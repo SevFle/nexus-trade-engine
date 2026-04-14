@@ -1,0 +1,69 @@
+id: "llm-sentiment-alpha"
+name: "LLM Sentiment Alpha"
+version: "1.0.0"
+author: "Nexus Team"
+description: >
+  Uses a large language model to analyze news sentiment and earnings
+  call transcripts. Adjusts portfolio allocation based on AI-derived
+  sentiment scores. Demonstrates how to call external LLM APIs from
+  within a Nexus strategy plugin.
+license: "MIT"
+min_engine_version: "0.1.0"
+
+runtime: "python:3.11"
+dependencies:
+  - httpx>=0.27.0
+
+resources:
+  max_memory: "512MB"
+  gpu: "none"
+  max_cpu_seconds: 60  # LLM calls can be slow
+
+artifacts:
+  - prompts/sentiment_analysis.txt
+
+network:
+  allowed_endpoints:
+    - api.anthropic.com
+    - api.openai.com
+
+config_schema:
+  type: object
+  properties:
+    llm_provider:
+      type: string
+      enum: ["anthropic", "openai"]
+      default: "anthropic"
+      description: "Which LLM provider to use"
+    model_name:
+      type: string
+      default: "claude-sonnet-4-20250514"
+      description: "Model name/ID"
+    sentiment_threshold:
+      type: number
+      default: 0.6
+      min: 0.0
+      max: 1.0
+      description: "Minimum sentiment score to trigger a buy signal"
+    max_allocation_pct:
+      type: number
+      default: 0.15
+      description: "Max portfolio allocation per symbol"
+    rebalance_frequency:
+      type: string
+      enum: ["daily", "weekly"]
+      default: "weekly"
+      description: "How often to re-evaluate sentiment"
+
+data_feeds:
+  - "ohlcv"
+  - "news"
+min_history_bars: 20
+watchlist: ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"]
+
+marketplace:
+  category: "llm"
+  tags: ["llm", "sentiment", "news", "ai"]
+  min_capital: 10000
+  preferred_assets: ["US equities"]
+  backtest_required: true

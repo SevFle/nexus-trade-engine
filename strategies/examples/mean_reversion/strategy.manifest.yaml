@@ -1,0 +1,66 @@
+id: "mean-reversion-basic"
+name: "Mean Reversion Basic"
+version: "1.0.0"
+author: "Nexus Team"
+description: >
+  A simple mean reversion strategy that buys when price drops below
+  the moving average by a configurable number of standard deviations,
+  and sells when it returns to the mean. Cost-aware: skips trades
+  where expected return doesn't cover transaction costs.
+license: "MIT"
+min_engine_version: "0.1.0"
+
+runtime: "python:3.11"
+dependencies: []
+resources:
+  max_memory: "256MB"
+  gpu: "none"
+
+artifacts: []
+
+network:
+  allowed_endpoints: []
+
+config_schema:
+  type: object
+  properties:
+    sma_period:
+      type: integer
+      default: 50
+      min: 10
+      max: 200
+      description: "Simple moving average lookback period"
+    entry_std:
+      type: number
+      default: 2.0
+      min: 0.5
+      max: 4.0
+      description: "Standard deviations below SMA to trigger buy"
+    exit_std:
+      type: number
+      default: 0.0
+      min: -1.0
+      max: 2.0
+      description: "Standard deviations above SMA to trigger sell (0 = at mean)"
+    position_weight:
+      type: number
+      default: 0.1
+      min: 0.01
+      max: 0.5
+      description: "Portfolio weight per position"
+    min_net_return_pct:
+      type: number
+      default: 0.5
+      description: "Minimum expected return (%) after costs to enter trade"
+
+data_feeds:
+  - "ohlcv"
+min_history_bars: 60
+watchlist: ["AAPL", "MSFT", "GOOGL", "AMZN", "META"]
+
+marketplace:
+  category: "algorithmic"
+  tags: ["mean-reversion", "beginner-friendly", "low-frequency"]
+  min_capital: 5000
+  preferred_assets: ["US equities"]
+  backtest_required: true

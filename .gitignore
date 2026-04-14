@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Node
+node_modules/
+frontend/dist/
+.next/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Model artifacts (large files)
+*.pt
+*.pth
+*.onnx
+*.pkl
+!strategies/examples/**/*.pkl
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Pytest
+.pytest_cache/
