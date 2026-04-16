@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
+from enum import Enum
 
 from sqlalchemy import ForeignKey, Index, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
@@ -46,6 +47,7 @@ class Portfolio(Base):
     user: Mapped[User] = relationship(back_populates="portfolios")
     positions: Mapped[list[Position]] = relationship(back_populates="portfolio")
     orders: Mapped[list[Order]] = relationship(back_populates="portfolio")
+    tax_lots: Mapped[list[TaxLotRecord]] = relationship(back_populates="portfolio")
 
 
 class Position(Base):
@@ -112,6 +114,35 @@ class BacktestResult(Base):
     end_date: Mapped[datetime]
     metrics: Mapped[dict] = mapped_column(JSONB, default=dict)  # type: ignore[assignment]
     created_at: Mapped[datetime] = mapped_column(default=_utcnow)
+
+
+class TaxLotStatus(str, Enum):
+    OPEN = "open"
+    PARTIALLY_CONSUMED = "partially_consumed"
+    CLOSED = "closed"
+
+
+class TaxLotRecord(Base):
+    __tablename__ = "tax_lot_records"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    lot_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
+    portfolio_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("portfolios.id", ondelete="CASCADE"), index=True
+    )
+    symbol: Mapped[str] = mapped_column(String(20), index=True)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    remaining_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    purchase_price: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    purchase_date: Mapped[datetime]
+    cost_basis_adjustment: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=Decimal("0"))
+    status: Mapped[str] = mapped_column(String(30), default=TaxLotStatus.OPEN.value)
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=_utcnow, onupdate=_utcnow)
+
+    portfolio: Mapped[Portfolio] = relationship(back_populates="tax_lots")
+
+    __table_args__ = (Index("ix_tax_lot_portfolio_symbol", "portfolio_id", "symbol"),)
 
 
 class OHLCVBar(Base):

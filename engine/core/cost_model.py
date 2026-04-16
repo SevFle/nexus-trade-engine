@@ -22,6 +22,7 @@ class TaxMethod(str, Enum):
 @dataclass
 class Money:
     """Monetary amount with explicit precision."""
+
     amount: float
     currency: str = "USD"
 
@@ -46,6 +47,7 @@ class Money:
 @dataclass
 class CostBreakdown:
     """Itemized breakdown of all costs for a single trade."""
+
     commission: Money = field(default_factory=lambda: Money(0.0))
     spread: Money = field(default_factory=lambda: Money(0.0))
     slippage: Money = field(default_factory=lambda: Money(0.0))
@@ -85,15 +87,16 @@ class CostBreakdown:
 @dataclass
 class TaxLot:
     """A single purchase lot for tax tracking."""
+
     symbol: str
     quantity: int
     purchase_price: float
     purchase_date: datetime
     lot_id: str = ""
 
-    @property
-    def is_long_term(self) -> bool:
-        held_days = (datetime.now(UTC) - self.purchase_date).days
+    def is_long_term(self, as_of: datetime | None = None) -> bool:
+        ref_date = as_of or datetime.now(UTC)
+        held_days = (ref_date - self.purchase_date).days
         return held_days >= 365
 
     @property
@@ -122,12 +125,16 @@ class ICostModel(ABC):
         ...
 
     @abstractmethod
-    def estimate_slippage(self, symbol: str, quantity: int, price: float, avg_volume: int) -> Money:
+    def estimate_slippage(
+        self, symbol: str, quantity: int, price: float, avg_volume: int
+    ) -> Money:
         """Estimate market impact / slippage based on order size vs volume."""
         ...
 
     @abstractmethod
-    def estimate_total(self, symbol: str, quantity: int, price: float, side: str, avg_volume: int = 0) -> CostBreakdown:
+    def estimate_total(
+        self, symbol: str, quantity: int, price: float, side: str, avg_volume: int = 0
+    ) -> CostBreakdown:
         """Full cost breakdown for a proposed trade."""
         ...
 
@@ -158,6 +165,16 @@ class ICostModel(ABC):
         buy_history: list[dict],
     ) -> bool:
         """Check if a sale would trigger wash sale rules (30-day window)."""
+
+    @abstractmethod
+    def calculate_wash_sale_adjustment(
+        self,
+        symbol: str,
+        sell_date: datetime,
+        loss_amount: float,
+        buy_history: list[dict],
+    ) -> dict:
+        """Calculate wash sale cost basis adjustment. Returns adjustment details."""
         ...
 
     @abstractmethod
@@ -201,7 +218,9 @@ class DefaultCostModel(ICostModel):
         spread_cost = price * (self.spread_bps / 10_000)
         return Money(amount=spread_cost)
 
-    def estimate_slippage(self, symbol: str, quantity: int, price: float, avg_volume: int) -> Money:
+    def estimate_slippage(
+        self, symbol: str, quantity: int, price: float, avg_volume: int
+    ) -> Money:
         base_slippage = price * (self.slippage_bps / 10_000) * quantity
         # Scale slippage with order size relative to volume
         if avg_volume > 0:
@@ -234,6 +253,7 @@ class DefaultCostModel(ICostModel):
         quantity: int,
         lots: list[TaxLot],
         method: TaxMethod = TaxMethod.FIFO,
+        sell_date: datetime | None = None,
     ) -> Money:
         if method == TaxMethod.FIFO:
             sorted_lots = sorted(lots, key=lambda l: l.purchase_date)
@@ -242,6 +262,7 @@ class DefaultCostModel(ICostModel):
         else:
             sorted_lots = lots
 
+        ref_date = sell_date or datetime.now(UTC)
         remaining = quantity
         total_tax = 0.0
 
@@ -252,7 +273,11 @@ class DefaultCostModel(ICostModel):
             gain = (sell_price - lot.purchase_price) * shares_from_lot
 
             if gain > 0:
-                rate = self.long_term_tax_rate if lot.is_long_term else self.short_term_tax_rate
+                rate = (
+                    self.long_term_tax_rate
+                    if lot.is_long_term(as_of=ref_date)
+                    else self.short_term_tax_rate
+                )
                 total_tax += gain * rate
 
             remaining -= shares_from_lot
@@ -274,6 +299,65 @@ class DefaultCostModel(ICostModel):
             if buy_symbol == symbol and window_start <= buy_date <= window_end:
                 return True
         return False
+
+    def calculate_wash_sale_adjustment(
+        self,
+        symbol: str,
+        sell_date: datetime,
+        loss_amount: float,
+        buy_history: list[dict],
+    ) -> dict:
+        """
+        Calculate wash sale cost basis adjustment.
+        When a loss is disallowed due to wash sale, the loss is added to the
+        cost basis of the replacement lot.
+
+        Returns dict with keys:
+            is_wash_sale: bool
+            adjustment: float (total disallowed loss, 0.0 if no wash sale)
+            adjustment_per_share: float (0.0 if no wash sale or no replacement qty)
+            replacement_lots: list[dict] (empty list if no wash sale)
+        """
+        empty = {
+            "is_wash_sale": False,
+            "adjustment": 0.0,
+            "adjustment_per_share": 0.0,
+            "replacement_lots": [],
+        }
+
+        if loss_amount >= 0:
+            return empty
+
+        window_start = sell_date - timedelta(days=self.wash_sale_window_days)
+        window_end = sell_date + timedelta(days=self.wash_sale_window_days)
+
+        replacement_lots = []
+        for buy in buy_history:
+            buy_date = buy.get("date")
+            buy_symbol = buy.get("symbol", "")
+            if buy_symbol == symbol and window_start <= buy_date <= window_end:
+                replacement_lots.append(
+                    {
+                        "date": buy_date,
+                        "price": buy.get("price", 0.0),
+                        "quantity": buy.get("quantity", 0),
+                    }
+                )
+
+        if not replacement_lots:
+            return empty
+
+        total_replacement_qty = sum(lot["quantity"] for lot in replacement_lots)
+        adjustment_per_share = (
+            abs(loss_amount) / total_replacement_qty if total_replacement_qty > 0 else 0.0
+        )
+
+        return {
+            "is_wash_sale": True,
+            "adjustment": abs(loss_amount),
+            "adjustment_per_share": adjustment_per_share,
+            "replacement_lots": replacement_lots,
+        }
 
     def estimate_dividend_tax(self, dividend_amount: float, is_qualified: bool) -> Money:
         rate = self.qualified_dividend_rate if is_qualified else self.ordinary_dividend_rate

@@ -5,6 +5,7 @@ Tests for the cost model — the most critical component to get right.
 from datetime import UTC, datetime, timedelta
 
 import pytest
+
 from engine.core.cost_model import DefaultCostModel, TaxLot, TaxMethod
 
 
@@ -71,41 +72,50 @@ class TestTotalCost:
 
 class TestTaxEngine:
     def test_short_term_gains_tax(self, cost_model):
+        sell_date = datetime(2026, 4, 16, tzinfo=UTC)
         lots = [
             TaxLot(
                 symbol="AAPL",
                 quantity=100,
                 purchase_price=100.0,
-                purchase_date=datetime.now(UTC) - timedelta(days=30),
+                purchase_date=sell_date - timedelta(days=30),
             )
         ]
-        tax = cost_model.estimate_tax("AAPL", 150.0, 100, lots, TaxMethod.FIFO)
+        tax = cost_model.estimate_tax(
+            "AAPL", 150.0, 100, lots, TaxMethod.FIFO, sell_date=sell_date
+        )
         expected = (150.0 - 100.0) * 100 * 0.37  # Short-term rate
         assert abs(tax.amount - expected) < 1e-6
 
     def test_long_term_gains_tax(self, cost_model):
+        sell_date = datetime(2026, 4, 16, tzinfo=UTC)
         lots = [
             TaxLot(
                 symbol="AAPL",
                 quantity=100,
                 purchase_price=100.0,
-                purchase_date=datetime.now(UTC) - timedelta(days=400),
+                purchase_date=sell_date - timedelta(days=400),
             )
         ]
-        tax = cost_model.estimate_tax("AAPL", 150.0, 100, lots, TaxMethod.FIFO)
+        tax = cost_model.estimate_tax(
+            "AAPL", 150.0, 100, lots, TaxMethod.FIFO, sell_date=sell_date
+        )
         expected = (150.0 - 100.0) * 100 * 0.20  # Long-term rate
         assert abs(tax.amount - expected) < 1e-6
 
     def test_no_tax_on_loss(self, cost_model):
+        sell_date = datetime.now(UTC)
         lots = [
             TaxLot(
                 symbol="AAPL",
                 quantity=100,
                 purchase_price=200.0,
-                purchase_date=datetime.now(UTC) - timedelta(days=30),
+                purchase_date=sell_date - timedelta(days=30),
             )
         ]
-        tax = cost_model.estimate_tax("AAPL", 150.0, 100, lots, TaxMethod.FIFO)
+        tax = cost_model.estimate_tax(
+            "AAPL", 150.0, 100, lots, TaxMethod.FIFO, sell_date=sell_date
+        )
         assert tax.amount == 0.0
 
     def test_fifo_vs_lifo(self, cost_model):
@@ -124,10 +134,8 @@ class TestTaxEngine:
                 purchase_date=now - timedelta(days=30),
             ),
         ]
-        fifo_tax = cost_model.estimate_tax("AAPL", 150.0, 50, lots, TaxMethod.FIFO)
-        lifo_tax = cost_model.estimate_tax("AAPL", 150.0, 50, lots, TaxMethod.LIFO)
-        # FIFO sells old (cheaper) lot first → higher gain but long-term rate
-        # LIFO sells new (expensive) lot first → lower gain but short-term rate
+        fifo_tax = cost_model.estimate_tax("AAPL", 150.0, 50, lots, TaxMethod.FIFO, sell_date=now)
+        lifo_tax = cost_model.estimate_tax("AAPL", 150.0, 50, lots, TaxMethod.LIFO, sell_date=now)
         assert fifo_tax.amount != lifo_tax.amount
 
 
@@ -152,6 +160,65 @@ class TestWashSale:
             {"symbol": "MSFT", "date": sell_date - timedelta(days=10)},
         ]
         assert cost_model.check_wash_sale("AAPL", sell_date, buy_history) is False
+
+    def test_wash_sale_adjustment_calculates_disallowed_loss(self, cost_model):
+        sell_date = datetime.now(UTC)
+        loss = -500.0
+        buy_history = [
+            {
+                "symbol": "AAPL",
+                "date": sell_date - timedelta(days=10),
+                "price": 145.0,
+                "quantity": 100,
+            },
+        ]
+        result = cost_model.calculate_wash_sale_adjustment("AAPL", sell_date, loss, buy_history)
+        assert result["is_wash_sale"] is True
+        assert result["adjustment"] == 500.0
+
+    def test_wash_sale_adjustment_no_loss(self, cost_model):
+        sell_date = datetime.now(UTC)
+        gain = 500.0
+        buy_history = [
+            {
+                "symbol": "AAPL",
+                "date": sell_date - timedelta(days=10),
+                "price": 145.0,
+                "quantity": 100,
+            },
+        ]
+        result = cost_model.calculate_wash_sale_adjustment("AAPL", sell_date, gain, buy_history)
+        assert result["is_wash_sale"] is False
+        assert result["replacement_lots"] == []
+
+    def test_wash_sale_adjustment_per_share(self, cost_model):
+        sell_date = datetime.now(UTC)
+        loss = -1000.0
+        buy_history = [
+            {
+                "symbol": "AAPL",
+                "date": sell_date - timedelta(days=10),
+                "price": 145.0,
+                "quantity": 100,
+            },
+        ]
+        result = cost_model.calculate_wash_sale_adjustment("AAPL", sell_date, loss, buy_history)
+        assert result["is_wash_sale"] is True
+        assert result["adjustment_per_share"] == 10.0
+
+    def test_wash_sale_30_day_window_after_sale(self, cost_model):
+        sell_date = datetime.now(UTC)
+        loss = -500.0
+        buy_history = [
+            {
+                "symbol": "AAPL",
+                "date": sell_date + timedelta(days=10),
+                "price": 145.0,
+                "quantity": 100,
+            },
+        ]
+        result = cost_model.calculate_wash_sale_adjustment("AAPL", sell_date, loss, buy_history)
+        assert result["is_wash_sale"] is True
 
 
 class TestDividendTax:
