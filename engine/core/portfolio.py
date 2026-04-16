@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from decimal import Decimal
+from datetime import UTC, datetime, timedelta
 
 from engine.core.cost_model import DefaultCostModel, TaxLot, TaxMethod
 
@@ -13,12 +12,18 @@ class Position:
     """Represents a position in a single security."""
 
     symbol: str
-    quantity: Decimal = Decimal("0")
+    quantity: int = 0
     avg_cost: float = 0.0
+    current_price: float = 0.0
 
     @property
     def is_zero(self) -> bool:
         return self.quantity == 0
+
+    @property
+    def market_value(self) -> float:
+        price = self.current_price if self.current_price > 0 else self.avg_cost
+        return self.quantity * price
 
 
 @dataclass
@@ -28,11 +33,23 @@ class TradeRecord:
     timestamp: datetime
     side: str
     symbol: str
-    quantity: Decimal
+    quantity: int
     price: float
     cost: float = 0.0
     tax: float = 0.0
     lot_ids: list[str] = field(default_factory=list)
+
+
+@dataclass
+class SellRecord:
+    """Record of a sell for wash sale detection."""
+
+    symbol: str
+    sell_date: datetime
+    quantity: int
+    sell_price: float
+    cost_basis: float
+    gain: float
 
 
 @dataclass
@@ -44,6 +61,7 @@ class Portfolio:
     positions: dict[str, Position] = field(default_factory=dict)
     _tax_lots: dict[str, list[TaxLot]] = field(default_factory=dict)
     trade_history: list[TradeRecord] = field(default_factory=list)
+    _sell_history: list[SellRecord] = field(default_factory=list)
     realized_pnl: float = 0.0
     tax_method: TaxMethod = TaxMethod.FIFO
     _cost_model: DefaultCostModel | None = field(default=None)
@@ -61,9 +79,7 @@ class Portfolio:
 
     @property
     def total_value(self) -> float:
-        positions_value = sum(
-            float(pos.quantity) * pos.avg_cost for pos in self.positions.values()
-        )
+        positions_value = sum(pos.market_value for pos in self.positions.values())
         return self._cash + positions_value
 
     @property
@@ -79,22 +95,45 @@ class Portfolio:
         price: float,
         cost: float = 0.0,
     ) -> uuid.UUID:
-        """Open a new position (buy). Creates a new tax lot."""
+        """Open a new position (buy). Creates a new tax lot.
+
+        If this buy is within 30 days of a sell at a loss for the same symbol,
+        the wash sale rule applies: the disallowed loss is added to this lot's
+        cost basis (per IRS Pub 550).
+        """
         total_cost = (quantity * price) + cost
 
         if self._cash < total_cost:
             raise ValueError(f"Insufficient cash: need {total_cost}, have {self._cash}")
 
+        purchase_date = self.transaction_date or datetime.now(UTC)
+
+        adjusted_price = price
+        total_adjustment = 0.0
+
+        for sell in self._sell_history:
+            if sell.symbol != symbol:
+                continue
+            if sell.gain >= 0:
+                continue
+            window_start = purchase_date - timedelta(days=self._cost_model.wash_sale_window_days)
+            if window_start <= sell.sell_date <= purchase_date:
+                disallowed = abs(sell.gain)
+                per_share = disallowed / sell.quantity
+                applicable = min(quantity, sell.quantity) * per_share
+                total_adjustment += applicable
+
+        if total_adjustment > 0:
+            adjusted_price = price + (total_adjustment / quantity)
+
         self._cash -= total_cost
 
         lot_id = str(uuid.uuid4())
-        purchase_date = self.transaction_date or datetime.now(UTC)
-
         lot = TaxLot(
             lot_id=lot_id,
             symbol=symbol,
             quantity=quantity,
-            purchase_price=price,
+            purchase_price=adjusted_price,
             purchase_date=purchase_date,
         )
 
@@ -104,15 +143,15 @@ class Portfolio:
 
         if symbol in self.positions:
             existing = self.positions[symbol]
-            total_quantity = existing.quantity + Decimal(str(quantity))
-            total_cost_basis = float(existing.quantity) * existing.avg_cost + (quantity * price)
-            existing.avg_cost = float(total_cost_basis / float(total_quantity))
-            existing.quantity = total_quantity
+            total_qty = existing.quantity + quantity
+            total_cost_basis = existing.quantity * existing.avg_cost + (quantity * adjusted_price)
+            existing.avg_cost = total_cost_basis / total_qty
+            existing.quantity = total_qty
         else:
             self.positions[symbol] = Position(
                 symbol=symbol,
-                quantity=Decimal(str(quantity)),
-                avg_cost=price,
+                quantity=quantity,
+                avg_cost=adjusted_price,
             )
 
         self.trade_history.append(
@@ -120,7 +159,7 @@ class Portfolio:
                 timestamp=purchase_date,
                 side="buy",
                 symbol=symbol,
-                quantity=Decimal(str(quantity)),
+                quantity=quantity,
                 price=price,
                 cost=cost,
                 lot_ids=[lot_id],
@@ -142,7 +181,7 @@ class Portfolio:
             raise ValueError(f"No position for {symbol}")
 
         position = self.positions[symbol]
-        if Decimal(str(quantity)) > position.quantity:
+        if quantity > position.quantity:
             raise ValueError(
                 f"Cannot sell {quantity} shares of {symbol}, only {position.quantity} held"
             )
@@ -151,31 +190,31 @@ class Portfolio:
         if not lots:
             raise ValueError(f"No tax lots found for {symbol}")
 
+        sell_date = self.transaction_date or datetime.now(UTC)
+
         if self.tax_method == TaxMethod.FIFO:
-            sorted_lots = sorted(lots, key=lambda l: l.purchase_date)
+            sorted_lots = sorted(lots, key=lambda lot: lot.purchase_date)
         elif self.tax_method == TaxMethod.LIFO:
-            sorted_lots = sorted(lots, key=lambda l: l.purchase_date, reverse=True)
+            sorted_lots = sorted(lots, key=lambda lot: lot.purchase_date, reverse=True)
         else:
             sorted_lots = lots
 
-        remaining_to_sell = Decimal(str(quantity))
+        remaining_to_sell = quantity
         consumed_lots = []
-        total_cost_basis = Decimal("0")
-
-        sell_date = self.transaction_date or datetime.now(UTC)
+        total_cost_basis = 0.0
 
         for lot in sorted_lots:
             if remaining_to_sell <= 0:
                 break
 
-            consumed_qty = min(remaining_to_sell, Decimal(str(lot.quantity)))
-            lot_cost_basis = consumed_qty * Decimal(str(lot.purchase_price))
+            consumed_qty = min(remaining_to_sell, lot.quantity)
+            lot_cost_basis = consumed_qty * lot.purchase_price
             total_cost_basis += lot_cost_basis
 
             consumed_lots.append(
                 {
                     "lot_id": lot.lot_id,
-                    "quantity": int(consumed_qty),
+                    "quantity": consumed_qty,
                     "purchase_price": lot.purchase_price,
                     "purchase_date": lot.purchase_date,
                     "is_long_term": lot.is_long_term(as_of=sell_date),
@@ -183,38 +222,39 @@ class Portfolio:
             )
 
             remaining_to_sell -= consumed_qty
-            lot.quantity = int(Decimal(str(lot.quantity)) - consumed_qty)
+            lot.quantity -= consumed_qty
 
             if lot.quantity <= 0:
                 lots.remove(lot)
 
         if symbol in self.positions:
-            position.quantity -= Decimal(str(quantity))
+            position.quantity -= quantity
             if position.quantity <= 0:
                 del self.positions[symbol]
 
-        self._cash += float(Decimal(str(quantity)) * Decimal(str(price))) - cost
+        sell_proceeds = quantity * price
+        self._cash += sell_proceeds - cost - tax
 
-        sell_value = float(Decimal(str(quantity)) * Decimal(str(price)))
-        cost_basis = float(total_cost_basis)
-        gain = sell_value - cost_basis - cost - tax
+        gain = sell_proceeds - total_cost_basis - cost - tax
         self.realized_pnl += gain
 
-        sell_date = self.transaction_date or datetime.now(UTC)
-        buy_history = [{"symbol": symbol, "date": lot.purchase_date} for lot in sorted_lots]
-        wash_sale = (
-            self._cost_model.check_wash_sale(symbol, sell_date, buy_history) if gain < 0 else False
+        self._sell_history.append(
+            SellRecord(
+                symbol=symbol,
+                sell_date=sell_date,
+                quantity=quantity,
+                sell_price=price,
+                cost_basis=total_cost_basis,
+                gain=gain,
+            )
         )
-
-        if wash_sale:
-            tax = 0.0
 
         self.trade_history.append(
             TradeRecord(
                 timestamp=sell_date,
                 side="sell",
                 symbol=symbol,
-                quantity=Decimal(str(quantity)),
+                quantity=quantity,
                 price=price,
                 cost=cost,
                 tax=tax,
@@ -225,17 +265,21 @@ class Portfolio:
         return consumed_lots
 
     def update_prices(self, prices: dict[str, float]) -> None:
-        """Update current prices for positions (for P&L calculation)."""
+        """Update current market prices for positions (for P&L calculation)."""
         for symbol, price in prices.items():
             if symbol in self.positions:
-                self.positions[symbol].avg_cost = price
+                self.positions[symbol].current_price = price
 
     def snapshot(self) -> PortfolioSnapshot:
         """Create an immutable snapshot of current portfolio state."""
         return PortfolioSnapshot(
             cash=self._cash,
             positions={
-                symbol: {"quantity": pos.quantity, "avg_cost": pos.avg_cost}
+                symbol: {
+                    "quantity": pos.quantity,
+                    "avg_cost": pos.avg_cost,
+                    "current_price": pos.current_price,
+                }
                 for symbol, pos in self.positions.items()
             },
             total_value=self.total_value,
@@ -265,10 +309,14 @@ class PortfolioSnapshot:
     def allocation_weight(self, symbol: str) -> float:
         if symbol not in self.positions or self.total_value == 0:
             return 0.0
-        position_value = (
-            float(self.positions[symbol]["quantity"]) * self.positions[symbol]["avg_cost"]
-        )
+        pos = self.positions[symbol]
+        price = pos.get("current_price") or pos.get("avg_cost", 0)
+        position_value = pos["quantity"] * price
         return (position_value / self.total_value) * 100
 
     def summary(self) -> str:
-        return f"Cash: ${self.cash:,.0f}, Value: ${self.total_value:,.0f}, Return: {self.total_return_pct:.2f}%"
+        return (
+            f"Cash: ${self.cash:,.0f}, "
+            f"Value: ${self.total_value:,.0f}, "
+            f"Return: {self.total_return_pct:.2f}%"
+        )

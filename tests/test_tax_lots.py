@@ -162,20 +162,83 @@ class TestWashSale:
 
         assert result["is_wash_sale"] is False
 
+    def test_wash_sale_return_shape_consistent(self):
+        cost_model = DefaultCostModel()
+        sell_date = datetime.now(UTC)
+        no_wash = cost_model.calculate_wash_sale_adjustment("AAPL", sell_date, 100.0, [])
+        assert set(no_wash.keys()) == {
+            "is_wash_sale",
+            "adjustment",
+            "adjustment_per_share",
+            "replacement_lots",
+        }
+        assert no_wash["replacement_lots"] == []
+
+        wash = cost_model.calculate_wash_sale_adjustment(
+            "AAPL",
+            sell_date,
+            -100.0,
+            [
+                {
+                    "symbol": "AAPL",
+                    "date": sell_date - timedelta(days=5),
+                    "price": 100.0,
+                    "quantity": 10,
+                }
+            ],
+        )
+        assert set(wash.keys()) == {
+            "is_wash_sale",
+            "adjustment",
+            "adjustment_per_share",
+            "replacement_lots",
+        }
+
 
 class TestPortfolioWashSale:
-    """Test wash sale integration with portfolio."""
+    """Test wash sale integration with portfolio.
 
-    def test_portfolio_wash_sale_disallows_loss(self):
-        p = Portfolio(initial_cash=100_000)
+    IRS rule: buy within 30 days of a loss sale → loss disallowed,
+    added to replacement lot cost basis.
+    """
 
-        p.transaction_date = datetime.now(UTC) - timedelta(days=60)
+    def test_portfolio_wash_sale_adjusts_replacement_lot_cost_basis(self):
+        p = Portfolio(initial_cash=200_000)
+
+        # Day 0: Buy 100 shares at $150
+        p.transaction_date = datetime(2026, 1, 1, tzinfo=UTC)
         p.open_position("AAPL", 100, 150.0)
 
-        p.transaction_date = datetime.now(UTC)
-        p.close_position("AAPL", 100, 140.0, cost=5.0)
+        # Day 60: Sell 100 shares at $140 → $1000 loss
+        p.transaction_date = datetime(2026, 3, 1, tzinfo=UTC)
+        p.close_position("AAPL", 100, 140.0, cost=0.0)
+        assert p.realized_pnl < 0
 
-        p.transaction_date = datetime.now(UTC) + timedelta(days=5)
+        # Day 65 (5 days later, within 30-day window): Buy 100 shares at $145
+        p.transaction_date = datetime(2026, 3, 6, tzinfo=UTC)
         p.open_position("AAPL", 100, 145.0)
 
-        assert p.realized_pnl < 0
+        # The replacement lot should have its cost basis adjusted upward
+        # by the disallowed loss ($1000 / 100 shares = $10/share)
+        lots = p.get_tax_lots("AAPL")
+        assert len(lots) == 1
+        assert lots[0].purchase_price > 145.0
+        expected_adjusted_price = 145.0 + (abs(p._sell_history[-1].gain) / 100)
+        assert abs(lots[0].purchase_price - expected_adjusted_price) < 1e-6
+
+    def test_portfolio_no_wash_sale_outside_window(self):
+        p = Portfolio(initial_cash=200_000)
+
+        p.transaction_date = datetime(2026, 1, 1, tzinfo=UTC)
+        p.open_position("AAPL", 100, 150.0)
+
+        p.transaction_date = datetime(2026, 3, 1, tzinfo=UTC)
+        p.close_position("AAPL", 100, 140.0)
+
+        # 60 days later — outside wash sale window
+        p.transaction_date = datetime(2026, 5, 1, tzinfo=UTC)
+        p.open_position("AAPL", 100, 145.0)
+
+        lots = p.get_tax_lots("AAPL")
+        assert len(lots) == 1
+        assert lots[0].purchase_price == 145.0

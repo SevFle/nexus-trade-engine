@@ -189,6 +189,7 @@ class TestWashSale:
         ]
         result = cost_model.calculate_wash_sale_adjustment("AAPL", sell_date, gain, buy_history)
         assert result["is_wash_sale"] is False
+        assert result["replacement_lots"] == []
 
     def test_wash_sale_adjustment_per_share(self, cost_model):
         sell_date = datetime.now(UTC)

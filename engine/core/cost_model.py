@@ -311,9 +311,22 @@ class DefaultCostModel(ICostModel):
         Calculate wash sale cost basis adjustment.
         When a loss is disallowed due to wash sale, the loss is added to the
         cost basis of the replacement lot.
+
+        Returns dict with keys:
+            is_wash_sale: bool
+            adjustment: float (total disallowed loss, 0.0 if no wash sale)
+            adjustment_per_share: float (0.0 if no wash sale or no replacement qty)
+            replacement_lots: list[dict] (empty list if no wash sale)
         """
+        empty = {
+            "is_wash_sale": False,
+            "adjustment": 0.0,
+            "adjustment_per_share": 0.0,
+            "replacement_lots": [],
+        }
+
         if loss_amount >= 0:
-            return {"is_wash_sale": False, "adjustment": 0.0, "replacement_lot": None}
+            return empty
 
         window_start = sell_date - timedelta(days=self.wash_sale_window_days)
         window_end = sell_date + timedelta(days=self.wash_sale_window_days)
@@ -332,13 +345,12 @@ class DefaultCostModel(ICostModel):
                 )
 
         if not replacement_lots:
-            return {"is_wash_sale": False, "adjustment": 0.0, "replacement_lot": None}
+            return empty
 
         total_replacement_qty = sum(lot["quantity"] for lot in replacement_lots)
-        if total_replacement_qty == 0:
-            return {"is_wash_sale": True, "adjustment": abs(loss_amount), "replacement_lot": None}
-
-        adjustment_per_share = abs(loss_amount) / total_replacement_qty
+        adjustment_per_share = (
+            abs(loss_amount) / total_replacement_qty if total_replacement_qty > 0 else 0.0
+        )
 
         return {
             "is_wash_sale": True,
