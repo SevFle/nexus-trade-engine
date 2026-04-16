@@ -133,6 +133,9 @@ class Portfolio:
                 lots.remove(lot)
             i += 1
 
+        if remaining > 0:
+            raise ValueError(f"Tax lots insufficient: {remaining} shares unfulfilled for {symbol}")
+
         return consumed, total_cost_basis
 
     def open_position(

@@ -100,7 +100,7 @@ def upgrade() -> None:
     op.create_table(
         "backtest_results",
         sa.Column("id", sa.UUID(as_uuid=True), nullable=False),
-        sa.Column("portfolio_id", sa.UUID(as_uuid=True), nullable=True),
+        sa.Column("portfolio_id", sa.UUID(as_uuid=True), nullable=False),
         sa.Column("strategy_name", sa.String(length=100), nullable=False),
         sa.Column("start_date", sa.DateTime(timezone=True), nullable=False),
         sa.Column("end_date", sa.DateTime(timezone=True), nullable=False),

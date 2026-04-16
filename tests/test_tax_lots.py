@@ -353,12 +353,11 @@ class TestPortfolioIdPropagation:
 class TestConsumeLotsOffByOne:
     """Regression test for _consume_lots off-by-one.
 
-    The original bug: lots.pop(i) followed by i += 1 would skip the next
-    lot after a pop, because popping shifts subsequent lots down by one
-    index while i advances past them.
+    The original bug: mutating the list being iterated (removing lots
+    during traversal) caused lots to be skipped when indices shifted.
 
     Scenario: 3 lots of 10 shares each, sell 25 shares FIFO.
-    Buggy code would consume only 20 (skip middle lot after popping first).
+    Buggy code would consume only 20 (skip a lot after removing one).
     Correct code consumes all 25.
     """
 
