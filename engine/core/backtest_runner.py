@@ -528,7 +528,7 @@ def _consume_lots(
         else:
             lots[i].quantity -= remaining
             remaining = 0
-        i += 1
+            i += 1
 
 
 async def run_backtest(config: BacktestConfig) -> BacktestResultOutput:
