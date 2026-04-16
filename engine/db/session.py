@@ -40,3 +40,20 @@ async def dispose_engine() -> None:
         await _engine.dispose()
         _engine = None
         _session_factory = None
+
+
+async def init_db() -> None:
+    """Initialize database schema.
+
+    Note: Use Alembic migrations instead of create_all() for schema management.
+    Run migrations with: alembic upgrade head
+
+    This function is kept for backwards compatibility but now delegates to Alembic.
+    For new deployments, run migrations manually or via CI/CD.
+    """
+    from alembic.config import Config  # noqa: PLC0415
+
+    from alembic import command  # noqa: PLC0415
+
+    alembic_cfg = Config("alembic.ini")
+    command.upgrade(alembic_cfg, "head")
