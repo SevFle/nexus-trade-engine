@@ -74,7 +74,7 @@ class _StubProvider(MarketDataProvider):
 def _make_ohlcv(n_bars: int = 60, start_price: float = 100.0) -> pd.DataFrame:
     dates = pd.date_range("2025-01-01", periods=n_bars, freq="B")
     rng = np.random.default_rng(42)
-    close = start_price + np.cumsum(rng.standard_normal(n_bars))
+    close = np.maximum(start_price + np.cumsum(rng.standard_normal(n_bars)), 1.0)
     return pd.DataFrame(
         {
             "open": close - 0.5,
@@ -144,3 +144,17 @@ class TestPortfolioPersistsAcrossBars:
         assert strategy.last_portfolio is not None
         assert result.final_capital == strategy.last_portfolio.total_value
         assert result.final_capital != 0.0
+
+    async def test_equity_curve_includes_portfolio_value(self) -> None:
+        df = _make_ohlcv(60)
+        strategy = _TrackingStrategy()
+        provider = _StubProvider(df)
+        runner = BacktestRunner(config=_default_config(df), strategy=strategy, provider=provider)
+        result = await runner.run()
+
+        assert len(result.equity_curve) > 0
+        for entry in result.equity_curve:
+            assert "portfolio_value" in entry
+            assert "price" in entry
+            assert entry["portfolio_value"] > 0
+            assert entry["price"] > 0

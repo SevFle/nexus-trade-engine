@@ -96,18 +96,17 @@ class BacktestRunner:
             )
             sdk_state = market_state.to_sdk_state()
 
-            signals = self.strategy.on_bar(sdk_state, portfolio)
-            result.trades.extend(signals)
-
             price = market_state.prices.get(self.config.symbol, 0.0)
             portfolio.update_prices({self.config.symbol: price})
-            portfolio_value = portfolio.total_value
+
+            signals = self.strategy.on_bar(sdk_state, portfolio)
+            result.trades.extend(signals)
 
             result.equity_curve.append(
                 {
                     "timestamp": ts,
                     "price": price,
-                    "portfolio_value": portfolio_value,
+                    "portfolio_value": portfolio.total_value,
                 }
             )
 

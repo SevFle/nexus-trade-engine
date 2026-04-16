@@ -322,4 +322,4 @@ class PortfolioSnapshot:
         )
 
 
-PortfolioState = Portfolio
+PortfolioState = Portfolio  # Deprecated: use Portfolio directly. Kept for SDK backward compat.
