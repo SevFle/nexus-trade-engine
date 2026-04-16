@@ -5,7 +5,7 @@ Tests for the cost model — the most critical component to get right.
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from core.cost_model import DefaultCostModel, TaxLot, TaxMethod
+from engine.core.cost_model import DefaultCostModel, TaxLot, TaxMethod
 
 
 @pytest.fixture
@@ -111,8 +111,18 @@ class TestTaxEngine:
     def test_fifo_vs_lifo(self, cost_model):
         now = datetime.now(UTC)
         lots = [
-            TaxLot(symbol="AAPL", quantity=50, purchase_price=80.0, purchase_date=now - timedelta(days=400)),
-            TaxLot(symbol="AAPL", quantity=50, purchase_price=140.0, purchase_date=now - timedelta(days=30)),
+            TaxLot(
+                symbol="AAPL",
+                quantity=50,
+                purchase_price=80.0,
+                purchase_date=now - timedelta(days=400),
+            ),
+            TaxLot(
+                symbol="AAPL",
+                quantity=50,
+                purchase_price=140.0,
+                purchase_date=now - timedelta(days=30),
+            ),
         ]
         fifo_tax = cost_model.estimate_tax("AAPL", 150.0, 50, lots, TaxMethod.FIFO)
         lifo_tax = cost_model.estimate_tax("AAPL", 150.0, 50, lots, TaxMethod.LIFO)
