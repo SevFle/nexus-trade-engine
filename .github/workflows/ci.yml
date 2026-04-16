@@ -47,7 +47,7 @@ jobs:
         run: pip install -e .[dev]
 
       - name: Run migrations
-        run: cd engine && alembic upgrade head
+        run: alembic upgrade head
         env:
           NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:test_password@localhost:5432/nexus_test
 

@@ -43,17 +43,20 @@ async def dispose_engine() -> None:
 
 
 async def init_db() -> None:
-    """Initialize database schema.
+    """Run pending Alembic migrations.
 
-    Note: Use Alembic migrations instead of create_all() for schema management.
-    Run migrations with: alembic upgrade head
-
-    This function is kept for backwards compatibility but now delegates to Alembic.
-    For new deployments, run migrations manually or via CI/CD.
+    Delegates the synchronous ``alembic upgrade head`` to a thread so the
+    async event loop is not blocked.  Prefer running migrations as a
+    separate CLI / CI step (``alembic upgrade head`` or ``make migrate``).
     """
+    import asyncio  # noqa: PLC0415
+
     from alembic.config import Config  # noqa: PLC0415
 
     from alembic import command  # noqa: PLC0415
 
-    alembic_cfg = Config("alembic.ini")
-    command.upgrade(alembic_cfg, "head")
+    def _run() -> None:
+        alembic_cfg = Config("alembic.ini")
+        command.upgrade(alembic_cfg, "head")
+
+    await asyncio.get_event_loop().run_in_executor(None, _run)

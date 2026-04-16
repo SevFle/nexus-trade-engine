@@ -5,12 +5,12 @@ Alembic migrations environment.
 import asyncio
 from logging.config import fileConfig
 
-from db.models import Base
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 from engine.config import settings as app_settings
+from engine.db.models import Base
 
 config = context.config
 config.set_main_option("sqlalchemy.url", app_settings.database_url)

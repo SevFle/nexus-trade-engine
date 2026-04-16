@@ -21,7 +21,7 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.create_table(
         "users",
-        sa.Column("id", postgresql.UUID(asnative="native"), nullable=False),
+        sa.Column("id", sa.UUID(as_uuid=True), nullable=False),
         sa.Column("email", sa.String(length=255), nullable=False),
         sa.Column("hashed_password", sa.String(length=255), nullable=False),
         sa.Column("display_name", sa.String(length=100), nullable=False),
@@ -34,8 +34,8 @@ def upgrade() -> None:
 
     op.create_table(
         "portfolios",
-        sa.Column("id", postgresql.UUID(asnative="native"), nullable=False),
-        sa.Column("user_id", postgresql.UUID(asnative="native"), nullable=False),
+        sa.Column("id", sa.UUID(as_uuid=True), nullable=False),
+        sa.Column("user_id", sa.UUID(as_uuid=True), nullable=False),
         sa.Column("name", sa.String(length=200), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("initial_capital", sa.Numeric(precision=18, scale=4), nullable=True),
@@ -47,8 +47,8 @@ def upgrade() -> None:
 
     op.create_table(
         "positions",
-        sa.Column("id", postgresql.UUID(asnative="native"), nullable=False),
-        sa.Column("portfolio_id", postgresql.UUID(asnative="native"), nullable=False),
+        sa.Column("id", sa.UUID(as_uuid=True), nullable=False),
+        sa.Column("portfolio_id", sa.UUID(as_uuid=True), nullable=False),
         sa.Column("symbol", sa.String(length=20), nullable=False),
         sa.Column("quantity", sa.Numeric(precision=18, scale=8), nullable=True),
         sa.Column("avg_entry_price", sa.Numeric(precision=18, scale=8), nullable=True),
@@ -63,8 +63,8 @@ def upgrade() -> None:
 
     op.create_table(
         "orders",
-        sa.Column("id", postgresql.UUID(asnative="native"), nullable=False),
-        sa.Column("portfolio_id", postgresql.UUID(asnative="native"), nullable=False),
+        sa.Column("id", sa.UUID(as_uuid=True), nullable=False),
+        sa.Column("portfolio_id", sa.UUID(as_uuid=True), nullable=False),
         sa.Column("symbol", sa.String(length=20), nullable=False),
         sa.Column("side", sa.String(length=10), nullable=False),
         sa.Column("order_type", sa.String(length=20), nullable=False),
@@ -81,8 +81,8 @@ def upgrade() -> None:
 
     op.create_table(
         "installed_strategies",
-        sa.Column("id", postgresql.UUID(asnative="native"), nullable=False),
-        sa.Column("portfolio_id", postgresql.UUID(asnative="native"), nullable=False),
+        sa.Column("id", sa.UUID(as_uuid=True), nullable=False),
+        sa.Column("portfolio_id", sa.UUID(as_uuid=True), nullable=False),
         sa.Column("strategy_name", sa.String(length=100), nullable=False),
         sa.Column("config", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("is_active", sa.Boolean(), nullable=True),
@@ -99,8 +99,8 @@ def upgrade() -> None:
 
     op.create_table(
         "backtest_results",
-        sa.Column("id", postgresql.UUID(asnative="native"), nullable=False),
-        sa.Column("portfolio_id", postgresql.UUID(asnative="native"), nullable=False),
+        sa.Column("id", sa.UUID(as_uuid=True), nullable=False),
+        sa.Column("portfolio_id", sa.UUID(as_uuid=True), nullable=False),
         sa.Column("strategy_name", sa.String(length=100), nullable=False),
         sa.Column("start_date", sa.DateTime(timezone=True), nullable=False),
         sa.Column("end_date", sa.DateTime(timezone=True), nullable=False),
@@ -118,7 +118,6 @@ def upgrade() -> None:
 
     op.create_table(
         "ohlcv_bars",
-        sa.Column("id", postgresql.UUID(asnative="native"), nullable=False),
         sa.Column("symbol", sa.String(length=20), nullable=False),
         sa.Column("timestamp", sa.DateTime(timezone=True), nullable=False),
         sa.Column("open", sa.Numeric(precision=18, scale=8), nullable=False),
@@ -126,7 +125,7 @@ def upgrade() -> None:
         sa.Column("low", sa.Numeric(precision=18, scale=8), nullable=False),
         sa.Column("close", sa.Numeric(precision=18, scale=8), nullable=False),
         sa.Column("volume", sa.Numeric(precision=24, scale=4), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("symbol", "timestamp"),
         sa.UniqueConstraint("symbol", "timestamp", name="uq_ohlcv_symbol_timestamp"),
     )
     op.create_index(

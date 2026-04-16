@@ -22,7 +22,7 @@ def upgrade() -> None:
     op.create_table(
         "portfolio_snapshots",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
-        sa.Column("portfolio_id", sa.Integer(), nullable=False),
+        sa.Column("portfolio_id", sa.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "timestamp",
             sa.DateTime(timezone=True),
@@ -34,7 +34,8 @@ def upgrade() -> None:
         sa.Column("unrealized_pnl", sa.Float(), nullable=True, server_default="0"),
         sa.Column("realized_pnl", sa.Float(), nullable=True, server_default="0"),
         sa.Column("num_positions", sa.Integer(), nullable=True, server_default="0"),
-        sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(["portfolio_id"], ["portfolios.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id", "timestamp"),
     )
     op.create_index(
         "ix_portfolio_snapshots_pid",
@@ -56,12 +57,13 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
         ),
         sa.Column("strategy_id", sa.String(length=100), nullable=False),
-        sa.Column("portfolio_id", sa.Integer(), nullable=False),
+        sa.Column("portfolio_id", sa.UUID(as_uuid=True), nullable=False),
         sa.Column("signals_emitted", sa.Integer(), nullable=True, server_default="0"),
         sa.Column("evaluation_ms", sa.Float(), nullable=True, server_default="0"),
         sa.Column("market_snapshot", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("signals", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(["portfolio_id"], ["portfolios.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id", "timestamp"),
     )
     op.create_index(
         "ix_eval_log_strategy",
@@ -73,8 +75,8 @@ def upgrade() -> None:
 
     op.create_table(
         "tax_lots",
-        sa.Column("id", postgresql.UUID(asnative="native"), nullable=False),
-        sa.Column("portfolio_id", postgresql.UUID(asnative="native"), nullable=False),
+        sa.Column("id", sa.UUID(as_uuid=True), nullable=False),
+        sa.Column("portfolio_id", sa.UUID(as_uuid=True), nullable=False),
         sa.Column("symbol", sa.String(length=20), nullable=False),
         sa.Column("quantity", sa.Numeric(precision=18, scale=8), nullable=False),
         sa.Column("cost_basis", sa.Numeric(precision=18, scale=4), nullable=False),
@@ -90,7 +92,7 @@ def upgrade() -> None:
 
     op.create_table(
         "marketplace_entries",
-        sa.Column("id", postgresql.UUID(asnative="native"), nullable=False),
+        sa.Column("id", sa.UUID(as_uuid=True), nullable=False),
         sa.Column("strategy_name", sa.String(length=100), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("price", sa.Numeric(precision=18, scale=4), nullable=True),
@@ -101,9 +103,9 @@ def upgrade() -> None:
 
     op.create_table(
         "marketplace_reviews",
-        sa.Column("id", postgresql.UUID(asnative="native"), nullable=False),
-        sa.Column("entry_id", postgresql.UUID(asnative="native"), nullable=False),
-        sa.Column("user_id", postgresql.UUID(asnative="native"), nullable=False),
+        sa.Column("id", sa.UUID(as_uuid=True), nullable=False),
+        sa.Column("entry_id", sa.UUID(as_uuid=True), nullable=False),
+        sa.Column("user_id", sa.UUID(as_uuid=True), nullable=False),
         sa.Column("rating", sa.Integer(), nullable=False),
         sa.Column("comment", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
@@ -112,7 +114,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        op.f("ix_marketplace_reviews_entry_id"), "marketplace_reviews", ["entry_id"], unique=False
+        op.f("ix_marketplace_reviews_entry_id"),
+        "marketplace_reviews",
+        ["entry_id"],
+        unique=False,
     )
 
 
