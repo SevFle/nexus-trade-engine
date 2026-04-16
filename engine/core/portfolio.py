@@ -88,6 +88,53 @@ class Portfolio:
             return 0.0
         return ((self.total_value - self.initial_cash) / self.initial_cash) * 100
 
+    def _consume_lots(
+        self,
+        symbol: str,
+        quantity: int,
+        sell_date: datetime,
+    ) -> tuple[list[dict], float]:
+        lots = self._tax_lots.get(symbol, [])
+        if not lots:
+            raise ValueError(f"No tax lots found for {symbol}")
+
+        if self.tax_method == TaxMethod.FIFO:
+            sorted_lots = sorted(lots, key=lambda lot: lot.purchase_date)
+        elif self.tax_method == TaxMethod.LIFO:
+            sorted_lots = sorted(lots, key=lambda lot: lot.purchase_date, reverse=True)
+        else:
+            sorted_lots = list(lots)
+
+        remaining = quantity
+        consumed: list[dict] = []
+        total_cost_basis = 0.0
+
+        i = 0
+        while remaining > 0 and i < len(sorted_lots):
+            lot = sorted_lots[i]
+            consumed_qty = min(remaining, lot.quantity)
+            lot_cost_basis = consumed_qty * lot.purchase_price
+            total_cost_basis += lot_cost_basis
+
+            consumed.append(
+                {
+                    "lot_id": lot.lot_id,
+                    "quantity": consumed_qty,
+                    "purchase_price": lot.purchase_price,
+                    "purchase_date": lot.purchase_date,
+                    "is_long_term": lot.is_long_term(as_of=sell_date),
+                }
+            )
+
+            remaining -= consumed_qty
+            lot.quantity -= consumed_qty
+
+            if lot.quantity <= 0:
+                lots.remove(lot)
+            i += 1
+
+        return consumed, total_cost_basis
+
     def open_position(
         self,
         symbol: str,
@@ -186,46 +233,9 @@ class Portfolio:
                 f"Cannot sell {quantity} shares of {symbol}, only {position.quantity} held"
             )
 
-        lots = self._tax_lots.get(symbol, [])
-        if not lots:
-            raise ValueError(f"No tax lots found for {symbol}")
-
         sell_date = self.transaction_date or datetime.now(UTC)
 
-        if self.tax_method == TaxMethod.FIFO:
-            sorted_lots = sorted(lots, key=lambda lot: lot.purchase_date)
-        elif self.tax_method == TaxMethod.LIFO:
-            sorted_lots = sorted(lots, key=lambda lot: lot.purchase_date, reverse=True)
-        else:
-            sorted_lots = list(lots)
-
-        remaining_to_sell = quantity
-        consumed_lots = []
-        total_cost_basis = 0.0
-
-        for lot in sorted_lots:
-            if remaining_to_sell <= 0:
-                break
-
-            consumed_qty = min(remaining_to_sell, lot.quantity)
-            lot_cost_basis = consumed_qty * lot.purchase_price
-            total_cost_basis += lot_cost_basis
-
-            consumed_lots.append(
-                {
-                    "lot_id": lot.lot_id,
-                    "quantity": consumed_qty,
-                    "purchase_price": lot.purchase_price,
-                    "purchase_date": lot.purchase_date,
-                    "is_long_term": lot.is_long_term(as_of=sell_date),
-                }
-            )
-
-            remaining_to_sell -= consumed_qty
-            lot.quantity -= consumed_qty
-
-            if lot.quantity <= 0:
-                lots.remove(lot)
+        consumed_lots, total_cost_basis = self._consume_lots(symbol, quantity, sell_date)
 
         if symbol in self.positions:
             position.quantity -= quantity

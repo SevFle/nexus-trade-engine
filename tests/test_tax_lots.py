@@ -348,3 +348,83 @@ class TestPortfolioIdPropagation:
 
         result = BacktestResult()
         assert result.portfolio_id is None
+
+
+class TestConsumeLotsOffByOne:
+    """Regression test for _consume_lots off-by-one.
+
+    The original bug: lots.pop(i) followed by i += 1 would skip the next
+    lot after a pop, because popping shifts subsequent lots down by one
+    index while i advances past them.
+
+    Scenario: 3 lots of 10 shares each, sell 25 shares FIFO.
+    Buggy code would consume only 20 (skip middle lot after popping first).
+    Correct code consumes all 25.
+    """
+
+    def test_sell_across_three_lots_consumes_all(self):
+        p = Portfolio(initial_cash=100_000, tax_method=TaxMethod.FIFO)
+        base = datetime(2026, 1, 1, tzinfo=UTC)
+
+        p.transaction_date = base
+        p.open_position("AAPL", 10, 100.0)
+
+        p.transaction_date = base + timedelta(days=1)
+        p.open_position("AAPL", 10, 110.0)
+
+        p.transaction_date = base + timedelta(days=2)
+        p.open_position("AAPL", 10, 120.0)
+
+        p.transaction_date = base + timedelta(days=10)
+        consumed = p.close_position("AAPL", 25, 150.0)
+
+        total_consumed = sum(c["quantity"] for c in consumed)
+        assert total_consumed == 25
+
+        assert consumed[0]["purchase_price"] == 100.0
+        assert consumed[0]["quantity"] == 10
+
+        assert consumed[1]["purchase_price"] == 110.0
+        assert consumed[1]["quantity"] == 10
+
+        assert consumed[2]["purchase_price"] == 120.0
+        assert consumed[2]["quantity"] == 5
+
+        remaining = p.get_tax_lots("AAPL")
+        assert len(remaining) == 1
+        assert remaining[0].quantity == 5
+        assert remaining[0].purchase_price == 120.0
+
+    def test_sell_exactly_all_lots(self):
+        p = Portfolio(initial_cash=100_000, tax_method=TaxMethod.FIFO)
+        base = datetime(2026, 1, 1, tzinfo=UTC)
+
+        p.transaction_date = base
+        p.open_position("AAPL", 10, 100.0)
+
+        p.transaction_date = base + timedelta(days=1)
+        p.open_position("AAPL", 10, 110.0)
+
+        p.transaction_date = base + timedelta(days=10)
+        consumed = p.close_position("AAPL", 20, 150.0)
+
+        total_consumed = sum(c["quantity"] for c in consumed)
+        assert total_consumed == 20
+        assert p.get_tax_lots("AAPL") == []
+
+    def test_sell_single_share_from_one_lot(self):
+        p = Portfolio(initial_cash=100_000, tax_method=TaxMethod.FIFO)
+        base = datetime(2026, 1, 1, tzinfo=UTC)
+
+        p.transaction_date = base
+        p.open_position("AAPL", 10, 100.0)
+
+        p.transaction_date = base + timedelta(days=10)
+        consumed = p.close_position("AAPL", 1, 150.0)
+
+        total_consumed = sum(c["quantity"] for c in consumed)
+        assert total_consumed == 1
+
+        remaining = p.get_tax_lots("AAPL")
+        assert len(remaining) == 1
+        assert remaining[0].quantity == 9
