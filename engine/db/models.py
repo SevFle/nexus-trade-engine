@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 
 from sqlalchemy import ForeignKey, Index, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
@@ -116,7 +116,7 @@ class BacktestResult(Base):
     created_at: Mapped[datetime] = mapped_column(default=_utcnow)
 
 
-class TaxLotStatus(str, Enum):
+class TaxLotStatus(StrEnum):
     OPEN = "open"
     PARTIALLY_CONSUMED = "partially_consumed"
     CLOSED = "closed"

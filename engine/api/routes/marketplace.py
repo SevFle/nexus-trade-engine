@@ -29,8 +29,8 @@ class InstallRequest(BaseModel):
 
 @router.get("/browse")
 async def browse_marketplace(
-    category: str = None,
-    search: str = None,
+    category: str | None = None,
+    search: str | None = None,
     sort_by: str = "downloads",
     page: int = 1,
     per_page: int = 20,

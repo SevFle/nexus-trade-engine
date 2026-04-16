@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import structlog
@@ -21,7 +21,7 @@ logger = structlog.get_logger()
 EventHandler = Callable[[dict], Awaitable[None]]
 
 
-class EventType(str, Enum):
+class EventType(StrEnum):
     """All event types in the system."""
 
     # Market events
@@ -65,7 +65,7 @@ class EventType(str, Enum):
 class Event:
     """A single event payload."""
 
-    def __init__(self, event_type: EventType, data: dict[str, Any] = None, source: str = "engine"):
+    def __init__(self, event_type: EventType, data: dict[str, Any] | None = None, source: str = "engine"):
         self.event_type = event_type
         self.data = data or {}
         self.source = source
@@ -133,7 +133,7 @@ class EventBus:
             try:
                 await handler(event.to_dict())
             except Exception as e:
-                logger.error("event_bus.handler_error", event=event.event_type.value, error=str(e))
+                logger.exception("event_bus.handler_error", event=event.event_type.value, error=str(e))
 
         # Redis pub/sub for cross-process consumers
         if self._redis:
@@ -147,7 +147,7 @@ class EventBus:
         if len(self._event_log) > self._max_log_size:
             self._event_log = self._event_log[-self._max_log_size:]
 
-    async def emit(self, event_type: EventType, data: dict = None, source: str = "engine"):
+    async def emit(self, event_type: EventType, data: dict | None = None, source: str = "engine"):
         """Convenience method: create and publish an event in one call."""
         await self.publish(Event(event_type, data, source))
 
