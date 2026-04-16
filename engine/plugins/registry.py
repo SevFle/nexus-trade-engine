@@ -52,3 +52,21 @@ def load_strategy_class(module_path: str) -> Any:
         logger.warning("strategy_class_not_found_in_module", path=module_path)
         raise AttributeError(f"Module {module_path} does not define a 'Strategy' class")
     return strategy_cls
+
+
+class PluginRegistry:
+    """Discovers and instantiates strategy plugins."""
+
+    def __init__(self, strategies_dir: Path | None = None) -> None:
+        self._strategies = discover_strategies(strategies_dir)
+
+    def load_strategy(self, strategy_name: str) -> Any | None:
+        entry = self._strategies.get(strategy_name)
+        if entry is None:
+            logger.warning("strategy_not_found", strategy=strategy_name)
+            return None
+        cls = load_strategy_class(entry["module_path"])
+        return cls()
+
+    def list_strategies(self) -> list[str]:
+        return list(self._strategies.keys())

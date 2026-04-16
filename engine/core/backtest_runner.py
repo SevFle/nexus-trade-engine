@@ -6,13 +6,20 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 import structlog
 
+from engine.core.cost_model import DefaultCostModel, TaxMethod
+from engine.core.execution.backtest import BacktestBackend
+from engine.core.metrics import PerformanceMetrics
+from engine.core.order_manager import OrderManager
 from engine.core.portfolio import Portfolio
+from engine.core.risk_engine import RiskEngine
+from engine.core.signal import Side
 from engine.data.market_state import MarketStateBuilder
+from engine.plugins.manifest import StrategyManifest
+from engine.plugins.sandbox import StrategySandbox
 
 if TYPE_CHECKING:
     import uuid
 
-    from engine.core.metrics import PerformanceMetrics
     from engine.data.feeds import MarketDataProvider
     from engine.plugins.sdk import BaseStrategy
 
@@ -29,6 +36,7 @@ class BacktestConfig:
     initial_capital: float = 100_000.0
     min_bars: int = 50
     debug: bool = False
+    random_seed: int | None = 42
 
 
 @dataclass
@@ -42,7 +50,7 @@ class BacktestResult:
 
 
 class BacktestRunner:
-    """Orchestrates backtest execution using MarketStateBuilder."""
+    """Orchestrates backtest execution using proper component wiring."""
 
     def __init__(
         self,
@@ -55,7 +63,7 @@ class BacktestRunner:
         self.provider = provider
         self._builder = MarketStateBuilder(min_bars=config.min_bars, debug=config.debug)
 
-    async def run(self) -> BacktestResult:
+    async def run(self) -> BacktestResult:  # noqa: PLR0912, PLR0915
         if self.provider is None:
             raise RuntimeError("No data provider configured")
         if self.strategy is None:
@@ -89,40 +97,123 @@ class BacktestRunner:
             end=str(timestamps[-1]),
         )
 
+        portfolio = Portfolio(
+            initial_cash=self.config.initial_capital,
+            tax_method=TaxMethod.FIFO,
+            portfolio_id=self.config.portfolio_id,
+        )
+
+        cost_model = DefaultCostModel()
+        risk_engine = RiskEngine()
+        backend = BacktestBackend(random_seed=self.config.random_seed)
+        await backend.connect()
+
+        order_manager = OrderManager(
+            cost_model=cost_model,
+            risk_engine=risk_engine,
+            portfolio=portfolio,
+        )
+        order_manager.set_execution_backend(backend)
+
+        manifest = StrategyManifest(
+            id=self.config.strategy_name,
+            name=self.config.strategy_name,
+            version="0.1.0",
+        )
+        sandbox = StrategySandbox(self.strategy, manifest)
+
         result = BacktestResult(portfolio_id=self.config.portfolio_id)
 
         for ts in timestamps:
-            market_state = self._builder.build_for_backtest(
-                all_data,
-                ts,
-                [self.config.symbol],
-            )
-            sdk_state = market_state.to_sdk_state()
-
-            portfolio = Portfolio(initial_cash=self.config.initial_capital)
-            signals = self.strategy.on_bar(sdk_state, portfolio)
-            result.trades.extend(signals)
-
-            result.equity_curve.append(
-                {
-                    "timestamp": ts,
-                    "price": market_state.prices.get(self.config.symbol, 0.0),
-                }
-            )
-
-        if result.equity_curve:
-            result.final_capital = result.equity_curve[-1].get("price", 0.0) * 100
-            first_price = result.equity_curve[0].get("price", 0.0)
-            if first_price > 0:
-                result.total_return_pct = (
-                    (result.equity_curve[-1].get("price", 0.0) - first_price) / first_price * 100
+            try:
+                market_state = self._builder.build_for_backtest(
+                    all_data,
+                    ts,
+                    [self.config.symbol],
                 )
+            except Exception:
+                logger.debug("backtest.warmup_skip", timestamp=str(ts))
+                continue
+            current_price = market_state.prices.get(self.config.symbol, 0.0)
+
+            portfolio.update_prices(market_state.prices)
+
+            snapshot = portfolio.snapshot()
+
+            pre_sell_positions: dict[str, tuple[float, int]] = {}
+            for sym, pos in portfolio.positions.items():
+                pre_sell_positions[sym] = (pos.avg_cost, pos.quantity)
+
+            signals = await sandbox.safe_evaluate(snapshot, market_state, cost_model)
+
+            for signal in signals:
+                if signal.side == Side.HOLD:
+                    continue
+                if signal.symbol != self.config.symbol:
+                    continue
+
+                order = await order_manager.process_signal(
+                    signal,
+                    current_price,
+                )
+
+                if order.status.value != "filled":
+                    continue
+
+                trade_record: dict[str, Any] = {
+                    "timestamp": ts,
+                    "symbol": order.symbol,
+                    "side": order.side.value,
+                    "quantity": order.fill_quantity,
+                    "fill_price": order.fill_price,
+                    "cost_breakdown": order.cost_breakdown,
+                }
+
+                if order.side == Side.SELL:
+                    avg_cost, _ = pre_sell_positions.get(order.symbol, (0.0, 0))
+                    realized_pnl = (order.fill_price - avg_cost) * order.fill_quantity
+                    trade_record["realized_pnl"] = realized_pnl
+                else:
+                    trade_record["realized_pnl"] = 0.0
+
+                result.trades.append(trade_record)
+
+            equity_point: dict[str, Any] = {
+                "timestamp": ts,
+                "total_value": portfolio.total_value,
+                "cash": portfolio.cash,
+            }
+            result.equity_curve.append(equity_point)
+
+        await backend.disconnect()
+
+        result.final_capital = portfolio.total_value
+        if self.config.initial_capital > 0:
+            result.total_return_pct = (
+                (result.final_capital - self.config.initial_capital)
+                / self.config.initial_capital
+                * 100
+            )
+
+        metrics = PerformanceMetrics(
+            equity_curve=result.equity_curve,
+            trade_log=result.trades,
+            initial_cash=self.config.initial_capital,
+        )
+        report = metrics.calculate()
+        result.metrics = report.to_dict()
+
+        total_trades = len(result.trades)
+        closed_trades = len([t for t in result.trades if t.get("realized_pnl", 0.0) != 0.0])
 
         logger.info(
             "backtest.complete",
             bars=len(result.equity_curve),
-            trades=len(result.trades),
+            total_trades=total_trades,
+            closed_trades=closed_trades,
             total_return_pct=round(result.total_return_pct, 2),
+            final_capital=round(result.final_capital, 2),
+            realized_pnl=round(portfolio.realized_pnl, 2),
         )
 
         return result
