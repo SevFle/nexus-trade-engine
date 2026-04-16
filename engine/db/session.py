@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import (
@@ -47,6 +48,7 @@ async def dispose_engine() -> None:
         _session_factory = None
 
 
+@contextlib.asynccontextmanager
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Get a new async session."""
     factory = get_session_factory()

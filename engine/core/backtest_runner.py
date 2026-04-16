@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -34,6 +35,7 @@ class BacktestConfig:
     cost_config: dict = field(default_factory=dict)
     interval: str = "1d"
     random_seed: int | None = 42
+    task_id: str | None = None
 
 
 @dataclass
@@ -83,6 +85,34 @@ class BacktestResultOutput:
     metrics: BacktestMetrics
     equity_curve: list[dict]
     trades: list[dict]
+
+
+_SLOW_EVAL_THRESHOLD_MS = 5000
+
+
+def _safe_on_bar(strategy: Any, state: MarketState, portfolio: Portfolio) -> list[dict]:
+    """
+    Sandboxed strategy evaluation with timeout and error handling.
+    Catches exceptions so a broken strategy never crashes the engine.
+    """
+    try:
+        start = time.monotonic()
+        result = strategy.on_bar(state, portfolio)
+        elapsed_ms = (time.monotonic() - start) * 1000
+        if elapsed_ms > _SLOW_EVAL_THRESHOLD_MS:
+            logger.warning(
+                "sandbox.slow_evaluate",
+                strategy=getattr(strategy, "name", "unknown"),
+                elapsed_ms=elapsed_ms,
+            )
+    except Exception:
+        logger.exception(
+            "sandbox.evaluation_error",
+            strategy=getattr(strategy, "name", "unknown"),
+        )
+        return []
+    else:
+        return result if result is not None else []
 
 
 def build_timeline(
@@ -198,7 +228,7 @@ def calculate_metrics(
 
             negative_returns = [r for r in returns if r < 0]
             if negative_returns:
-                downside_std = (sum(r**2 for r in negative_returns) / len(negative_returns)) ** 0.5
+                downside_std = (sum(r**2 for r in negative_returns) / len(returns)) ** 0.5
                 sortino_ratio = (mean_ret / downside_std) * (252**0.5) if downside_std > 0 else 0.0
             else:
                 sortino_ratio = 0.0
@@ -213,15 +243,16 @@ def calculate_metrics(
     total_taxes = sum(t.tax for t in trade_log)
     cost_drag_pct = (total_costs / initial_cash) * 100 if initial_cash > 0 else 0.0
 
-    total_trades = len([t for t in trade_log if t.pnl is not None])
-    winning_trades = [t for t in trade_log if t.pnl is not None and t.pnl > 0]
-    win_rate = len(winning_trades) / total_trades if total_trades > 0 else 0.0
+    total_trades = len(trade_log)
+    closed_trades = [t for t in trade_log if t.pnl is not None]
+    winning_trades = [t for t in closed_trades if t.pnl is not None and t.pnl > 0]
+    win_rate = len(winning_trades) / len(closed_trades) if closed_trades else 0.0
 
-    gross_profit = sum(t.pnl for t in trade_log if t.pnl and t.pnl > 0)
-    gross_loss = abs(sum(t.pnl for t in trade_log if t.pnl and t.pnl < 0))
+    gross_profit = sum(t.pnl for t in closed_trades if t.pnl is not None and t.pnl > 0)
+    gross_loss = abs(sum(t.pnl for t in closed_trades if t.pnl is not None and t.pnl < 0))
     profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0.0
 
-    pnls = [t.pnl for t in trade_log if t.pnl is not None]
+    pnls = [t.pnl for t in closed_trades if t.pnl is not None]
     avg_trade_pnl = sum(pnls) / len(pnls) if pnls else 0.0
 
     max_consecutive_losses = 0
@@ -309,12 +340,18 @@ async def persist_backtest_result(
     metrics: BacktestMetrics,
     equity_curve: list[dict],
     trades: list[dict],
+    task_id: str | None = None,
 ) -> str:
     """
     Persist backtest result to database.
     """
+    import uuid
+
+    result_id = task_id or str(uuid.uuid4())
+
     async with get_session() as session:
         result = BacktestResult(
+            id=uuid.UUID(result_id),
             strategy_name=strategy_name,
             start_date=datetime.fromisoformat(start_date),
             end_date=datetime.fromisoformat(end_date),
@@ -335,11 +372,163 @@ async def persist_backtest_result(
                 "final_value": final_value,
                 "equity_curve": equity_curve,
                 "trades": trades,
+                "status": "completed",
             },
         )
         session.add(result)
         await session.commit()
         return str(result.id)
+
+
+async def persist_backtest_error(
+    strategy_name: str,
+    start_date: str,
+    end_date: str,
+    task_id: str,
+    error_message: str,
+) -> None:
+    """
+    Persist a failed backtest status so polling can surface the error.
+    """
+    import uuid
+
+    async with get_session() as session:
+        result = BacktestResult(
+            id=uuid.UUID(task_id),
+            strategy_name=strategy_name,
+            start_date=datetime.fromisoformat(start_date),
+            end_date=datetime.fromisoformat(end_date),
+            metrics={
+                "status": "failed",
+                "error": error_message,
+            },
+        )
+        session.add(result)
+        await session.commit()
+
+
+async def _process_signals(
+    strategy: Any,
+    state: MarketState,
+    portfolio: Portfolio,
+    symbol: str,
+    bar_data: dict[str, dict],
+    config: BacktestConfig,
+    order_manager: OrderManager,
+    cost_model: CostModel,
+    position_lots: dict[str, list[TaxLot]],
+    trade_log: list[TradeRecord],
+    timestamp: datetime,
+) -> None:
+    """
+    Process signals from strategy evaluation for a single symbol/bar.
+    Captures avg_price before process_signal to correctly compute PnL on full exit.
+    Tracks tax lots on buys and consumes them on sells (FIFO).
+    """
+    signals = _safe_on_bar(strategy, state, portfolio)
+
+    if not signals:
+        return
+
+    for signal_dict in signals:
+        if not isinstance(signal_dict, dict):
+            continue
+
+        side = signal_dict.get("side", "hold")
+        if side == "hold":
+            continue
+
+        signal = Signal(
+            symbol=signal_dict.get("symbol", symbol),
+            side=Side(side),
+            weight=signal_dict.get("weight", 1.0),
+            quantity=signal_dict.get("quantity"),
+            strategy_id=config.strategy_name,
+            reason=signal_dict.get("reason", ""),
+        )
+
+        market_price = bar_data.get(symbol, {}).get("close", 0)
+        avg_volume = bar_data.get(symbol, {}).get("volume", 0)
+
+        if market_price <= 0:
+            continue
+
+        pre_exit_avg_price: float | None = None
+        if signal.side == Side.SELL and symbol in portfolio.positions:
+            pre_exit_avg_price = portfolio.positions[symbol].avg_price
+
+        order = await order_manager.process_signal(signal, market_price, avg_volume)
+
+        if order.status.value != "filled":
+            continue
+
+        cost = order.cost_breakdown.get("total", 0) if order.cost_breakdown else 0
+        fill_price = order.fill_price or 0.0
+        fill_quantity = order.fill_quantity or 0
+
+        tax = 0.0
+        if order.side == Side.BUY:
+            position_lots.setdefault(symbol, []).append(
+                TaxLot(
+                    symbol=symbol,
+                    quantity=fill_quantity,
+                    purchase_price=fill_price,
+                    purchase_date=timestamp,
+                )
+            )
+        elif order.side == Side.SELL and symbol in position_lots:
+            lots = position_lots[symbol]
+            if lots and fill_price > 0 and fill_quantity > 0:
+                tax_result = cost_model.estimate_tax(
+                    symbol,
+                    fill_price,
+                    fill_quantity,
+                    lots,
+                    TaxMethod.FIFO,
+                )
+                tax = tax_result.amount
+                _consume_lots(position_lots, symbol, fill_quantity)
+
+        pnl = None
+        if order.side == Side.SELL and fill_price > 0 and fill_quantity > 0:
+            avg_price = pre_exit_avg_price
+            if avg_price is not None and avg_price > 0:
+                pnl = (fill_price - avg_price) * fill_quantity - cost - tax
+
+        trade_log.append(
+            TradeRecord(
+                timestamp=timestamp,
+                symbol=order.symbol,
+                side=order.side.value,
+                quantity=fill_quantity,
+                price=fill_price,
+                cost=cost,
+                tax=tax,
+                pnl=pnl,
+            )
+        )
+
+
+def _consume_lots(
+    position_lots: dict[str, list[TaxLot]],
+    symbol: str,
+    quantity: int,
+) -> None:
+    """
+    Consume tax lots FIFO after a sell. Reduces lot quantities and removes
+    fully consumed lots.
+    """
+    lots = position_lots.get(symbol, [])
+    remaining = quantity
+    i = 0
+    while remaining > 0 and i < len(lots):
+        if lots[i].quantity <= remaining:
+            remaining -= lots[i].quantity
+            lots.pop(i)
+        else:
+            lots[i].quantity -= remaining
+            remaining = 0
+        i += 1
 
 
 async def run_backtest(config: BacktestConfig) -> BacktestResultOutput:
@@ -410,86 +599,23 @@ async def run_backtest(config: BacktestConfig) -> BacktestResultOutput:
         market_states = build_market_state(bar_data, timestamp, config.symbols, history_windows)
 
         for symbol, state in market_states.items():
-            signals = strategy.on_bar(state, portfolio)
-
-            if not signals:
-                continue
-
-            for signal_dict in signals:
-                if isinstance(signal_dict, dict):
-                    side = signal_dict.get("side", "hold")
-                    if side == "hold":
-                        continue
-
-                    signal = Signal(
-                        symbol=signal_dict.get("symbol", symbol),
-                        side=Side(side),
-                        weight=signal_dict.get("weight", 1.0),
-                        quantity=signal_dict.get("quantity"),
-                        strategy_id=config.strategy_name,
-                        reason=signal_dict.get("reason", ""),
-                    )
-
-                    market_price = bar_data.get(symbol, {}).get("close", 0)
-                    avg_volume = bar_data.get(symbol, {}).get("volume", 0)
-
-                    if market_price > 0:
-                        order = await order_manager.process_signal(
-                            signal, market_price, avg_volume
-                        )
-
-                        if order.status.value == "filled":
-                            cost = (
-                                order.cost_breakdown.get("total", 0) if order.cost_breakdown else 0
-                            )
-
-                            tax = 0.0
-                            if order.side == Side.SELL and symbol in position_lots:
-                                lots = position_lots[symbol]
-                                if (
-                                    order.fill_price is not None
-                                    and order.fill_quantity is not None
-                                ):
-                                    tax_result = cost_model.estimate_tax(
-                                        symbol,
-                                        order.fill_price,
-                                        order.fill_quantity,
-                                        lots,
-                                        TaxMethod.FIFO,
-                                    )
-                                    tax = tax_result.amount
-
-                            pnl = None
-                            if order.side == Side.SELL:
-                                pos = portfolio.positions.get(symbol)
-                                if (
-                                    pos
-                                    and order.fill_price is not None
-                                    and order.fill_quantity is not None
-                                ):
-                                    avg_price = pos.avg_price
-                                    if avg_price > 0:
-                                        pnl = (
-                                            (order.fill_price - avg_price) * order.fill_quantity
-                                            - cost
-                                            - tax
-                                        )
-
-                            trade_record = TradeRecord(
-                                timestamp=timestamp,
-                                symbol=order.symbol,
-                                side=order.side.value,
-                                quantity=order.fill_quantity or 0,
-                                price=order.fill_price or 0.0,
-                                cost=cost,
-                                tax=tax,
-                                pnl=pnl,
-                            )
-                            trade_log.append(trade_record)
+            await _process_signals(
+                strategy=strategy,
+                state=state,
+                portfolio=portfolio,
+                symbol=symbol,
+                bar_data=bar_data,
+                config=config,
+                order_manager=order_manager,
+                cost_model=cost_model,
+                position_lots=position_lots,
+                trade_log=trade_log,
+                timestamp=timestamp,
+            )
 
         positions_value = 0.0
-        for symbol, pos in portfolio.positions.items():
-            current_bar = bar_data.get(symbol)
+        for sym, pos in portfolio.positions.items():
+            current_bar = bar_data.get(sym)
             if current_bar:
                 positions_value += pos.quantity * current_bar["close"]
 
@@ -543,6 +669,7 @@ async def run_backtest(config: BacktestConfig) -> BacktestResultOutput:
         metrics,
         equity_curve_dict,
         trades_dict,
+        task_id=config.task_id,
     )
 
     logger.info(

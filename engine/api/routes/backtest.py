@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import datetime
-from functools import partial
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
@@ -35,8 +34,38 @@ class BacktestResponse(BaseModel):
     message: str | None = None
 
 
-def _run_backtest_background(config: BacktestConfig):
-    asyncio.run(run_backtest(config))
+def _run_backtest_background(config: BacktestConfig) -> None:
+    try:
+        asyncio.run(run_backtest(config))
+    except Exception:
+        import structlog
+
+        logger = structlog.get_logger()
+        logger.exception(
+            "backtest.background_failed",
+            task_id=config.task_id,
+            strategy=config.strategy_name,
+        )
+        try:
+            asyncio.run(_persist_error(config))
+        except Exception:
+            logger.exception("backtest.error_persist_failed", task_id=config.task_id)
+
+
+async def _persist_error(config: BacktestConfig) -> None:
+    async with get_session() as session:
+        result = BacktestResult(
+            id=uuid.UUID(config.task_id),
+            strategy_name=config.strategy_name,
+            start_date=datetime.fromisoformat(config.start_date),
+            end_date=datetime.fromisoformat(config.end_date),
+            metrics={
+                "status": "failed",
+                "error": "Background execution failed. Check server logs.",
+            },
+        )
+        session.add(result)
+        await session.commit()
 
 
 @router.post("/run")
@@ -52,6 +81,8 @@ async def run_backtest_endpoint(
     if not request.symbols:
         raise HTTPException(status_code=400, detail="At least one symbol is required")
 
+    task_id = str(uuid.uuid4())
+
     config = BacktestConfig(
         strategy_name=request.strategy_name,
         symbols=request.symbols,
@@ -62,11 +93,10 @@ async def run_backtest_endpoint(
         cost_config=request.cost_config or {},
         interval=request.interval,
         random_seed=request.random_seed,
+        task_id=task_id,
     )
 
-    task_id = str(uuid.uuid4())
-
-    background_tasks.add_task(partial(_run_backtest_background, config))
+    background_tasks.add_task(_run_backtest_background, config)
 
     return BacktestResponse(
         status="accepted",
@@ -86,10 +116,13 @@ async def get_backtest_result(backtest_id: str) -> dict:
     if not backtest:
         raise HTTPException(status_code=404, detail="Backtest result not found")
 
+    status = backtest.metrics.get("status", "completed") if backtest.metrics else "completed"
+
     return {
         "id": str(backtest.id),
         "strategy_name": backtest.strategy_name,
         "start_date": backtest.start_date.isoformat(),
         "end_date": backtest.end_date.isoformat(),
+        "status": status,
         "metrics": backtest.metrics,
     }
