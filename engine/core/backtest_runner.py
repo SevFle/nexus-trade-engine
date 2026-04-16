@@ -12,7 +12,6 @@ from engine.data.market_state import MarketStateBuilder
 if TYPE_CHECKING:
     import uuid
 
-if TYPE_CHECKING:
     from engine.core.metrics import PerformanceMetrics
     from engine.data.feeds import MarketDataProvider
     from engine.plugins.sdk import BaseStrategy
