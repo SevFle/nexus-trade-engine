@@ -214,12 +214,12 @@ class PerformanceMetrics:
         return ((final_value / self.initial_cash) ** (1 / years) - 1) * 100 if years > 0 else 0.0
 
     def _sharpe_ratio(self, daily_returns: list[float]) -> float:
-        if not daily_returns:
+        if len(daily_returns) < 2:  # noqa: PLR2004
             return 0.0
         rf_daily = self.risk_free_rate / self.trading_days_per_year
         mean_ret = float(np.mean(daily_returns))
         std_ret = float(np.std(daily_returns, ddof=1))
-        if std_ret == 0:
+        if std_ret == 0 or np.isnan(std_ret):
             return 0.0
         return (mean_ret - rf_daily) / std_ret * float(np.sqrt(self.trading_days_per_year))
 
@@ -290,7 +290,7 @@ class PerformanceMetrics:
         return annualized_return_pct / max_drawdown_pct
 
     def _volatility_annual_pct(self, daily_returns: list[float]) -> float:
-        if not daily_returns:
+        if len(daily_returns) < 2:  # noqa: PLR2004
             return 0.0
         return (
             float(np.std(daily_returns, ddof=1)) * float(np.sqrt(self.trading_days_per_year)) * 100
@@ -397,10 +397,25 @@ class PerformanceMetrics:
 
             rf_daily = self.risk_free_rate / self.trading_days_per_year
             mean_ret = float(np.mean(window_returns))
+
+            if len(window_returns) < 2:  # noqa: PLR2004
+                results.append(
+                    RollingWindowMetrics(
+                        window_days=window,
+                        sharpe_ratio=0.0,
+                        sortino_ratio=0.0,
+                        volatility_annual_pct=0.0,
+                        max_drawdown_pct=max(dd_curve) * 100
+                        if (dd_curve := self._calculate_drawdown_curve(window_values))
+                        else 0.0,
+                    )
+                )
+                continue
+
             std_ret = float(np.std(window_returns, ddof=1))
             sharpe = (
                 (mean_ret - rf_daily) / std_ret * float(np.sqrt(self.trading_days_per_year))
-                if std_ret != 0
+                if std_ret != 0 and not np.isnan(std_ret)
                 else 0.0
             )
 
@@ -438,12 +453,12 @@ def compute_sharpe_ratio(
     risk_free_rate: float = 0.0,
     trading_days_per_year: int = 252,
 ) -> float:
-    if not returns:
+    if len(returns) < 2:  # noqa: PLR2004
         return 0.0
     rf_daily = risk_free_rate / trading_days_per_year
     mean_ret = float(np.mean(returns))
     std_ret = float(np.std(returns, ddof=1))
-    if std_ret == 0:
+    if std_ret == 0 or np.isnan(std_ret):
         return 0.0
     return (mean_ret - rf_daily) / std_ret * float(np.sqrt(trading_days_per_year))
 

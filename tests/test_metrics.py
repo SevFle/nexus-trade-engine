@@ -311,6 +311,11 @@ class TestStandaloneFunctions:
         result = compute_sharpe_ratio([])
         assert result == 0.0
 
+    def test_compute_sharpe_ratio_single_return_no_nan(self):
+        result = compute_sharpe_ratio([0.01])
+        assert result == 0.0
+        assert not np.isnan(result)
+
     def test_compute_sharpe_ratio_custom_trading_days(self):
         returns = [0.01, -0.005, 0.02, 0.015, -0.01]
         result_252 = compute_sharpe_ratio(returns, risk_free_rate=0.05, trading_days_per_year=252)
@@ -692,6 +697,74 @@ class TestRollingWindowMetrics:
         report = metrics.calculate()
         assert len(report.rolling_metrics) == 1
         assert report.rolling_metrics[0].sortino_ratio is None
+
+
+class TestNanRegression:
+    def test_single_daily_return_sharpe_not_nan(self):
+        equity_curve = [
+            {"total_value": 100000.0, "cash": 50000.0},
+            {"total_value": 105000.0, "cash": 55000.0},
+        ]
+        metrics = PerformanceMetrics(
+            equity_curve=equity_curve,
+            trade_log=[],
+            initial_cash=100000.0,
+        )
+        report = metrics.calculate()
+        assert not np.isnan(report.sharpe_ratio)
+        assert report.sharpe_ratio == 0.0
+
+    def test_single_daily_return_volatility_not_nan(self):
+        equity_curve = [
+            {"total_value": 100000.0, "cash": 50000.0},
+            {"total_value": 105000.0, "cash": 55000.0},
+        ]
+        metrics = PerformanceMetrics(
+            equity_curve=equity_curve,
+            trade_log=[],
+            initial_cash=100000.0,
+        )
+        report = metrics.calculate()
+        assert not np.isnan(report.volatility_annual_pct)
+        assert report.volatility_annual_pct == 0.0
+
+    def test_single_daily_return_json_serializable(self):
+        equity_curve = [
+            {"total_value": 100000.0, "cash": 50000.0},
+            {"total_value": 105000.0, "cash": 55000.0},
+        ]
+        metrics = PerformanceMetrics(
+            equity_curve=equity_curve,
+            trade_log=[],
+            initial_cash=100000.0,
+        )
+        report = metrics.calculate()
+        result = report.to_dict()
+        serialized = json.dumps(result)
+        parsed = json.loads(serialized)
+        for key in ("sharpe_ratio", "volatility_annual_pct"):
+            val = parsed[key]
+            assert val is not None, f"{key} is None"
+            assert not np.isnan(val), f"{key} is nan"
+
+    def test_single_daily_return_rolling_not_nan(self):
+        equity_curve = [
+            {"total_value": 100000.0, "cash": 50000.0},
+            {"total_value": 105000.0, "cash": 55000.0},
+        ]
+        metrics = PerformanceMetrics(
+            equity_curve=equity_curve,
+            trade_log=[],
+            initial_cash=100000.0,
+            rolling_windows=[1],
+        )
+        report = metrics.calculate()
+        assert len(report.rolling_metrics) == 1
+        rm = report.rolling_metrics[0]
+        assert not np.isnan(rm.sharpe_ratio)
+        assert rm.sharpe_ratio == 0.0
+        assert not np.isnan(rm.volatility_annual_pct)
+        assert rm.volatility_annual_pct == 0.0
 
 
 class TestJsonSerialization:

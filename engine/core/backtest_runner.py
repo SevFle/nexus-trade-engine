@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from engine.core.metrics import PerformanceMetrics
+    from engine.core.metrics import PerformanceMetrics, RollingWindowMetrics
 
 
 @dataclass
@@ -50,6 +50,7 @@ class BacktestSummary:
     cost_drag_pct: float
     turnover_ratio: float
     exposure_pct: float
+    rolling_metrics: list[RollingWindowMetrics] = field(default_factory=list)
 
     @classmethod
     def from_metrics(cls, metrics: PerformanceMetrics) -> BacktestSummary:
@@ -79,4 +80,5 @@ class BacktestSummary:
             cost_drag_pct=report.cost_drag_pct,
             turnover_ratio=report.turnover_ratio,
             exposure_pct=report.exposure_pct,
+            rolling_metrics=report.rolling_metrics,
         )
