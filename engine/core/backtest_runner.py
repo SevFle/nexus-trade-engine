@@ -129,14 +129,15 @@ class BacktestSummary:
     total_return_pct: float
     annualized_return_pct: float
     sharpe_ratio: float
-    sortino_ratio: float
+    sortino_ratio: float | None
     max_drawdown_pct: float
     max_drawdown_duration_days: int
-    calmar_ratio: float
+    max_drawdown_recovery_days: int | None
+    calmar_ratio: float | None
     volatility_annual_pct: float
     total_trades: int
     win_rate: float
-    profit_factor: float
+    profit_factor: float | None
     avg_trade_pnl: float
     avg_winner: float
     avg_loser: float
@@ -160,6 +161,7 @@ class BacktestSummary:
             sortino_ratio=report.sortino_ratio,
             max_drawdown_pct=report.max_drawdown_pct,
             max_drawdown_duration_days=report.max_drawdown_duration_days,
+            max_drawdown_recovery_days=report.max_drawdown_recovery_days,
             calmar_ratio=report.calmar_ratio,
             volatility_annual_pct=report.volatility_annual_pct,
             total_trades=report.total_trades,

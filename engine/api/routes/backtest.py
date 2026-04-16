@@ -22,18 +22,27 @@ class BacktestResponse(BaseModel):
     task_id: str | None = None
 
 
+class RollingMetricsSnapshot(BaseModel):
+    window_days: int
+    sharpe_ratio: float
+    sortino_ratio: float | None
+    volatility_annual_pct: float
+    max_drawdown_pct: float
+
+
 class MetricsSummary(BaseModel):
     total_return_pct: float
     annualized_return_pct: float
     sharpe_ratio: float
-    sortino_ratio: float
+    sortino_ratio: float | None
     max_drawdown_pct: float
     max_drawdown_duration_days: int
-    calmar_ratio: float
+    max_drawdown_recovery_days: int | None
+    calmar_ratio: float | None
     volatility_annual_pct: float
     total_trades: int
     win_rate: float
-    profit_factor: float
+    profit_factor: float | None
     avg_trade_pnl: float
     avg_winner: float
     avg_loser: float
@@ -46,6 +55,7 @@ class MetricsSummary(BaseModel):
     cost_drag_pct: float
     turnover_ratio: float
     exposure_pct: float
+    rolling_metrics: list[RollingMetricsSnapshot] = []
 
 
 class BacktestResultResponse(BaseModel):
@@ -79,6 +89,7 @@ async def get_backtest_result(request: BacktestRequest) -> BacktestResultRespons
             sortino_ratio=0.0,
             max_drawdown_pct=0.0,
             max_drawdown_duration_days=0,
+            max_drawdown_recovery_days=0,
             calmar_ratio=0.0,
             volatility_annual_pct=0.0,
             total_trades=0,
