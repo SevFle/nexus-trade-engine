@@ -99,20 +99,22 @@ class BacktestRunner:
             signals = self.strategy.on_bar(sdk_state, portfolio)
             result.trades.extend(signals)
 
+            price = market_state.prices.get(self.config.symbol, 0.0)
+            portfolio.update_prices({self.config.symbol: price})
+            portfolio_value = portfolio.total_value
+
             result.equity_curve.append(
                 {
                     "timestamp": ts,
-                    "price": market_state.prices.get(self.config.symbol, 0.0),
+                    "price": price,
+                    "portfolio_value": portfolio_value,
                 }
             )
 
         if result.equity_curve:
-            result.final_capital = result.equity_curve[-1].get("price", 0.0) * 100
-            first_price = result.equity_curve[0].get("price", 0.0)
-            if first_price > 0:
-                result.total_return_pct = (
-                    (result.equity_curve[-1].get("price", 0.0) - first_price) / first_price * 100
-                )
+            result.final_capital = portfolio.total_value
+            if portfolio.initial_cash > 0:
+                result.total_return_pct = portfolio.total_return_pct
 
         logger.info(
             "backtest.complete",

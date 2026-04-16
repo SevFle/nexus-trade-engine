@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import sys
-from dataclasses import dataclass, field
-from datetime import datetime  # noqa: TC003
 from typing import TYPE_CHECKING, Any
+from unittest.mock import MagicMock
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from engine.core.backtest_runner import BacktestConfig, BacktestRunner
 from engine.data.feeds import MarketDataProvider
@@ -16,19 +15,18 @@ if TYPE_CHECKING:
     from engine.core.portfolio import Portfolio
 
 
-@dataclass
 class _SDKMarketState:
-    timestamp: datetime
-    prices: dict[str, float] = field(default_factory=dict)
-    volumes: dict[str, int] = field(default_factory=dict)
-    ohlcv: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
-
-
-sys.modules.setdefault(
-    "nexus_sdk.strategy",
-    type(sys)("nexus_sdk.strategy"),
-)
-sys.modules["nexus_sdk.strategy"].MarketState = _SDKMarketState  # type: ignore[attr-defined]
+    def __init__(
+        self,
+        timestamp: Any,
+        prices: dict[str, float] | None = None,
+        volumes: dict[str, int] | None = None,
+        ohlcv: dict[str, list[dict[str, Any]]] | None = None,
+    ) -> None:
+        self.timestamp = timestamp
+        self.prices = prices or {}
+        self.volumes = volumes or {}
+        self.ohlcv = ohlcv or {}
 
 
 class _TrackingStrategy(BaseStrategy):
@@ -36,11 +34,13 @@ class _TrackingStrategy(BaseStrategy):
     version = "0.1.0"
 
     def __init__(self) -> None:
-        self.portfolio_snapshots: list[int] = []
+        self.portfolio_ids: list[int] = []
+        self.last_portfolio: Portfolio | None = None
         self.bought = False
 
     def on_bar(self, state: Any, portfolio: Portfolio) -> list[dict]:
-        self.portfolio_snapshots.append(id(portfolio))
+        self.portfolio_ids.append(id(portfolio))
+        self.last_portfolio = portfolio
         if not self.bought:
             price = state.prices.get("TEST", 100.0)
             if isinstance(price, (int, float)) and price > 0:
@@ -98,6 +98,15 @@ def _default_config(df: pd.DataFrame) -> BacktestConfig:
     )
 
 
+@pytest.fixture(autouse=True)
+def _mock_nexus_sdk():
+    sdk = MagicMock()
+    sdk.MarketState = _SDKMarketState
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setitem(__import__("sys").modules, "nexus_sdk.strategy", sdk)
+        yield
+
+
 class TestPortfolioPersistsAcrossBars:
     async def test_same_portfolio_instance_across_bars(self) -> None:
         df = _make_ohlcv(60)
@@ -106,10 +115,8 @@ class TestPortfolioPersistsAcrossBars:
         runner = BacktestRunner(config=_default_config(df), strategy=strategy, provider=provider)
         await runner.run()
 
-        assert len(strategy.portfolio_snapshots) > 1, (
-            "Strategy should have been called multiple times"
-        )
-        assert len(set(strategy.portfolio_snapshots)) == 1, (
+        assert len(strategy.portfolio_ids) > 1, "Strategy should have been called multiple times"
+        assert len(set(strategy.portfolio_ids)) == 1, (
             "Portfolio was recreated each bar — expected a single instance"
         )
 
@@ -120,15 +127,20 @@ class TestPortfolioPersistsAcrossBars:
         runner = BacktestRunner(config=_default_config(df), strategy=strategy, provider=provider)
         await runner.run()
 
-        assert strategy.bought, "Strategy should have opened a position"
-        assert len(strategy.portfolio_snapshots) > 1
+        assert strategy.bought, "Strategy should have opened a position on bar 0"
+        assert strategy.last_portfolio is not None
+        assert "TEST" in strategy.last_portfolio.positions, (
+            "Position opened on bar 0 should still exist in portfolio after last bar"
+        )
+        assert strategy.last_portfolio.positions["TEST"].quantity == 10  # noqa: PLR2004
 
-    async def test_portfolio_not_instantiated_inside_loop(self) -> None:
+    async def test_final_capital_uses_portfolio_total_value(self) -> None:
         df = _make_ohlcv(60)
         strategy = _TrackingStrategy()
         provider = _StubProvider(df)
         runner = BacktestRunner(config=_default_config(df), strategy=strategy, provider=provider)
-        await runner.run()
+        result = await runner.run()
 
-        unique_ids = set(strategy.portfolio_snapshots)
-        assert len(unique_ids) == 1, f"Expected 1 portfolio instance, got {len(unique_ids)}"
+        assert strategy.last_portfolio is not None
+        assert result.final_capital == strategy.last_portfolio.total_value
+        assert result.final_capital != 0.0
