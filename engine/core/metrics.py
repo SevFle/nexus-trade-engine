@@ -13,18 +13,28 @@ class CostBreakdown:
 
 
 @dataclass
+class RollingWindowMetrics:
+    window_days: int
+    sharpe_ratio: float
+    sortino_ratio: float | None
+    volatility_annual_pct: float
+    max_drawdown_pct: float
+
+
+@dataclass
 class MetricsReport:
     total_return_pct: float
     annualized_return_pct: float
     sharpe_ratio: float
-    sortino_ratio: float
+    sortino_ratio: float | None
     max_drawdown_pct: float
     max_drawdown_duration_days: int
-    calmar_ratio: float
+    max_drawdown_recovery_days: int | None
+    calmar_ratio: float | None
     volatility_annual_pct: float
     total_trades: int
     win_rate: float
-    profit_factor: float
+    profit_factor: float | None
     avg_trade_pnl: float
     avg_winner: float
     avg_loser: float
@@ -39,6 +49,7 @@ class MetricsReport:
     exposure_pct: float
     equity_curve: list[dict] = field(default_factory=list)
     drawdown_curve: list[float] = field(default_factory=list)
+    rolling_metrics: list[RollingWindowMetrics] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -48,6 +59,7 @@ class MetricsReport:
             "sortino_ratio": self.sortino_ratio,
             "max_drawdown_pct": self.max_drawdown_pct,
             "max_drawdown_duration_days": self.max_drawdown_duration_days,
+            "max_drawdown_recovery_days": self.max_drawdown_recovery_days,
             "calmar_ratio": self.calmar_ratio,
             "volatility_annual_pct": self.volatility_annual_pct,
             "total_trades": self.total_trades,
@@ -65,6 +77,16 @@ class MetricsReport:
             "cost_drag_pct": self.cost_drag_pct,
             "turnover_ratio": self.turnover_ratio,
             "exposure_pct": self.exposure_pct,
+            "rolling_metrics": [
+                {
+                    "window_days": rm.window_days,
+                    "sharpe_ratio": rm.sharpe_ratio,
+                    "sortino_ratio": rm.sortino_ratio,
+                    "volatility_annual_pct": rm.volatility_annual_pct,
+                    "max_drawdown_pct": rm.max_drawdown_pct,
+                }
+                for rm in self.rolling_metrics
+            ],
         }
 
 
@@ -76,12 +98,14 @@ class PerformanceMetrics:
         initial_cash: float,
         risk_free_rate: float = 0.05,
         trading_days_per_year: int = 252,
+        rolling_windows: list[int] | None = None,
     ):
         self.equity_curve = equity_curve
         self.trade_log = trade_log
         self.initial_cash = initial_cash
         self.risk_free_rate = risk_free_rate
         self.trading_days_per_year = trading_days_per_year
+        self.rolling_windows = rolling_windows or []
 
     def calculate(self) -> MetricsReport:
         values = [point["total_value"] for point in self.equity_curve]
@@ -100,6 +124,7 @@ class PerformanceMetrics:
         sortino_ratio = self._sortino_ratio(daily_returns)
         max_drawdown_pct = self._max_drawdown_pct(drawdown_curve)
         max_dd_duration = self._max_drawdown_duration(values)
+        max_dd_recovery = self._max_drawdown_recovery(values, drawdown_curve)
         calmar_ratio = self._calmar_ratio(annualized_return_pct, max_drawdown_pct)
         volatility_annual_pct = self._volatility_annual_pct(daily_returns)
 
@@ -120,6 +145,8 @@ class PerformanceMetrics:
         turnover_ratio = self._turnover_ratio()
         exposure_pct = self._exposure_pct()
 
+        rolling_metrics = self._rolling_window_metrics(daily_returns, values)
+
         return MetricsReport(
             total_return_pct=total_return_pct,
             annualized_return_pct=annualized_return_pct,
@@ -127,6 +154,7 @@ class PerformanceMetrics:
             sortino_ratio=sortino_ratio,
             max_drawdown_pct=max_drawdown_pct,
             max_drawdown_duration_days=max_dd_duration,
+            max_drawdown_recovery_days=max_dd_recovery,
             calmar_ratio=calmar_ratio,
             volatility_annual_pct=volatility_annual_pct,
             total_trades=total_trades,
@@ -146,12 +174,20 @@ class PerformanceMetrics:
             exposure_pct=exposure_pct,
             equity_curve=self.equity_curve,
             drawdown_curve=drawdown_curve,
+            rolling_metrics=rolling_metrics,
         )
 
     def _calculate_daily_returns(self, values: list[float]) -> list[float]:
         if len(values) < 2:  # noqa: PLR2004
             return []
-        return [(values[i] - values[i - 1]) / values[i - 1] for i in range(1, len(values))]
+        returns = []
+        for i in range(1, len(values)):
+            prev = values[i - 1]
+            if prev == 0:
+                returns.append(0.0)
+            else:
+                returns.append((values[i] - prev) / prev)
+        return returns
 
     def _calculate_drawdown_curve(self, values: list[float]) -> list[float]:
         if not values:
@@ -181,24 +217,22 @@ class PerformanceMetrics:
         if not daily_returns:
             return 0.0
         rf_daily = self.risk_free_rate / self.trading_days_per_year
-        mean_ret = np.mean(daily_returns)
-        std_ret = np.std(daily_returns, ddof=0)
+        mean_ret = float(np.mean(daily_returns))
+        std_ret = float(np.std(daily_returns, ddof=1))
         if std_ret == 0:
             return 0.0
-        return (mean_ret - rf_daily) / std_ret * np.sqrt(self.trading_days_per_year)
+        return (mean_ret - rf_daily) / std_ret * float(np.sqrt(self.trading_days_per_year))
 
-    def _sortino_ratio(self, daily_returns: list[float]) -> float:
+    def _sortino_ratio(self, daily_returns: list[float]) -> float | None:
         if not daily_returns:
             return 0.0
         rf_daily = self.risk_free_rate / self.trading_days_per_year
-        mean_ret = np.mean(daily_returns)
-        downside_returns = [r for r in daily_returns if r < 0]
-        if not downside_returns:
-            return float("inf") if mean_ret > rf_daily else 0.0
-        downside_std = np.std(downside_returns, ddof=0)
-        if downside_std == 0:
-            return 0.0
-        return (mean_ret - rf_daily) / downside_std * np.sqrt(self.trading_days_per_year)
+        mean_ret = float(np.mean(daily_returns))
+        downside_diff_sq = [(min(r - rf_daily, 0.0)) ** 2 for r in daily_returns]
+        downside_dev = float(np.sqrt(np.mean(downside_diff_sq)))
+        if downside_dev == 0:
+            return None if mean_ret > rf_daily else 0.0
+        return (mean_ret - rf_daily) / downside_dev * float(np.sqrt(self.trading_days_per_year))
 
     def _max_drawdown_pct(self, drawdown_curve: list[float]) -> float:
         return max(drawdown_curve) * 100 if drawdown_curve else 0.0
@@ -229,15 +263,38 @@ class PerformanceMetrics:
             max_duration = max(max_duration, current_duration)
         return max_duration
 
-    def _calmar_ratio(self, annualized_return_pct: float, max_drawdown_pct: float) -> float:
+    def _max_drawdown_recovery(
+        self, values: list[float], drawdown_curve: list[float]
+    ) -> int | None:
+        if not values or not drawdown_curve:
+            return None
+
+        max_dd_idx = int(np.argmax(drawdown_curve))
+        max_dd = drawdown_curve[max_dd_idx]
+        if max_dd == 0:
+            return 0
+
+        pre_dd_peak = values[0]
+        for i in range(max_dd_idx + 1):
+            pre_dd_peak = max(pre_dd_peak, values[i])
+
+        for i in range(max_dd_idx + 1, len(values)):
+            if values[i] >= pre_dd_peak:
+                return i - max_dd_idx
+
+        return None
+
+    def _calmar_ratio(self, annualized_return_pct: float, max_drawdown_pct: float) -> float | None:
         if max_drawdown_pct == 0:
-            return float("inf") if annualized_return_pct > 0 else 0.0
+            return None if annualized_return_pct > 0 else 0.0
         return annualized_return_pct / max_drawdown_pct
 
     def _volatility_annual_pct(self, daily_returns: list[float]) -> float:
         if not daily_returns:
             return 0.0
-        return np.std(daily_returns, ddof=0) * np.sqrt(self.trading_days_per_year) * 100
+        return (
+            float(np.std(daily_returns, ddof=1)) * float(np.sqrt(self.trading_days_per_year)) * 100
+        )
 
     def _win_rate(self, trade_pnls: list[float]) -> float:
         if not trade_pnls:
@@ -245,11 +302,11 @@ class PerformanceMetrics:
         winning = sum(1 for p in trade_pnls if p > 0)
         return (winning / len(trade_pnls)) * 100
 
-    def _profit_factor(self, trade_pnls: list[float]) -> float:
+    def _profit_factor(self, trade_pnls: list[float]) -> float | None:
         gains = sum(p for p in trade_pnls if p > 0)
         losses = abs(sum(p for p in trade_pnls if p < 0))
         if losses == 0:
-            return float("inf") if gains > 0 else 0.0
+            return None if gains > 0 else 0.0
         return gains / losses
 
     def _mean_or_zero(self, values: list[float]) -> float:
@@ -326,17 +383,69 @@ class PerformanceMetrics:
                 exposures.append(invested / total_value)
         return float(np.mean(exposures)) * 100 if exposures else 0.0
 
+    def _rolling_window_metrics(
+        self, daily_returns: list[float], values: list[float]
+    ) -> list[RollingWindowMetrics]:
+        if not self.rolling_windows or not daily_returns:
+            return []
+        results = []
+        for window in self.rolling_windows:
+            if window > len(daily_returns):
+                continue
+            window_returns = daily_returns[-window:]
+            window_values = values[-(window + 1) :] if len(values) >= window + 1 else values
 
-def compute_sharpe_ratio(returns: list[float], risk_free_rate: float = 0.0) -> float:
+            rf_daily = self.risk_free_rate / self.trading_days_per_year
+            mean_ret = float(np.mean(window_returns))
+            std_ret = float(np.std(window_returns, ddof=1))
+            sharpe = (
+                (mean_ret - rf_daily) / std_ret * float(np.sqrt(self.trading_days_per_year))
+                if std_ret != 0
+                else 0.0
+            )
+
+            downside_diff_sq = [(min(r - rf_daily, 0.0)) ** 2 for r in window_returns]
+            downside_dev = float(np.sqrt(np.mean(downside_diff_sq)))
+            sortino = (
+                (mean_ret - rf_daily) / downside_dev * float(np.sqrt(self.trading_days_per_year))
+                if downside_dev != 0
+                else (None if mean_ret > rf_daily else 0.0)
+            )
+
+            vol = (
+                float(np.std(window_returns, ddof=1))
+                * float(np.sqrt(self.trading_days_per_year))
+                * 100
+            )
+
+            dd_curve = self._calculate_drawdown_curve(window_values)
+            max_dd = max(dd_curve) * 100 if dd_curve else 0.0
+
+            results.append(
+                RollingWindowMetrics(
+                    window_days=window,
+                    sharpe_ratio=sharpe,
+                    sortino_ratio=sortino,
+                    volatility_annual_pct=vol,
+                    max_drawdown_pct=max_dd,
+                )
+            )
+        return results
+
+
+def compute_sharpe_ratio(
+    returns: list[float],
+    risk_free_rate: float = 0.0,
+    trading_days_per_year: int = 252,
+) -> float:
     if not returns:
         return 0.0
-    trading_days = 252
-    rf_daily = risk_free_rate / trading_days
-    mean_ret = np.mean(returns)
-    std_ret = np.std(returns, ddof=0)
+    rf_daily = risk_free_rate / trading_days_per_year
+    mean_ret = float(np.mean(returns))
+    std_ret = float(np.std(returns, ddof=1))
     if std_ret == 0:
         return 0.0
-    return (mean_ret - rf_daily) / std_ret * np.sqrt(trading_days)
+    return (mean_ret - rf_daily) / std_ret * float(np.sqrt(trading_days_per_year))
 
 
 def compute_max_drawdown(equity_curve: list[float]) -> float:
