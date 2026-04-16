@@ -153,6 +153,7 @@ class ICostModel(ABC):
         quantity: int,
         lots: list[TaxLot],
         method: TaxMethod = TaxMethod.FIFO,
+        sell_date: datetime | None = None,
     ) -> Money:
         """Estimate capital gains tax for selling from given lots."""
         ...

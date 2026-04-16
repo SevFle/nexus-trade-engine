@@ -99,7 +99,7 @@ class TestHoldingPeriod:
                 purchase_date=now - timedelta(days=400),
             )
         ]
-        tax = cost_model.estimate_tax("AAPL", 150.0, 100, lots, TaxMethod.FIFO)
+        tax = cost_model.estimate_tax("AAPL", 150.0, 100, lots, TaxMethod.FIFO, sell_date=now)
         expected = (150.0 - 100.0) * 100 * 0.20
         assert abs(tax.amount - expected) < 1e-6
 
@@ -242,3 +242,87 @@ class TestPortfolioWashSale:
         lots = p.get_tax_lots("AAPL")
         assert len(lots) == 1
         assert lots[0].purchase_price == 145.0
+
+    def test_wash_sale_no_double_count_across_two_buys(self):
+        """One losing sell matched by two successive buys must not double-count."""
+        p = Portfolio(initial_cash=500_000)
+
+        # Buy 100 AAPL at $150
+        p.transaction_date = datetime(2026, 1, 1, tzinfo=UTC)
+        p.open_position("AAPL", 100, 150.0)
+
+        # Sell 100 AAPL at $140 → $1000 loss (sell_price - cost = 140*100 - 150*100 = -$1000)
+        p.transaction_date = datetime(2026, 3, 1, tzinfo=UTC)
+        p.close_position("AAPL", 100, 140.0)
+        loss = p.realized_pnl
+        assert loss < 0
+
+        # Buy 100 AAPL at $145, 5 days after sell (within 30-day window)
+        p.transaction_date = datetime(2026, 3, 6, tzinfo=UTC)
+        p.open_position("AAPL", 100, 145.0)
+
+        # Buy another 100 AAPL at $146, 10 days after sell
+        p.transaction_date = datetime(2026, 3, 11, tzinfo=UTC)
+        p.open_position("AAPL", 100, 146.0)
+
+        lots = p.get_tax_lots("AAPL")
+        assert len(lots) == 2
+
+        total_adjustment = sum(
+            (lot.purchase_price - base) * lot.quantity
+            for lot, base in [(lots[0], 145.0), (lots[1], 146.0)]
+        )
+        assert total_adjustment <= abs(loss) + 1e-6
+
+    def test_buy_then_sell_wash_sale_adjusts_existing_lot(self):
+        """Buy-then-sell direction: buy first, then sell at loss within 30 days.
+        The existing lot's cost basis should be adjusted."""
+        p = Portfolio(initial_cash=500_000)
+
+        # Day 0: Buy 100 AAPL at $150
+        p.transaction_date = datetime(2026, 1, 1, tzinfo=UTC)
+        p.open_position("AAPL", 100, 150.0)
+
+        # Day 10: Buy another 100 AAPL at $140 (replacement lot)
+        p.transaction_date = datetime(2026, 1, 11, tzinfo=UTC)
+        p.open_position("AAPL", 100, 140.0)
+
+        # Day 20: Sell 100 AAPL at $130 → loss.
+        # The $140 lot bought 10 days ago is within 30-day window.
+        p.transaction_date = datetime(2026, 1, 21, tzinfo=UTC)
+        p.close_position("AAPL", 100, 130.0)
+
+        # Remaining lot should have its cost basis adjusted upward
+        lots = p.get_tax_lots("AAPL")
+        assert len(lots) == 1
+        assert lots[0].purchase_price > 150.0 or lots[0].purchase_price > 140.0
+
+    def test_gain_does_not_subtract_tax(self):
+        """Gain = proceeds - cost_basis - fees. Tax is NOT subtracted from gain."""
+        p = Portfolio(initial_cash=100_000)
+
+        p.transaction_date = datetime(2026, 1, 1, tzinfo=UTC)
+        p.open_position("AAPL", 100, 100.0)
+
+        p.transaction_date = datetime(2026, 2, 1, tzinfo=UTC)
+        p.close_position("AAPL", 100, 120.0, cost=10.0, tax=500.0)
+
+        sell_proceeds = 100 * 120.0
+        cost_basis = 100 * 100.0
+        fees = 10.0
+        expected_gain = sell_proceeds - cost_basis - fees
+        assert abs(p.realized_pnl - expected_gain) < 1e-6
+
+    def test_tax_deducted_from_cash_on_sell(self):
+        p = Portfolio(initial_cash=100_000)
+
+        p.transaction_date = datetime(2026, 1, 1, tzinfo=UTC)
+        p.open_position("AAPL", 100, 100.0)
+
+        cash_before = p.cash
+        p.transaction_date = datetime(2026, 2, 1, tzinfo=UTC)
+        p.close_position("AAPL", 100, 120.0, cost=10.0, tax=500.0)
+
+        sell_proceeds = 100 * 120.0
+        expected_cash = cash_before + sell_proceeds - 10.0 - 500.0
+        assert abs(p.cash - expected_cash) < 1e-6

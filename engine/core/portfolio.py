@@ -50,6 +50,7 @@ class SellRecord:
     sell_price: float
     cost_basis: float
     gain: float
+    remaining_disallowed: float = 0.0
 
 
 @dataclass
@@ -116,12 +117,15 @@ class Portfolio:
                 continue
             if sell.gain >= 0:
                 continue
+            if sell.remaining_disallowed <= 0:
+                continue
             window_start = purchase_date - timedelta(days=self._cost_model.wash_sale_window_days)
             if window_start <= sell.sell_date <= purchase_date:
-                disallowed = abs(sell.gain)
-                per_share = disallowed / sell.quantity
+                per_share = sell.remaining_disallowed / sell.quantity
                 applicable = min(quantity, sell.quantity) * per_share
+                applicable = min(applicable, sell.remaining_disallowed)
                 total_adjustment += applicable
+                sell.remaining_disallowed -= applicable
 
         if total_adjustment > 0:
             adjusted_price = price + (total_adjustment / quantity)
@@ -235,9 +239,13 @@ class Portfolio:
         sell_proceeds = quantity * price
         self._cash += sell_proceeds - cost - tax
 
-        gain = sell_proceeds - total_cost_basis - cost - tax
+        gain = sell_proceeds - total_cost_basis - cost
         self.realized_pnl += gain
 
+        if gain < 0:
+            self._apply_buy_then_sell_wash_sale(symbol, sell_date, gain, quantity)
+
+        disallowed_amount = abs(gain) if gain < 0 else 0.0
         self._sell_history.append(
             SellRecord(
                 symbol=symbol,
@@ -246,6 +254,7 @@ class Portfolio:
                 sell_price=price,
                 cost_basis=total_cost_basis,
                 gain=gain,
+                remaining_disallowed=disallowed_amount,
             )
         )
 
@@ -263,6 +272,24 @@ class Portfolio:
         )
 
         return consumed_lots
+
+    def _apply_buy_then_sell_wash_sale(
+        self, symbol: str, sell_date: datetime, loss: float, sell_qty: int
+    ) -> None:
+        """IRS Pub 550: if a loss sale occurs within 30 days after buying the same
+        symbol, the loss is disallowed and added to the purchased lot's cost basis."""
+        window_start = sell_date - timedelta(days=self._cost_model.wash_sale_window_days)
+        lots = self._tax_lots.get(symbol, [])
+        for lot in lots:
+            if lot.symbol != symbol:
+                continue
+            if lot.quantity <= 0:
+                continue
+            if not (window_start <= lot.purchase_date <= sell_date):
+                continue
+            per_share = abs(loss) / sell_qty
+            applicable = min(lot.quantity, sell_qty) * per_share
+            lot.purchase_price += applicable / lot.quantity
 
     def update_prices(self, prices: dict[str, float]) -> None:
         """Update current market prices for positions (for P&L calculation)."""
