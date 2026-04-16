@@ -7,17 +7,13 @@ it in the database for backtest use.
 
 import asyncio
 import sys
-from datetime import datetime
 
 import yfinance as yf
-import pandas as pd
 from sqlalchemy import text
 
 # Add engine to path
 sys.path.insert(0, "../engine")
-from config import get_settings
 from db.session import engine as db_engine
-
 
 DEFAULT_SYMBOLS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "META",

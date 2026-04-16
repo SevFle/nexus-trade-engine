@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.order_manager import Order
     from core.cost_model import CostBreakdown
+    from core.order_manager import Order
 
 
 @dataclass

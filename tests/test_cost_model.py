@@ -2,10 +2,10 @@
 Tests for the cost model — the most critical component to get right.
 """
 
-import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
-from core.cost_model import DefaultCostModel, TaxLot, TaxMethod, Money
+import pytest
+from core.cost_model import DefaultCostModel, TaxLot, TaxMethod
 
 
 @pytest.fixture
@@ -76,7 +76,7 @@ class TestTaxEngine:
                 symbol="AAPL",
                 quantity=100,
                 purchase_price=100.0,
-                purchase_date=datetime.now(timezone.utc) - timedelta(days=30),
+                purchase_date=datetime.now(UTC) - timedelta(days=30),
             )
         ]
         tax = cost_model.estimate_tax("AAPL", 150.0, 100, lots, TaxMethod.FIFO)
@@ -89,7 +89,7 @@ class TestTaxEngine:
                 symbol="AAPL",
                 quantity=100,
                 purchase_price=100.0,
-                purchase_date=datetime.now(timezone.utc) - timedelta(days=400),
+                purchase_date=datetime.now(UTC) - timedelta(days=400),
             )
         ]
         tax = cost_model.estimate_tax("AAPL", 150.0, 100, lots, TaxMethod.FIFO)
@@ -102,14 +102,14 @@ class TestTaxEngine:
                 symbol="AAPL",
                 quantity=100,
                 purchase_price=200.0,
-                purchase_date=datetime.now(timezone.utc) - timedelta(days=30),
+                purchase_date=datetime.now(UTC) - timedelta(days=30),
             )
         ]
         tax = cost_model.estimate_tax("AAPL", 150.0, 100, lots, TaxMethod.FIFO)
         assert tax.amount == 0.0
 
     def test_fifo_vs_lifo(self, cost_model):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         lots = [
             TaxLot(symbol="AAPL", quantity=50, purchase_price=80.0, purchase_date=now - timedelta(days=400)),
             TaxLot(symbol="AAPL", quantity=50, purchase_price=140.0, purchase_date=now - timedelta(days=30)),
@@ -123,21 +123,21 @@ class TestTaxEngine:
 
 class TestWashSale:
     def test_wash_sale_detected(self, cost_model):
-        sell_date = datetime.now(timezone.utc)
+        sell_date = datetime.now(UTC)
         buy_history = [
             {"symbol": "AAPL", "date": sell_date - timedelta(days=10)},
         ]
         assert cost_model.check_wash_sale("AAPL", sell_date, buy_history) is True
 
     def test_no_wash_sale_outside_window(self, cost_model):
-        sell_date = datetime.now(timezone.utc)
+        sell_date = datetime.now(UTC)
         buy_history = [
             {"symbol": "AAPL", "date": sell_date - timedelta(days=60)},
         ]
         assert cost_model.check_wash_sale("AAPL", sell_date, buy_history) is False
 
     def test_no_wash_sale_different_symbol(self, cost_model):
-        sell_date = datetime.now(timezone.utc)
+        sell_date = datetime.now(UTC)
         buy_history = [
             {"symbol": "MSFT", "date": sell_date - timedelta(days=10)},
         ]

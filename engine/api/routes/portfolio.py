@@ -2,13 +2,12 @@
 Portfolio API routes.
 """
 
+from db.models import PortfolioRecord, PositionRecord
+from db.session import get_db
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
-from db.session import get_db
-from db.models import PortfolioRecord, PositionRecord
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 

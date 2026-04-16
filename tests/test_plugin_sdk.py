@@ -2,13 +2,12 @@
 Tests for the plugin SDK — verify the strategy contract works correctly.
 """
 
-import pytest
-import asyncio
 
-from core.signal import Signal, Side
-from plugins.sdk import IStrategy, StrategyConfig, MarketState, DataFeed
+import pytest
 from core.cost_model import DefaultCostModel
 from core.portfolio import Portfolio
+from core.signal import Side, Signal
+from plugins.sdk import IStrategy, MarketState, StrategyConfig
 
 
 class DummyStrategy(IStrategy):

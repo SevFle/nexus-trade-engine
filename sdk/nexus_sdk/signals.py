@@ -5,9 +5,8 @@ Signal types for the SDK.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -26,18 +25,18 @@ class SignalStrength(str, Enum):
 
 class Signal(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     symbol: str
     side: Side
     weight: float = Field(default=1.0, ge=0.0, le=1.0)
-    quantity: Optional[int] = None
+    quantity: int | None = None
     strategy_id: str = ""
     strength: SignalStrength = SignalStrength.MODERATE
     reason: str = ""
     metadata: dict = Field(default_factory=dict)
-    stop_loss_pct: Optional[float] = None
-    take_profit_pct: Optional[float] = None
-    max_cost_pct: Optional[float] = None
+    stop_loss_pct: float | None = None
+    take_profit_pct: float | None = None
+    max_cost_pct: float | None = None
 
     @classmethod
     def buy(cls, symbol: str, strategy_id: str = "", **kwargs) -> Signal:

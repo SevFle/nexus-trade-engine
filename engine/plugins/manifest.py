@@ -7,7 +7,7 @@ network whitelist, config schema, and marketplace listing.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -54,7 +54,7 @@ class StrategyManifest(BaseModel):
     )
 
     # ── Marketplace metadata ──
-    marketplace: Optional[dict[str, Any]] = Field(default=None)
+    marketplace: dict[str, Any] | None = Field(default=None)
 
     # ── Data requirements ──
     data_feeds: list[str] = Field(

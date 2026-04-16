@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from urllib.parse import urlparse, urlunparse
+
 from taskiq import TaskiqScheduler
 from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
-from urllib.parse import urlparse, urlunparse
 
 from engine.config import settings
 

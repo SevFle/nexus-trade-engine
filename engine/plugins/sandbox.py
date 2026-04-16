@@ -10,16 +10,14 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 import structlog
-
-from plugins.manifest import StrategyManifest
-from plugins.sdk import IStrategy, StrategyConfig, MarketState
-from core.signal import Signal
 from core.cost_model import ICostModel
 from core.portfolio import PortfolioSnapshot
+from core.signal import Signal
+from plugins.manifest import StrategyManifest
+from plugins.sdk import IStrategy, MarketState
 
 logger = structlog.get_logger()
 
@@ -33,7 +31,7 @@ class SandboxMetrics:
     avg_evaluation_ms: float = 0.0
     peak_memory_mb: float = 0.0
     errors: int = 0
-    last_error: Optional[str] = None
+    last_error: str | None = None
     api_calls: int = 0
 
 
@@ -79,7 +77,7 @@ class StrategySandbox:
             validated = self._validate_signals(signals)
             return validated
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             elapsed_ms = (time.monotonic() - start) * 1000
             self.metrics.errors += 1
             self.metrics.last_error = f"Timeout after {self._max_eval_seconds}s"

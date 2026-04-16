@@ -3,10 +3,11 @@ Shared types used across the SDK.
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+
 from pydantic import BaseModel, Field
-from typing import Optional
-from datetime import datetime, timezone
 
 
 @dataclass
@@ -40,7 +41,7 @@ class CostBreakdown:
 
 
 class PortfolioSnapshot(BaseModel):
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     cash: float = 0.0
     positions: dict[str, dict] = Field(default_factory=dict)
     total_value: float = 0.0
@@ -49,7 +50,7 @@ class PortfolioSnapshot(BaseModel):
     day_pnl: float = 0.0
     total_return_pct: float = 0.0
 
-    def get_position(self, symbol: str) -> Optional[dict]:
+    def get_position(self, symbol: str) -> dict | None:
         return self.positions.get(symbol)
 
     def has_position(self, symbol: str) -> bool:

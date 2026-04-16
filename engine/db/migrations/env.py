@@ -5,13 +5,13 @@ Alembic migrations environment.
 import asyncio
 from logging.config import fileConfig
 
+from config import get_settings
+from db.models import *  # noqa: Import all models so Alembic sees them
+from db.session import Base
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
-from alembic import context
 
-from config import get_settings
-from db.session import Base
-from db.models import *  # noqa: Import all models so Alembic sees them
+from alembic import context
 
 config = context.config
 settings = get_settings()
