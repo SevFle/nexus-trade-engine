@@ -40,3 +40,23 @@ async def dispose_engine() -> None:
         await _engine.dispose()
         _engine = None
         _session_factory = None
+
+
+async def init_db() -> None:
+    """Run pending Alembic migrations.
+
+    Delegates the synchronous ``alembic upgrade head`` to a thread so the
+    async event loop is not blocked.  Prefer running migrations as a
+    separate CLI / CI step (``alembic upgrade head`` or ``make migrate``).
+    """
+    import asyncio  # noqa: PLC0415
+
+    from alembic.config import Config  # noqa: PLC0415
+
+    from alembic import command  # noqa: PLC0415
+
+    def _run() -> None:
+        alembic_cfg = Config("alembic.ini")
+        command.upgrade(alembic_cfg, "head")
+
+    await asyncio.get_event_loop().run_in_executor(None, _run)
