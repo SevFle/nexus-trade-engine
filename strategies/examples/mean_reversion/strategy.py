@@ -15,12 +15,19 @@ import structlog
 # When running inside the engine, these come from the engine's modules.
 # When developing standalone, they come from the SDK.
 try:
-    from plugins.sdk import IStrategy, StrategyConfig, MarketState, DataFeed
-    from core.signal import Signal
     from core.cost_model import ICostModel
     from core.portfolio import PortfolioSnapshot
+    from core.signal import Signal
+    from plugins.sdk import DataFeed, IStrategy, MarketState, StrategyConfig
 except ImportError:
-    from nexus_sdk import IStrategy, StrategyConfig, MarketState, DataFeed, Signal, PortfolioSnapshot
+    from nexus_sdk import (
+        DataFeed,
+        IStrategy,
+        MarketState,
+        PortfolioSnapshot,
+        Signal,
+        StrategyConfig,
+    )
 
 logger = structlog.get_logger()
 

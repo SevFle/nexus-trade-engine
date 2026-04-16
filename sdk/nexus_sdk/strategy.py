@@ -8,7 +8,7 @@ It mirrors the engine's plugins.sdk but without engine dependencies.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -37,17 +37,17 @@ class MarketState(BaseModel):
     macro: dict[str, Any] = Field(default_factory=dict)
     order_book: dict[str, dict] = Field(default_factory=dict)
 
-    def latest(self, symbol: str) -> Optional[float]:
+    def latest(self, symbol: str) -> float | None:
         return self.prices.get(symbol)
 
-    def sma(self, symbol: str, period: int = 20) -> Optional[float]:
+    def sma(self, symbol: str, period: int = 20) -> float | None:
         bars = self.ohlcv.get(symbol, [])
         if len(bars) < period:
             return None
         closes = [b["close"] for b in bars[-period:]]
         return sum(closes) / period
 
-    def std(self, symbol: str, period: int = 20) -> Optional[float]:
+    def std(self, symbol: str, period: int = 20) -> float | None:
         bars = self.ohlcv.get(symbol, [])
         if len(bars) < period:
             return None

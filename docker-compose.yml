@@ -1,102 +1,56 @@
-version: "3.9"
-
 services:
-  # ── PostgreSQL with TimescaleDB extension ──
   db:
     image: timescale/timescaledb:latest-pg16
-    container_name: nexus-db
-    restart: unless-stopped
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_USER: nexus
-      POSTGRES_PASSWORD: nexus_dev_password
-      POSTGRES_DB: nexus_trade
+      POSTGRES_PASSWORD: nexus
+      POSTGRES_DB: nexus
+    ports:
+      - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - pgdata:/home/postgres/pgdata/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U nexus"]
       interval: 5s
-      timeout: 5s
+      timeout: 3s
       retries: 5
 
-  # ── Redis for caching, pub/sub, task queue ──
-  redis:
-    image: redis:7-alpine
-    container_name: nexus-redis
-    restart: unless-stopped
+  valkey:
+    image: valkey/valkey:8-alpine
     ports:
       - "6379:6379"
-    volumes:
-      - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
-      timeout: 5s
+      timeout: 3s
       retries: 5
 
-  # ── Trading Engine API ──
-  engine:
-    build:
-      context: ./engine
-      dockerfile: Dockerfile
-    container_name: nexus-engine
-    restart: unless-stopped
+  app:
+    build: .
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql+asyncpg://nexus:nexus_dev_password@db:5432/nexus_trade
-      REDIS_URL: redis://redis:6379/0
-      ENVIRONMENT: development
-      LOG_LEVEL: DEBUG
+    env_file: .env.example
     depends_on:
       db:
         condition: service_healthy
-      redis:
+      valkey:
         condition: service_healthy
-    volumes:
-      - ./engine:/app
-      - ./strategies:/app/strategies
-      - plugin_artifacts:/app/plugin_artifacts
+    environment:
+      NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:nexus@db:5432/nexus
+      NEXUS_VALKEY_URL: valkey://valkey:6379/0
 
-  # ── Celery Worker for async tasks (backtests, etc.) ──
   worker:
-    build:
-      context: ./engine
-      dockerfile: Dockerfile
-    container_name: nexus-worker
-    command: celery -A tasks.celery_app worker --loglevel=info --concurrency=4
-    environment:
-      DATABASE_URL: postgresql+asyncpg://nexus:nexus_dev_password@db:5432/nexus_trade
-      REDIS_URL: redis://redis:6379/0
-      ENVIRONMENT: development
+    build: .
+    entrypoint: ["python", "-m", "taskiq", "worker", "engine.tasks.worker:broker"]
+    env_file: .env.example
     depends_on:
       db:
         condition: service_healthy
-      redis:
+      valkey:
         condition: service_healthy
-    volumes:
-      - ./engine:/app
-      - ./strategies:/app/strategies
-      - plugin_artifacts:/app/plugin_artifacts
-
-  # ── Frontend ──
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: nexus-frontend
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
     environment:
-      VITE_API_URL: http://localhost:8000
-      VITE_WS_URL: ws://localhost:8000/ws
-    depends_on:
-      - engine
+      NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:nexus@db:5432/nexus
+      NEXUS_VALKEY_URL: valkey://valkey:6379/0
 
 volumes:
   pgdata:
-  redisdata:
-  plugin_artifacts:

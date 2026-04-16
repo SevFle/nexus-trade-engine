@@ -11,18 +11,25 @@ and passed via StrategyConfig.secrets.
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 import httpx
 import structlog
 
 try:
-    from plugins.sdk import IStrategy, StrategyConfig, MarketState, DataFeed
-    from core.signal import Signal, SignalStrength
     from core.cost_model import ICostModel
     from core.portfolio import PortfolioSnapshot
+    from core.signal import Signal, SignalStrength
+    from plugins.sdk import DataFeed, IStrategy, MarketState, StrategyConfig
 except ImportError:
-    from nexus_sdk import IStrategy, StrategyConfig, MarketState, DataFeed, Signal, SignalStrength, PortfolioSnapshot
+    from nexus_sdk import (
+        DataFeed,
+        IStrategy,
+        MarketState,
+        PortfolioSnapshot,
+        Signal,
+        SignalStrength,
+        StrategyConfig,
+    )
 
 logger = structlog.get_logger()
 
@@ -49,8 +56,8 @@ class LLMSentimentStrategy(IStrategy):
     """
 
     def __init__(self):
-        self._config: Optional[StrategyConfig] = None
-        self._http_client: Optional[httpx.AsyncClient] = None
+        self._config: StrategyConfig | None = None
+        self._http_client: httpx.AsyncClient | None = None
         self._provider = "anthropic"
         self._model = "claude-sonnet-4-20250514"
         self._api_key = ""
@@ -156,7 +163,7 @@ class LLMSentimentStrategy(IStrategy):
 
         return signals
 
-    async def _analyze_sentiment(self, symbol: str, headlines: list[str]) -> Optional[dict]:
+    async def _analyze_sentiment(self, symbol: str, headlines: list[str]) -> dict | None:
         """Call LLM API to analyze news sentiment."""
         if not self._api_key or not self._http_client:
             return None
@@ -185,7 +192,7 @@ class LLMSentimentStrategy(IStrategy):
                 text = data.get("content", [{}])[0].get("text", "{}")
                 return json.loads(text)
 
-            elif self._provider == "openai":
+            if self._provider == "openai":
                 response = await self._http_client.post(
                     "https://api.openai.com/v1/chat/completions",
                     headers={

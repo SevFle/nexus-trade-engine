@@ -1,62 +1,44 @@
-"""
-Application configuration loaded from environment variables.
-"""
+from __future__ import annotations
 
-from functools import lru_cache
-from pydantic_settings import BaseSettings
 from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Global application settings. All values can be overridden via env vars."""
+    model_config = SettingsConfigDict(env_prefix="NEXUS_", env_file=".env", extra="ignore")
 
-    # ── App ──
-    app_name: str = "Nexus Trade Engine"
-    environment: str = Field(default="development", description="development | staging | production")
+    # App
+    app_name: str = "nexus-trade-engine"
+    app_env: str = "development"
+    app_debug: bool = False
+    app_host: str = "0.0.0.0"  # noqa: S104
+    app_port: int = 8000
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+
+    # Database
+    database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
+    database_pool_size: int = 5
+    database_max_overflow: int = 10
+
+    # Valkey
+    valkey_url: str = "valkey://localhost:6379/0"
+
+    # Observability
     log_level: str = "INFO"
-    debug: bool = False
+    log_format: str = "console"
+    otlp_endpoint: str = ""
+    sentry_dsn: str = ""
 
-    # ── Database ──
-    database_url: str = "postgresql+asyncpg://nexus:nexus_dev_password@localhost:5432/nexus_trade"
-    db_pool_size: int = 20
-    db_max_overflow: int = 10
+    # Worker
+    worker_concurrency: int = 4
 
-    # ── Redis ──
-    redis_url: str = "redis://localhost:6379/0"
+    @property
+    def is_production(self) -> bool:
+        return self.app_env == "production"
 
-    # ── Auth ──
-    secret_key: str = "CHANGE-ME-IN-PRODUCTION-use-openssl-rand-hex-32"
-    access_token_expire_minutes: int = 60
-    algorithm: str = "HS256"
-
-    # ── Trading Engine ──
-    default_execution_mode: str = "paper"  # backtest | paper | live
-    max_open_positions: int = 50
-    max_portfolio_risk_pct: float = 0.25
-    circuit_breaker_drawdown_pct: float = 0.10
-
-    # ── Cost Model Defaults ──
-    default_commission_per_trade: float = 0.0  # USD (many brokers are zero)
-    default_spread_bps: float = 5.0  # basis points
-    default_slippage_bps: float = 10.0  # basis points
-    short_term_tax_rate: float = 0.37  # US federal max
-    long_term_tax_rate: float = 0.20
-    long_term_holding_days: int = 365
-    enable_wash_sale_detection: bool = True
-
-    # ── Plugin System ──
-    plugin_dir: str = "./strategies"
-    plugin_max_memory_mb: int = 2048
-    plugin_max_cpu_seconds: int = 30
-    plugin_sandbox_enabled: bool = True
-
-    # ── Market Data ──
-    market_data_provider: str = "yahoo"  # yahoo | alpaca | polygon | custom
-    market_data_cache_ttl_seconds: int = 60
-
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    @property
+    def is_test(self) -> bool:
+        return self.app_env == "test"
 
 
-@lru_cache()
-def get_settings() -> Settings:
-    return Settings()
+settings = Settings()

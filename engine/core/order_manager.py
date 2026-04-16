@@ -6,17 +6,15 @@ Signal → Validate → Cost → Risk Check → Execute → Reconcile → Log
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Optional
 
-from pydantic import BaseModel, Field
 import structlog
-
-from core.signal import Signal, Side
-from core.cost_model import ICostModel, CostBreakdown
+from core.cost_model import ICostModel
 from core.portfolio import Portfolio
 from core.risk_engine import RiskEngine
+from core.signal import Side, Signal
+from pydantic import BaseModel, Field
 
 logger = structlog.get_logger()
 
@@ -46,7 +44,7 @@ class Order(BaseModel):
     """Internal order representation. Created from Signals by the OrderManager."""
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # ── Origin ──
     signal_id: str
@@ -57,23 +55,23 @@ class Order(BaseModel):
     side: Side
     quantity: int
     order_type: OrderType = OrderType.MARKET
-    limit_price: Optional[float] = None
+    limit_price: float | None = None
 
     # ── Status tracking ──
     status: OrderStatus = OrderStatus.PENDING
     status_history: list[dict] = Field(default_factory=list)
 
     # ── Cost & execution ──
-    cost_breakdown: Optional[dict] = None
-    fill_price: Optional[float] = None
-    fill_quantity: Optional[int] = None
-    filled_at: Optional[datetime] = None
+    cost_breakdown: dict | None = None
+    fill_price: float | None = None
+    fill_quantity: int | None = None
+    filled_at: datetime | None = None
 
     def transition(self, new_status: OrderStatus, reason: str = ""):
         self.status_history.append({
             "from": self.status,
             "to": new_status,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "reason": reason,
         })
         self.status = new_status
@@ -166,7 +164,7 @@ class OrderManager:
         if fill.success:
             order.fill_price = fill.price
             order.fill_quantity = fill.quantity
-            order.filled_at = datetime.now(timezone.utc)
+            order.filled_at = datetime.now(UTC)
             order.transition(OrderStatus.FILLED)
 
             # Update portfolio

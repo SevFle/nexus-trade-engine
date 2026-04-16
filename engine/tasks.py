@@ -3,7 +3,6 @@ Celery tasks — async job processing for backtests and heavy operations.
 """
 
 from celery import Celery
-
 from config import get_settings
 
 settings = get_settings()

@@ -3,16 +3,15 @@ Nexus Trade Engine — Main application entry point.
 """
 
 from contextlib import asynccontextmanager
+
+import structlog
+from api.routes import backtest, marketplace, portfolio, strategies
+from config import get_settings
+from db.session import close_db, init_db
+from events.bus import EventBus
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import structlog
-
-from config import get_settings
-from db.session import init_db, close_db
-from events.bus import EventBus
 from plugins.registry import PluginRegistry
-from api.routes import portfolio, strategies, backtest, marketplace
-
 
 logger = structlog.get_logger()
 settings = get_settings()

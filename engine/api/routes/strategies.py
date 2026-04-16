@@ -63,7 +63,7 @@ async def activate_strategy(strategy_id: str, config: StrategyConfigRequest, req
             "version": instance.version,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to activate: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to activate: {e!s}")
 
 
 @router.post("/{strategy_id}/deactivate")

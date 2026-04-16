@@ -8,8 +8,6 @@ with a unified interface.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime
-from typing import Optional
 
 import pandas as pd
 import structlog
@@ -21,7 +19,7 @@ class MarketDataProvider(ABC):
     """Abstract market data provider."""
 
     @abstractmethod
-    async def get_latest_price(self, symbol: str) -> Optional[float]:
+    async def get_latest_price(self, symbol: str) -> float | None:
         ...
 
     @abstractmethod
@@ -45,7 +43,7 @@ class MarketDataProvider(ABC):
 class YahooDataProvider(MarketDataProvider):
     """Yahoo Finance data provider (free, good for development)."""
 
-    async def get_latest_price(self, symbol: str) -> Optional[float]:
+    async def get_latest_price(self, symbol: str) -> float | None:
         try:
             import yfinance as yf
             ticker = yf.Ticker(symbol)

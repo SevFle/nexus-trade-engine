@@ -9,9 +9,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Optional
 
 
 class TaxMethod(str, Enum):
@@ -94,7 +93,7 @@ class TaxLot:
 
     @property
     def is_long_term(self) -> bool:
-        held_days = (datetime.now(timezone.utc) - self.purchase_date).days
+        held_days = (datetime.now(UTC) - self.purchase_date).days
         return held_days >= 365
 
     @property

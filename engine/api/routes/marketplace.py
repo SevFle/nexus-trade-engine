@@ -3,7 +3,7 @@ Marketplace API — browse, search, install, and rate community strategies.
 """
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 router = APIRouter()
 

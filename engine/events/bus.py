@@ -7,11 +7,11 @@ with an in-process fallback for single-instance deployments.
 
 from __future__ import annotations
 
-import asyncio
 import json
-from datetime import datetime, timezone
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Awaitable
+from typing import Any
 
 import structlog
 
@@ -69,7 +69,7 @@ class Event:
         self.event_type = event_type
         self.data = data or {}
         self.source = source
-        self.timestamp = datetime.now(timezone.utc).isoformat()
+        self.timestamp = datetime.now(UTC).isoformat()
 
     def to_dict(self) -> dict:
         return {
