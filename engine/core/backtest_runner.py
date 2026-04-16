@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 import structlog
 
-from engine.core.portfolio import PortfolioState
+from engine.core.portfolio import Portfolio
 from engine.data.market_state import MarketStateBuilder
 
 if TYPE_CHECKING:
@@ -86,6 +86,7 @@ class BacktestRunner:
         )
 
         result = BacktestResult()
+        portfolio = Portfolio(initial_cash=self.config.initial_capital)
 
         for ts in timestamps:
             market_state = self._builder.build_for_backtest(
@@ -95,7 +96,6 @@ class BacktestRunner:
             )
             sdk_state = market_state.to_sdk_state()
 
-            portfolio = PortfolioState(cash=self.config.initial_capital)
             signals = self.strategy.on_bar(sdk_state, portfolio)
             result.trades.extend(signals)
 

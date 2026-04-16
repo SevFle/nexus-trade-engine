@@ -320,3 +320,6 @@ class PortfolioSnapshot:
             f"Value: ${self.total_value:,.0f}, "
             f"Return: {self.total_return_pct:.2f}%"
         )
+
+
+PortfolioState = Portfolio
