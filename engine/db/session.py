@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 from engine.config import settings
 
@@ -40,3 +45,10 @@ async def dispose_engine() -> None:
         await _engine.dispose()
         _engine = None
         _session_factory = None
+
+
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """Get a new async session."""
+    factory = get_session_factory()
+    async with factory() as session:
+        yield session

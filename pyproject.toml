@@ -58,7 +58,7 @@ select = [
     "SIM", "TID", "TCH", "ARG", "ERA", "PGH", "PL", "TRY",
     "FLY", "PERF", "RUF",
 ]
-ignore = ["S101", "TRY003", "PLR0913"]
+ignore = ["S101", "TRY003", "PLR0913", "PLR0912", "PLR0915", "PLC0415"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["engine"]
