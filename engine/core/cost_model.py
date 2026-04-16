@@ -22,6 +22,7 @@ class TaxMethod(str, Enum):
 @dataclass
 class Money:
     """Monetary amount with explicit precision."""
+
     amount: float
     currency: str = "USD"
 
@@ -46,6 +47,7 @@ class Money:
 @dataclass
 class CostBreakdown:
     """Itemized breakdown of all costs for a single trade."""
+
     commission: Money = field(default_factory=lambda: Money(0.0))
     spread: Money = field(default_factory=lambda: Money(0.0))
     slippage: Money = field(default_factory=lambda: Money(0.0))
@@ -85,6 +87,7 @@ class CostBreakdown:
 @dataclass
 class TaxLot:
     """A single purchase lot for tax tracking."""
+
     symbol: str
     quantity: int
     purchase_price: float
@@ -122,12 +125,16 @@ class ICostModel(ABC):
         ...
 
     @abstractmethod
-    def estimate_slippage(self, symbol: str, quantity: int, price: float, avg_volume: int) -> Money:
+    def estimate_slippage(
+        self, symbol: str, quantity: int, price: float, avg_volume: int
+    ) -> Money:
         """Estimate market impact / slippage based on order size vs volume."""
         ...
 
     @abstractmethod
-    def estimate_total(self, symbol: str, quantity: int, price: float, side: str, avg_volume: int = 0) -> CostBreakdown:
+    def estimate_total(
+        self, symbol: str, quantity: int, price: float, side: str, avg_volume: int = 0
+    ) -> CostBreakdown:
         """Full cost breakdown for a proposed trade."""
         ...
 
@@ -201,7 +208,9 @@ class DefaultCostModel(ICostModel):
         spread_cost = price * (self.spread_bps / 10_000)
         return Money(amount=spread_cost)
 
-    def estimate_slippage(self, symbol: str, quantity: int, price: float, avg_volume: int) -> Money:
+    def estimate_slippage(
+        self, symbol: str, quantity: int, price: float, avg_volume: int
+    ) -> Money:
         base_slippage = price * (self.slippage_bps / 10_000) * quantity
         # Scale slippage with order size relative to volume
         if avg_volume > 0:
@@ -274,6 +283,19 @@ class DefaultCostModel(ICostModel):
             if buy_symbol == symbol and window_start <= buy_date <= window_end:
                 return True
         return False
+
+    def calculate_wash_sale_adjustment(
+        self,
+        symbol: str,
+        sell_date: datetime,
+        loss: float,
+        buy_history: list[dict],
+    ) -> float:
+        if loss >= 0:
+            return 0.0
+        if not self.check_wash_sale(symbol, sell_date, buy_history):
+            return 0.0
+        return abs(loss)
 
     def estimate_dividend_tax(self, dividend_amount: float, is_qualified: bool) -> Money:
         rate = self.qualified_dividend_rate if is_qualified else self.ordinary_dividend_rate

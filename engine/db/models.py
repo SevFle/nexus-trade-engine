@@ -130,3 +130,22 @@ class OHLCVBar(Base):
         Index("ix_ohlcv_symbol_timestamp", "symbol", "timestamp"),
         UniqueConstraint("symbol", "timestamp", name="uq_ohlcv_symbol_timestamp"),
     )
+
+
+class TaxLotRecord(Base):
+    __tablename__ = "tax_lots"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    lot_id: Mapped[uuid.UUID] = mapped_column(String(36), unique=True, index=True)
+    portfolio_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("portfolios.id", ondelete="CASCADE"), index=True
+    )
+    symbol: Mapped[str] = mapped_column(String(20), index=True)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    remaining_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    purchase_price: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    purchase_date: Mapped[datetime]
+    cost_basis_adjustment: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=Decimal("0"))
+    status: Mapped[str] = mapped_column(String(20), default="open")
+
+    __table_args__ = (Index("ix_tax_lots_portfolio_symbol", "portfolio_id", "symbol"),)

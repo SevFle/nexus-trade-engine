@@ -111,8 +111,18 @@ class TestTaxEngine:
     def test_fifo_vs_lifo(self, cost_model):
         now = datetime.now(UTC)
         lots = [
-            TaxLot(symbol="AAPL", quantity=50, purchase_price=80.0, purchase_date=now - timedelta(days=400)),
-            TaxLot(symbol="AAPL", quantity=50, purchase_price=140.0, purchase_date=now - timedelta(days=30)),
+            TaxLot(
+                symbol="AAPL",
+                quantity=50,
+                purchase_price=80.0,
+                purchase_date=now - timedelta(days=400),
+            ),
+            TaxLot(
+                symbol="AAPL",
+                quantity=50,
+                purchase_price=140.0,
+                purchase_date=now - timedelta(days=30),
+            ),
         ]
         fifo_tax = cost_model.estimate_tax("AAPL", 150.0, 50, lots, TaxMethod.FIFO)
         lifo_tax = cost_model.estimate_tax("AAPL", 150.0, 50, lots, TaxMethod.LIFO)
@@ -142,6 +152,35 @@ class TestWashSale:
             {"symbol": "MSFT", "date": sell_date - timedelta(days=10)},
         ]
         assert cost_model.check_wash_sale("AAPL", sell_date, buy_history) is False
+
+    def test_wash_sale_disallowed_loss_adjustment(self, cost_model):
+        sell_date = datetime.now(UTC)
+        buy_history = [
+            {"symbol": "AAPL", "date": sell_date - timedelta(days=10)},
+        ]
+        loss = -1000.0
+        adjustment = cost_model.calculate_wash_sale_adjustment(
+            "AAPL", sell_date, loss, buy_history
+        )
+        assert adjustment == 1000.0
+
+    def test_no_wash_sale_adjustment_for_gain(self, cost_model):
+        sell_date = datetime.now(UTC)
+        buy_history = [
+            {"symbol": "AAPL", "date": sell_date - timedelta(days=10)},
+        ]
+        gain = 1000.0
+        adjustment = cost_model.calculate_wash_sale_adjustment(
+            "AAPL", sell_date, gain, buy_history
+        )
+        assert adjustment == 0.0
+
+    def test_wash_sale_buy_after_sell(self, cost_model):
+        sell_date = datetime.now(UTC)
+        buy_history = [
+            {"symbol": "AAPL", "date": sell_date + timedelta(days=10)},
+        ]
+        assert cost_model.check_wash_sale("AAPL", sell_date, buy_history) is True
 
 
 class TestDividendTax:
