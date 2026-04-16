@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from engine.db.session import async_session_factory
+from engine.db.session import get_session_factory
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -11,5 +11,11 @@ if TYPE_CHECKING:
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
-    async with async_session_factory() as session:
-        yield session
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

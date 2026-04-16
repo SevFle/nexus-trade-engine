@@ -30,6 +30,11 @@ async def client() -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture(scope="session")
 async def test_engine():
+    if not settings.database_url or "test" not in settings.database_url.lower():
+        raise RuntimeError(
+            f"Test database not configured. Set NEXUS_DATABASE_URL to a test database. "
+            f"Current: {settings.database_url}"
+        )
     engine = create_async_engine(settings.database_url, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

@@ -3,10 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import text
 
-from engine.config import settings
 from engine.deps import get_db
 
 if TYPE_CHECKING:
@@ -22,7 +21,7 @@ async def health() -> dict[str, str]:
 
 
 @router.get("/ready")
-async def ready(db: AsyncSession = Depends(get_db)) -> dict[str, str]:  # noqa: B008
+async def ready(request: Request, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
     checks: dict[str, str] = {}
 
     try:
@@ -33,11 +32,8 @@ async def ready(db: AsyncSession = Depends(get_db)) -> dict[str, str]:  # noqa: 
         checks["db"] = "error"
 
     try:
-        from valkey.asyncio import Valkey  # noqa: PLC0415
-
-        client = Valkey.from_url(settings.valkey_url)
-        await client.ping()
-        await client.aclose()
+        valkey_client = request.app.state.valkey
+        await valkey_client.ping()
         checks["valkey"] = "ok"
     except Exception:
         logger.exception("readiness_check_valkey_failed")

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from taskiq import TaskiqScheduler
 from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
+from urllib.parse import urlparse, urlunparse
 
 from engine.config import settings
 
-_broker_url = settings.valkey_url.replace("valkey://", "redis://", 1)
+_parsed = urlparse(settings.valkey_url)
+_broker_url = urlunparse(_parsed._replace(scheme="redis"))
 
 broker = ListQueueBroker(url=_broker_url).with_result_backend(
     RedisAsyncResultBackend(redis_url=_broker_url)

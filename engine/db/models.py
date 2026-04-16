@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -39,7 +40,7 @@ class Portfolio(Base):
     )
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
-    initial_capital: Mapped[float] = mapped_column(default=100_000.0)
+    initial_capital: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal("100000.0"))
     created_at: Mapped[datetime] = mapped_column(default=_utcnow)
 
     user: Mapped[User] = relationship(back_populates="portfolios")
@@ -55,9 +56,9 @@ class Position(Base):
         ForeignKey("portfolios.id", ondelete="CASCADE"), index=True
     )
     symbol: Mapped[str] = mapped_column(String(20), index=True)
-    quantity: Mapped[float] = mapped_column(default=0.0)
-    avg_entry_price: Mapped[float] = mapped_column(default=0.0)
-    current_price: Mapped[float] = mapped_column(default=0.0)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=Decimal("0"))
+    avg_entry_price: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=Decimal("0"))
+    current_price: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=Decimal("0"))
     updated_at: Mapped[datetime] = mapped_column(default=_utcnow, onupdate=_utcnow)
 
     portfolio: Mapped[Portfolio] = relationship(back_populates="positions")
@@ -77,8 +78,8 @@ class Order(Base):
     symbol: Mapped[str] = mapped_column(String(20), index=True)
     side: Mapped[str] = mapped_column(String(10))
     order_type: Mapped[str] = mapped_column(String(20))
-    quantity: Mapped[float]
-    price: Mapped[float | None] = mapped_column(nullable=True)
+    quantity: Mapped[Decimal]
+    price: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     filled_at: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=_utcnow)
@@ -119,11 +120,11 @@ class OHLCVBar(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     symbol: Mapped[str] = mapped_column(String(20))
     timestamp: Mapped[datetime]
-    open: Mapped[float]
-    high: Mapped[float]
-    low: Mapped[float]
-    close: Mapped[float]
-    volume: Mapped[float]
+    open: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    high: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    low: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    close: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    volume: Mapped[Decimal] = mapped_column(Numeric(24, 4))
 
     __table_args__ = (
         Index("ix_ohlcv_symbol_timestamp", "symbol", "timestamp"),

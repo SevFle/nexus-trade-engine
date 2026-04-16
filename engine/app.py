@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from valkey.asyncio import Valkey
 
 from engine.api.router import api_router
 from engine.config import settings
@@ -17,10 +18,12 @@ if TYPE_CHECKING:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
     setup_tracing()
+    app.state.valkey = Valkey.from_url(settings.valkey_url)
     yield
+    await app.state.valkey.aclose()
     await dispose_engine()
 
 
