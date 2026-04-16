@@ -35,8 +35,8 @@ class BacktestResponse(BaseModel):
     message: str | None = None
 
 
-def _run_backtest_background(config: BacktestConfig):
-    asyncio.run(run_backtest(config))
+def _run_backtest_background(config: BacktestConfig, backtest_id: str):
+    asyncio.run(run_backtest(config, backtest_id=backtest_id))
 
 
 @router.post("/run")
@@ -66,7 +66,7 @@ async def run_backtest_endpoint(
 
     task_id = str(uuid.uuid4())
 
-    background_tasks.add_task(partial(_run_backtest_background, config))
+    background_tasks.add_task(partial(_run_backtest_background, config, task_id))
 
     return BacktestResponse(
         status="accepted",

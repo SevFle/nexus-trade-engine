@@ -309,12 +309,17 @@ async def persist_backtest_result(
     metrics: BacktestMetrics,
     equity_curve: list[dict],
     trades: list[dict],
+    backtest_id: str | None = None,
 ) -> str:
     """
     Persist backtest result to database.
     """
+    import uuid as _uuid
+
     async with get_session() as session:
+        result_id = _uuid.UUID(backtest_id) if backtest_id else _uuid.uuid4()
         result = BacktestResult(
+            id=result_id,
             strategy_name=strategy_name,
             start_date=datetime.fromisoformat(start_date),
             end_date=datetime.fromisoformat(end_date),
@@ -342,7 +347,9 @@ async def persist_backtest_result(
         return str(result.id)
 
 
-async def run_backtest(config: BacktestConfig) -> BacktestResultOutput:
+async def run_backtest(
+    config: BacktestConfig, backtest_id: str | None = None
+) -> BacktestResultOutput:
     """
     Main backtest execution loop.
 
@@ -543,6 +550,7 @@ async def run_backtest(config: BacktestConfig) -> BacktestResultOutput:
         metrics,
         equity_curve_dict,
         trades_dict,
+        backtest_id=backtest_id,
     )
 
     logger.info(

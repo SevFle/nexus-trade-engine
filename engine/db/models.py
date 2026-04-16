@@ -104,8 +104,8 @@ class BacktestResult(Base):
     __tablename__ = "backtest_results"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    portfolio_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("portfolios.id", ondelete="CASCADE"), index=True
+    portfolio_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("portfolios.id", ondelete="CASCADE"), index=True, nullable=True
     )
     strategy_name: Mapped[str] = mapped_column(String(100))
     start_date: Mapped[datetime]
