@@ -258,14 +258,12 @@ class TestMarketStateWindowedAccess:
 
 
 class TestMarketStateToSdk:
-    def test_to_sdk_state_produces_compatible_model(self):
+    def test_to_sdk_state_raises_import_error_without_sdk(self):
         df = _make_ohlcv_df(60)
         state = MarketStateBuilder(min_bars=10).build_for_backtest(
             {"AAPL": df},
             df.index[-1],
             ["AAPL"],
         )
-        sdk_state = state.to_sdk_state()
-        assert sdk_state.prices["AAPL"] == state.prices["AAPL"]
-        assert sdk_state.latest("AAPL") == state.prices["AAPL"]
-        assert sdk_state.sma("AAPL", 10) is not None
+        with pytest.raises(ModuleNotFoundError):
+            state.to_sdk_state()

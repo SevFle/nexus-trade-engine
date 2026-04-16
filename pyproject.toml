@@ -38,6 +38,8 @@ dev = [
     "ruff>=0.8.0",
     "basedpyright>=1.22.0",
     "httpx>=0.28.0",
+    "numpy>=2.0.0",
+    "pandas>=2.2.0",
 ]
 
 [build-system]
@@ -76,10 +78,4 @@ addopts = "-ra --strict-markers --cov=engine --cov-report=term-missing"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests requiring external services",
-]
-
-[dependency-groups]
-dev = [
-    "numpy>=2.4.4",
-    "pandas>=3.0.2",
 ]
