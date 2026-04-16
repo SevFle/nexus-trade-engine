@@ -1,0 +1,13 @@
+name: mean_reversion_basic
+version: "0.1.0"
+description: Simple mean-reversion strategy using Bollinger Bands
+author: nexus-team
+parameters:
+  window: 20
+  num_std: 2.0
+  position_size: 0.1
+symbols:
+  - AAPL
+  - MSFT
+  - GOOGL
+timeframe: 1d

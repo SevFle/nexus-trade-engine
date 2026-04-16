@@ -1,39 +1,60 @@
-"""
-Shared test fixtures.
-"""
+from __future__ import annotations
 
-import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-# Add engine to Python path so tests can import engine modules
-sys.path.insert(0, str(Path(__file__).parent.parent / "engine"))
+from engine.app import create_app
+from engine.config import settings
+from engine.db.models import Base
+from engine.deps import get_db
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 
-@pytest.fixture
-def sample_portfolio():
-    from core.portfolio import Portfolio
-    p = Portfolio(initial_cash=100_000.0, name="Test Portfolio")
-    return p
-
-
-@pytest.fixture
-def default_cost_model():
-    from core.cost_model import DefaultCostModel
-    return DefaultCostModel(
-        commission_per_trade=1.0,
-        spread_bps=5.0,
-        slippage_bps=10.0,
-    )
+@pytest.fixture(scope="session")
+def anyio_backend():
+    return "asyncio"
 
 
 @pytest.fixture
-def sample_market_state():
-    from plugins.sdk import MarketState
-    bars = [{"open": 148 + i, "high": 152 + i, "low": 147 + i, "close": 150 + i, "volume": 1000000} for i in range(60)]
-    return MarketState(
-        prices={"AAPL": 150.0, "MSFT": 420.0, "GOOGL": 175.0},
-        volumes={"AAPL": 50_000_000, "MSFT": 25_000_000, "GOOGL": 20_000_000},
-        ohlcv={"AAPL": bars, "MSFT": bars, "GOOGL": bars},
-    )
+async def client() -> AsyncIterator[AsyncClient]:
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+
+@pytest.fixture(scope="session")
+async def test_engine():
+    engine = create_async_engine(settings.database_url, echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield engine
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await engine.dispose()
+
+
+@pytest.fixture
+async def db_session(test_engine) -> AsyncIterator[AsyncSession]:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_factory() as session:
+        yield session
+        await session.rollback()
+
+
+@pytest.fixture
+async def db_client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
+    app = create_app()
+
+    async def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac

@@ -1,66 +1,41 @@
-.PHONY: help dev up down test lint seed migrate
+.DEFAULT_GOAL := help
+
+.PHONY: help dev test lint fix typecheck migrate docker-up docker-down
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-# ── Docker ──
+dev: ## Start dev server with hot reload
+	uv run uvicorn engine.app:create_app --factory --reload --host 0.0.0.0 --port 8000
 
-up: ## Start all services
-	docker compose up -d
+test: ## Run test suite
+	uv run pytest
 
-down: ## Stop all services
-	docker compose down
+test-cov: ## Run tests with coverage report
+	uv run pytest --cov=engine --cov-report=html
 
-logs: ## Tail engine logs
-	docker compose logs -f engine worker
+lint: ## Run linter checks
+	uv run ruff check .
+	uv run ruff format --check .
 
-rebuild: ## Rebuild and restart
-	docker compose up -d --build
+fix: ## Auto-fix lint issues
+	uv run ruff check --fix .
+	uv run ruff format .
 
-# ── Development ──
-
-dev: ## Run engine in dev mode (requires local Python env)
-	cd engine && uvicorn main:app --reload --port 8000
-
-dev-frontend: ## Run frontend in dev mode
-	cd frontend && npm run dev
-
-# ── Database ──
+typecheck: ## Run type checker
+	uv run basedpyright
 
 migrate: ## Run database migrations
-	cd engine && alembic upgrade head
+	uv run alembic upgrade head
 
-migrate-new: ## Create a new migration
-	cd engine && alembic revision --autogenerate -m "$(msg)"
+migrate-new: ## Create a new migration (usage: make migrate-new msg="description")
+	uv run alembic revision --autogenerate -m "$(msg)"
 
-seed: ## Seed sample market data
-	cd scripts && python seed_data.py
+docker-up: ## Start all services via docker compose
+	docker compose up -d
 
-# ── Testing ──
+docker-down: ## Stop all services
+	docker compose down
 
-test: ## Run all tests
-	cd engine && python -m pytest ../tests -v --tb=short
-
-test-cov: ## Run tests with coverage
-	cd engine && python -m pytest ../tests -v --cov=. --cov-report=html
-
-test-cost: ## Run cost model tests only
-	cd engine && python -m pytest ../tests/test_cost_model.py -v
-
-# ── Code Quality ──
-
-lint: ## Run linters
-	cd engine && python -m ruff check .
-	cd frontend && npm run lint
-
-format: ## Format code
-	cd engine && python -m ruff format .
-
-# ── SDK ──
-
-sdk-install: ## Install SDK in development mode
-	cd sdk && pip install -e ".[dev]"
-
-sdk-test: ## Test SDK
-	cd sdk && python -m pytest tests/ -v
+docker-build: ## Build docker images
+	docker compose build
