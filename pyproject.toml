@@ -76,7 +76,7 @@ reportUnknownMemberType = false
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-ra --strict-markers --cov=engine --cov-report=term-missing"
+addopts = "-ra --strict-markers --cov=engine --cov-report=term-missing --cov-report=html --cov-fail-under=80"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests requiring external services",

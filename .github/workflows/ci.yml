@@ -65,6 +65,13 @@ jobs:
           name: test-results
           path: test-results.xml
 
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: htmlcov/
+
   test-frontend:
     name: Frontend Lint
     runs-on: [self-hosted, nexus]
