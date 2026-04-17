@@ -10,13 +10,14 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.cost_model import CostBreakdown
-    from core.order_manager import Order
+    from engine.core.cost_model import CostBreakdown
+    from engine.core.order_manager import Order
 
 
 @dataclass
 class FillResult:
     """Result of an order execution attempt."""
+
     success: bool
     price: float = 0.0
     quantity: int = 0

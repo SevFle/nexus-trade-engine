@@ -11,13 +11,17 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 import structlog
-from core.cost_model import ICostModel
-from core.portfolio import PortfolioSnapshot
-from core.signal import Signal
-from plugins.manifest import StrategyManifest
-from plugins.sdk import IStrategy, MarketState
+
+from engine.core.signal import Signal
+
+if TYPE_CHECKING:
+    from engine.core.cost_model import ICostModel
+    from engine.core.portfolio import PortfolioSnapshot
+    from engine.plugins.manifest import StrategyManifest
+    from engine.plugins.sdk import BaseStrategy
 
 logger = structlog.get_logger()
 
@@ -25,6 +29,7 @@ logger = structlog.get_logger()
 @dataclass
 class SandboxMetrics:
     """Runtime metrics for a sandboxed strategy."""
+
     total_evaluations: int = 0
     total_signals_emitted: int = 0
     total_cpu_time_ms: float = 0.0
@@ -46,7 +51,7 @@ class StrategySandbox:
     - Records metrics for the dashboard
     """
 
-    def __init__(self, strategy: IStrategy, manifest: StrategyManifest):
+    def __init__(self, strategy: BaseStrategy, manifest: StrategyManifest):
         self.strategy = strategy
         self.manifest = manifest
         self.metrics = SandboxMetrics()
@@ -55,35 +60,33 @@ class StrategySandbox:
     async def safe_evaluate(
         self,
         portfolio: PortfolioSnapshot,
-        market: MarketState,
+        market: Any,
         costs: ICostModel,
     ) -> list[Signal]:
         """
-        Execute strategy.evaluate() with timeout and error handling.
+        Execute strategy.on_bar() with timeout and error handling.
         Returns empty list on failure — never crashes the engine.
         """
         start = time.monotonic()
 
         try:
-            signals = await asyncio.wait_for(
-                self.strategy.evaluate(portfolio, market, costs),
+            raw_signals = await asyncio.wait_for(
+                self._call_strategy(portfolio, market),
                 timeout=self._max_eval_seconds,
             )
 
             elapsed_ms = (time.monotonic() - start) * 1000
+            signals = self._convert_signals(raw_signals)
             self._update_metrics(elapsed_ms, len(signals))
-
-            # Validate signal format
-            validated = self._validate_signals(signals)
-            return validated
+            return signals
 
         except TimeoutError:
             elapsed_ms = (time.monotonic() - start) * 1000
             self.metrics.errors += 1
             self.metrics.last_error = f"Timeout after {self._max_eval_seconds}s"
-            logger.error(
+            logger.exception(
                 "sandbox.timeout",
-                strategy_id=self.strategy.id,
+                strategy_name=self.strategy.name,
                 timeout_s=self._max_eval_seconds,
             )
             return []
@@ -92,27 +95,35 @@ class StrategySandbox:
             elapsed_ms = (time.monotonic() - start) * 1000
             self.metrics.errors += 1
             self.metrics.last_error = str(e)
-            logger.error(
+            logger.exception(
                 "sandbox.evaluation_error",
-                strategy_id=self.strategy.id,
+                strategy_name=self.strategy.name,
                 error=str(e),
                 elapsed_ms=elapsed_ms,
             )
             return []
 
-    def _validate_signals(self, signals: list) -> list[Signal]:
-        """Ensure all returned signals are valid Signal objects."""
-        validated = []
-        for s in signals:
+    async def _call_strategy(
+        self,
+        portfolio: PortfolioSnapshot,
+        market: Any,
+    ) -> list[Any]:
+        result = self.strategy.on_bar(market, portfolio)
+        if asyncio.iscoroutine(result):
+            result = await result
+        return result
+
+    def _convert_signals(self, raw_signals: list[Any]) -> list[Signal]:
+        validated: list[Signal] = []
+        for s in raw_signals:
             if isinstance(s, Signal):
-                # Inject strategy ID if missing
                 if not s.strategy_id:
-                    s.strategy_id = self.strategy.id
+                    s.strategy_id = self.strategy.name
                 validated.append(s)
             else:
                 logger.warning(
                     "sandbox.invalid_signal",
-                    strategy_id=self.strategy.id,
+                    strategy_name=self.strategy.name,
                     signal_type=type(s).__name__,
                 )
         return validated
@@ -127,7 +138,6 @@ class StrategySandbox:
 
     def get_health(self) -> dict:
         return {
-            "strategy_id": self.strategy.id,
             "strategy_name": self.strategy.name,
             "version": self.strategy.version,
             "evaluations": self.metrics.total_evaluations,

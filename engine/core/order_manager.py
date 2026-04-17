@@ -10,10 +10,10 @@ from datetime import UTC, datetime
 from enum import Enum
 
 import structlog
-from core.cost_model import ICostModel
-from core.portfolio import Portfolio
-from core.risk_engine import RiskEngine
-from core.signal import Side, Signal
+from engine.core.cost_model import ICostModel
+from engine.core.portfolio import Portfolio
+from engine.core.risk_engine import RiskEngine
+from engine.core.signal import Side, Signal
 from pydantic import BaseModel, Field
 
 logger = structlog.get_logger()
@@ -68,12 +68,14 @@ class Order(BaseModel):
     filled_at: datetime | None = None
 
     def transition(self, new_status: OrderStatus, reason: str = ""):
-        self.status_history.append({
-            "from": self.status,
-            "to": new_status,
-            "timestamp": datetime.now(UTC).isoformat(),
-            "reason": reason,
-        })
+        self.status_history.append(
+            {
+                "from": self.status,
+                "to": new_status,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "reason": reason,
+            }
+        )
         self.status = new_status
 
 
@@ -102,7 +104,9 @@ class OrderManager:
         self.execution_backend = backend
         logger.info("order_manager.backend_set", backend=type(backend).__name__)
 
-    async def process_signal(self, signal: Signal, market_price: float, avg_volume: int = 0) -> Order:
+    async def process_signal(
+        self, signal: Signal, market_price: float, avg_volume: int = 0
+    ) -> Order:
         """
         Full signal-to-order pipeline.
         Returns the final Order with its status (filled, rejected, etc.)
@@ -116,7 +120,13 @@ class OrderManager:
             side=signal.side,
             quantity=quantity,
         )
-        logger.info("order.created", order_id=order.id, symbol=order.symbol, side=order.side, qty=order.quantity)
+        logger.info(
+            "order.created",
+            order_id=order.id,
+            symbol=order.symbol,
+            side=order.side,
+            qty=order.quantity,
+        )
 
         # Step 2: Validate basic constraints
         if not self._validate_order(order, market_price):
@@ -138,9 +148,16 @@ class OrderManager:
         # Step 3b: Check if cost exceeds strategy's max tolerance
         if signal.max_cost_pct is not None:
             trade_value = order.quantity * market_price
-            cost_pct = cost_breakdown.total_without_tax.amount / trade_value if trade_value > 0 else float("inf")
+            cost_pct = (
+                cost_breakdown.total_without_tax.amount / trade_value
+                if trade_value > 0
+                else float("inf")
+            )
             if cost_pct > signal.max_cost_pct:
-                order.transition(OrderStatus.RISK_REJECTED, f"Cost {cost_pct:.4f} exceeds max {signal.max_cost_pct:.4f}")
+                order.transition(
+                    OrderStatus.RISK_REJECTED,
+                    f"Cost {cost_pct:.4f} exceeds max {signal.max_cost_pct:.4f}",
+                )
                 logger.info("order.cost_rejected", order_id=order.id, cost_pct=cost_pct)
                 return order
 
@@ -174,7 +191,9 @@ class OrderManager:
             elif order.side == Side.SELL:
                 tax = cost_breakdown.tax_estimate.amount
                 non_tax_cost = total_cost - tax
-                self.portfolio.close_position(order.symbol, fill.quantity, fill.price, non_tax_cost, tax)
+                self.portfolio.close_position(
+                    order.symbol, fill.quantity, fill.price, non_tax_cost, tax
+                )
 
             logger.info("order.filled", order_id=order.id, price=fill.price, qty=fill.quantity)
         else:

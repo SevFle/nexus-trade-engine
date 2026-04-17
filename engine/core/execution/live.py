@@ -9,11 +9,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import structlog
-from core.execution.base import ExecutionBackend, FillResult
+from engine.core.execution.base import ExecutionBackend, FillResult
 
 if TYPE_CHECKING:
-    from core.cost_model import CostBreakdown
-    from core.order_manager import Order
+    from engine.core.cost_model import CostBreakdown
+    from engine.core.order_manager import Order
 
 logger = structlog.get_logger()
 
@@ -26,7 +26,13 @@ class LiveBackend(ExecutionBackend):
     This is a scaffold — implement the broker-specific logic in a subclass.
     """
 
-    def __init__(self, broker_name: str = "alpaca", api_key: str = "", api_secret: str = "", base_url: str = ""):
+    def __init__(
+        self,
+        broker_name: str = "alpaca",
+        api_key: str = "",
+        api_secret: str = "",
+        base_url: str = "",
+    ):
         self.broker_name = broker_name
         self.api_key = api_key
         self.api_secret = api_secret
