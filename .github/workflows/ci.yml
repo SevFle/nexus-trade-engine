@@ -58,6 +58,22 @@ jobs:
           NEXUS_APP_ENV: test
         run: python -m pytest tests -v --tb=short --junitxml=test-results.xml
 
+      - name: Run golden backtest tests
+        if: |
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
+          || contains(github.event.pull_request.changed_files.*.filename, 'engine/core/backtest_runner.py')
+          || contains(github.event.pull_request.changed_files.*.filename, 'engine/core/cost_model.py')
+          || contains(github.event.pull_request.changed_files.*.filename, 'engine/core/metrics.py')
+          || contains(github.event.pull_request.changed_files.*.filename, 'engine/core/portfolio.py')
+          || contains(github.event.pull_request.changed_files.*.filename, 'engine/core/order_manager.py')
+          || contains(github.event.pull_request.changed_files.*.filename, 'tests/golden/backtests/')
+          || contains(github.event.pull_request.changed_files.*.filename, 'tests/test_golden_backtests.py')
+        env:
+          NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:test_password@localhost:5432/nexus_test
+          NEXUS_VALKEY_URL: redis://localhost:6379/0
+          NEXUS_APP_ENV: test
+        run: python -m pytest tests/test_golden_backtests.py -v --tb=short
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()

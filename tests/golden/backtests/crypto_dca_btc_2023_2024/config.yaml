@@ -1,0 +1,32 @@
+name: crypto_dca_btc_2023_2024
+description: Dollar-cost averaging into BTC daily, 2023-2024
+strategy:
+  class: DCAStrategy
+  params:
+    frequency: 7
+    quantity_per_buy: 10
+backtest:
+  symbol: BTC
+  start_date: "2023-01-02"
+  end_date: "2024-12-31"
+  initial_capital: 100000.0
+  min_bars: 5
+  random_seed: 42
+data:
+  type: synthetic
+  seed: 401
+  n_bars: 550
+  base_price: 16500.0
+  drift: 0.001
+  volatility: 0.03
+  start_date: "2023-01-02"
+tolerances:
+  sharpe: 0.001
+  cagr: 0.0001
+  total_return: 0.0001
+  max_drawdown: 0.01
+  volatility: 0.01
+  default: 0.0001
+  equity_pct: 0.01
+timeout_seconds: 30
+status: active

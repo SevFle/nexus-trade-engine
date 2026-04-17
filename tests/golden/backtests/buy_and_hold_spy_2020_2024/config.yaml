@@ -1,0 +1,32 @@
+name: buy_and_hold_spy_2020_2024
+description: Buy-and-hold SPY daily, 2020-2024 with deterministic synthetic data
+strategy:
+  class: BuyHoldStrategy
+  params:
+    quantity: 100
+backtest:
+  symbol: SPY
+  start_date: "2020-01-02"
+  end_date: "2024-12-31"
+  initial_capital: 100000.0
+  min_bars: 5
+  random_seed: 42
+data:
+  type: synthetic
+  seed: 101
+  n_bars: 1300
+  base_price: 320.0
+  drift: 0.0003
+  volatility: 0.012
+  start_date: "2020-01-02"
+tolerances:
+  sharpe: 0.001
+  cagr: 0.0001
+  total_return: 0.0001
+  max_drawdown: 0.01
+  volatility: 0.01
+  win_rate: 0.01
+  default: 0.0001
+  equity_pct: 0.01
+timeout_seconds: 30
+status: active

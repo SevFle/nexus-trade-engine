@@ -1,0 +1,28 @@
+name: pairs_trading_ko_pep_2023
+description: Pairs trading KO/PEP spread mean reversion, 2023
+strategy:
+  class: PairsTradingStrategy
+  params: {}
+backtest:
+  symbol: KO
+  start_date: "2023-01-03"
+  end_date: "2023-12-29"
+  initial_capital: 100000.0
+  min_bars: 50
+  random_seed: 42
+data:
+  type: synthetic
+  seed: 301
+  n_bars: 300
+  base_price: 60.0
+  drift: 0.0
+  volatility: 0.015
+  start_date: "2023-01-03"
+tolerances:
+  sharpe: 0.001
+  cagr: 0.0001
+  default: 0.0001
+  equity_pct: 0.01
+timeout_seconds: 30
+status: pending
+pending_reason: "Requires multi-symbol backtesting support (engine issue #96)"

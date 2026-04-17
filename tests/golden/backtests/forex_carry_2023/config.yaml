@@ -1,0 +1,28 @@
+name: forex_carry_2023
+description: Forex carry trade EUR/USD + AUD/JPY, 2023
+strategy:
+  class: ForexCarryStrategy
+  params: {}
+backtest:
+  symbol: EURUSD
+  start_date: "2023-01-02"
+  end_date: "2023-12-29"
+  initial_capital: 100000.0
+  min_bars: 50
+  random_seed: 42
+data:
+  type: synthetic
+  seed: 501
+  n_bars: 300
+  base_price: 1.07
+  drift: 0.0
+  volatility: 0.005
+  start_date: "2023-01-02"
+tolerances:
+  sharpe: 0.001
+  cagr: 0.0001
+  default: 0.0001
+  equity_pct: 0.01
+timeout_seconds: 30
+status: pending
+pending_reason: "Requires forex asset class and multi-currency support"

@@ -15,6 +15,15 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--update-golden",
+        action="store_true",
+        default=False,
+        help="Regenerate golden baselines for backtest fixtures",
+    )
+
+
 @pytest.fixture(scope="session")
 def anyio_backend():
     return "asyncio"
