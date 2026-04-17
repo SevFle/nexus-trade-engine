@@ -50,6 +50,7 @@ class SellRecord:
     sell_price: float
     cost_basis: float
     gain: float
+    remaining_disallowed: float = 0.0
 
 
 @dataclass
@@ -164,14 +165,16 @@ class Portfolio:
         for sell in self._sell_history:
             if sell.symbol != symbol:
                 continue
-            if sell.gain >= 0:
+            if sell.remaining_disallowed <= 0:
                 continue
             window_start = purchase_date - timedelta(days=self._cost_model.wash_sale_window_days)
             if window_start <= sell.sell_date <= purchase_date:
-                disallowed = abs(sell.gain)
-                per_share = disallowed / sell.quantity
-                applicable = min(quantity, sell.quantity) * per_share
+                per_share = abs(sell.gain) / sell.quantity
+                applicable_shares = min(quantity, sell.quantity)
+                applicable = applicable_shares * per_share
+                applicable = min(applicable, sell.remaining_disallowed)
                 total_adjustment += applicable
+                sell.remaining_disallowed -= applicable
 
         if total_adjustment > 0:
             adjusted_price = price + (total_adjustment / quantity)
@@ -248,8 +251,12 @@ class Portfolio:
         sell_proceeds = quantity * price
         self._cash += sell_proceeds - cost - tax
 
-        gain = sell_proceeds - total_cost_basis - cost - tax
+        gain = sell_proceeds - total_cost_basis - cost
         self.realized_pnl += gain
+
+        if gain < 0:
+            adjustment = self._apply_buy_then_sell_wash_sale(symbol, sell_date, gain, quantity)
+            self.realized_pnl += adjustment
 
         self._sell_history.append(
             SellRecord(
@@ -259,6 +266,7 @@ class Portfolio:
                 sell_price=price,
                 cost_basis=total_cost_basis,
                 gain=gain,
+                remaining_disallowed=abs(gain) if gain < 0 else 0.0,
             )
         )
 
@@ -276,6 +284,19 @@ class Portfolio:
         )
 
         return consumed_lots
+
+    def _apply_buy_then_sell_wash_sale(
+        self, symbol: str, sell_date: datetime, loss: float, sold_quantity: int
+    ) -> float:
+        remaining_lots = self._tax_lots.get(symbol, [])
+        window_start = sell_date - timedelta(days=self._cost_model.wash_sale_window_days)
+        disallowed_per_share = abs(loss) / sold_quantity
+        total_disallowed = 0.0
+        for lot in remaining_lots:
+            if window_start <= lot.purchase_date <= sell_date:
+                lot.purchase_price += disallowed_per_share
+                total_disallowed += lot.quantity * disallowed_per_share
+        return total_disallowed
 
     def update_prices(self, prices: dict[str, float]) -> None:
         """Update current market prices for positions (for P&L calculation)."""

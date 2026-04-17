@@ -1,20 +1,21 @@
 """add tax_lot_records table
 
-Revision ID: 001_tax_lots
-Revises:
-Create Date: 2026-04-16 13:30:00.000000
+Revision ID: 003_tax_lots
+Revises: 003_bt_result_nullable_pid
+Create Date: 2026-04-17
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "001_tax_lots"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+from alembic import op
+
+revision: str = "003_tax_lots"
+down_revision: str | Sequence[str] | None = "003_bt_result_nullable_pid"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -63,14 +64,16 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.func.now(),
         ),
+        if_not_exists=True,
     )
     op.create_index(
         "ix_tax_lot_portfolio_symbol",
         "tax_lot_records",
         ["portfolio_id", "symbol"],
+        if_not_exists=True,
     )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_tax_lot_portfolio_symbol", table_name="tax_lot_records")
-    op.drop_table("tax_lot_records")
+    op.drop_index("ix_tax_lot_portfolio_symbol", table_name="tax_lot_records", if_exists=True)
+    op.drop_table("tax_lot_records", if_exists=True)
