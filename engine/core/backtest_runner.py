@@ -13,7 +13,7 @@ from engine.core.order_manager import OrderManager
 from engine.core.portfolio import Portfolio
 from engine.core.risk_engine import RiskEngine
 from engine.core.signal import Side
-from engine.data.market_state import MarketStateBuilder
+from engine.data.market_state import MarketStateBuilder, ValidationError
 from engine.plugins.manifest import StrategyManifest
 from engine.plugins.sandbox import StrategySandbox
 
@@ -131,7 +131,7 @@ class BacktestRunner:
                     ts,
                     [self.config.symbol],
                 )
-            except Exception:
+            except ValidationError:
                 logger.debug("backtest.warmup_skip", timestamp=str(ts))
                 continue
             current_price = market_state.prices.get(self.config.symbol, 0.0)
@@ -140,10 +140,6 @@ class BacktestRunner:
 
             snapshot = portfolio.snapshot()
 
-            pre_sell_positions: dict[str, tuple[float, int]] = {}
-            for sym, pos in portfolio.positions.items():
-                pre_sell_positions[sym] = (pos.avg_cost, pos.quantity)
-
             signals = await sandbox.safe_evaluate(snapshot, market_state, cost_model)
 
             for signal in signals:
@@ -151,6 +147,12 @@ class BacktestRunner:
                     continue
                 if signal.symbol != self.config.symbol:
                     continue
+
+                sell_avg_cost = None
+                if signal.side == Side.SELL:
+                    pos = portfolio.positions.get(signal.symbol)
+                    if pos is not None:
+                        sell_avg_cost = pos.avg_cost
 
                 order = await order_manager.process_signal(
                     signal,
@@ -170,8 +172,15 @@ class BacktestRunner:
                 }
 
                 if order.side == Side.SELL:
-                    avg_cost, _ = pre_sell_positions.get(order.symbol, (0.0, 0))
+                    avg_cost = sell_avg_cost if sell_avg_cost is not None else 0.0
                     realized_pnl = (order.fill_price - avg_cost) * order.fill_quantity
+                    costs = order.cost_breakdown or {}
+                    total_costs = (
+                        costs.get("commission", 0.0)
+                        + costs.get("slippage", 0.0)
+                        + costs.get("tax", 0.0)
+                    )
+                    realized_pnl -= total_costs
                     trade_record["realized_pnl"] = realized_pnl
                 else:
                     trade_record["realized_pnl"] = 0.0
@@ -204,7 +213,7 @@ class BacktestRunner:
         result.metrics = report.to_dict()
 
         total_trades = len(result.trades)
-        closed_trades = len([t for t in result.trades if t.get("realized_pnl", 0.0) != 0.0])
+        closed_trades = len([t for t in result.trades if t.get("side") == "sell"])
 
         logger.info(
             "backtest.complete",

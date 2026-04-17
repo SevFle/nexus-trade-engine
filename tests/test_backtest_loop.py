@@ -9,6 +9,7 @@ M5: Wrong trade count
 
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
 
 import numpy as np
@@ -332,21 +333,42 @@ class TestM3SilentFailures:
         with pytest.raises(RuntimeError, match="No data provider"):
             await runner.run()
 
-    def test_api_result_status_on_failure(self):
-        from engine.api.routes.backtest import _backtest_results
+    @pytest.mark.asyncio
+    async def test_api_returns_404_for_unknown_id(self):
+        from fastapi import FastAPI
+        from httpx import ASGITransport, AsyncClient
 
-        test_id = "test-failure-id"
-        _backtest_results[test_id] = {
-            "status": "failed",
-            "strategy_name": "bad",
-            "symbol": "BAD",
-            "error": "Strategy not found: bad",
-            "error_type": "ValueError",
-        }
+        from engine.api.routes.backtest import router
 
-        stored = _backtest_results[test_id]
-        assert stored["status"] == "failed"
-        assert "error" in stored
+        app = FastAPI()
+        app.include_router(router, prefix="/api/backtest")
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/api/backtest/results/nonexistent-id")
+            assert resp.status_code == 404
+            body = resp.json()
+            assert body["status"] == "not_found"
+
+    @pytest.mark.asyncio
+    async def test_api_returns_202_for_running(self):
+        from fastapi import FastAPI
+        from httpx import ASGITransport, AsyncClient
+
+        from engine.api.routes.backtest import _backtest_results, router
+
+        _backtest_results["running-test-id"] = (
+            time.monotonic(),
+            {"status": "running", "strategy_name": "test", "symbol": "TEST"},
+        )
+
+        app = FastAPI()
+        app.include_router(router, prefix="/api/backtest")
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/api/backtest/results/running-test-id")
+            assert resp.status_code == 202
+            body = resp.json()
+            assert body["status"] == "running"
 
 
 class TestM4StrategySandbox:

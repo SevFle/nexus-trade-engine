@@ -65,8 +65,21 @@ class PluginRegistry:
         if entry is None:
             logger.warning("strategy_not_found", strategy=strategy_name)
             return None
-        cls = load_strategy_class(entry["module_path"])
-        return cls()
+        try:
+            cls = load_strategy_class(entry["module_path"])
+        except (ImportError, AttributeError) as exc:
+            logger.exception("strategy_load_failed", strategy=strategy_name, error=str(exc))
+            return None
+        try:
+            return cls()
+        except Exception as exc:
+            logger.exception(
+                "strategy_instantiation_failed",
+                strategy=strategy_name,
+                cls=cls.__name__,
+                error=str(exc),
+            )
+            return None
 
     def list_strategies(self) -> list[str]:
         return list(self._strategies.keys())

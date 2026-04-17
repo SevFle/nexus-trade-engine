@@ -322,4 +322,4 @@ class PortfolioSnapshot:
         )
 
 
-PortfolioState = PortfolioSnapshot
+PortfolioState = PortfolioSnapshot  # deprecated: use PortfolioSnapshot directly
