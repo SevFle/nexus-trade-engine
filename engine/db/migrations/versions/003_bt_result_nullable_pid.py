@@ -1,6 +1,6 @@
-"""backtest_result_nullable_portfolio
+"""make backtest_results.portfolio_id nullable
 
-Revision ID: 003_backtest_result_nullable_portfolio
+Revision ID: 003_bt_result_nullable_pid
 Revises: 002_additional_tables
 Create Date: 2026-04-16
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "003_backtest_result_nullable_portfolio"
+revision: str = "003_bt_result_nullable_pid"
 down_revision: str | Sequence[str] | None = "002_additional_tables"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
