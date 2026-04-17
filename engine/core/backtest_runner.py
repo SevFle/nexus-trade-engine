@@ -175,11 +175,7 @@ class BacktestRunner:
                     avg_cost = sell_avg_cost if sell_avg_cost is not None else 0.0
                     realized_pnl = (order.fill_price - avg_cost) * order.fill_quantity
                     costs = order.cost_breakdown or {}
-                    total_costs = (
-                        costs.get("commission", 0.0)
-                        + costs.get("slippage", 0.0)
-                        + costs.get("tax", 0.0)
-                    )
+                    total_costs = costs.get("total", 0.0)
                     realized_pnl -= total_costs
                     trade_record["realized_pnl"] = realized_pnl
                 else:

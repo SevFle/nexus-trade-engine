@@ -169,6 +169,8 @@ async def _run_backtest_background(
             },
         )
 
+        _evict_expired_results()
+
     except Exception as e:
         logger.exception(
             "backtest.background_failed",
@@ -202,7 +204,10 @@ async def run_backtest(
     return BacktestResponse(status="accepted", backtest_id=backtest_id)
 
 
-@router.get("/results/{backtest_id}")
+@router.get(
+    "/results/{backtest_id}",
+    response_model=BacktestResultResponse,
+)
 async def get_backtest_result(backtest_id: str) -> JSONResponse:
     _evict_expired_results()
 
