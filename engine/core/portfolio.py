@@ -197,7 +197,7 @@ class Portfolio:
         elif self.tax_method == TaxMethod.LIFO:
             sorted_lots = sorted(lots, key=lambda lot: lot.purchase_date, reverse=True)
         else:
-            sorted_lots = lots
+            sorted_lots = list(lots)
 
         remaining_to_sell = quantity
         consumed_lots = []

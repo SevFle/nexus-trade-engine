@@ -3,8 +3,10 @@ Tests for tax lot tracking with FIFO/LIFO selection, partial lot consumption,
 holding period awareness, and wash sale detection.
 """
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
+from engine.core.backtest_runner import BacktestConfig, BacktestResult
 from engine.core.cost_model import DefaultCostModel, TaxLot, TaxMethod
 from engine.core.portfolio import Portfolio
 
@@ -242,3 +244,107 @@ class TestPortfolioWashSale:
         lots = p.get_tax_lots("AAPL")
         assert len(lots) == 1
         assert lots[0].purchase_price == 145.0
+
+
+class TestCrossLotConsumption:
+    """Test selling across multiple lots in a single close_position call."""
+
+    def test_fifo_cross_lot_cost_basis(self):
+        p = Portfolio(initial_cash=100_000, tax_method=TaxMethod.FIFO)
+        base_date = datetime.now(UTC) - timedelta(days=400)
+
+        p.transaction_date = base_date - timedelta(days=500)
+        p.open_position("AAPL", 100, 80.0)
+
+        p.transaction_date = base_date - timedelta(days=100)
+        p.open_position("AAPL", 50, 120.0)
+
+        p.transaction_date = base_date
+        consumed = p.close_position("AAPL", 120, 150.0)
+
+        assert len(consumed) == 2
+        assert consumed[0]["purchase_price"] == 80.0
+        assert consumed[0]["quantity"] == 100
+        assert consumed[1]["purchase_price"] == 120.0
+        assert consumed[1]["quantity"] == 20
+
+        remaining = p.get_tax_lots("AAPL")
+        assert len(remaining) == 1
+        assert remaining[0].quantity == 30
+
+    def test_lifo_cross_lot_cost_basis(self):
+        p = Portfolio(initial_cash=100_000, tax_method=TaxMethod.LIFO)
+        base_date = datetime.now(UTC) - timedelta(days=400)
+
+        p.transaction_date = base_date - timedelta(days=500)
+        p.open_position("AAPL", 100, 80.0)
+
+        p.transaction_date = base_date - timedelta(days=100)
+        p.open_position("AAPL", 50, 120.0)
+
+        p.transaction_date = base_date
+        consumed = p.close_position("AAPL", 120, 150.0)
+
+        assert len(consumed) == 2
+        assert consumed[0]["purchase_price"] == 120.0
+        assert consumed[0]["quantity"] == 50
+        assert consumed[1]["purchase_price"] == 80.0
+        assert consumed[1]["quantity"] == 70
+
+
+class TestSpecificLotNoSkip:
+    """Test that SPECIFIC_LOT does not silently skip lots due to
+    list-mutation-during-iteration bug."""
+
+    def test_specific_lot_consumes_all_lots(self):
+        p = Portfolio(initial_cash=100_000, tax_method=TaxMethod.SPECIFIC_LOT)
+        base_date = datetime.now(UTC)
+
+        p.transaction_date = base_date - timedelta(days=10)
+        p.open_position("AAPL", 50, 100.0)
+
+        p.transaction_date = base_date - timedelta(days=5)
+        p.open_position("AAPL", 50, 110.0)
+
+        p.transaction_date = base_date - timedelta(days=2)
+        p.open_position("AAPL", 50, 120.0)
+
+        p.transaction_date = base_date
+        consumed = p.close_position("AAPL", 150, 130.0)
+
+        assert len(consumed) == 3
+        total_consumed = sum(c["quantity"] for c in consumed)
+        assert total_consumed == 150
+
+        remaining = p.get_tax_lots("AAPL")
+        assert len(remaining) == 0
+
+
+class TestPortfolioIdPropagation:
+    """Test that portfolio_id flows from BacktestConfig to BacktestResult."""
+
+    def test_config_portfolio_id_propagated_to_result(self):
+        pid = uuid.uuid4()
+        config = BacktestConfig(
+            strategy_name="test",
+            symbol="AAPL",
+            start_date="2025-01-01",
+            end_date="2025-12-31",
+            portfolio_id=pid,
+        )
+        assert config.portfolio_id == pid
+
+        result = BacktestResult(portfolio_id=pid)
+        assert result.portfolio_id == pid
+
+    def test_config_portfolio_id_defaults_none(self):
+        config = BacktestConfig(
+            strategy_name="test",
+            symbol="AAPL",
+            start_date="2025-01-01",
+            end_date="2025-12-31",
+        )
+        assert config.portfolio_id is None
+
+        result = BacktestResult()
+        assert result.portfolio_id is None

@@ -6,10 +6,12 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 import structlog
 
-from engine.core.portfolio import PortfolioState
+from engine.core.portfolio import Portfolio
 from engine.data.market_state import MarketStateBuilder
 
 if TYPE_CHECKING:
+    import uuid
+
     from engine.core.metrics import PerformanceMetrics
     from engine.data.feeds import MarketDataProvider
     from engine.plugins.sdk import BaseStrategy
@@ -23,6 +25,7 @@ class BacktestConfig:
     symbol: str
     start_date: str
     end_date: str
+    portfolio_id: uuid.UUID | None = None
     initial_capital: float = 100_000.0
     min_bars: int = 50
     debug: bool = False
@@ -30,6 +33,7 @@ class BacktestConfig:
 
 @dataclass
 class BacktestResult:
+    portfolio_id: uuid.UUID | None = None
     equity_curve: list[dict[str, Any]] = field(default_factory=list)
     trades: list[dict[str, Any]] = field(default_factory=list)
     metrics: dict[str, float] = field(default_factory=dict)
@@ -85,7 +89,7 @@ class BacktestRunner:
             end=str(timestamps[-1]),
         )
 
-        result = BacktestResult()
+        result = BacktestResult(portfolio_id=self.config.portfolio_id)
 
         for ts in timestamps:
             market_state = self._builder.build_for_backtest(
@@ -95,7 +99,7 @@ class BacktestRunner:
             )
             sdk_state = market_state.to_sdk_state()
 
-            portfolio = PortfolioState(cash=self.config.initial_capital)
+            portfolio = Portfolio(initial_cash=self.config.initial_capital)
             signals = self.strategy.on_bar(sdk_state, portfolio)
             result.trades.extend(signals)
 
