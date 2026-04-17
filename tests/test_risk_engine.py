@@ -166,7 +166,7 @@ class TestRiskCheckResultDefaults:
         result = RiskCheckResult(approved=True)
         assert result.warnings == []
 
-    def test_drawdown_zero_when_initial_cash_zero(self, portfolio):
+    def test_drawdown_zero_when_initial_cash_zero(self):
         zero_portfolio = Portfolio(initial_cash=0)
         engine = RiskEngine()
         order = _make_order("AAPL", Side.BUY, 1)

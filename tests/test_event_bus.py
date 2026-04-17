@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from engine.events.bus import Event, EventBus, EventType
-
-if TYPE_CHECKING:
-    pass
 
 
 @pytest.fixture(autouse=True)

@@ -153,6 +153,7 @@ class TestPluginRegistry:
         assert registry.load_strategy("no_class") is None
 
 
+@pytest.mark.integration
 class TestDiscoverRealStrategies:
     def test_discovers_mean_reversion_basic(self):
         strategies = discover_strategies()

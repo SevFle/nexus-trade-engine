@@ -91,47 +91,53 @@ def provider(synthetic_df) -> _SyntheticProvider:
     return _SyntheticProvider(synthetic_df)
 
 
+@pytest.fixture
+def buy_config() -> BacktestConfig:
+    return BacktestConfig(
+        strategy_name="simple_buy",
+        symbol="AAPL",
+        start_date="2024-01-01",
+        end_date="2024-12-31",
+        initial_capital=100_000.0,
+        random_seed=42,
+    )
+
+
+@pytest.fixture
+def hold_config() -> BacktestConfig:
+    return BacktestConfig(
+        strategy_name="always_hold",
+        symbol="AAPL",
+        start_date="2024-01-01",
+        end_date="2024-12-31",
+        initial_capital=100_000.0,
+        random_seed=42,
+    )
+
+
 class TestBacktestRunnerIntegration:
-    async def test_run_produces_nonzero_results(self, provider):
-        config = BacktestConfig(
-            strategy_name="simple_buy",
-            symbol="AAPL",
-            start_date="2024-01-01",
-            end_date="2024-12-31",
-            initial_capital=100_000.0,
-            random_seed=42,
+    async def test_run_produces_nonzero_results(self, provider, buy_config):
+        runner = BacktestRunner(
+            config=buy_config, strategy=_SimpleBuyStrategy(), provider=provider
         )
-        runner = BacktestRunner(config=config, strategy=_SimpleBuyStrategy(), provider=provider)
         result = await runner.run()
 
         assert result.final_capital != 0
         assert len(result.equity_curve) > 0
         assert result.total_return_pct != 0
 
-    async def test_equity_curve_length_matches_bars(self, provider):
-        config = BacktestConfig(
-            strategy_name="simple_buy",
-            symbol="AAPL",
-            start_date="2024-01-01",
-            end_date="2024-12-31",
-            initial_capital=100_000.0,
-            random_seed=42,
+    async def test_equity_curve_length_matches_bars(self, provider, buy_config):
+        runner = BacktestRunner(
+            config=buy_config, strategy=_SimpleBuyStrategy(), provider=provider
         )
-        runner = BacktestRunner(config=config, strategy=_SimpleBuyStrategy(), provider=provider)
         result = await runner.run()
 
         assert len(result.equity_curve) > 50
 
-    async def test_costs_applied_to_trades(self, provider):
-        config = BacktestConfig(
-            strategy_name="simple_buy",
-            symbol="AAPL",
-            start_date="2024-01-01",
-            end_date="2024-12-31",
-            initial_capital=100_000.0,
-            random_seed=42,
+    async def test_costs_applied_to_trades(self, provider, buy_config):
+        runner = BacktestRunner(
+            config=buy_config, strategy=_SimpleBuyStrategy(), provider=provider
         )
-        runner = BacktestRunner(config=config, strategy=_SimpleBuyStrategy(), provider=provider)
         result = await runner.run()
 
         for trade in result.trades:
@@ -139,50 +145,33 @@ class TestBacktestRunnerIntegration:
             if trade["cost_breakdown"]:
                 assert trade["cost_breakdown"].get("total", 0) >= 0
 
-    async def test_deterministic_with_fixed_seed(self, provider):
-        config = BacktestConfig(
-            strategy_name="simple_buy",
-            symbol="AAPL",
-            start_date="2024-01-01",
-            end_date="2024-12-31",
-            initial_capital=100_000.0,
-            random_seed=42,
+    async def test_deterministic_with_fixed_seed(self, provider, buy_config):
+        runner1 = BacktestRunner(
+            config=buy_config, strategy=_SimpleBuyStrategy(), provider=provider
         )
-
-        runner1 = BacktestRunner(config=config, strategy=_SimpleBuyStrategy(), provider=provider)
         result1 = await runner1.run()
 
-        runner2 = BacktestRunner(config=config, strategy=_SimpleBuyStrategy(), provider=provider)
+        runner2 = BacktestRunner(
+            config=buy_config, strategy=_SimpleBuyStrategy(), provider=provider
+        )
         result2 = await runner2.run()
 
         assert result1.final_capital == pytest.approx(result2.final_capital, rel=1e-6)
         assert len(result1.trades) == len(result2.trades)
 
-    async def test_hold_strategy_preserves_capital(self, provider):
-        config = BacktestConfig(
-            strategy_name="always_hold",
-            symbol="AAPL",
-            start_date="2024-01-01",
-            end_date="2024-12-31",
-            initial_capital=100_000.0,
-            random_seed=42,
+    async def test_hold_strategy_preserves_capital(self, provider, hold_config):
+        runner = BacktestRunner(
+            config=hold_config, strategy=_AlwaysHoldStrategy(), provider=provider
         )
-        runner = BacktestRunner(config=config, strategy=_AlwaysHoldStrategy(), provider=provider)
         result = await runner.run()
 
         assert result.final_capital == pytest.approx(100_000.0, abs=0.01)
         assert len(result.trades) == 0
 
-    async def test_metrics_report_included(self, provider):
-        config = BacktestConfig(
-            strategy_name="simple_buy",
-            symbol="AAPL",
-            start_date="2024-01-01",
-            end_date="2024-12-31",
-            initial_capital=100_000.0,
-            random_seed=42,
+    async def test_metrics_report_included(self, provider, buy_config):
+        runner = BacktestRunner(
+            config=buy_config, strategy=_SimpleBuyStrategy(), provider=provider
         )
-        runner = BacktestRunner(config=config, strategy=_SimpleBuyStrategy(), provider=provider)
         result = await runner.run()
 
         assert "sharpe_ratio" in result.metrics
