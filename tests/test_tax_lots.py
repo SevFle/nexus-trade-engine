@@ -101,7 +101,7 @@ class TestHoldingPeriod:
                 purchase_date=now - timedelta(days=400),
             )
         ]
-        tax = cost_model.estimate_tax("AAPL", 150.0, 100, lots, TaxMethod.FIFO)
+        tax = cost_model.estimate_tax("AAPL", 150.0, 100, lots, TaxMethod.FIFO, sell_date=now)
         expected = (150.0 - 100.0) * 100 * 0.20
         assert abs(tax.amount - expected) < 1e-6
 
@@ -207,25 +207,19 @@ class TestPortfolioWashSale:
     def test_portfolio_wash_sale_adjusts_replacement_lot_cost_basis(self):
         p = Portfolio(initial_cash=200_000)
 
-        # Day 0: Buy 100 shares at $150
         p.transaction_date = datetime(2026, 1, 1, tzinfo=UTC)
         p.open_position("AAPL", 100, 150.0)
 
-        # Day 60: Sell 100 shares at $140 → $1000 loss
         p.transaction_date = datetime(2026, 3, 1, tzinfo=UTC)
         p.close_position("AAPL", 100, 140.0, cost=0.0)
         assert p.realized_pnl < 0
 
-        # Day 65 (5 days later, within 30-day window): Buy 100 shares at $145
         p.transaction_date = datetime(2026, 3, 6, tzinfo=UTC)
         p.open_position("AAPL", 100, 145.0)
 
-        # The replacement lot should have its cost basis adjusted upward
-        # by the disallowed loss ($1000 / 100 shares = $10/share)
         lots = p.get_tax_lots("AAPL")
         assert len(lots) == 1
-        assert lots[0].purchase_price > 145.0
-        expected_adjusted_price = 145.0 + (abs(p._sell_history[-1].gain) / 100)
+        expected_adjusted_price = 145.0 + 10.0
         assert abs(lots[0].purchase_price - expected_adjusted_price) < 1e-6
 
     def test_portfolio_no_wash_sale_outside_window(self):
@@ -237,13 +231,105 @@ class TestPortfolioWashSale:
         p.transaction_date = datetime(2026, 3, 1, tzinfo=UTC)
         p.close_position("AAPL", 100, 140.0)
 
-        # 60 days later — outside wash sale window
         p.transaction_date = datetime(2026, 5, 1, tzinfo=UTC)
         p.open_position("AAPL", 100, 145.0)
 
         lots = p.get_tax_lots("AAPL")
         assert len(lots) == 1
         assert lots[0].purchase_price == 145.0
+
+    def test_sell_then_buy_two_partial_buys_equal_per_share(self):
+        """sell 100 @ -$1000 loss, buy 50 (day 5), buy 50 (day 10).
+        Both buys should get $10/share adjustment. Total = $1000."""
+        p = Portfolio(initial_cash=500_000)
+
+        p.transaction_date = datetime(2026, 1, 1, tzinfo=UTC)
+        p.open_position("AAPL", 100, 150.0)
+
+        p.transaction_date = datetime(2026, 3, 1, tzinfo=UTC)
+        p.close_position("AAPL", 100, 140.0)
+        assert abs(p.realized_pnl - (-1000.0)) < 1e-6
+
+        p.transaction_date = datetime(2026, 3, 6, tzinfo=UTC)
+        p.open_position("AAPL", 50, 145.0)
+
+        p.transaction_date = datetime(2026, 3, 11, tzinfo=UTC)
+        p.open_position("AAPL", 50, 145.0)
+
+        lots = p.get_tax_lots("AAPL")
+        assert len(lots) == 2
+        assert abs(lots[0].purchase_price - 155.0) < 1e-6
+        assert abs(lots[1].purchase_price - 155.0) < 1e-6
+
+        total_adj = sum((lot.purchase_price - 145.0) * lot.quantity for lot in lots)
+        assert abs(total_adj - 1000.0) < 1e-6
+
+    def test_buy_then_sell_wash_sale_adjusts_existing_lot(self):
+        """Buy first, then sell at loss within 30 days.
+        The existing lot's cost basis should be adjusted upward."""
+        p = Portfolio(initial_cash=500_000)
+
+        p.transaction_date = datetime(2026, 1, 1, tzinfo=UTC)
+        p.open_position("AAPL", 100, 150.0)
+
+        p.transaction_date = datetime(2026, 1, 11, tzinfo=UTC)
+        p.open_position("AAPL", 100, 140.0)
+
+        p.transaction_date = datetime(2026, 1, 21, tzinfo=UTC)
+        p.close_position("AAPL", 100, 130.0)
+
+        lots = p.get_tax_lots("AAPL")
+        assert len(lots) == 1
+        expected_adjustment_per_share = 10.0
+        expected_price = 150.0 + expected_adjustment_per_share
+        assert abs(lots[0].purchase_price - expected_price) < 1e-6
+
+    def test_buy_then_sell_reverses_realized_pnl(self):
+        """Buy-then-sell wash sale should reverse the disallowed loss from realized_pnl."""
+        p = Portfolio(initial_cash=500_000)
+
+        p.transaction_date = datetime(2026, 1, 1, tzinfo=UTC)
+        p.open_position("AAPL", 100, 150.0)
+
+        p.transaction_date = datetime(2026, 1, 11, tzinfo=UTC)
+        p.open_position("AAPL", 100, 140.0)
+
+        p.transaction_date = datetime(2026, 1, 21, tzinfo=UTC)
+        p.close_position("AAPL", 100, 130.0)
+
+        raw_gain = 100 * 130.0 - 100 * 150.0
+        assert raw_gain == -2000.0
+        assert p.realized_pnl > raw_gain
+
+    def test_gain_does_not_subtract_tax(self):
+        """gain = proceeds - cost_basis - fees. Tax NOT subtracted from gain."""
+        p = Portfolio(initial_cash=100_000)
+
+        p.transaction_date = datetime(2026, 1, 1, tzinfo=UTC)
+        p.open_position("AAPL", 100, 100.0)
+
+        p.transaction_date = datetime(2026, 2, 1, tzinfo=UTC)
+        p.close_position("AAPL", 100, 120.0, cost=10.0, tax=500.0)
+
+        sell_proceeds = 100 * 120.0
+        cost_basis = 100 * 100.0
+        fees = 10.0
+        expected_gain = sell_proceeds - cost_basis - fees
+        assert abs(p.realized_pnl - expected_gain) < 1e-6
+
+    def test_tax_deducted_from_cash_on_sell(self):
+        p = Portfolio(initial_cash=100_000)
+
+        p.transaction_date = datetime(2026, 1, 1, tzinfo=UTC)
+        p.open_position("AAPL", 100, 100.0)
+
+        cash_before = p.cash
+        p.transaction_date = datetime(2026, 2, 1, tzinfo=UTC)
+        p.close_position("AAPL", 100, 120.0, cost=10.0, tax=500.0)
+
+        sell_proceeds = 100 * 120.0
+        expected_cash = cash_before + sell_proceeds - 10.0 - 500.0
+        assert abs(p.cash - expected_cash) < 1e-6
 
 
 class TestCrossLotConsumption:
