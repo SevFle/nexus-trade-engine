@@ -9,7 +9,7 @@ on:
 jobs:
   test-engine:
     name: Engine Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, nexus]
 
     services:
       postgres:
@@ -67,7 +67,7 @@ jobs:
 
   test-frontend:
     name: Frontend Lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, nexus]
 
     steps:
       - uses: actions/checkout@v4
@@ -85,7 +85,7 @@ jobs:
 
   docker:
     name: Docker Build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, nexus]
     needs: [test-engine]
 
     steps:
