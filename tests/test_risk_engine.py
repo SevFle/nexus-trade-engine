@@ -2,28 +2,29 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import uuid
 
 import pytest
 
+from engine.core.order_manager import Order
 from engine.core.portfolio import Portfolio
 from engine.core.risk_engine import RiskCheckResult, RiskEngine
+from engine.core.signal import Side
 
 
-@dataclass
-class FakeSide:
-    value: str
-
-
-@dataclass
-class FakeOrder:
-    symbol: str
-    side: FakeSide
-    quantity: int
-
-
-def _make_order(symbol: str = "AAPL", side: str = "buy", quantity: int = 10):
-    return FakeOrder(symbol=symbol, side=FakeSide(value=side), quantity=quantity)
+def _make_order(
+    symbol: str = "AAPL",
+    side: Side = Side.BUY,
+    quantity: int = 10,
+    strategy_id: str = "test",
+) -> Order:
+    return Order(
+        signal_id=str(uuid.uuid4()),
+        strategy_id=strategy_id,
+        symbol=symbol,
+        side=side,
+        quantity=quantity,
+    )
 
 
 @pytest.fixture
@@ -46,13 +47,13 @@ class TestPositionConcentration:
         portfolio.open_position("AAPL", 10, 100.0)
         portfolio.update_prices({"AAPL": 100.0})
 
-        order = _make_order("AAPL", "buy", 300)
+        order = _make_order("AAPL", Side.BUY, 300)
         result = engine.check_order(order, portfolio, market_price=100.0)
         assert not result.approved
         assert "Position" in result.reason or "portfolio" in result.reason.lower()
 
     def test_within_limit_approved(self, engine, portfolio):
-        order = _make_order("AAPL", "buy", 10)
+        order = _make_order("AAPL", Side.BUY, 10)
         result = engine.check_order(order, portfolio, market_price=100.0)
         assert result.approved
 
@@ -60,23 +61,23 @@ class TestPositionConcentration:
 class TestDailyTradeLimit:
     def test_daily_trade_limit_reached(self, engine, portfolio):
         for _ in range(3):
-            order = _make_order("AAPL", "buy", 1)
+            order = _make_order("AAPL", Side.BUY, 1)
             result = engine.check_order(order, portfolio, market_price=100.0)
             assert result.approved
 
-        order = _make_order("AAPL", "buy", 1)
+        order = _make_order("AAPL", Side.BUY, 1)
         result = engine.check_order(order, portfolio, market_price=100.0)
         assert not result.approved
         assert "Daily trade limit" in result.reason
 
     def test_reset_daily_counters(self, engine, portfolio):
         for _ in range(3):
-            order = _make_order("AAPL", "buy", 1)
+            order = _make_order("AAPL", Side.BUY, 1)
             engine.check_order(order, portfolio, market_price=100.0)
 
         engine.reset_daily_counters()
 
-        order = _make_order("AAPL", "buy", 1)
+        order = _make_order("AAPL", Side.BUY, 1)
         result = engine.check_order(order, portfolio, market_price=100.0)
         assert result.approved
 
@@ -86,7 +87,7 @@ class TestCircuitBreaker:
         portfolio.open_position("AAPL", 100, 500.0)
         portfolio.update_prices({"AAPL": 1.0})
 
-        order = _make_order("AAPL", "buy", 1)
+        order = _make_order("AAPL", Side.BUY, 1)
         result = engine.check_order(order, portfolio, market_price=1.0)
         assert not result.approved
         assert "Circuit breaker" in result.reason
@@ -95,7 +96,7 @@ class TestCircuitBreaker:
     def test_circuit_breaker_blocks_subsequent_orders(self, engine, portfolio):
         engine.circuit_breaker_active = True
 
-        order = _make_order("AAPL", "buy", 1)
+        order = _make_order("AAPL", Side.BUY, 1)
         result = engine.check_order(order, portfolio, market_price=100.0)
         assert not result.approved
         assert "Circuit breaker active" in result.reason
@@ -104,7 +105,7 @@ class TestCircuitBreaker:
         engine.circuit_breaker_active = True
         engine.reset_circuit_breaker()
 
-        order = _make_order("AAPL", "buy", 1)
+        order = _make_order("AAPL", Side.BUY, 1)
         result = engine.check_order(order, portfolio, market_price=100.0)
         assert result.approved
 
@@ -112,14 +113,14 @@ class TestCircuitBreaker:
 class TestOrderValueCap:
     def test_order_value_exceeds_cap(self, portfolio):
         engine = RiskEngine(max_single_order_value=1000.0)
-        order = _make_order("AAPL", "buy", 100)
+        order = _make_order("AAPL", Side.BUY, 100)
         result = engine.check_order(order, portfolio, market_price=50.0)
         assert not result.approved
         assert "exceeds max" in result.reason
 
     def test_order_value_within_cap(self, portfolio):
         engine = RiskEngine(max_single_order_value=100_000.0)
-        order = _make_order("AAPL", "buy", 10)
+        order = _make_order("AAPL", Side.BUY, 10)
         result = engine.check_order(order, portfolio, market_price=100.0)
         assert result.approved
 
@@ -127,13 +128,13 @@ class TestOrderValueCap:
 class TestCashWarning:
     def test_large_cash_usage_warning(self, portfolio):
         engine = RiskEngine(max_position_pct=1.0, max_single_order_value=1_000_000.0)
-        order = _make_order("AAPL", "buy", 600)
+        order = _make_order("AAPL", Side.BUY, 600)
         result = engine.check_order(order, portfolio, market_price=100.0)
         assert result.approved
         assert any("cash" in w.lower() for w in result.warnings)
 
     def test_no_warning_for_small_orders(self, engine, portfolio):
-        order = _make_order("AAPL", "buy", 10)
+        order = _make_order("AAPL", Side.BUY, 10)
         result = engine.check_order(order, portfolio, market_price=100.0)
         assert result.approved
         assert len(result.warnings) == 0
@@ -146,7 +147,7 @@ class TestMaxOpenPositions:
         for sym in ["AAPL", "MSFT"]:
             portfolio.open_position(sym, 10, 100.0)
 
-        order = _make_order("GOOGL", "buy", 10)
+        order = _make_order("GOOGL", Side.BUY, 10)
         result = engine.check_order(order, portfolio, market_price=100.0)
         assert not result.approved
         assert "Max open positions" in result.reason
@@ -155,7 +156,7 @@ class TestMaxOpenPositions:
         engine = RiskEngine(max_open_positions=1)
         portfolio.open_position("AAPL", 10, 100.0)
 
-        order = _make_order("AAPL", "buy", 5)
+        order = _make_order("AAPL", Side.BUY, 5)
         result = engine.check_order(order, portfolio, market_price=100.0)
         assert result.approved
 
@@ -165,7 +166,9 @@ class TestRiskCheckResultDefaults:
         result = RiskCheckResult(approved=True)
         assert result.warnings == []
 
-    def test_drawdown_zero_when_initial_cash_zero(self, engine):
-        p = Portfolio(initial_cash=0)
-        dd = engine._calculate_drawdown(p)
-        assert dd == 0.0
+    def test_drawdown_zero_when_initial_cash_zero(self, portfolio):
+        zero_portfolio = Portfolio(initial_cash=0)
+        engine = RiskEngine()
+        order = _make_order("AAPL", Side.BUY, 1)
+        result = engine.check_order(order, zero_portfolio, market_price=100.0)
+        assert result.approved

@@ -91,17 +91,18 @@ class EventBus:
     Events are also persisted to Redis for cross-process consumers (e.g. frontend WebSocket).
     """
 
-    def __init__(self, redis_url: str = "redis://localhost:6379/0"):
+    def __init__(self, redis_url: str = "redis://localhost:6379/0", max_log_size: int = 10_000):
         self.redis_url = redis_url
         self._handlers: dict[EventType, list[EventHandler]] = {}
         self._redis = None
         self._event_log: list[dict] = []
-        self._max_log_size = 10_000
+        self._max_log_size = max_log_size
 
     async def connect(self):
         """Initialize Redis connection for cross-process pub/sub."""
         try:
             import redis.asyncio as aioredis
+
             self._redis = aioredis.from_url(self.redis_url)
             await self._redis.ping()
             logger.info("event_bus.redis_connected")
@@ -145,7 +146,7 @@ class EventBus:
         # Local event log (ring buffer)
         self._event_log.append(event.to_dict())
         if len(self._event_log) > self._max_log_size:
-            self._event_log = self._event_log[-self._max_log_size:]
+            self._event_log = self._event_log[-self._max_log_size :]
 
     async def emit(self, event_type: EventType, data: dict = None, source: str = "engine"):
         """Convenience method: create and publish an event in one call."""

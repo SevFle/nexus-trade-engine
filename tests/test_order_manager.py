@@ -188,19 +188,27 @@ class TestStatusHistory:
         assert OrderStatus.FILLED in statuses
 
 
-class TestCalculateQuantity:
-    def test_calculate_quantity_from_weight(self, cost_model, risk_engine, portfolio):
+class TestWeightBasedQuantity:
+    async def test_weight_signal_calculates_quantity(self, cost_model, portfolio):
+        risk_engine = RiskEngine(max_position_pct=1.0)
         om = OrderManager(cost_model=cost_model, risk_engine=risk_engine, portfolio=portfolio)
+        om.set_execution_backend(FakeExecutionBackend(success=True, price=100.0, quantity=500))
+
         signal = Signal.buy(symbol="AAPL", strategy_id="test", weight=0.5)
+        order = await om.process_signal(signal, market_price=100.0)
 
-        qty = om._calculate_quantity(signal, 100.0)
-        assert qty > 0
-        assert qty == int(portfolio.cash * 0.5 // 100.0)
+        assert order.status == OrderStatus.FILLED
+        assert order.quantity > 0
+        assert order.quantity == int(100_000.0 * 0.5 // 100.0)
 
-    def test_calculate_quantity_zero_price(self, cost_model, risk_engine, portfolio):
+    async def test_zero_price_signal_rejected(self, cost_model, risk_engine, portfolio):
         om = OrderManager(cost_model=cost_model, risk_engine=risk_engine, portfolio=portfolio)
+        om.set_execution_backend(FakeExecutionBackend())
+
         signal = Signal.buy(symbol="AAPL", strategy_id="test")
-        assert om._calculate_quantity(signal, 0.0) == 0
+        order = await om.process_signal(signal, market_price=0.0)
+
+        assert order.status == OrderStatus.REJECTED
 
 
 class TestCompletedOrders:

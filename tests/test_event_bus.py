@@ -97,8 +97,7 @@ class TestEventLog:
         assert len(recent) == 2
 
     async def test_ring_buffer_evicts_oldest(self):
-        bus = EventBus()
-        bus._max_log_size = 5
+        bus = EventBus(max_log_size=5)
 
         for i in range(10):
             await bus.publish(Event(EventType.ORDER_CREATED, data={"i": i}))

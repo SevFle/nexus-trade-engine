@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from engine.core.signal import Signal
+from engine.core.signal import Side, Signal
 from engine.plugins.manifest import StrategyManifest
 from engine.plugins.sandbox import StrategySandbox
 
@@ -123,10 +123,9 @@ class TestSignalStrategyIdInjection:
             def on_bar(self, state, portfolio):
                 sig = Signal(
                     symbol="AAPL",
-                    side=type("S", (), {"value": "buy", "BUY": "buy"})(),
+                    side=Side.BUY,
                     strategy_id="",
                 )
-                sig.side.value = "buy"
                 return [sig]
 
         sandbox = StrategySandbox(NoIdStrategy(), manifest)
