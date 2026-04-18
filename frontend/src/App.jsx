@@ -1,9 +1,12 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import Login from "./screens/Login";
+import Register from "./screens/Register";
+import AuthCallback from "./screens/AuthCallback";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
-// ── Pages (scaffolded) ──
 
 function Dashboard() {
   const [health, setHealth] = React.useState(null);
@@ -58,24 +61,42 @@ function Marketplace() {
   );
 }
 
-// ── Layout ──
-
 const navItems = [
-  { to: "/", label: "Dashboard", icon: "📊" },
-  { to: "/strategies", label: "Strategies", icon: "⚡" },
-  { to: "/backtest", label: "Backtest", icon: "⏪" },
-  { to: "/marketplace", label: "Marketplace", icon: "🏪" },
+  { to: "/", label: "Dashboard", icon: "\uD83D\uDCCA" },
+  { to: "/strategies", label: "Strategies", icon: "\u26A1" },
+  { to: "/backtest", label: "Backtest", icon: "\u23EA" },
+  { to: "/marketplace", label: "Marketplace", icon: "\uD83C\uDFEA" },
 ];
+
+function UserMenu() {
+  const { user, logout } = useAuth();
+
+  if (!user) return null;
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-gray-400">
+        {user.display_name || user.email}
+      </span>
+      <button
+        type="button"
+        onClick={logout}
+        className="text-xs text-gray-500 hover:text-white transition-colors"
+      >
+        Sign out
+      </button>
+    </div>
+  );
+}
 
 function Layout({ children }) {
   return (
     <div className="min-h-screen bg-gray-950 text-white flex">
-      {/* Sidebar */}
       <nav className="w-56 bg-gray-900 border-r border-gray-800 flex flex-col">
         <div className="p-4 border-b border-gray-800">
           <div className="flex items-center gap-2">
             <span className="text-lg font-bold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
-              ⚡ NEXUS
+              NEXUS
             </span>
           </div>
           <p className="text-xs text-gray-500 mt-1">Trade Engine v0.1.0</p>
@@ -99,27 +120,73 @@ function Layout({ children }) {
             </NavLink>
           ))}
         </div>
+        <div className="p-3 border-t border-gray-800">
+          <UserMenu />
+        </div>
       </nav>
 
-      {/* Main content */}
       <main className="flex-1 overflow-auto">{children}</main>
     </div>
   );
 }
 
-// ── App ──
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/auth/callback/:provider" element={<AuthCallback />} />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Dashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/strategies"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Strategies />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/backtest"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Backtest />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/marketplace"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Marketplace />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
 
 export default function App() {
   return (
     <BrowserRouter>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/strategies" element={<Strategies />} />
-          <Route path="/backtest" element={<Backtest />} />
-          <Route path="/marketplace" element={<Marketplace />} />
-        </Routes>
-      </Layout>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
     </BrowserRouter>
   );
 }
