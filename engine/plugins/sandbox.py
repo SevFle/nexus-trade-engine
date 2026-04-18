@@ -40,7 +40,6 @@ if TYPE_CHECKING:
     from engine.core.cost_model import ICostModel
     from engine.core.portfolio import PortfolioSnapshot
     from engine.plugins.manifest import StrategyManifest
-    from engine.plugins.sdk import BaseStrategy
 
 try:
     import resource as _resource
@@ -62,6 +61,8 @@ _BLOCKED_ATTRS: frozenset[str] = frozenset(
         "__code__",
     }
 )
+
+_eval_lock: asyncio.Lock = asyncio.Lock()
 
 
 class _RestrictedObject:
@@ -86,6 +87,16 @@ class SandboxMetrics:
     api_calls: int = 0
 
 
+class _PlaceholderStrategy:
+    """Minimal stand-in used by ``from_factory`` during initialisation."""
+
+    name = "_placeholder"
+    version = "0.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        return []
+
+
 class StrategySandbox:
     """
     Wraps a strategy instance with resource monitoring and enforcement.
@@ -96,10 +107,11 @@ class StrategySandbox:
     - Enforces resource limits (memory, file descriptors, CPU timeout)
     - Isolates filesystem access to a temp directory
     - Blocks dangerous introspection (``__subclasses__``, ``__globals__``, etc.)
+    - Serialises concurrent evaluations to prevent global-state races
     - Tracks metrics for the dashboard
     """
 
-    def __init__(self, strategy: BaseStrategy, manifest: StrategyManifest) -> None:
+    def __init__(self, strategy: Any, manifest: StrategyManifest) -> None:
         self.strategy = strategy
         self.manifest = manifest
         self.metrics = SandboxMetrics()
@@ -114,9 +126,30 @@ class StrategySandbox:
         self._original_getattr: Callable[..., Any] | None = None
         self._original_io_open: Any = None
         self._original_httpx_send: Any = None
+        self._original_object: Any = None
 
         self._create_sandboxed_http_client()
         self._setup_filesystem_isolation()
+
+    @classmethod
+    def from_factory(
+        cls,
+        strategy_factory: Callable[[], Any],
+        manifest: StrategyManifest,
+    ) -> StrategySandbox:
+        """
+        Create a sandbox with restrictions active during strategy instantiation.
+
+        Use this instead of the regular constructor to prevent C-2 bypass
+        (strategy stashing module references in ``__init__``).
+        """
+        sandbox = cls(_PlaceholderStrategy(), manifest)
+        sandbox._activate_restrictions()
+        try:
+            sandbox.strategy = strategy_factory()
+        finally:
+            sandbox._deactivate_restrictions()
+        return sandbox
 
     def _create_sandboxed_http_client(self) -> None:
         if self.manifest.requires_network():
@@ -188,9 +221,10 @@ class StrategySandbox:
         work_dir = os.path.realpath(self._work_dir or "")
 
         allowed = [work_dir]
+        allowed.extend(os.path.realpath(a) + os.sep for a in self.manifest.artifacts)
         allowed.extend(os.path.realpath(a) for a in self.manifest.artifacts)
 
-        if not any(resolved.startswith(p) for p in allowed if p):
+        if not any(resolved == p or resolved.startswith(p + os.sep) for p in allowed if p):
             raise PermissionError(f"File access to {file} is not allowed in strategy sandbox")
 
         if any(c in mode for c in ("w", "a", "+")):
@@ -222,33 +256,24 @@ class StrategySandbox:
         return restricted_send
 
     def _activate_restrictions(self) -> None:
-        # Layer 1: import restrictions
         self._importer.install()
-
-        # Layer 1.1: block introspection via __subclasses__
         self._original_object = builtins.object
         builtins.object = _RestrictedObject  # type: ignore[assignment]
         self._original_getattr = builtins.getattr
         builtins.getattr = self._restricted_getattr  # type: ignore[assignment]
-
-        # Layer 1.2: block io.open bypass
         self._original_io_open = _io_module.open
         _io_module.open = self._restricted_open  # type: ignore[assignment]
-
-        # Layer 2: enforce network whitelist on ALL httpx clients
         self._original_httpx_send = _httpx_module.AsyncClient.send
         _httpx_module.AsyncClient.send = self._make_restricted_send()
-
-        # Layer 4: filesystem isolation
         self._original_open = builtins.open
         builtins.open = self._restricted_open  # type: ignore[assignment]
-
-        # Layer 3: resource limits
         self._apply_resource_limits()
 
     def _deactivate_restrictions(self) -> None:
         self._importer.uninstall()
-        builtins.object = self._original_object  # type: ignore[attr-defined]
+        if self._original_object is not None:
+            builtins.object = self._original_object
+            self._original_object = None
         if self._original_getattr is not None:
             builtins.getattr = self._original_getattr  # type: ignore[assignment]
             self._original_getattr = None
@@ -272,9 +297,18 @@ class StrategySandbox:
         """
         Execute strategy.on_bar() with timeout and error handling.
 
-        All security layers are active for the duration of the strategy
-        call.  Returns empty list on failure - never crashes the engine.
+        Serialised via ``_eval_lock`` to prevent concurrent sandboxes
+        from corrupting each other's global builtin patches (C-4).
+        Returns empty list on failure - never crashes the engine.
         """
+        async with _eval_lock:
+            return await self._evaluate_inner(portfolio, market)
+
+    async def _evaluate_inner(
+        self,
+        portfolio: PortfolioSnapshot,
+        market: Any,
+    ) -> list[Signal]:
         start = time.monotonic()
         self._activate_restrictions()
 

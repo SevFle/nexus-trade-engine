@@ -21,20 +21,60 @@ if TYPE_CHECKING:
 
 BLOCKED_MODULES: frozenset[str] = frozenset(
     [
+        # Filesystem
         "os",
         "subprocess",
         "shutil",
         "pathlib",
+        "io",
+        "_io",
+        # Networking (raw; httpx OK via manifest)
         "socket",
+        "_socket",
         "http",
         "urllib",
+        "ftplib",
+        "smtplib",
+        "telnetlib",
+        "xmlrpc",
+        "webbrowser",
+        # Low-level / system
         "ctypes",
+        "_ctypes",
         "multiprocessing",
         "signal",
         "sys",
         "importlib",
-        "io",
-        "_io",
+        # Threading / concurrency
+        "threading",
+        "_thread",
+        "concurrent",
+        # Introspection / code execution
+        "gc",
+        "inspect",
+        "code",
+        "codeop",
+        "ast",
+        "dis",
+        "compileall",
+        # Import manipulation
+        "pkgutil",
+        "zipimport",
+        "runpy",
+        # Deserialization / persistence
+        "pickle",
+        "shelve",
+        "marshal",
+        # Persistent hooks
+        "atexit",
+        "sched",
+        # Terminal / debugger
+        "pty",
+        "tty",
+        "pdb",
+        "bdb",
+        # Site / runtime manipulation
+        "site",
     ]
 )
 

@@ -544,6 +544,198 @@ class TestFilesystemIsolation:
         assert not os.path.isdir(work_dir)
 
 
+# ── C-2: Pre-loaded module reference ─────────────────────────────────
+
+
+class _InitStashStrategy:
+    """C-2: stash os in __init__ before sandbox activates."""
+
+    name = "init_stash"
+    version = "1.0.0"
+    _os: Any = None
+
+    def __init__(self) -> None:
+        import os  # noqa: PLC0415
+
+        self._os = os
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        self._os.system("echo pwned")
+        return []
+
+
+class _ClassBodyStashStrategy:
+    """C-2: stash os at class-body time."""
+
+    name = "class_body_stash"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        return []
+
+
+class TestBypassInitStash:
+    def test_from_factory_blocks_init_stash(self, manifest: StrategyManifest) -> None:
+        with pytest.raises(ImportError, match="blocked"):
+            StrategySandbox.from_factory(_InitStashStrategy, manifest)
+
+    async def test_from_factory_produces_working_sandbox(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox.from_factory(_GoodStrategy, manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert len(signals) == 1
+            assert signals[0].symbol == "AAPL"
+        finally:
+            sandbox.cleanup()
+
+
+# ── H-2: _ctypes bypass ──────────────────────────────────────────────
+
+
+class _ImportCtypesStrategy:
+    name = "import_ctypes"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        import _ctypes  # noqa: F401, PLC0415
+
+        return []
+
+
+class _ImportThreadStrategy:
+    name = "import_thread"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        import threading  # noqa: F401, PLC0415
+
+        return []
+
+
+class _ImportGcStrategy:
+    name = "import_gc"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        import gc  # noqa: F401, PLC0415
+
+        return []
+
+
+class _ImportPickleStrategy:
+    name = "import_pickle"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        import pickle  # noqa: F401, PLC0415
+
+        return []
+
+
+class TestExpandedBlocklist:
+    async def test_ctypes_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_ImportCtypesStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert "blocked" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_threading_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_ImportThreadStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert "blocked" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_gc_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_ImportGcStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert "blocked" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_pickle_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_ImportPickleStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert "blocked" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+
+# ── M-1: Path prefix matching ────────────────────────────────────────
+
+
+class _FileReadStrategyWithPath:
+    name = "file_read_path"
+    version = "1.0.0"
+
+    def __init__(self, target_path: str) -> None:
+        self._target = target_path
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        with open(self._target) as f:
+            f.read()
+        return []
+
+
+class TestPathPrefixMatching:
+    async def test_path_prefix_does_not_match_partial_directory(self, tmp_path: Any) -> None:
+        artifact_dir = tmp_path / "data"
+        artifact_dir.mkdir()
+        (artifact_dir / "safe.txt").write_text("safe")
+
+        sibling = tmp_path / "database"
+        sibling.mkdir()
+        (sibling / "secret.txt").write_text("secret")
+
+        sandbox = StrategySandbox(
+            _FileReadStrategyWithPath(str(sibling / "secret.txt")),
+            StrategyManifest(
+                id="test",
+                name="test",
+                version="1.0.0",
+                resources={"max_cpu_seconds": 1},
+                artifacts=[str(artifact_dir)],
+            ),
+        )
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "not allowed" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_exact_artifact_path_allowed(self, tmp_path: Any) -> None:
+        artifact = tmp_path / "safe.txt"
+        artifact.write_text("safe content")
+
+        sandbox = StrategySandbox(
+            _FileReadStrategyWithPath(str(artifact)),
+            StrategyManifest(
+                id="test",
+                name="test",
+                version="1.0.0",
+                resources={"max_cpu_seconds": 1},
+                artifacts=[str(artifact)],
+            ),
+        )
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert len(signals) == 0
+            assert sandbox.metrics.errors == 0
+        finally:
+            sandbox.cleanup()
+
+
 # ── Integration ──────────────────────────────────────────────────────
 
 
