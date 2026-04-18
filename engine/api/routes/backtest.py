@@ -128,8 +128,8 @@ class BacktestResultResponse(BaseModel):
 
 async def _run_backtest_background(
     backtest_id: str,
-    request: BacktestRequest,
     user_id: str,
+    request: BacktestRequest,
 ) -> None:
     _backtest_results[backtest_id] = (
         time.monotonic(),
@@ -208,8 +208,8 @@ async def run_backtest(
     background_tasks.add_task(
         _run_backtest_background,
         backtest_id,
-        request,
         str(user.id),
+        request,
     )
     return BacktestResponse(status="accepted", backtest_id=backtest_id)
 
@@ -241,12 +241,12 @@ async def get_backtest_result(
             ).model_dump(),
         )
 
-    stored_user_id, stored = entry[1], entry[2]
-    if stored_user_id != str(user.id):
+    owner_id, stored = entry[1], entry[2]
+    if owner_id != str(user.id):
         return JSONResponse(
-            status_code=404,
+            status_code=403,
             content=BacktestResultResponse(
-                status="not_found",
+                status="forbidden",
                 strategy_name="",
                 symbol="",
                 initial_capital=0.0,
@@ -254,12 +254,13 @@ async def get_backtest_result(
                 metrics=_empty_metrics(),
                 equity_curve=[],
                 drawdown_curve=[],
-                error=f"Backtest {backtest_id} not found",
+                error="Access denied",
             ).model_dump(),
         )
-    bt_status = stored.get("status", "unknown")
 
-    if bt_status == "running":
+    status_val = stored.get("status", "unknown")
+
+    if status_val == "running":
         return JSONResponse(
             status_code=202,
             content=BacktestResultResponse(
@@ -274,7 +275,7 @@ async def get_backtest_result(
             ).model_dump(),
         )
 
-    if bt_status == "failed":
+    if status_val == "failed":
         return JSONResponse(
             status_code=200,
             content=BacktestResultResponse(

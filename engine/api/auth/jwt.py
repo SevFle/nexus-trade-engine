@@ -58,6 +58,12 @@ def generate_refresh_token() -> str:
 
 
 def hash_token(token: str) -> str:
+    # SECURITY NOTE: SHA-256 is intentionally used here instead of bcrypt/argon2.
+    # Refresh tokens carry 256 bits of entropy (secrets.token_hex(32)), making
+    # brute-force inversion of the hash computationally infeasible even with a
+    # fast hash. The primary defense is the token entropy, not the hash cost.
+    # Using bcrypt/argon2 would add unnecessary latency on every refresh without
+    # meaningful security gain at this entropy level.
     return hashlib.sha256(token.encode()).hexdigest()
 
 

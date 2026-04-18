@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 import structlog
 from jose import jwt as jose_jwt
@@ -28,10 +29,18 @@ class OIDCAuthProvider(IAuthProvider):
     async def _get_discovery(self) -> dict[str, Any]:
         if self._discovery_cache is not None:
             return self._discovery_cache
+
+        url = settings.oidc_discovery_url
+        parsed = urlparse(url)
+        if parsed.scheme != "https":
+            raise ValueError(
+                f"OIDC discovery URL must use HTTPS, got scheme '{parsed.scheme}': {url}"
+            )
+
         import httpx
 
         async with httpx.AsyncClient() as client:
-            resp = await client.get(settings.oidc_discovery_url)
+            resp = await client.get(url)
             resp.raise_for_status()
             self._discovery_cache = resp.json()
         return self._discovery_cache

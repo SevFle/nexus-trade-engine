@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select, update
 
@@ -175,40 +175,49 @@ async def refresh_token(
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     token_hash_val = hash_token(req.refresh_token)
+
     now = datetime.now(tz=UTC)
-
-    result = await db.execute(
-        select(RefreshToken).where(RefreshToken.token_hash == token_hash_val).with_for_update()
+    atomic_result = await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.token_hash == token_hash_val, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=now)
+        .returning(
+            RefreshToken.id, RefreshToken.user_id, RefreshToken.expires_at, RefreshToken.revoked_at
+        )
     )
-    stored_token = result.scalar_one_or_none()
+    rotated_row = atomic_result.first()
 
-    if stored_token is None:
+    if rotated_row is None:
+        stale_result = await db.execute(
+            select(RefreshToken).where(RefreshToken.token_hash == token_hash_val)
+        )
+        stale_token = stale_result.scalar_one_or_none()
+        if stale_token is not None and stale_token.revoked_at is not None:
+            await db.execute(
+                update(RefreshToken)
+                .where(
+                    RefreshToken.user_id == stale_token.user_id, RefreshToken.revoked_at.is_(None)
+                )
+                .values(revoked_at=now)
+            )
+            logger.warning("auth.token_replay_detected", user_id=str(stale_token.user_id))
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token reuse detected — all sessions revoked",
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
 
-    if stored_token.revoked_at is not None:
-        await db.execute(
-            update(RefreshToken)
-            .where(RefreshToken.user_id == stored_token.user_id)
-            .values(revoked_at=now)
-        )
-        await db.flush()
-        logger.warning("auth.token_replay_detected", user_id=str(stored_token.user_id))
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token reuse detected — all sessions revoked",
-        )
+    await db.flush()
 
-    if _aware(stored_token.expires_at) < now:
+    expires_at = rotated_row.expires_at
+    if _aware(expires_at) < now:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired"
         )
 
-    stored_token.revoked_at = now
-    await db.flush()
-
-    user = await db.get(User, stored_token.user_id)
+    user = await db.get(User, rotated_row.user_id)
     if user is None or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or disabled"
@@ -261,7 +270,9 @@ async def logout(
 
 
 @router.get("/{provider}/authorize")
-async def authorize_provider(provider: str, request: Request) -> dict[str, str]:
+async def authorize_provider(
+    provider: str, request: Request, response: Response
+) -> dict[str, str]:
     registry = _get_registry(request)
     auth_provider = registry.get(provider)
     if auth_provider is None:
@@ -284,6 +295,16 @@ async def authorize_provider(provider: str, request: Request) -> dict[str, str]:
             detail="Could not build authorize URL",
         )
 
+    response.set_cookie(
+        key=f"oauth_state_{provider}",
+        value=state,
+        httponly=True,
+        max_age=600,
+        samesite="lax",
+        secure=settings.is_production,
+        path="/api/v1/auth",
+    )
+
     return {"authorize_url": str(url), "state": state}
 
 
@@ -291,18 +312,30 @@ async def authorize_provider(provider: str, request: Request) -> dict[str, str]:
 async def provider_callback(
     provider: str,
     code: str,
-    state: str = "",
-    request: Request = None,  # type: ignore[assignment]
+    state: str,
+    request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    if state and request is not None:
-        cookie_state = request.cookies.get(f"oauth_state_{provider}")
-        if not cookie_state or not secrets.compare_digest(cookie_state, state):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Invalid OAuth state parameter"
-            )
+    if not state:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing OAuth state parameter",
+        )
 
-    registry = _get_registry(request)  # type: ignore[arg-type]
+    cookie_state = request.cookies.get(f"oauth_state_{provider}")
+    if not cookie_state or not secrets.compare_digest(cookie_state, state):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing OAuth state parameter",
+        )
+
+    response.delete_cookie(
+        key=f"oauth_state_{provider}",
+        path="/api/v1/auth",
+    )
+
+    registry = _get_registry(request)
     result = await registry.authenticate(provider, code=code, db=db)
     if not result.success:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=result.error)
