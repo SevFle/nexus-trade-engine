@@ -32,8 +32,12 @@ def parse_front_matter(content: str) -> dict[str, str] | None:
 
 
 def _parse_date(value: str) -> date_type:
-    parts = value.split("-")
-    return date_type(int(parts[0]), int(parts[1]), int(parts[2]))
+    try:
+        parts = value.split("-")
+        return date_type(int(parts[0]), int(parts[1]), int(parts[2]))
+    except (ValueError, IndexError) as exc:
+        msg = f"Invalid date format: {value!r}"
+        raise ValueError(msg) from exc
 
 
 async def sync_legal_documents(db: AsyncSession) -> int:

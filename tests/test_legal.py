@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import datetime
+import pathlib
+import tempfile
 from http import HTTPStatus
 from typing import TYPE_CHECKING
 from unittest.mock import patch
@@ -18,8 +21,8 @@ from engine.db.models import (
 from engine.deps import get_db
 from engine.legal import service as legal_service
 from engine.legal.schemas import AcceptanceItem
-from engine.legal.service import NUM_DOCS_ON_DISK
-from engine.legal.sync import parse_front_matter, sync_legal_documents
+from engine.legal.service import NUM_DOCS_ON_DISK, _version_gte, _version_lt
+from engine.legal.sync import _parse_date, parse_front_matter, sync_legal_documents
 from tests.factories import make_user
 
 if TYPE_CHECKING:
@@ -47,6 +50,20 @@ class TestFrontMatterParsing:
         assert meta == {}
 
 
+class TestParseDate:
+    def test_parse_valid_date(self):
+        result = _parse_date("2026-04-18")
+        assert result == datetime.date(2026, 4, 18)
+
+    def test_parse_invalid_date_raises(self):
+        with pytest.raises(ValueError, match="Invalid date format"):
+            _parse_date("not-a-date")
+
+    def test_parse_malformed_date_raises(self):
+        with pytest.raises(ValueError, match="Invalid date format"):
+            _parse_date("2026-13-01")
+
+
 class TestLegalDocumentSync:
     async def test_sync_registers_documents_from_legal_dir(self, db_session: AsyncSession):
         with patch("engine.legal.sync.settings") as mock_settings:
@@ -63,16 +80,16 @@ class TestLegalDocumentSync:
         assert doc.category == "trading"
         assert doc.requires_acceptance is True
 
-    async def test_sync_updates_version(self, db_session: AsyncSession):
+    async def test_sync_registers_documents_alongside_existing(self, db_session: AsyncSession):
         doc = LegalDocument(
             slug="test-doc",
-            title="Old Title",
+            title="Pre-existing Doc",
             current_version="0.9.0",
-            effective_date=__import__("datetime").date(2026, 1, 1),
+            effective_date=datetime.date(2026, 1, 1),
             requires_acceptance=True,
             category="general",
             display_order=0,
-            file_path="legal/risk-disclaimer.md",
+            file_path="legal/nonexistent.md",
         )
         db_session.add(doc)
         await db_session.flush()
@@ -83,8 +100,13 @@ class TestLegalDocumentSync:
 
         stmt = select(LegalDocument).where(LegalDocument.slug == "risk-disclaimer")
         result = await db_session.execute(stmt)
-        updated = result.scalar_one()
-        assert updated.current_version == "1.0.0"
+        synced = result.scalar_one()
+        assert synced.current_version == "1.0.0"
+
+        preexist_stmt = select(LegalDocument).where(LegalDocument.slug == "test-doc")
+        preexist_result = await db_session.execute(preexist_stmt)
+        preexist = preexist_result.scalar_one()
+        assert preexist.current_version == "0.9.0"
 
     async def test_sync_handles_missing_directory(self, db_session: AsyncSession):
         with patch("engine.legal.sync.settings") as mock_settings:
@@ -111,7 +133,7 @@ class TestLegalDocumentsAPI:
             slug="test-doc",
             title="Test Document",
             current_version="1.0.0",
-            effective_date=__import__("datetime").date(2026, 4, 20),
+            effective_date=datetime.date(2026, 4, 20),
             requires_acceptance=True,
             category="general",
             display_order=1,
@@ -135,7 +157,7 @@ class TestLegalDocumentsAPI:
             slug="cat-test",
             title="Cat Test",
             current_version="1.0.0",
-            effective_date=__import__("datetime").date(2026, 4, 20),
+            effective_date=datetime.date(2026, 4, 20),
             requires_acceptance=True,
             category="trading",
             display_order=1,
@@ -155,7 +177,7 @@ class TestLegalDocumentsAPI:
             slug="content-test",
             title="Content Test",
             current_version="1.0.0",
-            effective_date=__import__("datetime").date(2026, 4, 20),
+            effective_date=datetime.date(2026, 4, 20),
             requires_acceptance=True,
             category="general",
             display_order=1,
@@ -260,7 +282,7 @@ class TestLegalServiceAcceptance:
             slug=slug,
             title=slug.replace("-", " ").title(),
             current_version="1.0.0",
-            effective_date=__import__("datetime").date(2026, 4, 20),
+            effective_date=datetime.date(2026, 4, 20),
             requires_acceptance=True,
             category="general",
             display_order=0,
@@ -429,3 +451,89 @@ class TestLegalServiceAcceptance:
         assert len(records) == 2  # noqa: PLR2004
         v2_record = next(r for r in records if r.document_version == "2.0.0")
         assert v2_record.context == "re-acceptance"
+
+    async def test_semver_comparison_multi_digit_versions(self, db_session: AsyncSession):
+        user = await self._seed_user(db_session, "semver@example.com")
+        doc = await self._seed_doc(db_session, "semver-doc")
+        doc.current_version = "10.0.0"
+        await db_session.flush()
+
+        await legal_service.record_acceptances(
+            db_session,
+            user.id,
+            [AcceptanceItem(document_slug="semver-doc", document_version="9.0.0")],
+            "127.0.0.1",
+            "test",
+        )
+        await db_session.flush()
+
+        pending = await legal_service.get_pending_acceptances(db_session, user.id)
+        slugs = [p.slug for p in pending]
+        assert "semver-doc" in slugs
+
+    async def test_semver_comparison_equal_versions_not_pending(self, db_session: AsyncSession):
+        user = await self._seed_user(db_session, "semver-eq@example.com")
+        doc = await self._seed_doc(db_session, "semver-eq-doc")
+        doc.current_version = "10.0.0"
+        await db_session.flush()
+
+        await legal_service.record_acceptances(
+            db_session,
+            user.id,
+            [AcceptanceItem(document_slug="semver-eq-doc", document_version="10.0.0")],
+            "127.0.0.1",
+            "test",
+        )
+        await db_session.flush()
+
+        pending = await legal_service.get_pending_acceptances(db_session, user.id)
+        slugs = [p.slug for p in pending]
+        assert "semver-eq-doc" not in slugs
+
+
+class TestVersionHelpers:
+    def test_version_lt_lexicographic_guard(self):
+        assert _version_lt("9.0.0", "10.0.0") is True
+        assert _version_lt("10.0.0", "9.0.0") is False
+        assert _version_lt("1.2.3", "1.2.3") is False
+
+    def test_version_gte(self):
+        assert _version_gte("10.0.0", "9.0.0") is True
+        assert _version_gte("9.0.0", "10.0.0") is False
+        assert _version_gte("1.2.3", "1.2.3") is True
+
+
+class TestEffectiveDateSubstitution:
+    async def test_effective_date_replaced_in_content(
+        self, legal_client: AsyncClient, db_session: AsyncSession
+    ):
+        content = (
+            "---\ntitle: Test\nversion: 1.0.0\neffective_date: 2026-03-15\n---\n\n"
+            "Effective as of {{EFFECTIVE_DATE}}.\n"
+        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, dir="legal") as f:
+            f.write(content)
+            tmp_path = f.name
+
+        slug = pathlib.Path(tmp_path).stem
+        try:
+            doc = LegalDocument(
+                slug=slug,
+                title="ED Test",
+                current_version="1.0.0",
+                effective_date=datetime.date(2026, 3, 15),
+                requires_acceptance=True,
+                category="general",
+                display_order=0,
+                file_path=tmp_path,
+            )
+            db_session.add(doc)
+            await db_session.flush()
+
+            response = await legal_client.get(f"/api/v1/legal/documents/{slug}")
+            assert response.status_code == HTTPStatus.OK
+            data = response.json()
+            assert "2026-03-15" in data["content_markdown"]
+            assert "{{EFFECTIVE_DATE}}" not in data["content_markdown"]
+        finally:
+            pathlib.Path(tmp_path).unlink(missing_ok=True)

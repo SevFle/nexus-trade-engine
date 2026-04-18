@@ -202,7 +202,8 @@ class LegalAcceptance(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+        ForeignKey("users.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"),
+        index=True,
     )
     document_slug: Mapped[str] = mapped_column(String(50))
     document_version: Mapped[str] = mapped_column(String(20))
