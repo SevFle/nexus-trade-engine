@@ -5,7 +5,6 @@ import {
   refreshToken as apiRefreshToken,
   fetchMe,
   logout as apiLogout,
-  getAccessToken,
   setAccessToken,
   clearAccessToken,
   handleOAuthCallback,
@@ -15,15 +14,8 @@ import {
 const AuthContext = createContext(null);
 
 const TOKEN_REFRESH_MARGIN_MS = 60 * 1000;
-const MAX_REFRESH_RETRIES = 3;
-const RETRY_BASE_DELAY_MS = 1000;
-
-/*
- * ACCEPTED RISK (M2): Refresh token is persisted in sessionStorage so the
- * session survives page refreshes. sessionStorage is accessible to XSS;
- * migrating to httpOnly cookies set by the backend is recommended for
- * production. See ADR-002.
- */
+const MAX_REFRESH_RETRIES = 2;
+const REFRESH_RETRY_BASE_DELAY_MS = 1000;
 
 function parseJwtExpiry(token) {
   try {
@@ -32,6 +24,10 @@ function parseJwtExpiry(token) {
   } catch {
     return null;
   }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function AuthProvider({ children }) {
@@ -53,34 +49,39 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const refreshWithMutex = useCallback((token) => {
+  const doRefresh = useCallback(async () => {
     if (refreshMutexRef.current) {
       return refreshMutexRef.current;
     }
 
-    const promise = apiRefreshToken(token).finally(() => {
-      refreshMutexRef.current = null;
-    });
+    const promise = (async () => {
+      if (!refreshTokenRef.current) {
+        throw new Error("No refresh token");
+      }
 
-    refreshMutexRef.current = promise;
-    return promise;
-  }, []);
-
-  const refreshWithRetry = useCallback(
-    async (token) => {
-      for (let attempt = 0; attempt < MAX_REFRESH_RETRIES; attempt++) {
+      for (let attempt = 0; attempt <= MAX_REFRESH_RETRIES; attempt += 1) {
         try {
-          return await refreshWithMutex(token);
+          const data = await apiRefreshToken(refreshTokenRef.current);
+          setAccessToken(data.access_token);
+          refreshTokenRef.current = data.refresh_token;
+          return data;
         } catch (err) {
-          if (attempt === MAX_REFRESH_RETRIES - 1) throw err;
-          await new Promise((r) =>
-            setTimeout(r, RETRY_BASE_DELAY_MS * Math.pow(2, attempt)),
-          );
+          const isLast = attempt === MAX_REFRESH_RETRIES;
+          if (isLast) throw err;
+          await sleep(REFRESH_RETRY_BASE_DELAY_MS * 2 ** attempt);
         }
       }
-    },
-    [refreshWithMutex],
-  );
+    })();
+
+    refreshMutexRef.current = promise;
+
+    try {
+      const result = await promise;
+      return result;
+    } finally {
+      refreshMutexRef.current = null;
+    }
+  }, []);
 
   const scheduleRefresh = useCallback(
     (token) => {
@@ -97,20 +98,15 @@ export function AuthProvider({ children }) {
       if (delay <= 0) return;
 
       refreshTimerRef.current = setTimeout(async () => {
-        if (!refreshTokenRef.current) return;
         try {
-          const data = await refreshWithRetry(refreshTokenRef.current);
-          setAccessToken(data.access_token);
-          refreshTokenRef.current = data.refresh_token;
-          sessionStorage.setItem("nexus_refresh_token", data.refresh_token);
+          const data = await doRefresh();
           scheduleRefresh(data.access_token);
         } catch {
           clearSession();
-          sessionStorage.removeItem("nexus_refresh_token");
         }
       }, delay);
     },
-    [clearSession, refreshWithRetry],
+    [clearSession, doRefresh],
   );
 
   const loadUser = useCallback(async () => {
@@ -125,40 +121,20 @@ export function AuthProvider({ children }) {
   }, [clearSession]);
 
   useEffect(() => {
-    const storedRefresh = sessionStorage.getItem("nexus_refresh_token");
-    if (storedRefresh) {
-      refreshTokenRef.current = storedRefresh;
-      apiRefreshToken(storedRefresh)
-        .then((data) => {
-          setAccessToken(data.access_token);
-          refreshTokenRef.current = data.refresh_token;
-          sessionStorage.setItem("nexus_refresh_token", data.refresh_token);
-          scheduleRefresh(data.access_token);
-          return fetchMe();
-        })
-        .then((profile) => setUser(profile))
-        .catch(() => {
-          clearSession();
-          sessionStorage.removeItem("nexus_refresh_token");
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    setLoading(false);
 
     return () => {
       if (refreshTimerRef.current) {
         clearTimeout(refreshTimerRef.current);
       }
     };
-  }, [clearSession, scheduleRefresh]);
+  }, []);
 
   const login = useCallback(
     async (email, password) => {
       const data = await apiLogin(email, password);
       setAccessToken(data.access_token);
       refreshTokenRef.current = data.refresh_token;
-      sessionStorage.setItem("nexus_refresh_token", data.refresh_token);
       scheduleRefresh(data.access_token);
       await loadUser();
       return data;
@@ -184,7 +160,6 @@ export function AuthProvider({ children }) {
       const data = await handleOAuthCallback(provider, searchParams);
       setAccessToken(data.access_token);
       refreshTokenRef.current = data.refresh_token;
-      sessionStorage.setItem("nexus_refresh_token", data.refresh_token);
       scheduleRefresh(data.access_token);
       await loadUser();
       return data;
@@ -199,7 +174,6 @@ export function AuthProvider({ children }) {
       }
     } finally {
       clearSession();
-      sessionStorage.removeItem("nexus_refresh_token");
     }
   }, [clearSession]);
 
@@ -213,6 +187,7 @@ export function AuthProvider({ children }) {
     startOAuth,
     handleCallback,
     logout: logoutUser,
+    doRefresh,
     isAuthenticated: !!user,
   };
 
