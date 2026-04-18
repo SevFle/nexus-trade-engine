@@ -1,7 +1,12 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { marked } from "marked";
-import { useLegalDocuments, useAcceptLegal } from "../hooks/useLegal";
+import DOMPurify from "dompurify";
+import {
+  useLegalDocuments,
+  useLegalDocument,
+  useAcceptLegal,
+} from "../hooks/useLegal";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
 
 export default function Onboarding() {
@@ -15,6 +20,15 @@ export default function Onboarding() {
     () => (Array.isArray(documents) ? documents.filter((d) => d.requires_acceptance) : []),
     [documents]
   );
+
+  const currentDoc = requiredDocs[currentIdx];
+  const { data: docDetail } = useLegalDocument(currentDoc?.slug);
+
+  const htmlContent = useMemo(() => {
+    if (!docDetail?.content_markdown) return "";
+    const raw = marked.parse(docDetail.content_markdown, { async: false });
+    return DOMPurify.sanitize(raw);
+  }, [docDetail?.content_markdown]);
 
   const allAccepted = requiredDocs.every((d) => accepted[d.slug]);
 
@@ -47,8 +61,6 @@ export default function Onboarding() {
     navigate("/");
     return null;
   }
-
-  const currentDoc = requiredDocs[currentIdx];
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-nx-black p-xl">
@@ -96,10 +108,16 @@ export default function Onboarding() {
               </span>
             </div>
             <div className="max-h-64 overflow-y-auto mb-lg text-body-sm font-body text-nx-text-primary">
-              <p className="text-nx-text-secondary">
-                Document content will be loaded from the server. Please review
-                the full document before accepting.
-              </p>
+              {htmlContent ? (
+                <div
+                  className="prose prose-sm prose-invert max-w-none [&_h1]:text-subheading [&_h1]:font-display [&_h1]:text-nx-text-display [&_h1]:mb-md [&_h2]:text-body [&_h2]:font-display [&_h2]:text-nx-text-primary [&_h2]:mb-sm [&_p]:mb-sm [&_ul]:list-disc [&_ul]:pl-md"
+                  dangerouslySetInnerHTML={{ __html: htmlContent }}
+                />
+              ) : (
+                <div className="flex items-center justify-center py-xl">
+                  <LoadingSpinner />
+                </div>
+              )}
             </div>
             <button
               type="button"

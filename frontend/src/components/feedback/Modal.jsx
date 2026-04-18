@@ -1,6 +1,16 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { X } from "lucide-react";
 import clsx from "clsx";
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+
+function getFocusableElements(container) {
+  if (!container) return [];
+  return Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR)).filter(
+    (el) => !el.hasAttribute("disabled") && el.tabIndex >= 0
+  );
+}
 
 export function Modal({
   open,
@@ -31,6 +41,33 @@ export function Modal({
     return () => window.removeEventListener("keydown", handleEsc);
   }, [open, onClose]);
 
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key !== "Tab") return;
+      const container = dialogRef.current;
+      if (!container) return;
+      const focusable = getFocusableElements(container);
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    },
+    []
+  );
+
   if (!open) return null;
 
   return (
@@ -48,6 +85,7 @@ export function Modal({
       <div
         ref={dialogRef}
         tabIndex={-1}
+        onKeyDown={handleKeyDown}
         className={clsx(
           "relative bg-nx-surface border border-nx-border-visible rounded-2xl p-xl w-full",
           maxWidth,

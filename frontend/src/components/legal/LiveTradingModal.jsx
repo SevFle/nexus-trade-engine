@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { Modal } from "../feedback/Modal";
-import { useAcceptLegal } from "../../hooks/useLegal";
+import { useAcceptLegal, useLegalDocument } from "../../hooks/useLegal";
 
 export function LiveTradingModal({ open, onAccept, onClose }) {
   const [checked, setChecked] = useState(false);
   const acceptMutation = useAcceptLegal();
+  const { data: doc } = useLegalDocument("risk-disclaimer");
 
   const handleAccept = async () => {
+    const version = doc?.version;
+    if (!version) return;
     await acceptMutation.mutateAsync([
-      { document_slug: "risk-disclaimer", version: "latest" },
+      { document_slug: "risk-disclaimer", version },
     ]);
     onAccept();
   };
@@ -54,10 +57,10 @@ export function LiveTradingModal({ open, onAccept, onClose }) {
           </button>
           <button
             type="button"
-            disabled={!checked}
+            disabled={!checked || !doc?.version}
             onClick={handleAccept}
             className={`flex-1 px-xl py-md text-label font-mono uppercase rounded-full border transition-colors ${
-              checked
+              checked && doc?.version
                 ? "bg-nx-accent text-nx-black border-nx-accent hover:bg-nx-accent/80"
                 : "bg-nx-text-disabled/30 text-nx-text-disabled border-nx-text-disabled/30 cursor-not-allowed"
             }`}

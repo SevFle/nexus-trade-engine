@@ -6,6 +6,7 @@ const LEGAL_LINKS = [
   { to: "/legal/privacy-policy", label: "Privacy Policy" },
   { to: "/legal/eula", label: "EULA" },
   { to: "/legal/marketplace-eula", label: "Marketplace EULA" },
+  { to: "/legal/data-provider-attributions", label: "Data Provider Attributions" },
 ];
 
 export function Footer() {

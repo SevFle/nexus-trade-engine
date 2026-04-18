@@ -12,12 +12,15 @@ const LegalContext = createContext(null);
 export function LegalProvider({ children }) {
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [pendingDocs, setPendingDocs] = useState([]);
-  const { data: documents = [] } = useLegalDocuments();
+  const { data } = useLegalDocuments();
+  const documents = data ?? [];
   const acceptMutation = useAcceptLegal();
 
   useEffect(() => {
     if (!Array.isArray(documents)) return;
-    const required = documents.filter((d) => d.requires_acceptance);
+    const required = documents.filter(
+      (d) => d.needs_re_acceptance || (d.requires_acceptance && !d.accepted)
+    );
     if (required.length > 0) {
       setPendingDocs(required);
       setShowConsentModal(true);

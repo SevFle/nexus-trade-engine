@@ -20,7 +20,7 @@ export async function apiFetch(path, options = {}) {
 
   if (response.status === 451) {
     const body = await response.json().catch(() => ({}));
-    const pending = body.pending_documents || [];
+    const pending = body.detail?.documents || [];
     window.dispatchEvent(
       new CustomEvent("legal:consent-required", { detail: pending })
     );
