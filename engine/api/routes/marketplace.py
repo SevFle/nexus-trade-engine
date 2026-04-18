@@ -2,7 +2,9 @@
 Marketplace API — browse, search, install, and rate community strategies.
 """
 
-from fastapi import APIRouter, HTTPException
+from engine.api.auth.dependency import get_current_user, require_role
+from engine.db.models import User
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -34,9 +36,9 @@ async def browse_marketplace(
     sort_by: str = "downloads",
     page: int = 1,
     per_page: int = 20,
+    user: User = Depends(get_current_user),
 ):
     """Browse available strategies in the marketplace."""
-    # TODO: Query marketplace registry (could be remote API or local DB)
     return {
         "strategies": [],
         "total": 0,
@@ -47,24 +49,52 @@ async def browse_marketplace(
 
 
 @router.get("/categories")
-async def list_categories():
+async def list_categories(
+    user: User = Depends(get_current_user),
+):
     """List available strategy categories."""
     return {
         "categories": [
-            {"id": "algorithmic", "name": "Fixed Algorithm", "description": "Deterministic rule-based strategies"},
-            {"id": "ml", "name": "Machine Learning", "description": "Neural nets, ensemble models, deep learning"},
-            {"id": "llm", "name": "LLM-Powered", "description": "Strategies using large language models"},
-            {"id": "hybrid", "name": "Hybrid / Multi-Model", "description": "Combinations of multiple approaches"},
-            {"id": "income", "name": "Income / Yield", "description": "Dividend and options income strategies"},
-            {"id": "macro", "name": "Macro / Regime", "description": "Macro-driven allocation strategies"},
+            {
+                "id": "algorithmic",
+                "name": "Fixed Algorithm",
+                "description": "Deterministic rule-based strategies",
+            },
+            {
+                "id": "ml",
+                "name": "Machine Learning",
+                "description": "Neural nets, ensemble models, deep learning",
+            },
+            {
+                "id": "llm",
+                "name": "LLM-Powered",
+                "description": "Strategies using large language models",
+            },
+            {
+                "id": "hybrid",
+                "name": "Hybrid / Multi-Model",
+                "description": "Combinations of multiple approaches",
+            },
+            {
+                "id": "income",
+                "name": "Income / Yield",
+                "description": "Dividend and options income strategies",
+            },
+            {
+                "id": "macro",
+                "name": "Macro / Regime",
+                "description": "Macro-driven allocation strategies",
+            },
         ]
     }
 
 
 @router.post("/install")
-async def install_strategy(req: InstallRequest):
+async def install_strategy(
+    req: InstallRequest,
+    user: User = Depends(get_current_user),
+):
     """Install a strategy from the marketplace."""
-    # TODO: Download strategy package, validate manifest, install to plugin dir
     return {
         "status": "not_implemented",
         "strategy_id": req.strategy_id,
@@ -73,14 +103,29 @@ async def install_strategy(req: InstallRequest):
 
 
 @router.delete("/uninstall/{strategy_id}")
-async def uninstall_strategy(strategy_id: str):
+async def uninstall_strategy(
+    strategy_id: str,
+    user: User = Depends(get_current_user),
+):
     """Uninstall a strategy."""
-    # TODO: Deactivate, remove files, update DB
     return {"status": "not_implemented", "strategy_id": strategy_id}
 
 
+@router.post("/publish")
+async def publish_strategy(
+    user: User = Depends(require_role("developer")),
+):
+    """Publish a strategy to the marketplace."""
+    return {"status": "not_implemented"}
+
+
 @router.post("/{strategy_id}/rate")
-async def rate_strategy(strategy_id: str, rating: int, review: str = ""):
+async def rate_strategy(
+    strategy_id: str,
+    rating: int,
+    review: str = "",
+    user: User = Depends(get_current_user),
+):
     """Rate and review a marketplace strategy."""
     if not 1 <= rating <= 5:
         raise HTTPException(status_code=400, detail="Rating must be 1-5")

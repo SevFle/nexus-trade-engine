@@ -6,7 +6,9 @@ import uuid
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks
+from engine.api.auth.dependency import get_current_user
+from engine.db.models import User
+from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -194,6 +196,7 @@ async def _run_backtest_background(
 async def run_backtest(
     request: BacktestRequest,
     background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
 ) -> BacktestResponse:
     backtest_id = str(uuid.uuid4())
     background_tasks.add_task(
@@ -208,7 +211,10 @@ async def run_backtest(
     "/results/{backtest_id}",
     response_model=BacktestResultResponse,
 )
-async def get_backtest_result(backtest_id: str) -> JSONResponse:
+async def get_backtest_result(
+    backtest_id: str,
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
     _evict_expired_results()
 
     entry = _backtest_results.get(backtest_id)

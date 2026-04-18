@@ -2,8 +2,9 @@
 Portfolio API routes.
 """
 
-from db.models import PortfolioRecord, PositionRecord
-from db.session import get_db
+from engine.api.auth.dependency import get_current_user
+from engine.db.models import User
+from engine.deps import get_db
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -19,7 +20,7 @@ class CreatePortfolioRequest(BaseModel):
 
 
 class PortfolioResponse(BaseModel):
-    id: int
+    id: str
     name: str
     mode: str
     initial_cash: float
@@ -33,62 +34,86 @@ class PortfolioResponse(BaseModel):
 
 
 @router.post("/", response_model=PortfolioResponse)
-async def create_portfolio(req: CreatePortfolioRequest, db: AsyncSession = Depends(get_db)):
-    portfolio = PortfolioRecord(
-        user_id=1,  # TODO: get from auth
+async def create_portfolio(
+    req: CreatePortfolioRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from engine.db.models import Portfolio, Position
+
+    portfolio = Portfolio(
+        user_id=user.id,
         name=req.name,
-        mode=req.mode,
-        initial_cash=req.initial_cash,
-        current_cash=req.initial_cash,
-        total_value=req.initial_cash,
+        initial_capital=req.initial_cash,
     )
     db.add(portfolio)
     await db.flush()
     await db.refresh(portfolio)
-    return portfolio
+    return PortfolioResponse(
+        id=str(portfolio.id),
+        name=portfolio.name,
+        mode="paper",
+        initial_cash=float(portfolio.initial_capital),
+        current_cash=float(portfolio.initial_capital),
+        total_value=float(portfolio.initial_capital),
+        realized_pnl=0.0,
+        is_active=True,
+    )
 
 
 @router.get("/", response_model=list[PortfolioResponse])
-async def list_portfolios(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(PortfolioRecord).where(PortfolioRecord.user_id == 1, PortfolioRecord.is_active == True)
-    )
-    return result.scalars().all()
+async def list_portfolios(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from engine.db.models import Portfolio
 
-
-@router.get("/{portfolio_id}", response_model=PortfolioResponse)
-async def get_portfolio(portfolio_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(PortfolioRecord).where(PortfolioRecord.id == portfolio_id))
-    portfolio = result.scalar_one_or_none()
-    if not portfolio:
-        raise HTTPException(status_code=404, detail="Portfolio not found")
-    return portfolio
-
-
-@router.get("/{portfolio_id}/positions")
-async def get_positions(portfolio_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(PositionRecord).where(PositionRecord.portfolio_id == portfolio_id)
-    )
-    positions = result.scalars().all()
+    result = await db.execute(select(Portfolio).where(Portfolio.user_id == user.id))
+    portfolios = result.scalars().all()
     return [
-        {
-            "symbol": p.symbol,
-            "quantity": p.quantity,
-            "avg_cost": p.avg_cost,
-            "current_price": p.current_price,
-            "unrealized_pnl": p.unrealized_pnl,
-            "market_value": p.quantity * p.current_price,
-        }
-        for p in positions
+        PortfolioResponse(
+            id=str(p.id),
+            name=p.name,
+            mode="paper",
+            initial_cash=float(p.initial_capital),
+            current_cash=float(p.initial_capital),
+            total_value=float(p.initial_capital),
+            realized_pnl=0.0,
+            is_active=True,
+        )
+        for p in portfolios
     ]
 
 
-@router.delete("/{portfolio_id}")
-async def archive_portfolio(portfolio_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(PortfolioRecord).where(PortfolioRecord.id == portfolio_id))
+@router.get("/{portfolio_id}")
+async def get_portfolio(
+    portfolio_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from engine.db.models import Portfolio
+
+    result = await db.execute(select(Portfolio).where(Portfolio.id == portfolio_id))
     portfolio = result.scalar_one_or_none()
     if not portfolio:
         raise HTTPException(status_code=404, detail="Portfolio not found")
-    portfolio.is_active = False
+    if portfolio.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return {"id": str(portfolio.id), "name": portfolio.name}
+
+
+@router.delete("/{portfolio_id}")
+async def archive_portfolio(
+    portfolio_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from engine.db.models import Portfolio
+
+    result = await db.execute(select(Portfolio).where(Portfolio.id == portfolio_id))
+    portfolio = result.scalar_one_or_none()
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    if portfolio.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
     return {"status": "archived", "id": portfolio_id}
