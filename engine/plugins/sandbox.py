@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import builtins
 import contextlib
+import io as _io_module
 import os
 import shutil
 import tempfile
@@ -26,6 +27,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+import httpx as _httpx_module
 import structlog
 
 from engine.core.signal import Signal
@@ -33,6 +35,8 @@ from engine.plugins.restricted_importer import RestrictedImporter
 from engine.plugins.sandboxed_http import SandboxedHttpClient
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from engine.core.cost_model import ICostModel
     from engine.core.portfolio import PortfolioSnapshot
     from engine.plugins.manifest import StrategyManifest
@@ -47,6 +51,25 @@ except ImportError:
     HAS_RESOURCE_MODULE = False
 
 logger = structlog.get_logger()
+
+_BLOCKED_ATTRS: frozenset[str] = frozenset(
+    {
+        "__subclasses__",
+        "__bases__",
+        "__mro__",
+        "__globals__",
+        "__closure__",
+        "__code__",
+    }
+)
+
+
+class _RestrictedObject:
+    """Proxy for ``builtins.object`` that blocks ``__subclasses__()``."""
+
+    @classmethod
+    def __subclasses__(cls) -> list[type]:
+        raise RuntimeError("__subclasses__() is not allowed in strategy sandbox")
 
 
 @dataclass
@@ -72,6 +95,7 @@ class StrategySandbox:
     - Whitelists network endpoints from the manifest
     - Enforces resource limits (memory, file descriptors, CPU timeout)
     - Isolates filesystem access to a temp directory
+    - Blocks dangerous introspection (``__subclasses__``, ``__globals__``, etc.)
     - Tracks metrics for the dashboard
     """
 
@@ -86,6 +110,10 @@ class StrategySandbox:
         self._work_dir: str | None = None
         self._original_open: Any = None
         self._saved_resource_limits: dict[str, tuple[int, int]] = {}
+
+        self._original_getattr: Callable[..., Any] | None = None
+        self._original_io_open: Any = None
+        self._original_httpx_send: Any = None
 
         self._create_sandboxed_http_client()
         self._setup_filesystem_isolation()
@@ -170,14 +198,66 @@ class StrategySandbox:
 
         return self._original_open(file, mode, *args, **kwargs)
 
+    def _restricted_getattr(self, obj: Any, name: str, *default: Any) -> Any:
+        if name in _BLOCKED_ATTRS:
+            raise PermissionError(f"Attribute '{name}' is not accessible in strategy sandbox")
+        return self._original_getattr(obj, name, *default)  # type: ignore[misc]
+
+    def _make_restricted_send(self) -> Any:
+        allowed = self.manifest.network.allowed_endpoints
+        original_send = self._original_httpx_send
+
+        async def restricted_send(
+            client: Any,
+            request: Any,
+            *,
+            stream: bool = False,
+            **kwargs: Any,
+        ) -> Any:
+            host = request.url.host
+            if not any(host == ep or host.endswith(f".{ep}") for ep in allowed):
+                raise PermissionError(f"Network access to {host} is not allowed")
+            return await original_send(client, request, stream=stream, **kwargs)
+
+        return restricted_send
+
     def _activate_restrictions(self) -> None:
+        # Layer 1: import restrictions
         self._importer.install()
+
+        # Layer 1.1: block introspection via __subclasses__
+        self._original_object = builtins.object
+        builtins.object = _RestrictedObject  # type: ignore[assignment]
+        self._original_getattr = builtins.getattr
+        builtins.getattr = self._restricted_getattr  # type: ignore[assignment]
+
+        # Layer 1.2: block io.open bypass
+        self._original_io_open = _io_module.open
+        _io_module.open = self._restricted_open  # type: ignore[assignment]
+
+        # Layer 2: enforce network whitelist on ALL httpx clients
+        self._original_httpx_send = _httpx_module.AsyncClient.send
+        _httpx_module.AsyncClient.send = self._make_restricted_send()
+
+        # Layer 4: filesystem isolation
         self._original_open = builtins.open
         builtins.open = self._restricted_open  # type: ignore[assignment]
+
+        # Layer 3: resource limits
         self._apply_resource_limits()
 
     def _deactivate_restrictions(self) -> None:
         self._importer.uninstall()
+        builtins.object = self._original_object  # type: ignore[attr-defined]
+        if self._original_getattr is not None:
+            builtins.getattr = self._original_getattr  # type: ignore[assignment]
+            self._original_getattr = None
+        if self._original_io_open is not None:
+            _io_module.open = self._original_io_open
+            self._original_io_open = None
+        if self._original_httpx_send is not None:
+            _httpx_module.AsyncClient.send = self._original_httpx_send
+            self._original_httpx_send = None
         if self._original_open is not None:
             builtins.open = self._original_open  # type: ignore[assignment]
             self._original_open = None

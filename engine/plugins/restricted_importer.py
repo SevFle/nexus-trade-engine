@@ -33,6 +33,8 @@ BLOCKED_MODULES: frozenset[str] = frozenset(
         "signal",
         "sys",
         "importlib",
+        "io",
+        "_io",
     ]
 )
 

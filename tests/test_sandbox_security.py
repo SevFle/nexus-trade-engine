@@ -3,7 +3,10 @@ Adversarial tests for the strategy sandbox security layers.
 
 Layers tested:
   1. Import restrictions - blocked modules cannot be imported
+  1.1 Introspection blocking - __subclasses__, __globals__ etc.
+  1.2 io.open bypass closed
   2. Network whitelist - only declared endpoints are reachable
+     (enforced on ALL httpx clients, not just SandboxedHttpClient)
   3. Resource limits - memory / FD limits enforced (Linux only)
   4. Filesystem isolation - no access outside sandbox working dir
   5. Process isolation - documented as production target (MVP = in-process)
@@ -75,6 +78,16 @@ class _ImportSysStrategy:
         return []
 
 
+class _ImportIoStrategy:
+    name = "import_io"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        import io  # noqa: F401, PLC0415
+
+        return []
+
+
 class _FileReadStrategy:
     name = "file_read"
     version = "1.0.0"
@@ -116,6 +129,79 @@ class _SlowStrategy:
         return []
 
 
+# ── Bypass vector strategies ─────────────────────────────────────────
+
+
+class _SubclassTraversalStrategy:
+    """Bypass 1: walk object.__subclasses__() to reach blocked modules."""
+
+    name = "subclass_traversal"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        for _cls in object.__subclasses__():  # type: ignore[type-arg]
+            pass
+        return []
+
+
+class _GetattrSubclassTraversalStrategy:
+    """Bypass 1a: getattr-based traversal for non-object types."""
+
+    name = "getattr_subclass_traversal"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        subs = getattr(int, "__subclasses__")()  # noqa: B009
+        return [type(s).__name__ for s in subs]
+
+
+class _GetattrGlobalsStrategy:
+    """Bypass 1b: getattr-based access to __globals__."""
+
+    name = "getattr_globals"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        fn = self.on_bar
+        globs = getattr(fn, "__globals__")  # noqa: B009
+        return [k for k in globs if "os" in k]
+
+
+class _IoOpenReadStrategy:
+    """Bypass 2: use io.open() to bypass builtins.open restriction."""
+
+    name = "io_open_read"
+    version = "1.0.0"
+
+    def __init__(self, target_path: str) -> None:
+        self._target = target_path
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        import io  # noqa: PLC0415
+
+        with io.open(self._target) as f:  # type: ignore[attr-defined]  # noqa: UP020
+            f.read()
+        return []
+
+
+class _DirectHttpxStrategy:
+    """Bypass 3: create own httpx.AsyncClient bypassing SandboxedHttpClient."""
+
+    name = "direct_httpx"
+    version = "1.0.0"
+
+    async def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        import httpx as hx  # noqa: PLC0415
+
+        transport = hx.MockTransport(lambda _r: hx.Response(200))
+        async with hx.AsyncClient(transport=transport) as client:
+            await client.get("https://evil.com/api")
+        return []
+
+
+# ── Fixtures ─────────────────────────────────────────────────────────
+
+
 @pytest.fixture
 def manifest() -> StrategyManifest:
     return StrategyManifest(
@@ -135,6 +221,9 @@ def networked_manifest() -> StrategyManifest:
         resources={"max_cpu_seconds": 5},
         network={"allowed_endpoints": ["api.anthropic.com"]},
     )
+
+
+# ── Layer 1: Import restrictions ─────────────────────────────────────
 
 
 class TestRestrictedImporter:
@@ -221,6 +310,15 @@ class TestImportRestrictionIntegration:
         finally:
             sandbox.cleanup()
 
+    async def test_import_io_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_ImportIoStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert "blocked" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
     async def test_safe_import_still_works(self, manifest: StrategyManifest) -> None:
         sandbox = StrategySandbox(_GoodStrategy(), manifest)
         try:
@@ -229,6 +327,59 @@ class TestImportRestrictionIntegration:
             assert signals[0].symbol == "AAPL"
         finally:
             sandbox.cleanup()
+
+
+# ── Layer 1.1: Introspection blocking ────────────────────────────────
+
+
+class TestBypassSubclassTraversal:
+    async def test_object_subclasses_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_SubclassTraversalStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "__subclasses__" in (sandbox.metrics.last_error or "")
+        finally:
+            sandbox.cleanup()
+
+    async def test_getattr_subclasses_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_GetattrSubclassTraversalStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "not accessible" in (sandbox.metrics.last_error or "")
+        finally:
+            sandbox.cleanup()
+
+    async def test_getattr_globals_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_GetattrGlobalsStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "not accessible" in (sandbox.metrics.last_error or "")
+        finally:
+            sandbox.cleanup()
+
+
+# ── Layer 1.2 / Bypass 2: io.open ───────────────────────────────────
+
+
+class TestBypassIoOpen:
+    async def test_io_import_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_IoOpenReadStrategy("/etc/passwd"), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "blocked" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+
+# ── Layer 2 / Bypass 3: httpx direct construction ───────────────────
 
 
 class TestSandboxedHttpClient:
@@ -302,6 +453,21 @@ class TestSandboxedHttpClient:
             sandbox.cleanup()
 
 
+class TestBypassDirectHttpx:
+    async def test_direct_httpx_client_blocked(self, networked_manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_DirectHttpxStrategy(), networked_manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "not allowed" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+
+# ── Layer 3: Resource limits ─────────────────────────────────────────
+
+
 class TestResourceLimits:
     def test_parse_memory_mb(self) -> None:
         assert StrategySandbox._parse_memory("512MB") == 512 * 1024**2  # noqa: SLF001
@@ -323,6 +489,9 @@ class TestResourceLimits:
 
     def test_parse_memory_with_spaces(self) -> None:
         assert StrategySandbox._parse_memory("  512MB  ") == 512 * 1024**2  # noqa: SLF001
+
+
+# ── Layer 4: Filesystem isolation ────────────────────────────────────
 
 
 class TestFilesystemIsolation:
@@ -375,6 +544,9 @@ class TestFilesystemIsolation:
         assert not os.path.isdir(work_dir)
 
 
+# ── Integration ──────────────────────────────────────────────────────
+
+
 class TestSandboxSecurityIntegration:
     async def test_timeout_returns_empty_signals(self, manifest: StrategyManifest) -> None:
         sandbox = StrategySandbox(_SlowStrategy(), manifest)
@@ -389,24 +561,28 @@ class TestSandboxSecurityIntegration:
     async def test_restrictions_removed_after_evaluation(self, manifest: StrategyManifest) -> None:
         original_import = builtins.__import__
         original_open = builtins.open
+        original_object = builtins.object
 
         sandbox = StrategySandbox(_GoodStrategy(), manifest)
         try:
             await sandbox.safe_evaluate(None, None, None)
             assert builtins.__import__ is original_import
             assert builtins.open is original_open
+            assert builtins.object is original_object
         finally:
             sandbox.cleanup()
 
     async def test_restrictions_removed_after_error(self, manifest: StrategyManifest) -> None:
         original_import = builtins.__import__
         original_open = builtins.open
+        original_object = builtins.object
 
         sandbox = StrategySandbox(_ImportOsStrategy(), manifest)
         try:
             await sandbox.safe_evaluate(None, None, None)
             assert builtins.__import__ is original_import
             assert builtins.open is original_open
+            assert builtins.object is original_object
         finally:
             sandbox.cleanup()
 
