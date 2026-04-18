@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
@@ -30,6 +30,12 @@ export default function Onboarding() {
 
   const allAccepted = requiredDocs.every((d) => accepted[d.slug]);
 
+  useEffect(() => {
+    if (!isLoading && requiredDocs.length === 0) {
+      navigate("/");
+    }
+  }, [isLoading, requiredDocs.length, navigate]);
+
   const handleAcceptDoc = () => {
     const doc = requiredDocs[currentIdx];
     setAccepted((prev) => ({ ...prev, [doc.slug]: true }));
@@ -56,7 +62,6 @@ export default function Onboarding() {
   }
 
   if (requiredDocs.length === 0) {
-    navigate("/");
     return null;
   }
 

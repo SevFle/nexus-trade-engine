@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useLegalDocuments, useAcceptLegal } from "../hooks/useLegal";
@@ -15,6 +16,7 @@ export function LegalProvider({ children }) {
   const [pendingDocs, setPendingDocs] = useState([]);
   const documents = useLegalDocuments().data || [];
   const acceptMutation = useAcceptLegal();
+  const consentedThisSession = useRef(false);
 
   const requiredPending = useMemo(
     () =>
@@ -25,7 +27,7 @@ export function LegalProvider({ children }) {
   );
 
   useEffect(() => {
-    if (requiredPending.length > 0) {
+    if (requiredPending.length > 0 && !consentedThisSession.current) {
       setPendingDocs(requiredPending);
       setShowConsentModal(true);
     }
@@ -50,6 +52,7 @@ export function LegalProvider({ children }) {
       document_slug: d.slug,
       document_version: d.current_version,
     }));
+    consentedThisSession.current = true;
     await acceptMutation.mutateAsync(acceptances);
     setPendingDocs([]);
     setShowConsentModal(false);
