@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import Enum
 
@@ -161,3 +161,56 @@ class OHLCVBar(Base):
         Index("ix_ohlcv_symbol_timestamp", "symbol", "timestamp"),
         UniqueConstraint("symbol", "timestamp", name="uq_ohlcv_symbol_timestamp"),
     )
+
+
+class LegalDocument(Base):
+    __tablename__ = "legal_documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    slug: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    current_version: Mapped[str] = mapped_column(String(20))
+    effective_date: Mapped[date] = mapped_column()
+    requires_acceptance: Mapped[bool] = mapped_column(default=True)
+    category: Mapped[str] = mapped_column(String(30), default="general", index=True)
+    display_order: Mapped[int] = mapped_column(default=0)
+    file_path: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=_utcnow, onupdate=_utcnow)
+
+
+class LegalAcceptance(Base):
+    __tablename__ = "legal_acceptances"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    document_slug: Mapped[str] = mapped_column(String(50))
+    document_version: Mapped[str] = mapped_column(String(20))
+    accepted_at: Mapped[datetime] = mapped_column(default=_utcnow)
+    ip_address: Mapped[str] = mapped_column(String(45))
+    user_agent: Mapped[str] = mapped_column(String(500))
+    context: Mapped[str] = mapped_column(String(50), default="onboarding")
+    revoked_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    __table_args__ = (
+        Index("ix_acceptance_user_doc", "user_id", "document_slug"),
+        Index("ix_acceptance_user_doc_ver", "user_id", "document_slug", "document_version"),
+        Index("ix_acceptance_time", "accepted_at"),
+    )
+
+
+class DataProviderAttribution(Base):
+    __tablename__ = "data_provider_attributions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    provider_slug: Mapped[str] = mapped_column(String(50), unique=True)
+    provider_name: Mapped[str] = mapped_column(String(100))
+    attribution_text: Mapped[str] = mapped_column(Text)
+    attribution_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    logo_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    display_contexts: Mapped[dict] = mapped_column(JSONB, default=list)  # type: ignore[assignment]
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=_utcnow, onupdate=_utcnow)

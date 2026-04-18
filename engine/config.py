@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     # Worker
     worker_concurrency: int = 4
 
+    # Legal / Operator
+    legal_documents_dir: str = "legal"
+    operator_name: str = "Nexus Trade Engine"
+    operator_email: str = "legal@example.com"
+    operator_url: str = "https://example.com"
+    jurisdiction: str = "United States"
+    platform_fee_percent: int = 30
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
