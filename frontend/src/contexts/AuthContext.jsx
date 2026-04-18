@@ -9,12 +9,21 @@ import {
   setAccessToken,
   clearAccessToken,
   handleOAuthCallback,
-  getOAuthAuthorizeUrl,
+  fetchOAuthAuthorizeUrl,
 } from "../api/auth";
 
 const AuthContext = createContext(null);
 
 const TOKEN_REFRESH_MARGIN_MS = 60 * 1000;
+const MAX_REFRESH_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 1000;
+
+/*
+ * ACCEPTED RISK (M2): Refresh token is persisted in sessionStorage so the
+ * session survives page refreshes. sessionStorage is accessible to XSS;
+ * migrating to httpOnly cookies set by the backend is recommended for
+ * production. See ADR-002.
+ */
 
 function parseJwtExpiry(token) {
   try {
@@ -31,16 +40,47 @@ export function AuthProvider({ children }) {
   const [providers, setProviders] = useState(["local"]);
   const refreshTokenRef = useRef(null);
   const refreshTimerRef = useRef(null);
+  const refreshMutexRef = useRef(null);
 
   const clearSession = useCallback(() => {
     setUser(null);
     clearAccessToken();
     refreshTokenRef.current = null;
+    refreshMutexRef.current = null;
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = null;
     }
   }, []);
+
+  const refreshWithMutex = useCallback((token) => {
+    if (refreshMutexRef.current) {
+      return refreshMutexRef.current;
+    }
+
+    const promise = apiRefreshToken(token).finally(() => {
+      refreshMutexRef.current = null;
+    });
+
+    refreshMutexRef.current = promise;
+    return promise;
+  }, []);
+
+  const refreshWithRetry = useCallback(
+    async (token) => {
+      for (let attempt = 0; attempt < MAX_REFRESH_RETRIES; attempt++) {
+        try {
+          return await refreshWithMutex(token);
+        } catch (err) {
+          if (attempt === MAX_REFRESH_RETRIES - 1) throw err;
+          await new Promise((r) =>
+            setTimeout(r, RETRY_BASE_DELAY_MS * Math.pow(2, attempt)),
+          );
+        }
+      }
+    },
+    [refreshWithMutex],
+  );
 
   const scheduleRefresh = useCallback(
     (token) => {
@@ -59,16 +99,18 @@ export function AuthProvider({ children }) {
       refreshTimerRef.current = setTimeout(async () => {
         if (!refreshTokenRef.current) return;
         try {
-          const data = await apiRefreshToken(refreshTokenRef.current);
+          const data = await refreshWithRetry(refreshTokenRef.current);
           setAccessToken(data.access_token);
           refreshTokenRef.current = data.refresh_token;
+          sessionStorage.setItem("nexus_refresh_token", data.refresh_token);
           scheduleRefresh(data.access_token);
         } catch {
           clearSession();
+          sessionStorage.removeItem("nexus_refresh_token");
         }
       }, delay);
     },
-    [clearSession],
+    [clearSession, refreshWithRetry],
   );
 
   const loadUser = useCallback(async () => {
@@ -132,8 +174,9 @@ export function AuthProvider({ children }) {
     [login],
   );
 
-  const startOAuth = useCallback((provider) => {
-    window.location.href = getOAuthAuthorizeUrl(provider);
+  const startOAuth = useCallback(async (provider) => {
+    const authorizeUrl = await fetchOAuthAuthorizeUrl(provider);
+    window.location.href = authorizeUrl;
   }, []);
 
   const handleCallback = useCallback(

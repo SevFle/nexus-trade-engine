@@ -86,8 +86,11 @@ export async function logout(refreshTokenValue) {
   }
 }
 
-export function getOAuthAuthorizeUrl(provider) {
-  return `${API}/api/v1/auth/${provider}/authorize`;
+export async function fetchOAuthAuthorizeUrl(provider) {
+  const data = await request(`/api/v1/auth/${provider}/authorize`, {
+    noAuth: true,
+  });
+  return data.authorize_url;
 }
 
 export async function handleOAuthCallback(provider, searchParams) {
