@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Zap, Rewind, Store, BarChart3, Shield, Terminal, DollarSign } from "lucide-react";
+import { LayoutDashboard, Zap, Rewind, Store, BarChart3, Shield, Terminal, DollarSign, Settings as SettingsIcon } from "lucide-react";
 import clsx from "clsx";
 import { useTheme } from "../../hooks/useTheme";
 
@@ -13,6 +13,7 @@ const navItems = [
   { to: "/costs", label: "COST ANALYSIS", icon: DollarSign },
   { to: "/risk", label: "RISK MONITOR", icon: Shield },
   { to: "/dev", label: "DEV CONSOLE", icon: Terminal },
+  { to: "/settings", label: "SETTINGS", icon: SettingsIcon },
 ];
 
 function Sidebar({ collapsed, onToggle }) {

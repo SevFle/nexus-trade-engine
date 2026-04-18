@@ -3,6 +3,8 @@ import { HeroMetric } from "../components/primitives/HeroMetric";
 import { StatRow } from "../components/primitives/StatRow";
 import { Sparkline } from "../components/data/Sparkline";
 import { StatusBadge } from "../components/primitives/StatusBadge";
+import { BacktestDisclaimer } from "../components/legal/DisclaimerBanner";
+import { AttributionBadges } from "../components/legal/AttributionBadges";
 
 const MOCK_RESULTS = {
   sharpe: "2.34",
@@ -108,6 +110,10 @@ export default function Backtest() {
             <StatRow label="PERIOD" value={`${MOCK_CONFIG.start} -> ${MOCK_CONFIG.end}`} />
           </div>
         </section>
+
+        <BacktestDisclaimer className="mb-3xl" />
+
+        <AttributionBadges providers={[{ slug: "polygon", name: "Polygon.io" }]} className="mb-3xl" />
       </div>
     </div>
   );

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { StatusBadge } from "../components/primitives/StatusBadge";
 import { StatRow } from "../components/primitives/StatRow";
+import { PaperTradingDisclaimer } from "../components/legal/DisclaimerBanner";
+import { RiskAcceptanceModal } from "../components/legal/RiskAcceptanceModal";
 
 const STRATEGIES = [
   { id: "momentum-alpha", name: "MOMENTUM ALPHA v3.2", status: "idle" },
@@ -26,10 +28,21 @@ export default function Strategies() {
     Object.fromEntries(MOCK_PARAMS.map((p) => [p.key, p.value]))
   );
   const [running, setRunning] = useState(false);
+  const [showRiskModal, setShowRiskModal] = useState(false);
 
   const strategy = STRATEGIES.find((s) => s.id === activeStrategy);
 
   const handleRun = () => {
+    if (mode === "LIVE") {
+      setShowRiskModal(true);
+      return;
+    }
+    setRunning(true);
+    setTimeout(() => setRunning(false), 3000);
+  };
+
+  const handleRiskAccepted = () => {
+    setShowRiskModal(false);
     setRunning(true);
     setTimeout(() => setRunning(false), 3000);
   };
@@ -136,7 +149,17 @@ export default function Strategies() {
             <StatusBadge status="loading">EXECUTING</StatusBadge>
           )}
         </section>
+
+        {mode === "PAPER" && <PaperTradingDisclaimer className="mt-2xl" />}
       </div>
+      {showRiskModal && (
+        <RiskAcceptanceModal
+          documentSlug="risk-disclaimer"
+          version="1.0"
+          onAccepted={handleRiskAccepted}
+          onCancel={() => setShowRiskModal(false)}
+        />
+      )}
     </div>
   );
 }

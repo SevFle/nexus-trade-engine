@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { MarketplaceDisclaimer } from "../components/legal/DisclaimerBanner";
 
 const CATEGORIES = ["ALL", "MOMENTUM", "MEAN REVERSION", "ARBITRAGE", "MACRO", "ML/AI"];
 
@@ -57,6 +58,8 @@ export default function Marketplace() {
             STRATEGY CATALOG
           </h1>
         </header>
+
+        <MarketplaceDisclaimer className="mb-2xl" />
 
         <section className="mb-2xl">
           <div className="flex items-center gap-md mb-lg">
