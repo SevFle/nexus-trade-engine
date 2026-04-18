@@ -1,8 +1,9 @@
 import React from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Zap, Rewind, Store, BarChart3, Shield, Terminal, DollarSign } from "lucide-react";
+import { LayoutDashboard, Zap, Rewind, Store, BarChart3, Shield, Terminal, DollarSign, Settings as SettingsIcon } from "lucide-react";
 import clsx from "clsx";
 import { useTheme } from "../../hooks/useTheme";
+import { Footer } from "./Footer";
 
 const navItems = [
   { to: "/", label: "DASHBOARD", icon: LayoutDashboard },
@@ -13,6 +14,7 @@ const navItems = [
   { to: "/costs", label: "COST ANALYSIS", icon: DollarSign },
   { to: "/risk", label: "RISK MONITOR", icon: Shield },
   { to: "/dev", label: "DEV CONSOLE", icon: Terminal },
+  { to: "/settings", label: "LEGAL & SETTINGS", icon: SettingsIcon },
 ];
 
 function Sidebar({ collapsed, onToggle }) {
@@ -79,18 +81,21 @@ export function Shell({ children }) {
   return (
     <div className="flex min-h-screen bg-nx-black">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
-      <main className="flex-1 overflow-auto">
-        <div className="flex justify-end p-sm">
-          <button
-            type="button"
-            onClick={toggle}
-            className="text-label font-mono uppercase text-nx-text-secondary hover:text-nx-text-display"
-          >
-            [{mode === "dark" ? "LIGHT" : "DARK"}]
-          </button>
-        </div>
-        {children}
-      </main>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex-1 overflow-auto">
+          <div className="flex justify-end p-sm">
+            <button
+              type="button"
+              onClick={toggle}
+              className="text-label font-mono uppercase text-nx-text-secondary hover:text-nx-text-display"
+            >
+              [{mode === "dark" ? "LIGHT" : "DARK"}]
+            </button>
+          </div>
+          {children}
+        </main>
+        <Footer />
+      </div>
     </div>
   );
 }

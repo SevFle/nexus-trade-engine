@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { StatusBadge } from "../components/primitives/StatusBadge";
 import { StatRow } from "../components/primitives/StatRow";
+import { DisclaimerBanner } from "../components/legal/DisclaimerBanner";
+import { LiveTradingModal } from "../components/legal/LiveTradingModal";
 
 const STRATEGIES = [
   { id: "momentum-alpha", name: "MOMENTUM ALPHA v3.2", status: "idle" },
@@ -26,10 +28,21 @@ export default function Strategies() {
     Object.fromEntries(MOCK_PARAMS.map((p) => [p.key, p.value]))
   );
   const [running, setRunning] = useState(false);
+  const [showLiveModal, setShowLiveModal] = useState(false);
 
   const strategy = STRATEGIES.find((s) => s.id === activeStrategy);
 
   const handleRun = () => {
+    if (mode === "LIVE") {
+      setShowLiveModal(true);
+      return;
+    }
+    setRunning(true);
+    setTimeout(() => setRunning(false), 3000);
+  };
+
+  const handleLiveAccept = () => {
+    setShowLiveModal(false);
     setRunning(true);
     setTimeout(() => setRunning(false), 3000);
   };
@@ -66,6 +79,18 @@ export default function Strategies() {
               </button>
             ))}
           </div>
+          {mode === "PAPER" && (
+            <DisclaimerBanner variant="info" className="mt-md">
+              Paper trading results may differ materially from live trading.
+              Slippage, fill rates, and latency are simulated.
+            </DisclaimerBanner>
+          )}
+          {mode === "LIVE" && (
+            <DisclaimerBanner variant="danger" className="mt-md">
+              Live trading uses real capital. You will be required to acknowledge
+              risks before each session.
+            </DisclaimerBanner>
+          )}
         </section>
 
         <section className="mb-2xl">
@@ -136,6 +161,12 @@ export default function Strategies() {
             <StatusBadge status="loading">EXECUTING</StatusBadge>
           )}
         </section>
+
+        <LiveTradingModal
+          open={showLiveModal}
+          onAccept={handleLiveAccept}
+          onClose={() => setShowLiveModal(false)}
+        />
       </div>
     </div>
   );

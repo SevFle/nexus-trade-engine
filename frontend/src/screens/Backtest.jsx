@@ -3,6 +3,8 @@ import { HeroMetric } from "../components/primitives/HeroMetric";
 import { StatRow } from "../components/primitives/StatRow";
 import { Sparkline } from "../components/data/Sparkline";
 import { StatusBadge } from "../components/primitives/StatusBadge";
+import { DisclaimerBanner } from "../components/legal/DisclaimerBanner";
+import { AttributionStrip } from "../components/legal/AttributionStrip";
 
 const MOCK_RESULTS = {
   sharpe: "2.34",
@@ -46,6 +48,13 @@ export default function Backtest() {
   return (
     <div className="text-nx-text-primary p-xl">
       <div className="max-w-6xl mx-auto">
+        <div className="mb-3xl">
+          <DisclaimerBanner variant="warning">
+            Past performance does not guarantee future results. Backtests are
+            subject to look-ahead bias, selection bias, and survivorship bias.
+            Simulated results may differ materially from actual trading.
+          </DisclaimerBanner>
+        </div>
         <header className="mb-3xl">
           <div className="flex items-center gap-md mb-sm">
             <span className="text-label font-mono uppercase text-nx-text-secondary">
@@ -108,6 +117,8 @@ export default function Backtest() {
             <StatRow label="PERIOD" value={`${MOCK_CONFIG.start} -> ${MOCK_CONFIG.end}`} />
           </div>
         </section>
+
+        <AttributionStrip className="mb-3xl" />
       </div>
     </div>
   );
