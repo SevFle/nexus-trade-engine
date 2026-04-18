@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     # Worker
     worker_concurrency: int = 4
 
+    # Operator (for legal doc substitution)
+    operator_name: str = "Nexus Trade Engine"
+    operator_email: str = "legal@nexus-trade.example"
+    operator_url: str = "https://nexus-trade.example"
+    operator_jurisdiction: str = "United States"
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
