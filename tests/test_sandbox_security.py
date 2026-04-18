@@ -107,6 +107,124 @@ class _FileDescriptorStrategy:
         return []
 
 
+class _SubclassTraversalStrategy:
+    name = "subclass_traversal"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        getattr((), "__class__").__bases__[0].__subclasses__()  # noqa: B009
+        return []
+
+
+class _IoOpenStrategy:
+    name = "io_open"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        import io  # noqa: PLC0415
+
+        io.open("/etc/passwd").read()  # noqa: SIM115, UP020
+        return []
+
+
+class _ImportHttpxStrategy:
+    name = "import_httpx"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        import httpx  # noqa: PLC0415
+
+        httpx.get("https://evil.com")
+        return []
+
+
+class _TypeIntrospectionStrategy:
+    name = "type_introspection"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        type("X", (), {})
+        return []
+
+
+class _GetattrBypassStrategy:
+    name = "getattr_bypass"
+    version = "1.0.0"
+
+    def __init__(self) -> None:
+        self._result: str | None = None
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        self._result = getattr(self, "name")  # noqa: B009
+        return []
+
+
+class _DirBypassStrategy:
+    name = "dir_bypass"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        dir(builtins)
+        return []
+
+
+class _VarsBypassStrategy:
+    name = "vars_bypass"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        vars()
+        return []
+
+
+class _ExecBypassStrategy:
+    name = "exec_bypass"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        exec("import os")  # noqa: S102
+        return []
+
+
+class _EvalBypassStrategy:
+    name = "eval_bypass"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        eval("1+1")  # noqa: S307
+        return []
+
+
+class _ImportThreadingStrategy:
+    name = "import_threading"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        import threading  # noqa: F401, PLC0415
+
+        return []
+
+
+class _ImportPickleStrategy:
+    name = "import_pickle"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        import pickle  # noqa: F401, PLC0415
+
+        return []
+
+
+class _ImportInspectStrategy:
+    name = "import_inspect"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        import inspect  # noqa: F401, PLC0415
+
+        return []
+
+
 class _SlowStrategy:
     name = "slow"
     version = "1.0.0"
@@ -417,5 +535,191 @@ class TestSandboxSecurityIntegration:
             assert len(signals) == 1
             assert signals[0].symbol == "AAPL"
             assert sandbox.metrics.errors == 0
+        finally:
+            sandbox.cleanup()
+
+
+class TestSubclassTraversalBypass:
+    async def test_getattr_blocked_prevents_subclass_traversal(
+        self, manifest: StrategyManifest
+    ) -> None:
+        sandbox = StrategySandbox(_SubclassTraversalStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "getattr" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_type_blocked_prevents_type_introspection(
+        self, manifest: StrategyManifest
+    ) -> None:
+        sandbox = StrategySandbox(_TypeIntrospectionStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "type" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_dir_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_DirBypassStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "dir" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_vars_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_VarsBypassStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "vars" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_exec_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_ExecBypassStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "exec" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_eval_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_EvalBypassStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "eval" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_getattr_not_available_as_builtin_during_execution(
+        self, manifest: StrategyManifest
+    ) -> None:
+        sandbox = StrategySandbox(_GetattrBypassStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+        finally:
+            sandbox.cleanup()
+
+    async def test_builtins_restored_after_evaluation(self, manifest: StrategyManifest) -> None:
+        original_getattr = builtins.getattr
+        original_type = builtins.type
+        original_dir = builtins.dir
+
+        sandbox = StrategySandbox(_GoodStrategy(), manifest)
+        try:
+            await sandbox.safe_evaluate(None, None, None)
+            assert builtins.getattr is original_getattr
+            assert builtins.type is original_type
+            assert builtins.dir is original_dir
+        finally:
+            sandbox.cleanup()
+
+    async def test_builtins_restored_after_error(self, manifest: StrategyManifest) -> None:
+        original_getattr = builtins.getattr
+        original_type = builtins.type
+
+        sandbox = StrategySandbox(_SubclassTraversalStrategy(), manifest)
+        try:
+            await sandbox.safe_evaluate(None, None, None)
+            assert builtins.getattr is original_getattr
+            assert builtins.type is original_type
+        finally:
+            sandbox.cleanup()
+
+
+class TestIoOpenBypass:
+    async def test_io_import_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_IoOpenStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "blocked" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_io_in_blocked_modules_list(self) -> None:
+        assert "io" in BLOCKED_MODULES
+        assert "_io" in BLOCKED_MODULES
+
+    async def test_codecs_in_blocked_modules_list(self) -> None:
+        assert "codecs" in BLOCKED_MODULES
+
+
+class TestHttpxBypass:
+    async def test_httpx_import_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_ImportHttpxStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "blocked" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_httpx_in_blocked_modules_list(self) -> None:
+        assert "httpx" in BLOCKED_MODULES
+
+    async def test_requests_in_blocked_modules_list(self) -> None:
+        assert "requests" in BLOCKED_MODULES
+
+    async def test_aiohttp_in_blocked_modules_list(self) -> None:
+        assert "aiohttp" in BLOCKED_MODULES
+
+    async def test_urllib3_in_blocked_modules_list(self) -> None:
+        assert "urllib3" in BLOCKED_MODULES
+
+
+class TestAdditionalModuleBlocks:
+    async def test_threading_import_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_ImportThreadingStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert "blocked" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_pickle_import_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_ImportPickleStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert "blocked" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_inspect_import_blocked(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_ImportInspectStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert "blocked" in (sandbox.metrics.last_error or "").lower()
+        finally:
+            sandbox.cleanup()
+
+
+class TestCleanupResourceRestore:
+    async def test_cleanup_restores_resource_limits(self, manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_GoodStrategy(), manifest)
+        try:
+            await sandbox.safe_evaluate(None, None, None)
+            sandbox.cleanup()
+            assert sandbox._saved_resource_limits == {}  # noqa: SLF001
         finally:
             sandbox.cleanup()

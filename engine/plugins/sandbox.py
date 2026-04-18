@@ -23,6 +23,7 @@ import os
 import shutil
 import tempfile
 import time
+from collections.abc import Coroutine as _CoroutineType
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -47,6 +48,22 @@ except ImportError:
     HAS_RESOURCE_MODULE = False
 
 logger = structlog.get_logger()
+
+_BLOCKED_BUILTINS: frozenset[str] = frozenset(
+    [
+        "getattr",
+        "hasattr",
+        "setattr",
+        "delattr",
+        "type",
+        "dir",
+        "vars",
+        "exec",
+        "eval",
+        "compile",
+        "breakpoint",
+    ]
+)
 
 
 @dataclass
@@ -86,6 +103,8 @@ class StrategySandbox:
         self._work_dir: str | None = None
         self._original_open: Any = None
         self._saved_resource_limits: dict[str, tuple[int, int]] = {}
+        self._saved_builtins: dict[str, Any] = {}
+        self._restore_setattr: Any = builtins.setattr
 
         self._create_sandboxed_http_client()
         self._setup_filesystem_isolation()
@@ -176,6 +195,22 @@ class StrategySandbox:
         builtins.open = self._restricted_open  # type: ignore[assignment]
         self._apply_resource_limits()
 
+    def _activate_builtin_restrictions(self) -> None:
+        _delete = delattr
+        self._saved_builtins = {}
+        for name in _BLOCKED_BUILTINS:
+            value = builtins.__dict__.get(name)
+            if value is not None:
+                self._saved_builtins[name] = value
+        for name in self._saved_builtins:
+            _delete(builtins, name)
+
+    def _deactivate_builtin_restrictions(self) -> None:
+        _sa = self._restore_setattr
+        for name, value in self._saved_builtins.items():
+            _sa(builtins, name, value)
+        self._saved_builtins.clear()
+
     def _deactivate_restrictions(self) -> None:
         self._importer.uninstall()
         if self._original_open is not None:
@@ -237,10 +272,14 @@ class StrategySandbox:
         portfolio: PortfolioSnapshot,
         market: Any,
     ) -> list[Any]:
-        result = self.strategy.on_bar(market, portfolio)
-        if asyncio.iscoroutine(result):
-            result = await result
-        return result
+        self._activate_builtin_restrictions()
+        try:
+            result = self.strategy.on_bar(market, portfolio)
+            if isinstance(result, _CoroutineType):
+                result = await result
+            return result  # type: ignore[return-value]
+        finally:
+            self._deactivate_builtin_restrictions()
 
     def _convert_signals(self, raw_signals: list[Any]) -> list[Signal]:
         validated: list[Signal] = []
@@ -271,6 +310,15 @@ class StrategySandbox:
         if self._original_open is not None:
             builtins.open = self._original_open
             self._original_open = None
+
+        if self._saved_builtins:
+            _sa = self._restore_setattr
+            for name, value in self._saved_builtins.items():
+                _sa(builtins, name, value)
+            self._saved_builtins.clear()
+
+        self._restore_resource_limits()
+
         if self._work_dir and os.path.isdir(self._work_dir):
             shutil.rmtree(self._work_dir, ignore_errors=True)
             self._work_dir = None

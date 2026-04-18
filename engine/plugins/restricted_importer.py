@@ -33,6 +33,28 @@ BLOCKED_MODULES: frozenset[str] = frozenset(
         "signal",
         "sys",
         "importlib",
+        "io",
+        "_io",
+        "codecs",
+        "fileinput",
+        "linecache",
+        "httpx",
+        "requests",
+        "aiohttp",
+        "urllib3",
+        "threading",
+        "_thread",
+        "gc",
+        "pickle",
+        "marshal",
+        "code",
+        "codeop",
+        "pty",
+        "webbrowser",
+        "_posixsubprocess",
+        "tempfile",
+        "inspect",
+        "ast",
     ]
 )
 
@@ -70,10 +92,9 @@ class RestrictedImporter(MetaPathFinder):
         fromlist: tuple[str, ...] = (),
         level: int = 0,
     ) -> object:
-        if level == 0:
-            root = name.split(".", maxsplit=1)[0]
-            if root in self.blocked:
-                raise ImportError(f"Module '{name}' is blocked in strategy sandbox")
+        root = name.split(".", maxsplit=1)[0]
+        if root in self.blocked:
+            raise ImportError(f"Module '{name}' is blocked in strategy sandbox")
         return self._original_import(name, globals_, locals_, fromlist, level)
 
     def install(self) -> None:
