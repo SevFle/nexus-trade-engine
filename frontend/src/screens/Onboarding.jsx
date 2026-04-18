@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -49,6 +49,10 @@ export default function Onboarding() {
     navigate("/");
   };
 
+  useEffect(() => {
+    if (requiredDocs.length === 0 && !isLoading) navigate("/");
+  }, [requiredDocs, isLoading, navigate]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-nx-black">
@@ -58,7 +62,6 @@ export default function Onboarding() {
   }
 
   if (requiredDocs.length === 0) {
-    navigate("/");
     return null;
   }
 

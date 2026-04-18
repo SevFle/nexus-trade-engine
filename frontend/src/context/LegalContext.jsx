@@ -3,6 +3,8 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
+  useRef,
   useState,
 } from "react";
 import { useLegalDocuments, useAcceptLegal } from "../hooks/useLegal";
@@ -12,20 +14,24 @@ const LegalContext = createContext(null);
 export function LegalProvider({ children }) {
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [pendingDocs, setPendingDocs] = useState([]);
+  const hasConsentedRef = useRef(false);
   const { data } = useLegalDocuments();
   const documents = data ?? [];
   const acceptMutation = useAcceptLegal();
 
-  useEffect(() => {
-    if (!Array.isArray(documents)) return;
-    const required = documents.filter(
+  const requiredPending = useMemo(() => {
+    if (!Array.isArray(documents)) return [];
+    return documents.filter(
       (d) => d.needs_re_acceptance || (d.requires_acceptance && !d.accepted)
     );
-    if (required.length > 0) {
-      setPendingDocs(required);
+  }, [documents]);
+
+  useEffect(() => {
+    if (requiredPending.length > 0 && !hasConsentedRef.current) {
+      setPendingDocs(requiredPending);
       setShowConsentModal(true);
     }
-  }, [documents]);
+  }, [requiredPending]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -37,6 +43,7 @@ export function LegalProvider({ children }) {
   }, []);
 
   const handleAccept = useCallback(async () => {
+    hasConsentedRef.current = true;
     const acceptances = pendingDocs.map((d) => ({
       document_slug: d.slug,
       version: d.version,
