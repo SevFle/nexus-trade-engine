@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import { useLegalDocuments, useAcceptLegal } from "../hooks/useLegal";
@@ -12,31 +13,42 @@ const LegalContext = createContext(null);
 export function LegalProvider({ children }) {
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [pendingDocs, setPendingDocs] = useState([]);
-  const { data: documents = [] } = useLegalDocuments();
+  const documents = useLegalDocuments().data || [];
   const acceptMutation = useAcceptLegal();
 
+  const requiredPending = useMemo(
+    () =>
+      documents.filter(
+        (d) => d.needs_re_acceptance || (d.requires_acceptance && !d.accepted)
+      ),
+    [documents]
+  );
+
   useEffect(() => {
-    if (!Array.isArray(documents)) return;
-    const required = documents.filter((d) => d.requires_acceptance);
-    if (required.length > 0) {
-      setPendingDocs(required);
+    if (requiredPending.length > 0) {
+      setPendingDocs(requiredPending);
       setShowConsentModal(true);
     }
-  }, [documents]);
+  }, [requiredPending]);
 
   useEffect(() => {
     const handler = (e) => {
-      setPendingDocs(e.detail);
+      const slugs = Array.isArray(e.detail) ? e.detail : [];
+      const docs = slugs.map((slug) => {
+        const found = documents.find((d) => d.slug === slug);
+        return found || { slug, title: slug, current_version: "0.0.0" };
+      });
+      setPendingDocs(docs);
       setShowConsentModal(true);
     };
     window.addEventListener("legal:consent-required", handler);
     return () => window.removeEventListener("legal:consent-required", handler);
-  }, []);
+  }, [documents]);
 
   const handleAccept = useCallback(async () => {
     const acceptances = pendingDocs.map((d) => ({
       document_slug: d.slug,
-      version: d.version,
+      document_version: d.current_version,
     }));
     await acceptMutation.mutateAsync(acceptances);
     setPendingDocs([]);

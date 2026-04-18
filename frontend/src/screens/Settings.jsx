@@ -3,7 +3,8 @@ import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
 import { Link } from "react-router-dom";
 
 export default function Settings() {
-  const { data: documents = [], isLoading: docsLoading } = useLegalDocuments();
+  const documents = useLegalDocuments().data || [];
+  const docsLoading = useLegalDocuments().isLoading;
   const { data: acceptancesData, isLoading: accLoading } = useMyAcceptances();
   const acceptances = acceptancesData?.acceptances || [];
 
@@ -39,7 +40,7 @@ export default function Settings() {
                     {doc.title || doc.slug}
                   </span>
                   <span className="text-label font-mono uppercase text-nx-text-disabled">
-                    v{doc.version}
+                    v{doc.current_version}
                   </span>
                 </Link>
               ))}
@@ -68,17 +69,17 @@ export default function Settings() {
             </span>
           ) : (
             <div className="bg-nx-surface border border-nx-border rounded-2xl">
-              {acceptances.map((acc, i) => (
+              {acceptances.map((acc) => (
                 <div
-                  key={`${acc.document_slug}-${acc.accepted_at}-${i}`}
+                  key={acc.id || `${acc.document_slug}-${acc.accepted_at}`}
                   className="flex items-center justify-between p-lg border-b border-nx-border last:border-b-0"
                 >
                   <div>
                     <span className="text-body font-body text-nx-text-primary block">
-                      {acc.document_title || acc.document_slug}
+                      {acc.document_slug}
                     </span>
                     <span className="text-label font-mono text-nx-text-disabled">
-                      v{acc.version}
+                      v{acc.document_version}
                     </span>
                   </div>
                   <span className="text-label font-mono text-nx-text-secondary">

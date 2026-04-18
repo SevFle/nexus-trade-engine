@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import clsx from "clsx";
 
@@ -13,23 +13,60 @@ export function Modal({
   const dialogRef = useRef(null);
   const previousFocus = useRef(null);
 
+  const getFocusableElements = useCallback(() => {
+    if (!dialogRef.current) return [];
+    return Array.from(
+      dialogRef.current.querySelectorAll(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((el) => !el.hasAttribute("disabled"));
+  }, []);
+
   useEffect(() => {
     if (open) {
       previousFocus.current = document.activeElement;
-      dialogRef.current?.focus();
+      requestAnimationFrame(() => {
+        const focusable = getFocusableElements();
+        if (focusable.length > 0) {
+          focusable[0].focus();
+        } else {
+          dialogRef.current?.focus();
+        }
+      });
     } else {
       previousFocus.current?.focus();
     }
-  }, [open]);
+  }, [open, getFocusableElements]);
 
   useEffect(() => {
     if (!open) return;
     const handleEsc = (e) => {
       if (e.key === "Escape") onClose?.();
     };
+    const handleTab = (e) => {
+      if (e.key !== "Tab") return;
+      const focusable = getFocusableElements();
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     window.addEventListener("keydown", handleEsc);
-    return () => window.removeEventListener("keydown", handleEsc);
-  }, [open, onClose]);
+    window.addEventListener("keydown", handleTab);
+    return () => {
+      window.removeEventListener("keydown", handleEsc);
+      window.removeEventListener("keydown", handleTab);
+    };
+  }, [open, onClose, getFocusableElements]);
 
   if (!open) return null;
 

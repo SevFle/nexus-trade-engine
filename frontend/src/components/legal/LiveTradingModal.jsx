@@ -1,14 +1,18 @@
 import { useState } from "react";
 import { Modal } from "../feedback/Modal";
-import { useAcceptLegal } from "../../hooks/useLegal";
+import { useAcceptLegal, useLegalDocuments } from "../../hooks/useLegal";
 
 export function LiveTradingModal({ open, onAccept, onClose }) {
   const [checked, setChecked] = useState(false);
   const acceptMutation = useAcceptLegal();
+  const { data: documents = [] } = useLegalDocuments();
+
+  const riskDoc = documents.find((d) => d.slug === "risk-disclaimer");
+  const riskVersion = riskDoc?.current_version || "1.0.0";
 
   const handleAccept = async () => {
     await acceptMutation.mutateAsync([
-      { document_slug: "risk-disclaimer", version: "latest" },
+      { document_slug: "risk-disclaimer", document_version: riskVersion },
     ]);
     onAccept();
   };

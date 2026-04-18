@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { useLegalDocument } from "../../hooks/useLegal";
 import { LoadingSpinner } from "../feedback/LoadingSpinner";
@@ -7,9 +8,11 @@ export function LegalDocumentViewer({ slug }) {
   const { data, isLoading, error } = useLegalDocument(slug);
 
   const htmlContent = useMemo(() => {
-    if (!data?.content) return "";
-    return marked.parse(data.content, { async: false });
-  }, [data?.content]);
+    const raw = data?.content_markdown;
+    if (!raw) return "";
+    const html = marked.parse(raw, { async: false });
+    return DOMPurify.sanitize(html);
+  }, [data?.content_markdown]);
 
   if (isLoading) {
     return (

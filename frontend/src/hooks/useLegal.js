@@ -11,6 +11,7 @@ export function useLegalDocuments() {
   return useQuery({
     queryKey: ["legal", "documents"],
     queryFn: fetchLegalDocuments,
+    select: (data) => data.documents || [],
   });
 }
 
