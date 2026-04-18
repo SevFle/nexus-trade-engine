@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid  # noqa: TC003
 from datetime import UTC
 from datetime import datetime as dt
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import structlog
@@ -10,6 +11,7 @@ from fastapi import HTTPException
 from packaging.version import Version
 from sqlalchemy import select
 
+from engine.config import settings
 from engine.db.models import (
     DataProviderAttribution,
     LegalAcceptance,
@@ -127,8 +129,19 @@ async def get_document_content(
         return None
     if version and version != doc.current_version:
         return None
+    resolved_path = Path(doc.file_path).resolve()
+    legal_root = Path(settings.legal_documents_dir).resolve()
+    if not resolved_path.is_relative_to(legal_root):
+        logger.error(
+            "legal.path_traversal_blocked",
+            path=doc.file_path,
+            resolved=str(resolved_path),
+            legal_root=str(legal_root),
+            slug=slug,
+        )
+        return None
     try:
-        with open(doc.file_path) as f:
+        with open(resolved_path) as f:
             markdown = f.read()
     except FileNotFoundError:
         logger.exception("legal.file_not_found", path=doc.file_path, slug=slug)

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 
 from engine.config import settings
 from engine.deps import get_db
@@ -23,14 +24,20 @@ if TYPE_CHECKING:
 router = APIRouter()
 logger = structlog.get_logger()
 
+_MD_SPECIAL_RE = re.compile(r"([\\`*_{}\[\]()#+\-.!|~>])")
+
+
+def _escape_markdown(value: str) -> str:
+    return _MD_SPECIAL_RE.sub(r"\\\1", value)
+
 
 def _apply_substitutions(content: str, effective_date: str = "") -> str:
     return (
-        content.replace("{{OPERATOR_NAME}}", settings.operator_name)
-        .replace("{{OPERATOR_EMAIL}}", settings.operator_email)
-        .replace("{{OPERATOR_URL}}", settings.operator_url)
-        .replace("{{JURISDICTION}}", settings.jurisdiction)
-        .replace("{{PLATFORM_FEE_PERCENT}}", str(settings.platform_fee_percent))
+        content.replace("{{OPERATOR_NAME}}", _escape_markdown(settings.operator_name))
+        .replace("{{OPERATOR_EMAIL}}", _escape_markdown(settings.operator_email))
+        .replace("{{OPERATOR_URL}}", _escape_markdown(settings.operator_url))
+        .replace("{{JURISDICTION}}", _escape_markdown(settings.jurisdiction))
+        .replace("{{PLATFORM_FEE_PERCENT}}", _escape_markdown(str(settings.platform_fee_percent)))
         .replace("{{EFFECTIVE_DATE}}", effective_date)
     )
 
@@ -54,9 +61,12 @@ async def list_documents(
     return DocumentListResponse(documents=summaries)
 
 
-@router.get("/api/v1/legal/documents/{slug}", response_model=DocumentDetailResponse)
+@router.get(
+    "/api/v1/legal/documents/{slug}",
+    response_model=DocumentDetailResponse,
+)
 async def get_document(
-    slug: str,
+    slug: str = Path(pattern=r"^[a-z0-9-]+$"),
     version: str | None = Query(None),
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> DocumentDetailResponse:
