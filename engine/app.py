@@ -54,6 +54,9 @@ def _build_auth_registry() -> AuthProviderRegistry:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
     setup_tracing()
+    if not settings.is_test and not settings.secret_key:
+        msg = "NEXUS_SECRET_KEY must be set outside the test environment"
+        raise ValueError(msg)
     app.state.valkey = Valkey.from_url(settings.valkey_url)
     app.state.auth_registry = _build_auth_registry()
     logger.info("auth.providers_loaded", providers=list(app.state.auth_registry.providers.keys()))

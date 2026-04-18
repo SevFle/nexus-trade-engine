@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     platform_fee_percent: int = 30
 
     # Auth
-    secret_key: str = "change-me-in-production"
+    secret_key: str = ""
     secret_key_previous: str = ""
     jwt_access_token_expire_minutes: int = 60
     jwt_refresh_token_expire_days: int = 7

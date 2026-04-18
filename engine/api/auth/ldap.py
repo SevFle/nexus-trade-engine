@@ -31,15 +31,17 @@ class LDAPAuthProvider(IAuthProvider):
 
         try:
             import ldap
+            from ldap.filter import escape_filter_chars
 
             conn = ldap.initialize(settings.ldap_server_url)
             conn.set_option(ldap.OPT_NETWORK_TIMEOUT, 10)
             conn.set_option(ldap.OPT_TIMEOUT, 10)
 
-            user_dn = f"{settings.ldap_bind_dn.replace('{{username}}', username)}"
+            safe_username = escape_filter_chars(username)
+            user_dn = f"{settings.ldap_bind_dn.replace('{{username}}', safe_username)}"
             conn.simple_bind_s(user_dn, password)
 
-            search_filter = f"(uid={username})"
+            search_filter = f"(uid={safe_username})"
             results = conn.search_s(
                 settings.ldap_search_base,
                 ldap.SCOPE_SUBTREE,

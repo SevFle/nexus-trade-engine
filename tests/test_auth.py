@@ -74,7 +74,7 @@ async def auth_db(auth_engine) -> AsyncIterator[AsyncSession]:
 
 
 @pytest.fixture
-async def auth_client(auth_db: AsyncSession) -> AsyncIterator[AsyncClient]:
+async def auth_client(auth_db: AsyncSession, _set_test_settings) -> AsyncIterator[AsyncClient]:
 
     from engine.api.auth.local import LocalAuthProvider
     from engine.api.auth.registry import AuthProviderRegistry
