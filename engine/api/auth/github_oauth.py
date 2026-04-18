@@ -107,10 +107,13 @@ class GitHubAuthProvider(IAuthProvider):
             ),
         )
 
-    def get_authorize_url(self) -> str:
-        return (
+    def get_authorize_url(self, state: str = "") -> str:
+        url = (
             f"https://github.com/login/oauth/authorize"
             f"?client_id={settings.github_client_id}"
             f"&redirect_uri={settings.github_redirect_uri}"
             f"&scope=user:email"
         )
+        if state:
+            url += f"&state={state}"
+        return url

@@ -19,14 +19,16 @@ logger = structlog.get_logger()
 
 router = APIRouter()
 
-_backtest_results: dict[str, tuple[float, dict[str, Any]]] = {}
+_backtest_results: dict[str, tuple[float, str, dict[str, Any]]] = {}
 
 _RESULTS_TTL_SECONDS = 3600
 
 
 def _evict_expired_results() -> None:
     now = time.monotonic()
-    expired = [k for k, (ts, _) in _backtest_results.items() if now - ts > _RESULTS_TTL_SECONDS]
+    expired = [
+        k for k, (ts, _uid, _data) in _backtest_results.items() if now - ts > _RESULTS_TTL_SECONDS
+    ]
     for k in expired:
         del _backtest_results[k]
     if expired:
@@ -127,9 +129,11 @@ class BacktestResultResponse(BaseModel):
 async def _run_backtest_background(
     backtest_id: str,
     request: BacktestRequest,
+    user_id: str,
 ) -> None:
     _backtest_results[backtest_id] = (
         time.monotonic(),
+        user_id,
         {
             "status": "running",
             "strategy_name": request.strategy_name,
@@ -159,6 +163,7 @@ async def _run_backtest_background(
 
         _backtest_results[backtest_id] = (
             time.monotonic(),
+            user_id,
             {
                 "status": "completed",
                 "strategy_name": request.strategy_name,
@@ -182,6 +187,7 @@ async def _run_backtest_background(
         )
         _backtest_results[backtest_id] = (
             time.monotonic(),
+            user_id,
             {
                 "status": "failed",
                 "strategy_name": request.strategy_name,
@@ -203,6 +209,7 @@ async def run_backtest(
         _run_backtest_background,
         backtest_id,
         request,
+        str(user.id),
     )
     return BacktestResponse(status="accepted", backtest_id=backtest_id)
 
@@ -234,10 +241,25 @@ async def get_backtest_result(
             ).model_dump(),
         )
 
-    stored = entry[1]
-    status = stored.get("status", "unknown")
+    stored_user_id, stored = entry[1], entry[2]
+    if stored_user_id != str(user.id):
+        return JSONResponse(
+            status_code=404,
+            content=BacktestResultResponse(
+                status="not_found",
+                strategy_name="",
+                symbol="",
+                initial_capital=0.0,
+                final_value=0.0,
+                metrics=_empty_metrics(),
+                equity_curve=[],
+                drawdown_curve=[],
+                error=f"Backtest {backtest_id} not found",
+            ).model_dump(),
+        )
+    bt_status = stored.get("status", "unknown")
 
-    if status == "running":
+    if bt_status == "running":
         return JSONResponse(
             status_code=202,
             content=BacktestResultResponse(
@@ -252,7 +274,7 @@ async def get_backtest_result(
             ).model_dump(),
         )
 
-    if status == "failed":
+    if bt_status == "failed":
         return JSONResponse(
             status_code=200,
             content=BacktestResultResponse(

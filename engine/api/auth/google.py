@@ -101,11 +101,14 @@ class GoogleAuthProvider(IAuthProvider):
             ),
         )
 
-    def get_authorize_url(self) -> str:
-        return (
+    def get_authorize_url(self, state: str = "") -> str:
+        url = (
             f"https://accounts.google.com/o/oauth2/v2/auth"
             f"?client_id={settings.google_client_id}"
             f"&redirect_uri={settings.google_redirect_uri}"
             f"&response_type=code"
             f"&scope=openid email profile"
         )
+        if state:
+            url += f"&state={state}"
+        return url

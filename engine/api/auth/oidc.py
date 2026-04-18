@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -20,6 +19,7 @@ logger = structlog.get_logger()
 class OIDCAuthProvider(IAuthProvider):
     def __init__(self) -> None:
         self._discovery_cache: dict[str, Any] | None = None
+        self._jwks_cache: dict[str, Any] | None = None
 
     @property
     def name(self) -> str:
@@ -35,6 +35,19 @@ class OIDCAuthProvider(IAuthProvider):
             resp.raise_for_status()
             self._discovery_cache = resp.json()
         return self._discovery_cache
+
+    async def _get_jwks(self) -> dict[str, Any]:
+        if self._jwks_cache is not None:
+            return self._jwks_cache
+        import httpx
+
+        discovery = await self._get_discovery()
+        jwks_uri = discovery["jwks_uri"]
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(jwks_uri)
+            resp.raise_for_status()
+            self._jwks_cache = resp.json()
+        return self._jwks_cache
 
     async def authenticate(self, **kwargs: Any) -> AuthResult:
         code = kwargs.get("code")
@@ -63,8 +76,13 @@ class OIDCAuthProvider(IAuthProvider):
                 tokens = token_resp.json()
 
             id_token = tokens.get("id_token", "")
-            claims = jose_jwt.get_unverified_claims(id_token)
-            claims_data = json.loads(claims)
+            jwks = await self._get_jwks()
+            claims_data = jose_jwt.decode(
+                id_token,
+                jwks,
+                algorithms=["RS256"],
+                audience=settings.oidc_client_id,
+            )
 
         except Exception as exc:
             logger.exception("auth.oidc.failed", error=str(exc))
@@ -125,13 +143,16 @@ class OIDCAuthProvider(IAuthProvider):
             ),
         )
 
-    async def get_authorize_url(self) -> str:
+    async def get_authorize_url(self, state: str = "") -> str:
         discovery = await self._get_discovery()
         auth_endpoint = discovery["authorization_endpoint"]
-        return (
+        url = (
             f"{auth_endpoint}"
             f"?client_id={settings.oidc_client_id}"
             f"&redirect_uri={settings.oidc_redirect_uri}"
             f"&response_type=code"
             f"&scope=openid email profile"
         )
+        if state:
+            url += f"&state={state}"
+        return url

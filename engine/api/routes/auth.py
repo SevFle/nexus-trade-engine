@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -174,8 +175,10 @@ async def refresh_token(
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     token_hash_val = hash_token(req.refresh_token)
+    now = datetime.now(tz=UTC)
+
     result = await db.execute(
-        select(RefreshToken).where(RefreshToken.token_hash == token_hash_val)
+        select(RefreshToken).where(RefreshToken.token_hash == token_hash_val).with_for_update()
     )
     stored_token = result.scalar_one_or_none()
 
@@ -184,14 +187,12 @@ async def refresh_token(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
 
-    now = datetime.now(tz=UTC)
-
     if stored_token.revoked_at is not None:
-        family_result = await db.execute(
-            select(RefreshToken).where(RefreshToken.user_id == stored_token.user_id)
+        await db.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == stored_token.user_id)
+            .values(revoked_at=now)
         )
-        for ft in family_result.scalars().all():
-            ft.revoked_at = now
         await db.flush()
         logger.warning("auth.token_replay_detected", user_id=str(stored_token.user_id))
         raise HTTPException(
@@ -268,9 +269,11 @@ async def authorize_provider(provider: str, request: Request) -> dict[str, str]:
             status_code=status.HTTP_404_NOT_FOUND, detail=f"Provider '{provider}' not configured"
         )
 
+    state = secrets.token_urlsafe(32)
+
     url = ""
     if hasattr(auth_provider, "get_authorize_url"):
-        maybe_url = auth_provider.get_authorize_url()
+        maybe_url = auth_provider.get_authorize_url(state=state)
         if callable(maybe_url) and not isinstance(maybe_url, str):
             maybe_url = await maybe_url
         url = maybe_url
@@ -281,17 +284,25 @@ async def authorize_provider(provider: str, request: Request) -> dict[str, str]:
             detail="Could not build authorize URL",
         )
 
-    return {"authorize_url": str(url)}
+    return {"authorize_url": str(url), "state": state}
 
 
 @router.get("/{provider}/callback")
 async def provider_callback(
     provider: str,
     code: str,
-    request: Request,
+    state: str = "",
+    request: Request = None,  # type: ignore[assignment]
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    registry = _get_registry(request)
+    if state and request is not None:
+        cookie_state = request.cookies.get(f"oauth_state_{provider}")
+        if not cookie_state or not secrets.compare_digest(cookie_state, state):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Invalid OAuth state parameter"
+            )
+
+    registry = _get_registry(request)  # type: ignore[arg-type]
     result = await registry.authenticate(provider, code=code, db=db)
     if not result.success:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=result.error)

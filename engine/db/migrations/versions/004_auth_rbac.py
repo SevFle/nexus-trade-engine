@@ -33,8 +33,6 @@ def upgrade() -> None:
         "ON users (auth_provider, external_id) WHERE external_id IS NOT NULL"
     )
 
-    op.execute("UPDATE users SET role = 'admin' WHERE role = 'user'")
-
     op.create_table(
         "refresh_tokens",
         sa.Column("id", sa.UUID(as_uuid=True), primary_key=True),
