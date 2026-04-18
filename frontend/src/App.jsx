@@ -1,9 +1,14 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AuthProvider } from "./auth/AuthContext";
+import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { Shell } from "./components/layout/Shell";
 import { LegalProvider } from "./context/LegalContext";
 import { ConsentModal } from "./components/legal/ConsentModal";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import OAuthCallback from "./pages/OAuthCallback";
 import Dashboard from "./screens/Dashboard";
 import Strategies from "./screens/Strategies";
 import Backtest from "./screens/Backtest";
@@ -37,24 +42,36 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <LegalProvider>
-          <ConsentModal />
-          <Routes>
-            <Route path="/onboarding" element={<Onboarding />} />
-            <Route element={<ShellLayout />}>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/strategies" element={<Strategies />} />
-              <Route path="/backtest" element={<Backtest />} />
-              <Route path="/marketplace" element={<Marketplace />} />
-              <Route path="/positions" element={<Positions />} />
-              <Route path="/costs" element={<CostAnalysis />} />
-              <Route path="/risk" element={<RiskMonitor />} />
-              <Route path="/dev" element={<DevConsole />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/legal/:slug" element={<LegalDocument />} />
-            </Route>
-          </Routes>
-        </LegalProvider>
+        <AuthProvider>
+          <LegalProvider>
+            <ConsentModal />
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/auth/callback" element={<OAuthCallback />} />
+              <Route path="/onboarding" element={<Onboarding />} />
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <ShellLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/strategies" element={<Strategies />} />
+                <Route path="/backtest" element={<Backtest />} />
+                <Route path="/marketplace" element={<Marketplace />} />
+                <Route path="/positions" element={<Positions />} />
+                <Route path="/costs" element={<CostAnalysis />} />
+                <Route path="/risk" element={<RiskMonitor />} />
+                <Route path="/dev" element={<DevConsole />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/legal/:slug" element={<LegalDocument />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            </Routes>
+          </LegalProvider>
+        </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
   );

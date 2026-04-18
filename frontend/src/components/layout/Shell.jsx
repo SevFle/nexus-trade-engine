@@ -1,8 +1,9 @@
 import React from "react";
-import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Zap, Rewind, Store, BarChart3, Shield, Terminal, DollarSign, Settings as SettingsIcon } from "lucide-react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { LayoutDashboard, Zap, Rewind, Store, BarChart3, Shield, Terminal, DollarSign, LogOut, Settings as SettingsIcon } from "lucide-react";
 import clsx from "clsx";
 import { useTheme } from "../../hooks/useTheme";
+import { useAuth } from "../../auth/useAuth";
 import { Footer } from "./Footer";
 
 const navItems = [
@@ -67,23 +68,54 @@ function Sidebar({ collapsed, onToggle }) {
 
       <div className="p-md border-t border-nx-border">
         {!collapsed && (
-          <span className="text-caption font-mono text-nx-text-disabled">v0.1.0</span>
+          <div className="flex items-center justify-between">
+            <span className="text-caption font-mono text-nx-text-disabled">v0.1.0</span>
+            <SidebarLogoutButton />
+          </div>
         )}
+        {collapsed && <SidebarLogoutButton />}
       </div>
     </nav>
+  );
+}
+
+function SidebarLogoutButton() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleLogout() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleLogout}
+      className="text-nx-text-secondary hover:text-nx-accent transition-colors flex items-center gap-xs"
+      title={user ? `Sign out ${user.email || user.display_name || ""}` : "Sign out"}
+    >
+      <LogOut size={14} strokeWidth={1.5} />
+    </button>
   );
 }
 
 export function Shell({ children }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const { mode, toggle } = useTheme();
+  const { user } = useAuth();
 
   return (
     <div className="flex min-h-screen bg-nx-black">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
       <div className="flex-1 flex flex-col overflow-hidden">
         <main className="flex-1 overflow-auto">
-          <div className="flex justify-end p-sm">
+          <div className="flex justify-between items-center p-sm">
+            {user && (
+              <span className="text-caption font-mono text-nx-text-disabled">
+                {user.display_name || user.email || ""}
+              </span>
+            )}
             <button
               type="button"
               onClick={toggle}
