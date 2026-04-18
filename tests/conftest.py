@@ -10,9 +10,14 @@ from engine.app import create_app
 from engine.config import settings
 from engine.db.models import Base
 from engine.deps import get_db
+from engine.legal.dependencies import require_legal_acceptance
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+
+async def _bypass_legal_acceptance():
+    return None
 
 
 @pytest.fixture(scope="session")
@@ -23,6 +28,7 @@ def anyio_backend():
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
     app = create_app()
+    app.dependency_overrides[require_legal_acceptance] = _bypass_legal_acceptance
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -60,6 +66,7 @@ async def db_client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[require_legal_acceptance] = _bypass_legal_acceptance
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

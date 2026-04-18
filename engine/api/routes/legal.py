@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import Path as PathParam
 
 from engine.deps import get_db
 from engine.legal.schemas import (
@@ -48,7 +49,7 @@ async def get_documents(
 
 @router.get("/documents/{slug}", response_model=LegalDocumentDetail)
 async def get_document_by_slug(
-    slug: str,
+    slug: str = PathParam(pattern=r"^[a-z0-9-]+$"),
     version: str | None = Query(None),
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> LegalDocumentDetail:

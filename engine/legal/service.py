@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, func, select
+from sqlalchemy.orm import aliased
 
 from engine.db.models import DataProviderAttribution, LegalAcceptance, LegalDocument
 
@@ -10,6 +11,24 @@ if TYPE_CHECKING:
     import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def _parse_version(version: str) -> tuple[int, ...]:
+    parts: list[int] = []
+    for part in version.split("."):
+        try:
+            parts.append(int(part))
+        except ValueError:
+            parts.append(0)
+    return tuple(parts)
+
+
+def _version_lt(a: str, b: str) -> bool:
+    return _parse_version(a) < _parse_version(b)
+
+
+def _version_eq(a: str, b: str) -> bool:
+    return _parse_version(a) == _parse_version(b)
 
 
 async def list_documents(
@@ -22,6 +41,31 @@ async def list_documents(
         stmt = stmt.where(LegalDocument.category == category)
     result = await session.execute(stmt)
     documents = result.scalars().all()
+
+    latest_acceptances: dict[str, LegalAcceptance] = {}
+    if user_id:
+        sub = (
+            select(
+                LegalAcceptance.document_slug,
+                LegalAcceptance.document_version,
+                LegalAcceptance.accepted_at,
+            )
+            .where(
+                and_(
+                    LegalAcceptance.user_id == user_id,
+                    LegalAcceptance.revoked_at.is_(None),
+                )
+            )
+            .distinct(LegalAcceptance.document_slug)
+            .order_by(
+                LegalAcceptance.document_slug,
+                LegalAcceptance.accepted_at.desc(),
+            )
+        )
+        sub_alias = aliased(LegalAcceptance, sub.subquery())
+        la_result = await session.execute(select(sub_alias))
+        for row in la_result.scalars().all():
+            latest_acceptances[row.document_slug] = row
 
     response = []
     for doc in documents:
@@ -38,25 +82,11 @@ async def list_documents(
         }
 
         if user_id and doc.requires_acceptance:
-            acc_stmt = (
-                select(LegalAcceptance)
-                .where(
-                    and_(
-                        LegalAcceptance.user_id == user_id,
-                        LegalAcceptance.document_slug == doc.slug,
-                        LegalAcceptance.revoked_at.is_(None),
-                    )
-                )
-                .order_by(LegalAcceptance.accepted_at.desc())
-                .limit(1)
-            )
-            acc_result = await session.execute(acc_stmt)
-            latest = acc_result.scalar_one_or_none()
-
+            latest = latest_acceptances.get(doc.slug)
             if latest:
                 item["accepted"] = True
                 item["accepted_version"] = latest.document_version
-                if latest.document_version != doc.current_version:
+                if _version_lt(latest.document_version, doc.current_version):
                     item["needs_re_acceptance"] = True
         elif user_id and not doc.requires_acceptance:
             item["accepted"] = True
@@ -82,12 +112,16 @@ async def get_document_content(
     from pathlib import Path  # noqa: PLC0415
 
     base_dir = Path(__file__).resolve().parent.parent.parent
-    file_path = base_dir / doc.file_path
+    resolved_path = (base_dir / doc.file_path).resolve()
+    legal_root = (base_dir / "legal").resolve()
 
-    if not file_path.is_file():
+    if not resolved_path.is_relative_to(legal_root):
+        raise ValueError(f"file_path escapes legal directory: {doc.file_path}")
+
+    if not resolved_path.is_file():
         return None
 
-    content = file_path.read_text(encoding="utf-8")
+    content = resolved_path.read_text(encoding="utf-8")
 
     from engine.legal.sync import apply_substitutions, parse_front_matter  # noqa: PLC0415
 
@@ -116,30 +150,54 @@ async def record_acceptances(
     user_agent: str,
     context: str | None = None,
 ) -> list[dict]:
+    slugs = [a["document_slug"] for a in acceptances]
+    doc_stmt = select(LegalDocument).where(LegalDocument.slug.in_(slugs))
+    doc_result = await session.execute(doc_stmt)
+    doc_map = {d.slug: d for d in doc_result.scalars().all()}
+
+    existing_stmt = select(LegalAcceptance).where(
+        and_(
+            LegalAcceptance.user_id == user_id,
+            LegalAcceptance.document_slug.in_(slugs),
+            LegalAcceptance.revoked_at.is_(None),
+        )
+    )
+    existing_result = await session.execute(existing_stmt)
+    existing_map: dict[str, LegalAcceptance] = {}
+    for acc in existing_result.scalars().all():
+        key = f"{acc.document_slug}:{acc.document_version}"
+        existing_map[key] = acc
+
+    prior_count_stmt = (
+        select(
+            LegalAcceptance.document_slug,
+            func.count(),
+        )
+        .where(
+            and_(
+                LegalAcceptance.user_id == user_id,
+                LegalAcceptance.document_slug.in_(slugs),
+                LegalAcceptance.revoked_at.is_(None),
+            )
+        )
+        .group_by(LegalAcceptance.document_slug)
+    )
+    prior_result = await session.execute(prior_count_stmt)
+    prior_counts: dict[str, int] = dict(prior_result.all())
+
     accepted = []
     for item in acceptances:
         slug = item["document_slug"]
         ver = item["document_version"]
 
-        doc_stmt = select(LegalDocument).where(LegalDocument.slug == slug)
-        doc_result = await session.execute(doc_stmt)
-        doc = doc_result.scalar_one_or_none()
+        doc = doc_map.get(slug)
         if doc is None:
             continue
-        if doc.current_version != ver:
+        if not _version_eq(doc.current_version, ver):
             continue
 
-        existing_stmt = select(LegalAcceptance).where(
-            and_(
-                LegalAcceptance.user_id == user_id,
-                LegalAcceptance.document_slug == slug,
-                LegalAcceptance.document_version == ver,
-                LegalAcceptance.revoked_at.is_(None),
-            )
-        )
-        existing_result = await session.execute(existing_stmt)
-        existing = existing_result.scalar_one_or_none()
-
+        key = f"{slug}:{ver}"
+        existing = existing_map.get(key)
         if existing:
             accepted.append(
                 {
@@ -151,20 +209,7 @@ async def record_acceptances(
             continue
 
         if context is None:
-            any_prior_stmt = (
-                select(func.count())
-                .select_from(LegalAcceptance)
-                .where(
-                    and_(
-                        LegalAcceptance.user_id == user_id,
-                        LegalAcceptance.document_slug == slug,
-                        LegalAcceptance.revoked_at.is_(None),
-                    )
-                )
-            )
-            any_prior_result = await session.execute(any_prior_stmt)
-            has_prior = any_prior_result.scalar() > 0
-            detected_context = "re-acceptance" if has_prior else "onboarding"
+            detected_context = "re-acceptance" if prior_counts.get(slug, 0) > 0 else "onboarding"
         else:
             detected_context = context
 
@@ -207,23 +252,36 @@ async def get_pending_acceptances(
     session: AsyncSession,
     user_id: uuid.UUID,
 ) -> list[LegalDocument]:
+    accepted_stmt = (
+        select(
+            LegalAcceptance.document_slug,
+            LegalAcceptance.document_version,
+        )
+        .where(
+            and_(
+                LegalAcceptance.user_id == user_id,
+                LegalAcceptance.revoked_at.is_(None),
+            )
+        )
+        .distinct(LegalAcceptance.document_slug)
+        .order_by(
+            LegalAcceptance.document_slug,
+            LegalAcceptance.accepted_at.desc(),
+        )
+    )
+    accepted_result = await session.execute(accepted_stmt)
+    accepted_versions: dict[str, str] = {
+        row.document_slug: row.document_version for row in accepted_result.all()
+    }
+
     docs_stmt = select(LegalDocument).where(LegalDocument.requires_acceptance.is_(True))
     docs_result = await session.execute(docs_stmt)
     docs = docs_result.scalars().all()
 
     pending = []
     for doc in docs:
-        acc_stmt = select(LegalAcceptance).where(
-            and_(
-                LegalAcceptance.user_id == user_id,
-                LegalAcceptance.document_slug == doc.slug,
-                LegalAcceptance.document_version == doc.current_version,
-                LegalAcceptance.revoked_at.is_(None),
-            )
-        )
-        acc_result = await session.execute(acc_stmt)
-        has_accepted = acc_result.scalar_one_or_none() is not None
-        if not has_accepted:
+        accepted_ver = accepted_versions.get(doc.slug)
+        if accepted_ver is None or _version_lt(accepted_ver, doc.current_version):
             pending.append(doc)
 
     return pending
