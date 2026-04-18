@@ -5,16 +5,17 @@ import {
   refreshToken as apiRefreshToken,
   fetchMe,
   logout as apiLogout,
-  getAccessToken,
   setAccessToken,
   clearAccessToken,
   handleOAuthCallback,
-  getOAuthAuthorizeUrl,
+  fetchOAuthAuthorizeUrl,
 } from "../api/auth";
 
 const AuthContext = createContext(null);
 
 const TOKEN_REFRESH_MARGIN_MS = 60 * 1000;
+const MAX_REFRESH_RETRIES = 2;
+const REFRESH_RETRY_BASE_DELAY_MS = 1000;
 
 function parseJwtExpiry(token) {
   try {
@@ -25,12 +26,17 @@ function parseJwtExpiry(token) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [providers, setProviders] = useState(["local"]);
   const refreshTokenRef = useRef(null);
   const refreshTimerRef = useRef(null);
+  const refreshMutexRef = useRef(null);
 
   const clearSession = useCallback(() => {
     setUser(null);
@@ -39,6 +45,41 @@ export function AuthProvider({ children }) {
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = null;
+    }
+    refreshMutexRef.current = null;
+  }, []);
+
+  const doRefresh = useCallback(async () => {
+    if (refreshMutexRef.current) {
+      return refreshMutexRef.current;
+    }
+
+    const promise = (async () => {
+      if (!refreshTokenRef.current) {
+        throw new Error("No refresh token");
+      }
+
+      for (let attempt = 0; attempt <= MAX_REFRESH_RETRIES; attempt += 1) {
+        try {
+          const data = await apiRefreshToken(refreshTokenRef.current);
+          setAccessToken(data.access_token);
+          refreshTokenRef.current = data.refresh_token;
+          return data;
+        } catch (err) {
+          const isLast = attempt === MAX_REFRESH_RETRIES;
+          if (isLast) throw err;
+          await sleep(REFRESH_RETRY_BASE_DELAY_MS * 2 ** attempt);
+        }
+      }
+    })();
+
+    refreshMutexRef.current = promise;
+
+    try {
+      const result = await promise;
+      return result;
+    } finally {
+      refreshMutexRef.current = null;
     }
   }, []);
 
@@ -57,18 +98,15 @@ export function AuthProvider({ children }) {
       if (delay <= 0) return;
 
       refreshTimerRef.current = setTimeout(async () => {
-        if (!refreshTokenRef.current) return;
         try {
-          const data = await apiRefreshToken(refreshTokenRef.current);
-          setAccessToken(data.access_token);
-          refreshTokenRef.current = data.refresh_token;
+          const data = await doRefresh();
           scheduleRefresh(data.access_token);
         } catch {
           clearSession();
         }
       }, delay);
     },
-    [clearSession],
+    [clearSession, doRefresh],
   );
 
   const loadUser = useCallback(async () => {
@@ -83,40 +121,20 @@ export function AuthProvider({ children }) {
   }, [clearSession]);
 
   useEffect(() => {
-    const storedRefresh = sessionStorage.getItem("nexus_refresh_token");
-    if (storedRefresh) {
-      refreshTokenRef.current = storedRefresh;
-      apiRefreshToken(storedRefresh)
-        .then((data) => {
-          setAccessToken(data.access_token);
-          refreshTokenRef.current = data.refresh_token;
-          sessionStorage.setItem("nexus_refresh_token", data.refresh_token);
-          scheduleRefresh(data.access_token);
-          return fetchMe();
-        })
-        .then((profile) => setUser(profile))
-        .catch(() => {
-          clearSession();
-          sessionStorage.removeItem("nexus_refresh_token");
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    setLoading(false);
 
     return () => {
       if (refreshTimerRef.current) {
         clearTimeout(refreshTimerRef.current);
       }
     };
-  }, [clearSession, scheduleRefresh]);
+  }, []);
 
   const login = useCallback(
     async (email, password) => {
       const data = await apiLogin(email, password);
       setAccessToken(data.access_token);
       refreshTokenRef.current = data.refresh_token;
-      sessionStorage.setItem("nexus_refresh_token", data.refresh_token);
       scheduleRefresh(data.access_token);
       await loadUser();
       return data;
@@ -132,8 +150,9 @@ export function AuthProvider({ children }) {
     [login],
   );
 
-  const startOAuth = useCallback((provider) => {
-    window.location.href = getOAuthAuthorizeUrl(provider);
+  const startOAuth = useCallback(async (provider) => {
+    const authorizeUrl = await fetchOAuthAuthorizeUrl(provider);
+    window.location.href = authorizeUrl;
   }, []);
 
   const handleCallback = useCallback(
@@ -141,7 +160,6 @@ export function AuthProvider({ children }) {
       const data = await handleOAuthCallback(provider, searchParams);
       setAccessToken(data.access_token);
       refreshTokenRef.current = data.refresh_token;
-      sessionStorage.setItem("nexus_refresh_token", data.refresh_token);
       scheduleRefresh(data.access_token);
       await loadUser();
       return data;
@@ -156,7 +174,6 @@ export function AuthProvider({ children }) {
       }
     } finally {
       clearSession();
-      sessionStorage.removeItem("nexus_refresh_token");
     }
   }, [clearSession]);
 
@@ -170,6 +187,7 @@ export function AuthProvider({ children }) {
     startOAuth,
     handleCallback,
     logout: logoutUser,
+    doRefresh,
     isAuthenticated: !!user,
   };
 
