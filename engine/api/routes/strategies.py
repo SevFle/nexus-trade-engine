@@ -2,8 +2,11 @@
 Strategy management API routes — install, configure, activate, monitor.
 """
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+
+from engine.api.auth.dependency import get_current_user
+from engine.db.models import User
 
 router = APIRouter()
 
@@ -13,14 +16,14 @@ class StrategyConfigRequest(BaseModel):
 
 
 @router.get("/")
-async def list_strategies(request: Request):
+async def list_strategies(request: Request, user: User = Depends(get_current_user)):
     """List all installed strategies and their status."""
     registry = request.app.state.plugin_registry
     return {"strategies": registry.list_all()}
 
 
 @router.get("/{strategy_id}")
-async def get_strategy(strategy_id: str, request: Request):
+async def get_strategy(strategy_id: str, request: Request, user: User = Depends(get_current_user)):
     """Get details for a specific strategy."""
     registry = request.app.state.plugin_registry
     entry = registry.get(strategy_id)
@@ -42,7 +45,12 @@ async def get_strategy(strategy_id: str, request: Request):
 
 
 @router.post("/{strategy_id}/activate")
-async def activate_strategy(strategy_id: str, config: StrategyConfigRequest, request: Request):
+async def activate_strategy(
+    strategy_id: str,
+    config: StrategyConfigRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+):
     """Initialize and activate a strategy with given configuration."""
     registry = request.app.state.plugin_registry
     entry = registry.get(strategy_id)
@@ -51,6 +59,7 @@ async def activate_strategy(strategy_id: str, config: StrategyConfigRequest, req
 
     try:
         from plugins.sdk import StrategyConfig
+
         strategy_config = StrategyConfig(
             strategy_id=strategy_id,
             params=config.params,
@@ -67,7 +76,11 @@ async def activate_strategy(strategy_id: str, config: StrategyConfigRequest, req
 
 
 @router.post("/{strategy_id}/deactivate")
-async def deactivate_strategy(strategy_id: str, request: Request):
+async def deactivate_strategy(
+    strategy_id: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+):
     """Deactivate and unload a strategy."""
     registry = request.app.state.plugin_registry
     await registry.unload(strategy_id)
@@ -75,7 +88,11 @@ async def deactivate_strategy(strategy_id: str, request: Request):
 
 
 @router.post("/{strategy_id}/reload")
-async def reload_strategy(strategy_id: str, request: Request):
+async def reload_strategy(
+    strategy_id: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+):
     """Hot-reload a strategy from disk."""
     registry = request.app.state.plugin_registry
     success = await registry.reload(strategy_id)
@@ -85,7 +102,11 @@ async def reload_strategy(strategy_id: str, request: Request):
 
 
 @router.get("/{strategy_id}/health")
-async def strategy_health(strategy_id: str, request: Request):
+async def strategy_health(
+    strategy_id: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+):
     """Get runtime health metrics for an active strategy."""
     registry = request.app.state.plugin_registry
     entry = registry.get(strategy_id)
