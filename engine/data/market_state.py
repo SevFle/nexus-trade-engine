@@ -14,6 +14,8 @@ from typing import Any
 import pandas as pd
 import structlog
 
+from engine.data.quality import DataQualityReport, DataValidator
+
 logger = structlog.get_logger()
 
 
@@ -142,9 +144,17 @@ class MarketState:
 class MarketStateBuilder:
     """Constructs validated MarketState instances from raw OHLCV data."""
 
-    def __init__(self, min_bars: int = 50, debug: bool = False) -> None:
+    def __init__(
+        self,
+        min_bars: int = 50,
+        debug: bool = False,
+        use_data_validator: bool = False,
+    ) -> None:
         self._min_bars = min_bars
         self._debug = debug
+        self._use_data_validator = use_data_validator
+        self._validator = DataValidator() if use_data_validator else None
+        self._last_report: DataQualityReport | None = None
 
     def build_for_backtest(
         self,
@@ -156,12 +166,23 @@ class MarketStateBuilder:
         volumes: dict[str, int] = {}
         ohlcv: dict[str, list[dict[str, Any]]] = {}
 
+        if self._use_data_validator:
+            self._last_report = DataQualityReport()
+
         for symbol in symbols:
             df = data.get(symbol)
             if df is None:
                 raise ValidationError(f"No data for symbol: {symbol}")
             df = self._slice_to_timestamp(df, timestamp)
             self._validate(df, symbol)
+
+            if self._validator and self._last_report is not None:
+                df = self._validator.validate(df, symbol, self._last_report)
+                if len(df) < self._min_bars:
+                    raise ValidationError(
+                        f"Insufficient bars after data cleaning for {symbol}: "
+                        f"{len(df)} < {self._min_bars}"
+                    )
 
             bars = self._df_to_bars(df)
             bars = bars[-self._min_bars :] if len(bars) > self._min_bars else bars
@@ -197,6 +218,9 @@ class MarketStateBuilder:
         volumes: dict[str, int] = {}
         ohlcv: dict[str, list[dict[str, Any]]] = {}
 
+        if self._use_data_validator:
+            self._last_report = DataQualityReport()
+
         latest_prices = await provider.get_multiple_prices(symbols)
         prices.update(latest_prices)
 
@@ -206,6 +230,10 @@ class MarketStateBuilder:
             df = await provider.get_ohlcv(symbol)
             if df is not None and not df.empty:
                 self._validate(df, symbol)
+
+                if self._validator and self._last_report is not None:
+                    df = self._validator.validate(df, symbol, self._last_report)
+
                 bars = self._df_to_bars(df)
                 bars = bars[-self._min_bars :]
                 if bars:
@@ -218,6 +246,9 @@ class MarketStateBuilder:
             volumes=volumes,
             ohlcv=ohlcv,
         )
+
+    def last_validation_report(self) -> DataQualityReport | None:
+        return self._last_report
 
     def _slice_to_timestamp(self, df: pd.DataFrame, timestamp: datetime) -> pd.DataFrame:
         ts = pd.Timestamp(timestamp)
