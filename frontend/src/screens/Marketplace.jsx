@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DisclaimerBanner } from "../components/legal/DisclaimerBanner";
 
 const CATEGORIES = ["ALL", "MOMENTUM", "MEAN REVERSION", "ARBITRAGE", "MACRO", "ML/AI"];
 
@@ -57,6 +58,14 @@ export default function Marketplace() {
             STRATEGY CATALOG
           </h1>
         </header>
+
+        <div className="mb-3xl">
+          <DisclaimerBanner variant="danger">
+            You are running third-party code in your environment. Nexus is not
+            responsible for the performance, safety, or behavior of
+            author-provided strategies. Review all code before installing.
+          </DisclaimerBanner>
+        </div>
 
         <section className="mb-2xl">
           <div className="flex items-center gap-md mb-lg">

@@ -3,6 +3,7 @@ import { StatRow } from "../components/primitives/StatRow";
 import { StatusBadge } from "../components/primitives/StatusBadge";
 import { Sparkline } from "../components/data/Sparkline";
 import { InlineStatus } from "../components/feedback/InlineStatus";
+import { AttributionStrip } from "../components/legal/AttributionStrip";
 
 const MOCK_PORTFOLIO = {
   value: "$2,847,391.44",
@@ -95,16 +96,19 @@ export default function Dashboard() {
         </section>
 
         <footer className="flex items-center justify-between border-t border-nx-border pt-md">
-          <span className="text-label font-mono uppercase text-nx-text-disabled">
-            LAST UPDATE: {new Date(lastUpdate).toLocaleTimeString("en-US", { hour12: false })}
-          </span>
-          {health ? (
-            <InlineStatus status={health.status === "ok" ? "ok" : "error"}>
-              {health.status === "ok" ? "ENGINE CONNECTED" : "ENGINE DISCONNECTED"}
-            </InlineStatus>
-          ) : (
-            <InlineStatus status="loading">CONNECTING</InlineStatus>
-          )}
+          <AttributionStrip />
+          <div className="flex items-center gap-lg">
+            <span className="text-label font-mono uppercase text-nx-text-disabled">
+              LAST UPDATE: {new Date(lastUpdate).toLocaleTimeString("en-US", { hour12: false })}
+            </span>
+            {health ? (
+              <InlineStatus status={health.status === "ok" ? "ok" : "error"}>
+                {health.status === "ok" ? "ENGINE CONNECTED" : "ENGINE DISCONNECTED"}
+              </InlineStatus>
+            ) : (
+              <InlineStatus status="loading">CONNECTING</InlineStatus>
+            )}
+          </div>
         </footer>
       </div>
     </div>
