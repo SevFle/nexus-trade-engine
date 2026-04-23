@@ -84,7 +84,7 @@ def upgrade() -> None:
             "display_contexts",
             postgresql.JSONB(),
             nullable=False,
-            server_default="'[]'",
+            server_default=sa.text("'[]'::jsonb"),
         ),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.Column(
