@@ -26,9 +26,10 @@ def upgrade() -> None:
         $$ LANGUAGE plpgsql
         """
     )
+    op.execute("DROP TRIGGER IF EXISTS no_acceptance_update ON legal_acceptances")
     op.execute(
         """
-        CREATE TRIGGER IF NOT EXISTS no_acceptance_update
+        CREATE TRIGGER no_acceptance_update
         BEFORE UPDATE OR DELETE ON legal_acceptances
         FOR EACH ROW EXECUTE FUNCTION prevent_acceptance_modification()
         """
