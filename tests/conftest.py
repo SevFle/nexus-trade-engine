@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING
 
 import pytest
@@ -7,13 +8,24 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from engine.api.auth.dependency import get_current_user
 from engine.app import create_app
 from engine.config import settings
-from engine.db.models import Base
+from engine.db.models import Base, User
 from engine.deps import get_db
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+
+def _fake_authenticated_user(role: str = "admin") -> User:
+    return User(
+        id=uuid.uuid4(),
+        email="test@example.com",
+        display_name="Test User",
+        is_active=True,
+        role=role,
+    )
 
 
 @pytest.fixture(scope="session")
@@ -24,6 +36,7 @@ def anyio_backend():
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
     app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -66,6 +79,7 @@ async def db_client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
