@@ -10,6 +10,9 @@ jobs:
   test-engine:
     name: Engine Tests
     runs-on: [self-hosted, nexus]
+    concurrency:
+      group: engine-tests-self-hosted-postgres
+      cancel-in-progress: false
 
     services:
       postgres:
