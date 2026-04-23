@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import { Modal } from "../feedback/Modal";
 import { useLegalContext } from "../../context/LegalContext";
 import { useLegalDocument } from "../../hooks/useLegal";
@@ -14,9 +15,10 @@ export function ConsentModal() {
   const { data: docContent } = useLegalDocument(activeSlug);
 
   const htmlContent = useMemo(() => {
-    if (!docContent?.content) return "";
-    return marked.parse(docContent.content, { async: false });
-  }, [docContent?.content]);
+    if (!docContent?.content_markdown) return "";
+    const raw = marked.parse(docContent.content_markdown, { async: false });
+    return DOMPurify.sanitize(raw);
+  }, [docContent?.content_markdown]);
 
   useEffect(() => {
     setChecked(false);
