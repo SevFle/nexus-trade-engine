@@ -27,7 +27,7 @@ export function ConsentModal() {
   if (!showConsentModal || pendingDocs.length === 0) return null;
 
   return (
-    <Modal open title={null} maxWidth="max-w-2xl">
+    <Modal open title="Legal Acceptance Required" maxWidth="max-w-2xl">
       <div className="mb-lg">
         <h2 className="text-subheading font-display text-nx-text-display mb-xs">
           LEGAL ACCEPTANCE REQUIRED

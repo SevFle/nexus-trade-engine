@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useCallback, useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 import clsx from "clsx";
 
@@ -22,6 +22,7 @@ export function Modal({
 }) {
   const dialogRef = useRef(null);
   const previousFocus = useRef(null);
+  const headingId = useId();
 
   useEffect(() => {
     if (open) {
@@ -75,7 +76,7 @@ export function Modal({
       className="fixed inset-0 z-50 flex items-center justify-center"
       role="dialog"
       aria-modal="true"
-      aria-label={title}
+      aria-labelledby={title ? headingId : undefined}
     >
       <div
         className="absolute inset-0 bg-black/80"
@@ -95,7 +96,7 @@ export function Modal({
         )}
       >
         <div className="flex items-center justify-between mb-lg">
-          <h2 className="text-subheading font-display text-nx-text-display">
+          <h2 id={headingId} className="text-subheading font-display text-nx-text-display">
             {title}
           </h2>
           {onClose && (
