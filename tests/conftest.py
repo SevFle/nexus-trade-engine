@@ -33,6 +33,28 @@ def anyio_backend():
     return "asyncio"
 
 
+@pytest.fixture(autouse=True)
+def _bypass_auth(request, monkeypatch):
+    """Globally bypass Bearer-token auth in tests. Patches FastAPI so every
+    new app gets a dependency_override for get_current_user, covering tests
+    that build their own isolated FastAPI instances. Tests in test_auth*
+    opt out so they exercise real auth behavior."""
+    nodeid = request.node.nodeid
+    if "test_auth" in nodeid:
+        return
+
+    from fastapi import FastAPI
+
+    fake = _fake_authenticated_user()
+    original_init = FastAPI.__init__
+
+    def patched_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        self.dependency_overrides[get_current_user] = lambda: fake
+
+    monkeypatch.setattr(FastAPI, "__init__", patched_init)
+
+
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
     app = create_app()
