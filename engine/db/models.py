@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from enum import Enum
 
-from sqlalchemy import ForeignKey, Index, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -26,8 +26,10 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255))
     display_name: Mapped[str] = mapped_column(String(100))
     is_active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=_utcnow, onupdate=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
 
     portfolios: Mapped[list[Portfolio]] = relationship(back_populates="user")
 
@@ -42,7 +44,7 @@ class Portfolio(Base):
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
     initial_capital: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal("100000.0"))
-    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     user: Mapped[User] = relationship(back_populates="portfolios")
     positions: Mapped[list[Position]] = relationship(back_populates="portfolio")
@@ -61,7 +63,9 @@ class Position(Base):
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=Decimal("0"))
     avg_entry_price: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=Decimal("0"))
     current_price: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=Decimal("0"))
-    updated_at: Mapped[datetime] = mapped_column(default=_utcnow, onupdate=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
 
     portfolio: Mapped[Portfolio] = relationship(back_populates="positions")
 
@@ -83,8 +87,8 @@ class Order(Base):
     quantity: Mapped[Decimal]
     price: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
-    filled_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
+    filled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     portfolio: Mapped[Portfolio] = relationship(back_populates="orders")
 
@@ -99,7 +103,7 @@ class InstalledStrategy(Base):
     strategy_name: Mapped[str] = mapped_column(String(100))
     config: Mapped[dict] = mapped_column(JSONB, default=dict)  # type: ignore[assignment]
     is_active: Mapped[bool] = mapped_column(default=True)
-    installed_at: Mapped[datetime] = mapped_column(default=_utcnow)
+    installed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class BacktestResult(Base):
@@ -110,10 +114,10 @@ class BacktestResult(Base):
         ForeignKey("portfolios.id", ondelete="CASCADE"), index=True, nullable=True
     )
     strategy_name: Mapped[str] = mapped_column(String(100))
-    start_date: Mapped[datetime]
-    end_date: Mapped[datetime]
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     metrics: Mapped[dict] = mapped_column(JSONB, default=dict)  # type: ignore[assignment]
-    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class TaxLotStatus(str, Enum):
@@ -134,11 +138,13 @@ class TaxLotRecord(Base):
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 8))
     remaining_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 8))
     purchase_price: Mapped[Decimal] = mapped_column(Numeric(18, 8))
-    purchase_date: Mapped[datetime]
+    purchase_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     cost_basis_adjustment: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=Decimal("0"))
     status: Mapped[str] = mapped_column(String(30), default=TaxLotStatus.OPEN.value)
-    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=_utcnow, onupdate=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
 
     portfolio: Mapped[Portfolio] = relationship(back_populates="tax_lots")
 
@@ -150,7 +156,7 @@ class OHLCVBar(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     symbol: Mapped[str] = mapped_column(String(20))
-    timestamp: Mapped[datetime]
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     open: Mapped[Decimal] = mapped_column(Numeric(18, 8))
     high: Mapped[Decimal] = mapped_column(Numeric(18, 8))
     low: Mapped[Decimal] = mapped_column(Numeric(18, 8))
