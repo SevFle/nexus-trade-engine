@@ -356,8 +356,11 @@ class TestM3SilentFailures:
 
         from engine.api.routes.backtest import _backtest_results, router
 
+        from tests.conftest import FAKE_USER_ID
+
         _backtest_results["running-test-id"] = (
             time.monotonic(),
+            str(FAKE_USER_ID),
             {"status": "running", "strategy_name": "test", "symbol": "TEST"},
         )
 

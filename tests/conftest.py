@@ -18,9 +18,12 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 
+FAKE_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
 def _fake_authenticated_user(role: str = "admin") -> User:
     return User(
-        id=uuid.uuid4(),
+        id=FAKE_USER_ID,
         email="test@example.com",
         display_name="Test User",
         is_active=True,
