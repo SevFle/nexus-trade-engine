@@ -139,12 +139,11 @@ class TestH3DbImmutability:
             await db_session.execute(text("SELECT id FROM legal_acceptances LIMIT 1"))
         ).scalar_one()
 
-        await db_session.execute(
-            text("UPDATE legal_acceptances SET document_version = '9.9.9' WHERE id = :id"),
-            {"id": str(record)},
-        )
         with pytest.raises(Exception, match="immutable"):
-            await db_session.flush()
+            await db_session.execute(
+                text("UPDATE legal_acceptances SET document_version = '9.9.9' WHERE id = :id"),
+                {"id": str(record)},
+            )
 
     async def test_delete_legal_acceptance_raises(self, db_session: AsyncSession):
         await db_session.execute(
@@ -199,12 +198,11 @@ class TestH3DbImmutability:
             await db_session.execute(text("SELECT id FROM legal_acceptances LIMIT 1"))
         ).scalar_one()
 
-        await db_session.execute(
-            text("DELETE FROM legal_acceptances WHERE id = :id"),
-            {"id": str(record)},
-        )
         with pytest.raises(Exception, match="immutable"):
-            await db_session.flush()
+            await db_session.execute(
+                text("DELETE FROM legal_acceptances WHERE id = :id"),
+                {"id": str(record)},
+            )
 
 
 class TestM1MarkdownEscape:
@@ -317,6 +315,21 @@ class TestL2SlugValidation:
         response = await legal_client_slug.get("/api/v1/legal/documents/hello%20world")
         assert response.status_code in (HTTPStatus.NOT_FOUND, HTTPStatus.UNPROCESSABLE_ENTITY)
 
-    async def test_accepts_valid_slug(self, legal_client_slug: AsyncClient):
+    async def test_accepts_valid_slug(
+        self, legal_client_slug: AsyncClient, db_session: AsyncSession
+    ):
+        doc = LegalDocument(
+            slug="risk-disclaimer",
+            title="Risk Disclaimer",
+            current_version="1.0.0",
+            effective_date=datetime.date(2026, 4, 20),
+            requires_acceptance=True,
+            category="general",
+            display_order=0,
+            file_path="legal/risk-disclaimer.md",
+        )
+        db_session.add(doc)
+        await db_session.flush()
+
         response = await legal_client_slug.get("/api/v1/legal/documents/risk-disclaimer")
         assert response.status_code == HTTPStatus.OK
