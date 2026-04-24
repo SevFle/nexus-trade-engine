@@ -10,9 +10,8 @@ jobs:
   test-engine:
     name: Engine Tests
     runs-on: [self-hosted, nexus]
-    concurrency:
-      group: engine-tests-self-hosted-postgres
-      cancel-in-progress: false
+    container:
+      image: python:3.12
 
     services:
       postgres:
@@ -21,7 +20,6 @@ jobs:
           POSTGRES_USER: nexus
           POSTGRES_PASSWORD: test_password
           POSTGRES_DB: nexus_test
-        ports: ["5432:5432"]
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -30,7 +28,6 @@ jobs:
 
       valkey:
         image: valkey/valkey:8-alpine
-        ports: ["6379:6379"]
         options: >-
           --health-cmd "valkey-cli ping"
           --health-interval 10s
@@ -40,24 +37,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
       - name: Install dependencies
         run: pip install -e .[dev]
 
       - name: Run migrations
         run: alembic upgrade head
         env:
-          NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:test_password@localhost:5432/nexus_test
+          NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:test_password@postgres:5432/nexus_test
 
       - name: Run tests
         env:
-          NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:test_password@localhost:5432/nexus_test
-          NEXUS_VALKEY_URL: redis://localhost:6379/0
+          NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:test_password@postgres:5432/nexus_test
+          NEXUS_VALKEY_URL: redis://valkey:6379/0
           NEXUS_APP_ENV: test
         run: python -m pytest tests -v --tb=short --junitxml=test-results.xml
 
