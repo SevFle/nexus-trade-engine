@@ -455,7 +455,7 @@ class TestLegalServiceAcceptance:
     async def test_semver_comparison_multi_digit_versions(self, db_session: AsyncSession):
         user = await self._seed_user(db_session, "semver@example.com")
         doc = await self._seed_doc(db_session, "semver-doc")
-        doc.current_version = "10.0.0"
+        doc.current_version = "9.0.0"
         await db_session.flush()
 
         await legal_service.record_acceptances(
@@ -465,6 +465,9 @@ class TestLegalServiceAcceptance:
             "127.0.0.1",
             "test",
         )
+        await db_session.flush()
+
+        doc.current_version = "10.0.0"
         await db_session.flush()
 
         pending = await legal_service.get_pending_acceptances(db_session, user.id)
