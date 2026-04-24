@@ -11,8 +11,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "004_auth_rbac"
-down_revision: str | Sequence[str] | None = "003_bt_result_nullable_pid"
+revision: str = "005_auth_rbac"
+down_revision: str | Sequence[str] | None = "004_legal_documents"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
