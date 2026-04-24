@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from enum import Enum
 
-from sqlalchemy import ForeignKey, Index, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
