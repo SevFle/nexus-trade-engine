@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from engine.app import create_app
@@ -36,11 +37,16 @@ async def test_engine():
             f"Current: {settings.database_url}"
         )
     engine = create_async_engine(settings.database_url, echo=False)
+    # CI runs `alembic upgrade head` before pytest, so the schema already
+    # exists with triggers/functions. create_all is idempotent and fills
+    # in any ORM-only tables.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine
+    # Tear down with CASCADE so FK constraints don't block drop ordering.
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("DROP SCHEMA public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
     await engine.dispose()
 
 
