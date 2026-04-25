@@ -2,19 +2,33 @@
 
 from __future__ import annotations
 
+import uuid
 from http import HTTPStatus
 
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from engine.api.auth.dependency import get_current_user
 from engine.api.routes.marketplace import router as marketplace_router
+from engine.db.models import User
+
+
+def _fake_user(role: str = "developer") -> User:
+    return User(
+        id=uuid.uuid4(),
+        email="test@example.com",
+        display_name="Test",
+        is_active=True,
+        role=role,
+    )
 
 
 @pytest.fixture
 async def marketplace_client():
     app = FastAPI()
     app.include_router(marketplace_router, prefix="/api/v1/marketplace")
+    app.dependency_overrides[get_current_user] = lambda: _fake_user()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

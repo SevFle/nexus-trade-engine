@@ -6,25 +6,29 @@ import uuid
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from engine.api.auth.dependency import get_current_user
 from engine.core.backtest_runner import BacktestConfig, BacktestRunner
 from engine.data.feeds import get_data_provider
+from engine.db.models import User
 
 logger = structlog.get_logger()
 
 router = APIRouter()
 
-_backtest_results: dict[str, tuple[float, dict[str, Any]]] = {}
+_backtest_results: dict[str, tuple[float, str, dict[str, Any]]] = {}
 
 _RESULTS_TTL_SECONDS = 3600
 
 
 def _evict_expired_results() -> None:
     now = time.monotonic()
-    expired = [k for k, (ts, _) in _backtest_results.items() if now - ts > _RESULTS_TTL_SECONDS]
+    expired = [
+        k for k, (ts, _uid, _data) in _backtest_results.items() if now - ts > _RESULTS_TTL_SECONDS
+    ]
     for k in expired:
         del _backtest_results[k]
     if expired:
@@ -124,10 +128,12 @@ class BacktestResultResponse(BaseModel):
 
 async def _run_backtest_background(
     backtest_id: str,
+    user_id: str,
     request: BacktestRequest,
 ) -> None:
     _backtest_results[backtest_id] = (
         time.monotonic(),
+        user_id,
         {
             "status": "running",
             "strategy_name": request.strategy_name,
@@ -157,6 +163,7 @@ async def _run_backtest_background(
 
         _backtest_results[backtest_id] = (
             time.monotonic(),
+            user_id,
             {
                 "status": "completed",
                 "strategy_name": request.strategy_name,
@@ -180,6 +187,7 @@ async def _run_backtest_background(
         )
         _backtest_results[backtest_id] = (
             time.monotonic(),
+            user_id,
             {
                 "status": "failed",
                 "strategy_name": request.strategy_name,
@@ -194,11 +202,13 @@ async def _run_backtest_background(
 async def run_backtest(
     request: BacktestRequest,
     background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
 ) -> BacktestResponse:
     backtest_id = str(uuid.uuid4())
     background_tasks.add_task(
         _run_backtest_background,
         backtest_id,
+        str(user.id),
         request,
     )
     return BacktestResponse(status="accepted", backtest_id=backtest_id)
@@ -208,7 +218,10 @@ async def run_backtest(
     "/results/{backtest_id}",
     response_model=BacktestResultResponse,
 )
-async def get_backtest_result(backtest_id: str) -> JSONResponse:
+async def get_backtest_result(
+    backtest_id: str,
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
     _evict_expired_results()
 
     entry = _backtest_results.get(backtest_id)
@@ -228,10 +241,26 @@ async def get_backtest_result(backtest_id: str) -> JSONResponse:
             ).model_dump(),
         )
 
-    stored = entry[1]
-    status = stored.get("status", "unknown")
+    owner_id, stored = entry[1], entry[2]
+    if owner_id != str(user.id):
+        return JSONResponse(
+            status_code=403,
+            content=BacktestResultResponse(
+                status="forbidden",
+                strategy_name="",
+                symbol="",
+                initial_capital=0.0,
+                final_value=0.0,
+                metrics=_empty_metrics(),
+                equity_curve=[],
+                drawdown_curve=[],
+                error="Access denied",
+            ).model_dump(),
+        )
 
-    if status == "running":
+    status_val = stored.get("status", "unknown")
+
+    if status_val == "running":
         return JSONResponse(
             status_code=202,
             content=BacktestResultResponse(
@@ -246,7 +275,7 @@ async def get_backtest_result(backtest_id: str) -> JSONResponse:
             ).model_dump(),
         )
 
-    if status == "failed":
+    if status_val == "failed":
         return JSONResponse(
             status_code=200,
             content=BacktestResultResponse(
