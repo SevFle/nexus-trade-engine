@@ -115,18 +115,20 @@ class TestLegalDocumentSync:
             assert count == 0
 
 
+@pytest.fixture
+async def legal_client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
+    app = create_app()
+
+    async def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+
 class TestLegalDocumentsAPI:
-    @pytest.fixture
-    async def legal_client(self, db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
-        app = create_app()
-
-        async def override_get_db():
-            yield db_session
-
-        app.dependency_overrides[get_db] = override_get_db
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            yield ac
 
     async def test_list_documents(self, legal_client: AsyncClient, db_session: AsyncSession):
         doc = LegalDocument(
