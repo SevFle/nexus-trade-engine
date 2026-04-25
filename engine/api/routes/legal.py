@@ -24,13 +24,14 @@ router = APIRouter()
 logger = structlog.get_logger()
 
 
-def _apply_substitutions(content: str) -> str:
+def _apply_substitutions(content: str, effective_date: str = "") -> str:
     return (
         content.replace("{{OPERATOR_NAME}}", settings.operator_name)
         .replace("{{OPERATOR_EMAIL}}", settings.operator_email)
         .replace("{{OPERATOR_URL}}", settings.operator_url)
         .replace("{{JURISDICTION}}", settings.jurisdiction)
         .replace("{{PLATFORM_FEE_PERCENT}}", str(settings.platform_fee_percent))
+        .replace("{{EFFECTIVE_DATE}}", effective_date)
     )
 
 
@@ -63,7 +64,7 @@ async def get_document(
     if result is None:
         raise HTTPException(status_code=404, detail=f"Document '{slug}' not found")
     doc, raw = result
-    rendered = _strip_front_matter(_apply_substitutions(raw))
+    rendered = _strip_front_matter(_apply_substitutions(raw, str(doc.effective_date)))
     return DocumentDetailResponse(
         slug=doc.slug,
         title=doc.title,

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 from fastapi import HTTPException
+from packaging.version import Version
 from sqlalchemy import select
 
 from engine.db.models import (
@@ -30,6 +31,45 @@ logger = structlog.get_logger()
 NUM_DOCS_ON_DISK = 6
 
 
+def _version_gte(accepted: str, current: str) -> bool:
+    return Version(accepted) >= Version(current)
+
+
+def _version_lt(accepted: str, current: str) -> bool:
+    return Version(accepted) < Version(current)
+
+
+async def _bulk_latest_acceptances(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+) -> dict[str, LegalAcceptance]:
+    latest_cte = (
+        select(
+            LegalAcceptance.document_slug,
+            LegalAcceptance.accepted_at,
+        )
+        .where(
+            LegalAcceptance.user_id == user_id,
+            LegalAcceptance.revoked_at.is_(None),
+        )
+        .order_by(LegalAcceptance.document_slug, LegalAcceptance.accepted_at.desc())
+        .distinct(LegalAcceptance.document_slug)
+        .cte("latest_acceptance")
+    )
+    stmt = select(LegalAcceptance).where(
+        LegalAcceptance.user_id == user_id,
+        LegalAcceptance.revoked_at.is_(None),
+        LegalAcceptance.document_slug.in_(select(latest_cte.c.document_slug)),
+        LegalAcceptance.accepted_at.in_(
+            select(latest_cte.c.accepted_at).where(
+                latest_cte.c.document_slug == LegalAcceptance.document_slug
+            )
+        ),
+    )
+    result = await db.execute(stmt)
+    return {la.document_slug: la for la in result.scalars().all()}
+
+
 async def list_documents(
     db: AsyncSession,
     user_id: uuid.UUID | None = None,
@@ -41,18 +81,23 @@ async def list_documents(
     result = await db.execute(stmt)
     docs = result.scalars().all()
 
+    acceptances: dict[str, LegalAcceptance] = {}
+    if user_id:
+        acceptances = await _bulk_latest_acceptances(db, user_id)
+
     summaries: list[DocumentSummary] = []
     for doc in docs:
         accepted = False
         accepted_version: str | None = None
-        if user_id:
-            latest = await _get_latest_acceptance(db, user_id, doc.slug)
-            if latest is not None:
-                accepted = True
-                accepted_version = latest.document_version
+        la = acceptances.get(doc.slug)
+        if user_id and la is not None:
+            accepted = True
+            accepted_version = la.document_version
         needs_re = doc.requires_acceptance and (
             not accepted
-            or (accepted_version is not None and accepted_version < doc.current_version)
+            or (
+                accepted_version is not None and _version_lt(accepted_version, doc.current_version)
+            )
         )
         summaries.append(
             DocumentSummary(
@@ -191,10 +236,12 @@ async def get_pending_acceptances(
     result = await db.execute(stmt)
     docs = result.scalars().all()
 
+    acceptances = await _bulk_latest_acceptances(db, user_id)
+
     pending: list[LegalDocument] = []
     for doc in docs:
-        latest = await _get_latest_acceptance(db, user_id, doc.slug)
-        if latest is None or latest.document_version < doc.current_version:
+        la = acceptances.get(doc.slug)
+        if la is None or _version_lt(la.document_version, doc.current_version):
             pending.append(doc)
     return pending
 

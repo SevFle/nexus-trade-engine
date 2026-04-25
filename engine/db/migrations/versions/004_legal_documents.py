@@ -47,7 +47,7 @@ def upgrade() -> None:
         sa.Column(
             "user_id",
             sa.UUID(as_uuid=True),
-            sa.ForeignKey("users.id", ondelete="RESTRICT"),
+            sa.ForeignKey("users.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"),
             nullable=False,
             index=True,
         ),
