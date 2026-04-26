@@ -6,8 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from engine.api.auth.dependency import get_current_user
 from engine.db.models import Portfolio, User
 from engine.deps import get_db
+from engine.legal.dependencies import require_legal_acceptance
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_legal_acceptance)])
 
 
 class CreatePortfolioRequest(BaseModel):

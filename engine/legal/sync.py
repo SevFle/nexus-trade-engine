@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 
 from engine.config import settings
 from engine.db.models import LegalDocument
@@ -63,46 +63,32 @@ async def sync_legal_documents(db: AsyncSession) -> int:
             category = meta.get("category", "general")
             display_order = int(meta.get("display_order", "0"))
 
-            stmt = select(LegalDocument).where(LegalDocument.slug == slug)
-            result = await db.execute(stmt)
-            existing = result.scalar_one_or_none()
+            parsed_date = _parse_date(effective_date)
+            file_path = str(md_file)
 
-            if existing is None:
-                doc = LegalDocument(
-                    slug=slug,
-                    title=title,
-                    current_version=version,
-                    effective_date=_parse_date(effective_date),
-                    requires_acceptance=requires_acceptance,
-                    category=category,
-                    display_order=display_order,
-                    file_path=str(md_file),
-                )
-                db.add(doc)
-                logger.info("legal.document_registered", slug=slug, version=version)
-            elif existing.current_version != version:
-                old_version = existing.current_version
-                existing.current_version = version
-                existing.title = title
-                existing.effective_date = _parse_date(effective_date)
-                existing.requires_acceptance = requires_acceptance
-                existing.category = category
-                existing.display_order = display_order
-                existing.file_path = str(md_file)
-                logger.info(
-                    "legal.version_changed",
-                    slug=slug,
-                    old=old_version,
-                    new=version,
-                )
-            else:
-                existing.title = title
-                existing.effective_date = _parse_date(effective_date)
-                existing.requires_acceptance = requires_acceptance
-                existing.category = category
-                existing.display_order = display_order
-                existing.file_path = str(md_file)
-
+            stmt = insert(LegalDocument).values(
+                slug=slug,
+                title=title,
+                current_version=version,
+                effective_date=parsed_date,
+                requires_acceptance=requires_acceptance,
+                category=category,
+                display_order=display_order,
+                file_path=file_path,
+            )
+            upsert = stmt.on_conflict_do_update(
+                index_elements=["slug"],
+                set_={
+                    "title": title,
+                    "current_version": version,
+                    "effective_date": parsed_date,
+                    "requires_acceptance": requires_acceptance,
+                    "category": category,
+                    "display_order": display_order,
+                    "file_path": file_path,
+                },
+            )
+            await db.execute(upsert)
             synced += 1
         except Exception:
             logger.exception("legal.sync_file_error", file=str(md_file))

@@ -7,8 +7,9 @@ from pydantic import BaseModel
 
 from engine.api.auth.dependency import get_current_user, require_role
 from engine.db.models import User
+from engine.legal.dependencies import require_legal_acceptance
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_legal_acceptance)])
 
 
 class MarketplaceEntry(BaseModel):
