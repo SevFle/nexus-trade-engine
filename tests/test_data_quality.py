@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from engine.data.market_state import MarketStateBuilder
 from engine.data.quality import (
@@ -158,7 +159,7 @@ class TestDataQualityReport:
 
     def test_should_not_warn_below_threshold(self):
         report = DataQualityReport()
-        universe = ["AAPL"] * 20
+        universe = ["AAPL"] + [f"SYM{i}" for i in range(1, 20)]
         report.add_correction("AAPL", "close", -1.0, None, "negative_price", "exclude")
         assert not report.should_warn(universe, threshold_pct=10.0)
 
@@ -459,3 +460,138 @@ class TestDataValidatorIntegration:
         report = DataQualityReport()
         cleaned = validator.validate(df, "AAPL", report)
         assert len(cleaned) == original_clean_count
+
+
+class TestB1RevenueInterpolationDistinctCorrections:
+    def test_multiple_negative_revenues_get_distinct_interpolated_values(self):
+        fundamentals = pd.DataFrame(
+            {"revenue": [1e9, -2e9, -5e9, 3e9], "book_value": [5e9] * 4},
+            index=pd.date_range("2024-01-01", periods=4, freq="QS"),
+        )
+        rule = RatioSanityRule()
+        report = DataQualityReport()
+        cleaned = rule.apply_fundamentals("AAPL", report, fundamentals)
+
+        rev_corrections = [c for c in report.corrections if c.reason == "negative_revenue"]
+        assert len(rev_corrections) == 2
+
+        corrected_values = {c.original_value: c.corrected_value for c in rev_corrections}
+        assert -2e9 in corrected_values
+        assert -5e9 in corrected_values
+        assert corrected_values[-2e9] != corrected_values[-5e9]
+
+        assert corrected_values[-2e9] == pytest.approx(1e9)
+        assert corrected_values[-5e9] == pytest.approx(3e9)
+
+        assert all(cleaned["revenue"].values > 0)
+
+
+class TestB3GBpGBPRuleDivisionByZero:
+    def test_sector_median_zero_returns_df_unchanged(self):
+        df = _make_ohlcv_df(20, base_price=580.0)
+        rule = GBpGBPRule()
+        report = DataQualityReport()
+        result = rule.apply(df, "BARC.L", report, sector_median_price=0.0)
+        assert len(result) == len(df)
+        assert len(report.corrections) == 0
+
+    def test_sector_median_negative_returns_df_unchanged(self):
+        df = _make_ohlcv_df(20, base_price=580.0)
+        rule = GBpGBPRule()
+        report = DataQualityReport()
+        result = rule.apply(df, "BARC.L", report, sector_median_price=-5.0)
+        assert len(result) == len(df)
+        assert len(report.corrections) == 0
+
+
+class TestM1FlaggedPercentage:
+    def test_flagged_percentage_with_corrections(self):
+        report = DataQualityReport()
+        report.record_symbol("AAPL")
+        report.record_symbol("MSFT")
+        report.record_symbol("GOOG")
+        report.add_correction("AAPL", "close", -1.0, None, "negative_price", "exclude")
+        assert report.flagged_percentage == pytest.approx(100.0 / 3.0)
+
+    def test_flagged_percentage_all_flagged(self):
+        report = DataQualityReport()
+        report.record_symbol("AAPL")
+        report.add_correction("AAPL", "close", -1.0, None, "negative_price", "exclude")
+        assert report.flagged_percentage == 100.0
+
+    def test_flagged_percentage_no_corrections(self):
+        report = DataQualityReport()
+        report.record_symbol("AAPL")
+        report.record_symbol("MSFT")
+        assert report.flagged_percentage == 0.0
+
+
+class TestM2ApplyFundamentalsReturnValue:
+    def test_pe_check_uses_cleaned_fundamentals(self):
+        df = _make_ohlcv_df(20, base_price=100.0)
+        fundamentals = pd.DataFrame(
+            {"revenue": [1e9, -5e9, 1e9], "eps": [0.001, -5.0, 0.001]},
+            index=pd.date_range("2024-01-01", periods=3, freq="QS"),
+        )
+        rule = RatioSanityRule()
+        report = DataQualityReport()
+        rule.apply(df, "AAPL", report, fundamentals=fundamentals)
+
+        revenue_corrections = [c for c in report.corrections if c.reason == "negative_revenue"]
+        assert len(revenue_corrections) == 1
+
+
+class TestM3FlaggedPercentageUniverseDuplicates:
+    def test_duplicate_symbols_in_universe_dont_inflate_denominator(self):
+        report = DataQualityReport()
+        universe = ["AAPL"] * 20
+        report.add_correction("AAPL", "close", -1.0, None, "negative_price", "exclude")
+        pct = report.flagged_percentage_for_universe(universe)
+        assert pct == 100.0
+
+
+class TestM4RulesInChain:
+    def test_ratio_sanity_rule_in_validator_chain(self):
+        df = _make_ohlcv_df(20, base_price=100.0)
+        fundamentals = pd.DataFrame(
+            {"revenue": [1e9, -5e9, 1e9], "eps": [5.0, 5.0, 5.0]},
+            index=pd.date_range("2024-01-01", periods=3, freq="QS"),
+        )
+        validator = DataValidator()
+        report = DataQualityReport()
+        validator.validate(df, "AAPL", report, fundamentals=fundamentals)
+        assert any(c.reason == "negative_revenue" for c in report.corrections)
+
+    def test_gbp_rule_in_validator_chain(self):
+        df = _make_ohlcv_df(20, base_price=580.0)
+        validator = DataValidator()
+        report = DataQualityReport()
+        validator.validate(df, "BARC.L", report, sector_median_price=5.8)
+        assert any(c.reason == "gbp_gbp_mismatch" for c in report.corrections)
+
+
+class TestM5NegativeRevenueTolerance:
+    def test_small_negative_revenue_not_flagged_with_tolerance(self):
+        fundamentals = pd.DataFrame(
+            {"revenue": [1e9, -0.01e9, 1e9], "book_value": [5e9] * 3},
+            index=pd.date_range("2024-01-01", periods=3, freq="QS"),
+        )
+        config = ValidationConfig(negative_revenue_tolerance=0.1)
+        rule = RatioSanityRule(config=config)
+        report = DataQualityReport()
+        cleaned = rule.apply_fundamentals("AAPL", report, fundamentals)
+        rev_corrections = [c for c in report.corrections if c.reason == "negative_revenue"]
+        assert len(rev_corrections) == 0
+        assert cleaned["revenue"].iloc[1] < 0
+
+    def test_large_negative_revenue_still_flagged_with_tolerance(self):
+        fundamentals = pd.DataFrame(
+            {"revenue": [1e9, -5e9, 1e9], "book_value": [5e9] * 3},
+            index=pd.date_range("2024-01-01", periods=3, freq="QS"),
+        )
+        config = ValidationConfig(negative_revenue_tolerance=0.1)
+        rule = RatioSanityRule(config=config)
+        report = DataQualityReport()
+        rule.apply_fundamentals("AAPL", report, fundamentals)
+        rev_corrections = [c for c in report.corrections if c.reason == "negative_revenue"]
+        assert len(rev_corrections) == 1

@@ -233,6 +233,11 @@ class MarketStateBuilder:
 
                 if self._validator and self._last_report is not None:
                     df = self._validator.validate(df, symbol, self._last_report)
+                    if len(df) < self._min_bars:
+                        raise ValidationError(
+                            f"Insufficient bars after data cleaning for {symbol}: "
+                            f"{len(df)} < {self._min_bars}"
+                        )
 
                 bars = self._df_to_bars(df)
                 bars = bars[-self._min_bars :]
