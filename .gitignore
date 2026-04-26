@@ -60,3 +60,7 @@ celerybeat.pid
 
 # Pytest
 .pytest_cache/
+
+# Local agent / tooling artifacts
+graphify-out/
+.playwright-mcp/

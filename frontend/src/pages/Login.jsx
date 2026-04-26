@@ -63,25 +63,31 @@ export default function Login() {
             <span className="text-display-lg font-display text-nx-text-display block mb-sm">
               NEXUS
             </span>
-            <Text variant="label" color="secondary">TRADE ENGINE</Text>
+            <Text variant="label" color="secondary">
+              TRADE ENGINE
+            </Text>
           </div>
 
           {sessionExpired && (
-            <div className="mb-lg p-md rounded-lg border border-nx-warning/30 bg-nx-warning/5 text-nx-warning text-body-sm font-body" role="alert">
-              Your session has expired. Please sign in again.
+            <div className="mb-lg" role="alert">
+              <span className="nx-bracket text-nx-warning">[SESSION EXPIRED]</span>{" "}
+              <span className="text-body-sm text-nx-text-primary">
+                Sign in again.
+              </span>
             </div>
           )}
 
           {error && (
-            <div className="mb-lg p-md rounded-lg border border-nx-accent/30 bg-nx-accent/5 text-nx-accent text-body-sm font-body" role="alert">
-              {error}
+            <div className="mb-lg" role="alert">
+              <span className="nx-bracket text-nx-accent">[ERROR]</span>{" "}
+              <span className="text-body-sm text-nx-text-primary">{error}</span>
             </div>
           )}
 
           {showLocal && (
-            <form onSubmit={handleSubmit} className="space-y-md">
+            <form onSubmit={handleSubmit} className="space-y-lg">
               <div>
-                <label htmlFor="email" className="block text-label font-mono uppercase text-nx-text-secondary mb-xs">
+                <label htmlFor="email" className="nx-label">
                   Email
                 </label>
                 <input
@@ -91,13 +97,13 @@ export default function Login() {
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-md py-sm bg-nx-surface border border-nx-border rounded-lg text-body font-body text-nx-text-primary placeholder-nx-text-disabled focus:outline-none focus:border-nx-interactive focus:ring-1 focus:ring-nx-interactive"
+                  className="nx-input"
                   placeholder="you@example.com"
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-label font-mono uppercase text-nx-text-secondary mb-xs">
+                <label htmlFor="password" className="nx-label">
                   Password
                 </label>
                 <input
@@ -107,7 +113,7 @@ export default function Login() {
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-md py-sm bg-nx-surface border border-nx-border rounded-lg text-body font-body text-nx-text-primary placeholder-nx-text-disabled focus:outline-none focus:border-nx-interactive focus:ring-1 focus:ring-nx-interactive"
+                  className="nx-input"
                   placeholder="Enter your password"
                 />
               </div>
@@ -115,17 +121,19 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full px-md py-sm bg-nx-interactive text-white font-body text-body font-medium rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-nx-interactive focus:ring-offset-2 focus:ring-offset-nx-black"
+                className="nx-btn-primary w-full"
               >
-                {submitting ? "Signing in..." : "Sign in"}
+                {submitting ? "SIGNING IN…" : "SIGN IN"}
               </button>
             </form>
           )}
 
           {showLocal && oauthProviders.length > 0 && (
-            <div className="flex items-center gap-md my-lg">
+            <div className="flex items-center gap-md my-xl">
               <div className="flex-1 border-t border-nx-border" />
-              <Text variant="label" color="disabled">or sign in with</Text>
+              <Text variant="label" color="disabled">
+                OR
+              </Text>
               <div className="flex-1 border-t border-nx-border" />
             </div>
           )}
@@ -133,16 +141,20 @@ export default function Login() {
           {oauthProviders.length > 0 && (
             <div className="space-y-sm">
               {oauthProviders.map((provider) => {
-                const cfg = OAUTH_PROVIDER_CONFIG[provider] || { label: `Sign in with ${provider}`, icon: "?" };
+                const cfg =
+                  OAUTH_PROVIDER_CONFIG[provider] || {
+                    label: `Sign in with ${provider}`,
+                    icon: "?",
+                  };
                 return (
                   <button
                     key={provider}
                     type="button"
                     onClick={() => handleOAuth(provider)}
-                    className="w-full px-md py-sm bg-nx-surface border border-nx-border rounded-lg text-body font-body text-nx-text-primary hover:border-nx-text-secondary transition-colors focus:outline-none focus:ring-2 focus:ring-nx-interactive focus:ring-offset-2 focus:ring-offset-nx-black flex items-center justify-center gap-sm"
+                    className="nx-btn-secondary w-full"
                   >
-                    <span className="text-label font-mono font-bold">{cfg.icon}</span>
-                    {cfg.label}
+                    <span className="font-mono mr-sm">[{cfg.icon}]</span>
+                    {cfg.label.toUpperCase()}
                   </button>
                 );
               })}
@@ -150,9 +162,12 @@ export default function Login() {
           )}
 
           {showLocal && (
-            <p className="mt-lg text-center text-body-sm font-body text-nx-text-secondary">
+            <p className="mt-xl text-center text-body-sm font-body text-nx-text-secondary">
               Don&apos;t have an account?{" "}
-              <Link to="/register" className="text-nx-interactive hover:underline">
+              <Link
+                to="/register"
+                className="text-nx-interactive hover:underline"
+              >
                 Create one
               </Link>
             </p>

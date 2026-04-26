@@ -46,7 +46,7 @@ export function LegalProvider({ children }) {
     hasConsentedRef.current = true;
     const acceptances = pendingDocs.map((d) => ({
       document_slug: d.slug,
-      version: d.version,
+      document_version: d.current_version ?? d.version,
     }));
     await acceptMutation.mutateAsync(acceptances);
     setPendingDocs([]);

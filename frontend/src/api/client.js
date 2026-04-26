@@ -1,3 +1,5 @@
+import { getAccessToken } from "./auth";
+
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export class ConsentRequiredError extends Error {
@@ -9,10 +11,12 @@ export class ConsentRequiredError extends Error {
 }
 
 export async function apiFetch(path, options = {}) {
+  const token = getAccessToken();
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
     credentials: "include",
