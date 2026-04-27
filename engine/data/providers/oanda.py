@@ -10,6 +10,7 @@ from engine.data.providers._cache import ProviderCache
 from engine.data.providers._http import (
     DEFAULT_OHLCV_TTL_S,
     HTTPProviderBase,
+    encode_path_segment,
     normalise_ohlcv,
 )
 from engine.data.providers.base import (
@@ -19,6 +20,7 @@ from engine.data.providers.base import (
     HealthCheckResult,
     IDataProvider,
     RateLimit,
+    TransientProviderError,
 )
 
 if TYPE_CHECKING:
@@ -92,17 +94,21 @@ class OandaDataProvider(HTTPProviderBase, IDataProvider):
         if period not in PERIOD_COUNT:
             raise FatalProviderError(f"oanda invalid period {period}")
 
+        # OANDA wire format uses ``EUR_USD`` while callers may pass
+        # ``EUR/USD``. Normalise *before* the cache key so both forms
+        # resolve to the same cached entry.
+        instrument = symbol.replace("/", "_").upper()
         cache_key = ProviderCache.make_key(
-            "oanda", "ohlcv", symbol=symbol, period=period, interval=interval
+            "oanda", "ohlcv", symbol=instrument, period=period, interval=interval
         )
         cached = await self._cache.get_dataframe(cache_key)
         if cached is not None:
             return cached
 
-        instrument = symbol.replace("/", "_")
+        encoded = encode_path_segment(instrument)
         data = await self._request_json(
             "GET",
-            f"/v3/instruments/{instrument}/candles",
+            f"/v3/instruments/{encoded}/candles",
             params={
                 "granularity": GRANULARITY_MAP[interval],
                 "count": min(PERIOD_COUNT[period], 5000),
@@ -115,7 +121,11 @@ class OandaDataProvider(HTTPProviderBase, IDataProvider):
         return df
 
     async def get_latest_price(self, symbol: str) -> float | None:
+        # Forex closes weekends — fall back to a wider window if 1m candles
+        # are empty so callers don't get spurious ``None`` mid-week.
         df = await self.get_ohlcv(symbol, period="1d", interval="1m")
+        if df.empty:
+            df = await self.get_ohlcv(symbol, period="5d", interval="1h")
         if df.empty:
             return None
         return float(df["close"].iloc[-1])
@@ -125,7 +135,7 @@ class OandaDataProvider(HTTPProviderBase, IDataProvider):
         for sym in symbols:
             try:
                 price = await self.get_latest_price(sym)
-            except FatalProviderError:
+            except (FatalProviderError, TransientProviderError):
                 continue
             if price is not None:
                 out[sym] = price
@@ -137,10 +147,9 @@ class OandaDataProvider(HTTPProviderBase, IDataProvider):
         raise FatalProviderError("oanda does not offer options chain")
 
     async def get_orderbook(self, symbol: str, depth: int = 20) -> pd.DataFrame:
-        instrument = symbol.replace("/", "_")
-        data = await self._request_json(
-            "GET", f"/v3/instruments/{instrument}/orderBook"
-        )
+        instrument = symbol.replace("/", "_").upper()
+        encoded = encode_path_segment(instrument)
+        data = await self._request_json("GET", f"/v3/instruments/{encoded}/orderBook")
         buckets = ((data or {}).get("orderBook") or {}).get("buckets") or []
         rows = [
             (

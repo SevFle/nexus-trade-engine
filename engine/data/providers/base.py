@@ -75,11 +75,28 @@ class ProviderError(Exception):
 
 
 class TransientProviderError(ProviderError):
-    """Recoverable: rate-limited, network blip, 5xx — retried by ``call_with_retry``."""
+    """Recoverable: rate-limited, network blip, 5xx — retried by ``call_with_retry``,
+    then failed-over to the next provider by the registry."""
 
 
 class FatalProviderError(ProviderError):
-    """Non-recoverable: bad credentials, unsupported asset — fail fast, fail-over."""
+    """Non-recoverable for this provider, but the registry will continue trying
+    the next candidate. Use for bad credentials, unsupported assets, malformed
+    schema, or capability gaps. The registry surfaces the *last* fatal as part
+    of :class:`NoProviderAvailableError` when nothing succeeds."""
+
+
+class CapabilityNotSupportedError(FatalProviderError):
+    """Specific subclass for when a provider lacks a requested capability.
+
+    Surfaced separately so callers can distinguish "no one supports this op"
+    from "all providers failed". The registry pre-filters candidates by
+    capability so this rarely escapes; when it does, every candidate lacked
+    the feature.
+    """
+
+
+SYMBOL_PATTERN = r"^[A-Za-z0-9._\-/=^]{1,32}$"
 
 
 class IDataProvider(ABC):

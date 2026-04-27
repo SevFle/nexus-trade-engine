@@ -3,10 +3,19 @@
 Order of operations for any read:
 
 1.  Resolve candidate providers for the requested ``asset_class`` ordered
-    by configured priority (lower number = higher priority).
-2.  Try them in order; on :class:`TransientProviderError` move to the next
-    candidate. :class:`FatalProviderError` propagates.
-3.  If nothing succeeds, raise :class:`NoProviderAvailable`.
+    by configured priority (lower number = higher priority). A capability
+    predicate further narrows candidates so an adapter that doesn't
+    declare ``supports_options_chain`` is never asked for one.
+2.  Try them in order. ``FatalProviderError`` (incl. ``CapabilityNotSupportedError``)
+    skips to the next candidate but is preserved as ``last_exc`` so the
+    final ``NoProviderAvailableError`` still surfaces the cause.
+    ``TransientProviderError`` / ``TimeoutError`` likewise fail-over.
+3.  If a provider returns an *empty* DataFrame for OHLCV calls, the
+    registry treats that as a soft miss and tries the next candidate
+    (e.g. Yahoo returning ``[]`` for a delisted symbol still lets us try
+    Polygon). The empty result of the last candidate is returned if
+    nothing else has data.
+4.  If nothing succeeds, raise :class:`NoProviderAvailableError`.
 
 The registry itself is async-safe and can be mutated at runtime (e.g.
 hot-reload from YAML) without restarting the engine.
@@ -15,13 +24,15 @@ hot-reload from YAML) without restarting the engine.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 import structlog
 
 from engine.data.providers.base import (
     AssetClass,
+    CapabilityNotSupportedError,
     FatalProviderError,
     HealthCheckResult,
     HealthStatus,
@@ -34,6 +45,8 @@ if TYPE_CHECKING:
     import pandas as pd
 
 logger = structlog.get_logger()
+
+T = TypeVar("T")
 
 
 class NoProviderAvailableError(ProviderError):
@@ -54,6 +67,14 @@ class ProviderRegistration:
     @property
     def name(self) -> str:
         return self.provider.name
+
+
+CapabilityPredicate = Callable[[IDataProvider], bool]
+
+
+def _is_empty_dataframe(value: object) -> bool:
+    """True iff ``value`` is a DataFrame with zero rows."""
+    return hasattr(value, "empty") and bool(getattr(value, "empty", False))
 
 
 class DataProviderRegistry:
@@ -86,11 +107,17 @@ class DataProviderRegistry:
         reg = self._registrations.get(name)
         return reg.provider if reg else None
 
-    def candidates_for(self, asset_class: AssetClass) -> list[ProviderRegistration]:
+    def candidates_for(
+        self,
+        asset_class: AssetClass,
+        capability: CapabilityPredicate | None = None,
+    ) -> list[ProviderRegistration]:
         matched = [
             reg
             for reg in self._registrations.values()
-            if reg.enabled and asset_class in reg.asset_classes
+            if reg.enabled
+            and asset_class in reg.asset_classes
+            and (capability is None or capability(reg.provider))
         ]
         matched.sort(key=lambda r: (r.priority, r.name))
         return matched
@@ -105,7 +132,9 @@ class DataProviderRegistry:
         async def call(p: IDataProvider) -> pd.DataFrame:
             return await p.get_ohlcv(symbol, period=period, interval=interval)
 
-        return await self._run_with_failover(asset_class, "get_ohlcv", call, symbol=symbol)
+        return await self._run_with_failover(
+            asset_class, "get_ohlcv", call, symbol=symbol, retry_on_empty=True
+        )
 
     async def get_latest_price(
         self, symbol: str, asset_class: AssetClass = AssetClass.EQUITY
@@ -115,9 +144,13 @@ class DataProviderRegistry:
 
         try:
             return await self._run_with_failover(
-                asset_class, "get_latest_price", call, symbol=symbol
+                asset_class,
+                "get_latest_price",
+                call,
+                symbol=symbol,
+                retry_on_empty=True,
             )
-        except NoProviderAvailable:
+        except NoProviderAvailableError:
             return None
 
     async def get_multiple_prices(
@@ -128,9 +161,13 @@ class DataProviderRegistry:
 
         try:
             return await self._run_with_failover(
-                asset_class, "get_multiple_prices", call, symbol=",".join(symbols[:5])
+                asset_class,
+                "get_multiple_prices",
+                call,
+                symbol=",".join(symbols[:5]),
+                retry_on_empty=True,
             )
-        except NoProviderAvailable:
+        except NoProviderAvailableError:
             return {}
 
     async def get_options_chain(
@@ -140,12 +177,14 @@ class DataProviderRegistry:
         asset_class: AssetClass = AssetClass.OPTIONS,
     ) -> pd.DataFrame:
         async def call(p: IDataProvider) -> pd.DataFrame:
-            if not p.capability.supports_options_chain:
-                raise FatalProviderError(f"{p.name} does not support options chain")
             return await p.get_options_chain(symbol, expiry=expiry)
 
         return await self._run_with_failover(
-            asset_class, "get_options_chain", call, symbol=symbol
+            asset_class,
+            "get_options_chain",
+            call,
+            symbol=symbol,
+            capability=lambda p: p.capability.supports_options_chain,
         )
 
     async def get_orderbook(
@@ -155,23 +194,27 @@ class DataProviderRegistry:
         asset_class: AssetClass = AssetClass.CRYPTO,
     ) -> pd.DataFrame:
         async def call(p: IDataProvider) -> pd.DataFrame:
-            if not p.capability.supports_orderbook:
-                raise FatalProviderError(f"{p.name} does not support orderbook")
             return await p.get_orderbook(symbol, depth=depth)
 
-        return await self._run_with_failover(asset_class, "get_orderbook", call, symbol=symbol)
+        return await self._run_with_failover(
+            asset_class,
+            "get_orderbook",
+            call,
+            symbol=symbol,
+            capability=lambda p: p.capability.supports_orderbook,
+        )
 
     async def health(self) -> list[HealthCheckResult]:
         results: list[HealthCheckResult] = []
         for reg in self._registrations.values():
             try:
                 results.append(await reg.provider.health_check())
-            except Exception as exc:
+            except Exception as exc:  # per-provider isolation
                 results.append(
                     HealthCheckResult(
                         name=reg.name,
                         status=HealthStatus.DOWN,
-                        detail=str(exc),
+                        detail=type(exc).__name__,
                     )
                 )
         return results
@@ -180,42 +223,71 @@ class DataProviderRegistry:
         self,
         asset_class: AssetClass,
         method: str,
-        call,
+        call: Callable[[IDataProvider], Awaitable[T]],
+        *,
         symbol: str = "",
-    ):
-        candidates = self.candidates_for(asset_class)
+        capability: CapabilityPredicate | None = None,
+        retry_on_empty: bool = False,
+    ) -> T:
+        candidates = self.candidates_for(asset_class, capability=capability)
         if not candidates:
-            raise NoProviderAvailable(
+            if capability is not None:
+                raise CapabilityNotSupportedError(
+                    f"No provider with required capability for asset_class="
+                    f"{asset_class.value} method={method}"
+                )
+            raise NoProviderAvailableError(
                 f"No provider configured for asset_class={asset_class.value}"
             )
 
         last_exc: BaseException | None = None
+        last_empty: T | None = None
         for reg in candidates:
             try:
-                return await call(reg.provider)
+                result = await call(reg.provider)
             except FatalProviderError as exc:
                 last_exc = exc
                 logger.warning(
-                    "data_provider.fatal_skip",
+                    "data_provider.registry.fatal_skip",
                     provider=reg.name,
                     method=method,
                     symbol=symbol,
-                    error=str(exc),
+                    error=type(exc).__name__,
                 )
                 continue
             except (TransientProviderError, TimeoutError) as exc:
                 last_exc = exc
                 logger.warning(
-                    "data_provider.failover",
+                    "data_provider.registry.failover",
                     provider=reg.name,
                     method=method,
                     symbol=symbol,
-                    error=str(exc),
+                    error=type(exc).__name__,
                 )
                 continue
 
-        raise NoProviderAvailable(
-            f"All providers failed for asset_class={asset_class.value} method={method}: {last_exc}"
+            if retry_on_empty and (
+                result is None
+                or _is_empty_dataframe(result)
+                or (isinstance(result, dict) and not result)
+            ):
+                last_empty = result
+                logger.info(
+                    "data_provider.registry.empty_result",
+                    provider=reg.name,
+                    method=method,
+                    symbol=symbol,
+                )
+                continue
+
+            return result
+
+        if last_empty is not None:
+            return last_empty
+
+        raise NoProviderAvailableError(
+            f"All providers failed for asset_class={asset_class.value} "
+            f"method={method}: {type(last_exc).__name__ if last_exc else 'none'}"
         )
 
 

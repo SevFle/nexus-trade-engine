@@ -39,6 +39,14 @@ logger = structlog.get_logger()
 
 ENV_VAR_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")
 
+# Only fields whose name appears in this set may carry ``${VAR}``
+# placeholders. This keeps env expansion away from ``priority``,
+# ``asset_classes``, and other structural fields whose value should
+# never come from an arbitrary env var.
+EXPANDABLE_OPTION_KEYS: frozenset[str] = frozenset(
+    {"api_key", "api_secret", "environment", "passphrase", "account_id"}
+)
+
 
 @dataclass(frozen=True)
 class ProviderConfig:
@@ -62,28 +70,36 @@ class ProviderConfig:
         return frozenset(out)
 
 
-def _expand_env_vars(value: str) -> str:
+def _expand_env_vars(value: str, *, key: str, provider: str) -> str:
+    """Replace ``${VAR}`` references with environment values.
+
+    Raises if a referenced variable is unset — silent expansion to ``""``
+    masks misconfigurations (e.g. forgotten ``POLYGON_API_KEY``) and was
+    flagged by adversarial review as security-relevant.
+    """
+    missing: list[str] = []
+
     def repl(match: re.Match[str]) -> str:
-        return os.environ.get(match.group(1), "")
+        var = match.group(1)
+        env_value = os.environ.get(var)
+        if env_value is None:
+            missing.append(var)
+            return ""
+        return env_value
 
-    return ENV_VAR_PATTERN.sub(repl, value)
-
-
-def _coerce(value: object) -> object:
-    if isinstance(value, str):
-        return _expand_env_vars(value)
-    if isinstance(value, dict):
-        return {k: _coerce(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_coerce(v) for v in value]
-    return value
+    expanded = ENV_VAR_PATTERN.sub(repl, value)
+    if missing:
+        raise ValueError(
+            f"data_providers.{provider}.{key} references unset env var(s): "
+            f"{', '.join(sorted(set(missing)))}"
+        )
+    return expanded
 
 
 def parse_config(payload: dict) -> list[ProviderConfig]:
-    raw = ((_coerce(payload) or {}) or {})
-    if not isinstance(raw, dict):
+    if not isinstance(payload, dict):
         raise ValueError("data_providers config must be a mapping")
-    providers = raw.get("data_providers") or {}
+    providers = payload.get("data_providers") or {}
     if not isinstance(providers, dict):
         raise ValueError("data_providers root must be a mapping")
 
@@ -94,11 +110,21 @@ def parse_config(payload: dict) -> list[ProviderConfig]:
         enabled = bool(body.get("enabled", True))
         priority = int(body.get("priority", 100))
         asset_classes = list(body.get("asset_classes") or [])
-        options = {
-            k: str(v)
-            for k, v in body.items()
-            if k not in {"enabled", "priority", "asset_classes"}
-        }
+
+        options: dict[str, str] = {}
+        for option_key, value in body.items():
+            if option_key in {"enabled", "priority", "asset_classes"}:
+                continue
+            text = str(value)
+            if option_key in EXPANDABLE_OPTION_KEYS:
+                text = _expand_env_vars(text, key=option_key, provider=name)
+            elif ENV_VAR_PATTERN.search(text):
+                raise ValueError(
+                    f"data_providers.{name}.{option_key} is not in the env-expandable "
+                    f"allowlist: {sorted(EXPANDABLE_OPTION_KEYS)}"
+                )
+            options[option_key] = text
+
         out.append(
             ProviderConfig(
                 name=name,

@@ -11,6 +11,7 @@ from engine.data.providers._cache import ProviderCache
 from engine.data.providers._http import (
     DEFAULT_OHLCV_TTL_S,
     HTTPProviderBase,
+    encode_path_segment,
     normalise_ohlcv,
 )
 from engine.data.providers.base import (
@@ -98,11 +99,16 @@ class AlpacaDataProvider(HTTPProviderBase, IDataProvider):
         if cached is not None:
             return cached
 
-        end = datetime.now(UTC)
-        start = end - timedelta(days=PERIOD_DAYS[period])
+        # Drop sub-second precision (some Alpaca tiers reject it) and clip
+        # the request window so the current still-forming bar is excluded
+        # — avoids look-ahead in backtests that pass ``end=now()``.
+        now = datetime.now(UTC).replace(microsecond=0)
+        end = now - timedelta(minutes=1)
+        start = (end - timedelta(days=PERIOD_DAYS[period])).replace(microsecond=0)
+        encoded = encode_path_segment(symbol)
         data = await self._request_json(
             "GET",
-            f"/v2/stocks/{symbol}/bars",
+            f"/v2/stocks/{encoded}/bars",
             params={
                 "timeframe": INTERVAL_MAP[interval],
                 "start": start.isoformat(),
@@ -117,7 +123,8 @@ class AlpacaDataProvider(HTTPProviderBase, IDataProvider):
         return df
 
     async def get_latest_price(self, symbol: str) -> float | None:
-        data = await self._request_json("GET", f"/v2/stocks/{symbol}/trades/latest")
+        encoded = encode_path_segment(symbol)
+        data = await self._request_json("GET", f"/v2/stocks/{encoded}/trades/latest")
         trade = (data or {}).get("trade") or {}
         price = trade.get("p")
         return float(price) if isinstance(price, (int, float)) else None

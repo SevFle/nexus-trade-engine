@@ -682,6 +682,221 @@ def test_configure_registry_skips_invalid_provider(caplog):
     assert out.list_providers() == []
 
 
+# ---------- security regression ----------
+
+
+def test_validate_symbol_rejects_url_like_strings():
+    from engine.data.providers._http import validate_symbol
+
+    with pytest.raises(FatalProviderError):
+        validate_symbol("http://attacker.example/x")
+    with pytest.raises(FatalProviderError):
+        validate_symbol("../../etc/passwd")
+    with pytest.raises(FatalProviderError):
+        validate_symbol("AAPL\nattack")
+    # legitimate symbols pass
+    assert validate_symbol("AAPL") == "AAPL"
+    assert validate_symbol("BRK.B") == "BRK.B"
+    assert validate_symbol("EUR/USD") == "EUR/USD"
+
+
+def test_redact_secrets_strips_obvious_credentials():
+    from engine.data.providers._http import redact_secrets
+
+    assert "<redacted>" in redact_secrets("apiKey=AKIAIOSFODNN7EXAMPLE")
+    assert "<redacted>" in redact_secrets("Authorization: Bearer abcdef0123456789abcdef0123456789")
+    assert "<redacted>" in redact_secrets("signature=deadbeefdeadbeefdeadbeefdeadbeef")
+
+
+@pytest.mark.asyncio
+async def test_request_refuses_locked_auth_header_override():
+    cache = _make_cache()
+    async with _mock_transport(
+        lambda r: httpx.Response(200, json={"results": {"p": 1.0}})
+    ) as client:
+        provider = PolygonDataProvider(api_key="secret", client=client, cache=cache)
+        with pytest.raises(FatalProviderError, match="locked header"):
+            await provider._request_json("GET", "/x", headers={"Authorization": "Bearer evil"})
+
+
+@pytest.mark.asyncio
+async def test_request_refuses_cross_host_path():
+    cache = _make_cache()
+    provider = YahooDataProvider(
+        client=_mock_transport(lambda r: httpx.Response(200, json={})),
+        cache=cache,
+    )
+    with pytest.raises(FatalProviderError, match="cross-host"):
+        await provider._request_json("GET", "https://attacker.example/exfil")
+    await provider.aclose()
+
+
+# ---------- registry capability prefilter + empty failover ----------
+
+
+@pytest.mark.asyncio
+async def test_registry_prefilters_by_capability():
+    from engine.data.providers.base import CapabilityNotSupportedError
+
+    registry = DataProviderRegistry()
+    no_options = _FakeProvider("a", {AssetClass.OPTIONS})
+    # Force capability flag false
+    no_options.capability = type(no_options.capability)(  # type: ignore[call-arg]
+        name=no_options.capability.name,
+        asset_classes=no_options.capability.asset_classes,
+        supports_options_chain=False,
+    )
+    registry.register(ProviderRegistration(provider=no_options, priority=1))
+    with pytest.raises(CapabilityNotSupportedError):
+        await registry.get_options_chain("AAPL", asset_class=AssetClass.OPTIONS)
+
+
+@pytest.mark.asyncio
+async def test_registry_falls_over_when_first_returns_empty():
+    """Empty DataFrame from primary should let secondary try."""
+    registry = DataProviderRegistry()
+    primary = _FakeProvider(
+        "primary",
+        {AssetClass.EQUITY},
+        ohlcv=pd.DataFrame(columns=["open", "high", "low", "close", "volume"]),
+    )
+    fallback = _FakeProvider("fallback", {AssetClass.EQUITY})
+    registry.register(ProviderRegistration(provider=primary, priority=1))
+    registry.register(ProviderRegistration(provider=fallback, priority=10))
+    df = await registry.get_ohlcv("AAPL", asset_class=AssetClass.EQUITY)
+    assert not df.empty
+
+
+# ---------- config env expansion ----------
+
+
+def test_parse_config_raises_on_unset_env_var(monkeypatch):
+    monkeypatch.delenv("THIS_DEFINITELY_DOES_NOT_EXIST", raising=False)
+    payload = {
+        "data_providers": {
+            "polygon": {
+                "asset_classes": ["equity"],
+                "api_key": "${THIS_DEFINITELY_DOES_NOT_EXIST}",
+            }
+        }
+    }
+    with pytest.raises(ValueError, match="unset env var"):
+        parse_config(payload)
+
+
+def test_parse_config_blocks_env_in_non_secret_field():
+    payload = {
+        "data_providers": {
+            "polygon": {
+                "asset_classes": ["equity"],
+                "rogue_field": "${EVIL}",
+            }
+        }
+    }
+    with pytest.raises(ValueError, match="env-expandable allowlist"):
+        parse_config(payload)
+
+
+# ---------- cache key + tz roundtrip ----------
+
+
+def test_cache_key_rejects_non_primitive():
+    from datetime import datetime as _dt
+
+    with pytest.raises(TypeError):
+        ProviderCache.make_key("p", "m", when=_dt.now())  # noqa: DTZ005
+
+
+@pytest.mark.asyncio
+async def test_cache_dataframe_preserves_utc_tz():
+    cache = _make_cache()
+    df = _ohlcv_df()
+    key = ProviderCache.make_key("yahoo", "ohlcv", symbol="AAPL")
+    await cache.set_dataframe(key, df, ttl_seconds=10)
+    out = await cache.get_dataframe(key)
+    assert out is not None
+    assert isinstance(out.index, pd.DatetimeIndex)
+    assert out.index.tz is not None
+    assert str(out.index.tz) == "UTC"
+
+
+# ---------- adapter-specific data correctness ----------
+
+
+@pytest.mark.asyncio
+async def test_binance_rejects_period_exceeding_limit():
+    cache = _make_cache()
+    provider = BinanceDataProvider(
+        client=_mock_transport(lambda r: httpx.Response(200, json=[])),
+        cache=cache,
+    )
+    with pytest.raises(FatalProviderError, match="exceeds single-call limit"):
+        await provider.get_ohlcv("BTCUSDT", period="5y", interval="1d")
+    await provider.aclose()
+
+
+@pytest.mark.asyncio
+async def test_polygon_excludes_today_from_path():
+    captured: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        return httpx.Response(200, json={"results": []})
+
+    cache = _make_cache()
+    async with _mock_transport(handler) as client:
+        provider = PolygonDataProvider(api_key="x", client=client, cache=cache)
+        await provider.get_ohlcv("AAPL", period="1mo", interval="1d")
+
+    from datetime import UTC, datetime, timedelta
+
+    today = datetime.now(UTC).date().isoformat()
+    yesterday = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
+    assert today not in captured["path"]
+    assert yesterday in captured["path"]
+
+
+@pytest.mark.asyncio
+async def test_oanda_normalises_symbol_in_cache_key():
+    """Cache key should match for ``EUR/USD`` and ``EUR_USD`` forms."""
+    payload = {
+        "candles": [
+            {
+                "time": "2026-01-01T00:00:00.000000000Z",
+                "complete": True,
+                "volume": 100,
+                "mid": {"o": "1.10", "h": "1.11", "l": "1.09", "c": "1.105"},
+            }
+        ]
+    }
+    requests = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests["n"] += 1
+        return httpx.Response(200, json=payload)
+
+    cache = _make_cache()
+    async with _mock_transport(handler) as client:
+        provider = OandaDataProvider(api_key="t", client=client, cache=cache)
+        await provider.get_ohlcv("EUR/USD", period="1mo", interval="1d")
+        await provider.get_ohlcv("EUR_USD", period="1mo", interval="1d")
+    assert requests["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_coingecko_logs_unknown_symbol(caplog):
+    payload = {"bitcoin": {"usd": 50_000.0}}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    cache = _make_cache()
+    async with _mock_transport(handler) as client:
+        provider = CoinGeckoDataProvider(client=client, cache=cache)
+        out = await provider.get_multiple_prices(["BTC", "BOGUS"])
+    assert "BTC" in out and "BOGUS" not in out
+
+
 # ---------- adapter unsupported-feature stubs ----------
 
 

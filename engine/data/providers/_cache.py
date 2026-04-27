@@ -24,6 +24,10 @@ import structlog
 
 logger = structlog.get_logger()
 
+# Cap an individual cached payload at 8 MB to bound memory + decode cost
+# from a malicious or pathological provider response.
+CACHE_PAYLOAD_CAP = 8 * 1024 * 1024
+
 
 class _AsyncRedis(Protocol):
     async def get(self, key: str) -> bytes | None: ...
@@ -82,19 +86,45 @@ class ProviderCache:
 
     @staticmethod
     def make_key(provider: str, method: str, **params: object) -> str:
-        payload = json.dumps(params, sort_keys=True, default=str)
-        digest = hashlib.sha1(payload.encode(), usedforsecurity=False).hexdigest()[:12]
-        return f"nexus:dp:{provider}:{method}:{digest}"
+        """Hash the call parameters into a deterministic cache key.
+
+        Params must be JSON-serialisable primitives. Non-primitives are
+        rejected up front rather than silently coerced via ``str``,
+        which avoids cache collisions between e.g. ``"1"`` and ``1``.
+        """
+        for key, value in params.items():
+            if value is None:
+                continue
+            if not isinstance(value, (str, int, float, bool, list, tuple)):
+                raise TypeError(
+                    f"cache key param {key!r} must be a primitive, got {type(value).__name__}"
+                )
+        payload = json.dumps(params, sort_keys=True)
+        digest = hashlib.sha256(payload.encode()).hexdigest()
+        return f"nexus:dp:v1:{provider}:{method}:{digest}"
 
     async def get_dataframe(self, key: str) -> pd.DataFrame | None:
         raw = await self._raw_get(key)
         if raw is None:
             return None
+        if len(raw) > CACHE_PAYLOAD_CAP:
+            logger.warning(
+                "data_provider.cache.payload_too_large",
+                key=key,
+                size=len(raw),
+            )
+            return None
         try:
-            return pd.read_json(io.BytesIO(raw), orient="split")
+            df = pd.read_json(io.BytesIO(raw), orient="split")
         except ValueError as exc:
             logger.warning("data_provider.cache.decode_failed", key=key, error=str(exc))
             return None
+        # ``read_json`` returns a tz-naive DatetimeIndex even when we serialised
+        # an aware one — re-localise to UTC so callers can compare against
+        # tz-aware timestamps without ``TypeError``.
+        if isinstance(df.index, pd.DatetimeIndex) and df.index.tz is None:
+            df.index = df.index.tz_localize("UTC")
+        return df
 
     async def set_dataframe(self, key: str, df: pd.DataFrame, ttl_seconds: int) -> None:
         if df is None or df.empty:
@@ -102,7 +132,15 @@ class ProviderCache:
         encoded = df.to_json(orient="split", date_format="iso")
         if encoded is None:
             return
-        await self._raw_set(key, encoded.encode(), ttl_seconds)
+        payload = encoded.encode()
+        if len(payload) > CACHE_PAYLOAD_CAP:
+            logger.warning(
+                "data_provider.cache.refuse_oversized_set",
+                key=key,
+                size=len(payload),
+            )
+            return
+        await self._raw_set(key, payload, ttl_seconds)
 
     async def get_json(self, key: str) -> object | None:
         raw = await self._raw_get(key)

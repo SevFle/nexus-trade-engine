@@ -13,7 +13,9 @@ from engine.data.providers._cache import ProviderCache
 from engine.data.providers._http import (
     DEFAULT_OHLCV_TTL_S,
     HTTPProviderBase,
+    encode_path_segment,
     normalise_ohlcv,
+    validate_symbol,
 )
 from engine.data.providers.base import (
     AssetClass,
@@ -83,9 +85,10 @@ class YahooDataProvider(HTTPProviderBase, IDataProvider):
         if cached is not None:
             return cached
 
+        encoded = encode_path_segment(symbol)
         data = await self._request_json(
             "GET",
-            f"/v8/finance/chart/{symbol}",
+            f"/v8/finance/chart/{encoded}",
             params={"range": period, "interval": INTERVAL_MAP[interval]},
         )
         df = self._parse_chart(data)
@@ -102,10 +105,11 @@ class YahooDataProvider(HTTPProviderBase, IDataProvider):
     async def get_multiple_prices(self, symbols: list[str]) -> dict[str, float]:
         if not symbols:
             return {}
+        valid = [validate_symbol(s) for s in symbols]
         data = await self._request_json(
             "GET",
             "/v7/finance/quote",
-            params={"symbols": ",".join(symbols)},
+            params={"symbols": ",".join(valid)},
         )
         out: dict[str, float] = {}
         for entry in data.get("quoteResponse", {}).get("result", []) or []:

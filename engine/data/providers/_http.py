@@ -7,8 +7,10 @@ cache so each adapter only owns its endpoint logic and response parsing.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 import pandas as pd
@@ -18,6 +20,7 @@ from engine.data.providers._cache import ProviderCache
 from engine.data.providers._resilience import TokenBucket, call_with_retry
 from engine.data.providers.base import (
     OHLCV_COLUMNS,
+    SYMBOL_PATTERN,
     DataProviderCapability,
     FatalProviderError,
     HealthCheckResult,
@@ -29,12 +32,57 @@ logger = structlog.get_logger()
 
 DEFAULT_TIMEOUT_S = 10.0
 DEFAULT_OHLCV_TTL_S = 60
+ERROR_BODY_PREVIEW = 200
+RESPONSE_BYTE_CAP = 16 * 1024 * 1024  # 16 MB hard cap on a single response
 
 HTTP_CLIENT_ERROR_MIN = 400
 HTTP_SERVER_ERROR_MIN = 500
 HTTP_SERVER_ERROR_MAX = 600
 TRANSIENT_STATUS = frozenset({408, 425, 429})
 AUTH_STATUS = frozenset({401, 403})
+
+_SYMBOL_RE = re.compile(SYMBOL_PATTERN)
+_SECRET_PATTERNS = (
+    re.compile(r"(?i)(api[-_]?key|apikey|secret|signature|token|authorization)\s*[:=]\s*\S+"),
+    re.compile(r"\b[A-Za-z0-9_\-]{24,}\b"),  # bearer tokens / signatures
+)
+# Header names whose values must never be overridden by per-call headers.
+LOCKED_AUTH_HEADERS: frozenset[str] = frozenset(
+    h.lower()
+    for h in (
+        "authorization",
+        "apca-api-key-id",
+        "apca-api-secret-key",
+        "x-mbx-apikey",
+        "x-cg-api-key",
+    )
+)
+
+
+def validate_symbol(symbol: str) -> str:
+    """Reject symbols that could break out of a URL path or hit unintended hosts.
+
+    Symbols are user-supplied and flow into ``f"/v2/aggs/ticker/{symbol}/..."``.
+    Without validation an adversarial symbol like ``"http://attacker"`` would
+    redirect httpx off our base_url and exfiltrate auth headers (SSRF).
+    Path-traversal sequences like ``..`` are also rejected.
+    """
+    if not isinstance(symbol, str) or not _SYMBOL_RE.fullmatch(symbol) or ".." in symbol:
+        raise FatalProviderError(f"invalid symbol: {symbol!r}")
+    return symbol
+
+
+def encode_path_segment(symbol: str) -> str:
+    """URL-encode a validated symbol for safe interpolation into a path."""
+    return quote(validate_symbol(symbol), safe="")
+
+
+def redact_secrets(text: str) -> str:
+    """Strip likely secret material from a body preview before logging it."""
+    out = text
+    for pat in _SECRET_PATTERNS:
+        out = pat.sub("<redacted>", out)
+    return out
 
 
 def normalise_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
@@ -80,6 +128,7 @@ class HTTPProviderBase:
     ) -> None:
         self.capability = capability
         self._base_url = base_url.rstrip("/")
+        self._base_host = httpx.URL(self._base_url).host
         self._client = client
         self._owns_client = client is None
         self._timeout = timeout
@@ -105,6 +154,19 @@ class HTTPProviderBase:
             await self._client.aclose()
             self._client = None
 
+    def _resolve_url(self, path: str) -> httpx.URL:
+        """Resolve ``path`` against the base URL and refuse cross-host targets.
+
+        Stops absolute URLs or off-base redirects from leaking auth headers.
+        """
+        target = httpx.URL(self._base_url).join(path)
+        if target.host and target.host != self._base_host:
+            raise FatalProviderError(
+                f"{self.capability.name} refused cross-host path "
+                f"(base={self._base_host}, target={target.host})"
+            )
+        return target
+
     async def _request_json(
         self,
         method: str,
@@ -113,41 +175,56 @@ class HTTPProviderBase:
         params: dict[str, Any] | None = None,
         json: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> Any:
         client = await self._ensure_client()
-        merged_headers = {**self._headers, **(headers or {})} or None
+        # Default auth headers always win — caller-supplied headers can extend
+        # but never overwrite our locked auth header set.
+        if headers:
+            for key in headers:
+                if key.lower() in LOCKED_AUTH_HEADERS:
+                    raise FatalProviderError(
+                        f"{self.capability.name} refusing to override locked header: {key}"
+                    )
+        merged_headers = {**(headers or {}), **self._headers} or None
+        target = self._resolve_url(path)
 
-        async def call() -> dict[str, Any]:
+        async def call() -> Any:
             await self._bucket.acquire()
             try:
                 response = await client.request(
-                    method, path, params=params, json=json, headers=merged_headers
+                    method, target, params=params, json=json, headers=merged_headers
                 )
             except httpx.TimeoutException as exc:
-                raise TransientProviderError(f"{self.capability.name} timeout: {exc}") from exc
+                raise TransientProviderError(f"{self.capability.name} timeout") from exc
             except httpx.RequestError as exc:
-                raise TransientProviderError(f"{self.capability.name} network: {exc}") from exc
+                raise TransientProviderError(
+                    f"{self.capability.name} network: {type(exc).__name__}"
+                ) from exc
 
             status = response.status_code
+            preview = redact_secrets(response.text[:ERROR_BODY_PREVIEW])
             if (
                 status in TRANSIENT_STATUS
                 or HTTP_SERVER_ERROR_MIN <= status < HTTP_SERVER_ERROR_MAX
             ):
                 raise TransientProviderError(
-                    f"{self.capability.name} HTTP {status}: {response.text[:200]}"
+                    f"{self.capability.name} HTTP {status}: {preview}"
                 )
             if status in AUTH_STATUS:
                 raise FatalProviderError(f"{self.capability.name} auth error {status}")
             if status >= HTTP_CLIENT_ERROR_MIN:
-                raise FatalProviderError(
-                    f"{self.capability.name} HTTP {status}: {response.text[:200]}"
-                )
+                raise FatalProviderError(f"{self.capability.name} HTTP {status}: {preview}")
 
+            content = response.content
+            if len(content) > RESPONSE_BYTE_CAP:
+                raise FatalProviderError(
+                    f"{self.capability.name} response too large: {len(content)} bytes"
+                )
             try:
                 return response.json()
             except ValueError as exc:
                 raise FatalProviderError(
-                    f"{self.capability.name} returned non-JSON: {exc}"
+                    f"{self.capability.name} returned non-JSON"
                 ) from exc
 
         return await call_with_retry(call, provider=self.capability.name)
@@ -170,13 +247,13 @@ class HTTPProviderBase:
             return HealthCheckResult(
                 name=self.capability.name,
                 status=HealthStatus.DOWN,
-                detail=str(exc),
+                detail=type(exc).__name__,
             )
         except TransientProviderError as exc:
             return HealthCheckResult(
                 name=self.capability.name,
                 status=HealthStatus.DEGRADED,
-                detail=str(exc),
+                detail=type(exc).__name__,
             )
         elapsed_ms = (time.monotonic() - started) * 1000
         return HealthCheckResult(

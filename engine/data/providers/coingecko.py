@@ -5,11 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pandas as pd
+import structlog
 
 from engine.data.providers._cache import ProviderCache
 from engine.data.providers._http import (
     DEFAULT_OHLCV_TTL_S,
     HTTPProviderBase,
+    encode_path_segment,
     normalise_ohlcv,
 )
 from engine.data.providers.base import (
@@ -20,6 +22,8 @@ from engine.data.providers.base import (
     IDataProvider,
     RateLimit,
 )
+
+logger = structlog.get_logger()
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -77,14 +81,15 @@ class CoinGeckoDataProvider(HTTPProviderBase, IDataProvider):
             return cached
 
         coin_id = self._symbol_to_id(symbol)
+        encoded = encode_path_segment(coin_id)
         data = await self._request_json(
             "GET",
-            f"/coins/{coin_id}/ohlc",
+            f"/coins/{encoded}/ohlc",
             params={"vs_currency": "usd", "days": PERIOD_DAYS[period]},
         )
         market = await self._request_json(
             "GET",
-            f"/coins/{coin_id}/market_chart",
+            f"/coins/{encoded}/market_chart",
             params={"vs_currency": "usd", "days": PERIOD_DAYS[period], "interval": "daily"},
         )
         df = self._parse_ohlc(data, market)
@@ -94,6 +99,7 @@ class CoinGeckoDataProvider(HTTPProviderBase, IDataProvider):
 
     async def get_latest_price(self, symbol: str) -> float | None:
         coin_id = self._symbol_to_id(symbol)
+        encode_path_segment(coin_id)  # validate
         data = await self._request_json(
             "GET",
             "/simple/price",
@@ -106,16 +112,23 @@ class CoinGeckoDataProvider(HTTPProviderBase, IDataProvider):
         if not symbols:
             return {}
         ids = [self._symbol_to_id(s) for s in symbols]
+        unique_ids = list(dict.fromkeys(ids))
         data = await self._request_json(
             "GET",
             "/simple/price",
-            params={"ids": ",".join(ids), "vs_currencies": "usd"},
+            params={"ids": ",".join(unique_ids), "vs_currencies": "usd"},
         )
         out: dict[str, float] = {}
         for sym, coin_id in zip(symbols, ids, strict=True):
             usd = (data or {}).get(coin_id, {}).get("usd")
             if isinstance(usd, (int, float)):
                 out[sym] = float(usd)
+            else:
+                logger.warning(
+                    "data_provider.coingecko.unknown_symbol",
+                    symbol=sym,
+                    coin_id=coin_id,
+                )
         return out
 
     async def get_options_chain(
@@ -134,14 +147,30 @@ class CoinGeckoDataProvider(HTTPProviderBase, IDataProvider):
 
     @staticmethod
     def _symbol_to_id(symbol: str) -> str:
-        # CoinGecko uses slug ids ("bitcoin"), users may pass "BTC" or "bitcoin".
+        """Map a ticker to a CoinGecko slug.
+
+        Built-in lookups cover the common cases; for everything else, the
+        adapter falls back to the lower-cased symbol and CoinGecko itself
+        decides whether the slug exists. ``get_multiple_prices`` logs a
+        warning when CoinGecko returns no entry, so unknown slugs surface
+        explicitly rather than silently dropping symbols.
+        """
+        if not isinstance(symbol, str):
+            raise FatalProviderError(f"coingecko symbol must be a string, got {type(symbol)}")
         normalised = symbol.lower().strip()
+        if not normalised or any(c in normalised for c in (" ", "/", "..", "\\")):
+            raise FatalProviderError(f"coingecko invalid symbol: {symbol!r}")
         return {
             "btc": "bitcoin",
             "eth": "ethereum",
             "sol": "solana",
             "ada": "cardano",
             "doge": "dogecoin",
+            "xrp": "ripple",
+            "matic": "matic-network",
+            "avax": "avalanche-2",
+            "dot": "polkadot",
+            "ltc": "litecoin",
         }.get(normalised, normalised)
 
     @staticmethod

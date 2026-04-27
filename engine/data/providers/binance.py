@@ -15,6 +15,7 @@ from engine.data.providers._http import (
     DEFAULT_OHLCV_TTL_S,
     HTTPProviderBase,
     normalise_ohlcv,
+    validate_symbol,
 )
 from engine.data.providers.base import (
     AssetClass,
@@ -41,6 +42,8 @@ INTERVAL_MAP = {
     "1d": "1d",
     "1wk": "1w",
 }
+
+BINANCE_KLINES_MAX = 1000
 
 PERIOD_LIMIT = {
     "1d": 1,
@@ -95,19 +98,28 @@ class BinanceDataProvider(HTTPProviderBase, IDataProvider):
         if period not in PERIOD_LIMIT:
             raise FatalProviderError(f"binance invalid period {period}")
 
+        normalised = validate_symbol(symbol.upper())
         cache_key = ProviderCache.make_key(
-            "binance", "ohlcv", symbol=symbol, period=period, interval=interval
+            "binance", "ohlcv", symbol=normalised, period=period, interval=interval
         )
         cached = await self._cache.get_dataframe(cache_key)
         if cached is not None:
             return cached
 
-        limit = min(PERIOD_LIMIT[period], 1000)
+        # Binance caps a single response at 1000 klines; refuse to silently
+        # truncate longer windows so callers don't get a quietly short
+        # backtest history.
+        if PERIOD_LIMIT[period] > BINANCE_KLINES_MAX:
+            raise FatalProviderError(
+                f"binance period={period} exceeds single-call limit "
+                f"({BINANCE_KLINES_MAX}); use a shorter period or a paginating provider"
+            )
+        limit = PERIOD_LIMIT[period]
         klines = await self._request_json(
             "GET",
             "/api/v3/klines",
             params={
-                "symbol": symbol.upper(),
+                "symbol": normalised,
                 "interval": INTERVAL_MAP[interval],
                 "limit": limit,
             },
@@ -118,8 +130,9 @@ class BinanceDataProvider(HTTPProviderBase, IDataProvider):
         return df
 
     async def get_latest_price(self, symbol: str) -> float | None:
+        normalised = validate_symbol(symbol.upper())
         data = await self._request_json(
-            "GET", "/api/v3/ticker/price", params={"symbol": symbol.upper()}
+            "GET", "/api/v3/ticker/price", params={"symbol": normalised}
         )
         price = data.get("price") if isinstance(data, dict) else None
         return float(price) if isinstance(price, (str, int, float)) else None
@@ -148,10 +161,11 @@ class BinanceDataProvider(HTTPProviderBase, IDataProvider):
     async def get_orderbook(self, symbol: str, depth: int = 20) -> pd.DataFrame:
         if depth not in {5, 10, 20, 50, 100, 500, 1000, 5000}:
             depth = 20
+        normalised = validate_symbol(symbol.upper())
         data = await self._request_json(
             "GET",
             "/api/v3/depth",
-            params={"symbol": symbol.upper(), "limit": depth},
+            params={"symbol": normalised, "limit": depth},
         )
         bids = [(float(p), float(q), "bid") for p, q in data.get("bids") or []]
         asks = [(float(p), float(q), "ask") for p, q in data.get("asks") or []]
@@ -164,6 +178,8 @@ class BinanceDataProvider(HTTPProviderBase, IDataProvider):
         return await self._probe_health(path="/api/v3/ping")
 
     def _sign(self, params: dict[str, str | int]) -> str:
+        if not self._api_secret:
+            raise FatalProviderError("binance signing requires api_secret")
         query = urlencode(params)
         return hmac.new(
             self._api_secret.encode(), query.encode(), hashlib.sha256
