@@ -12,6 +12,15 @@ logger = structlog.get_logger()
 STRATEGIES_DIR = Path(__file__).resolve().parent.parent.parent / "strategies"
 
 
+def is_scoring_strategy(instance: Any) -> bool:
+    try:
+        from nexus_sdk.scoring import IScoringStrategy
+
+        return isinstance(instance, IScoringStrategy)
+    except ImportError:
+        return False
+
+
 def discover_strategies(base_dir: Path | None = None) -> dict[str, dict[str, Any]]:
     root = base_dir or STRATEGIES_DIR
     strategies: dict[str, dict[str, Any]] = {}

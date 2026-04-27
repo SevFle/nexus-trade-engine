@@ -1,0 +1,16 @@
+name: quality_momentum
+version: "0.1.0"
+description: Multi-factor Quality-Momentum scoring strategy using composite Z-score ranking
+author: nexus-team
+type: scoring
+parameters:
+  roe_weight: 0.3
+  pe_weight: 0.2
+  momentum_weight: 0.2
+  debt_equity_weight: 0.15
+  earnings_growth_weight: 0.15
+  winsorize_pct:
+    - 1
+    - 99
+symbols: []
+timeframe: 1d

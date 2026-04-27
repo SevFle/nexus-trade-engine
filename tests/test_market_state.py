@@ -258,7 +258,27 @@ class TestMarketStateWindowedAccess:
 
 
 class TestMarketStateToSdk:
-    def test_to_sdk_state_raises_import_error_without_sdk(self):
+    def test_to_sdk_state_raises_import_error_without_sdk(self, monkeypatch):
+        # Pytest config now puts `sdk/` on pythonpath so `import nexus_sdk`
+        # succeeds at runtime. Verify the *contract* that to_sdk_state
+        # propagates ModuleNotFoundError when the SDK isn't installed by
+        # blocking the import in this test only.
+        import builtins
+        import sys
+
+        for mod in list(sys.modules):
+            if mod == "nexus_sdk" or mod.startswith("nexus_sdk."):
+                monkeypatch.delitem(sys.modules, mod, raising=False)
+
+        real_import = builtins.__import__
+
+        def blocked_import(name, *args, **kwargs):
+            if name == "nexus_sdk.strategy" or name.startswith("nexus_sdk."):
+                raise ModuleNotFoundError(name)
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", blocked_import)
+
         df = _make_ohlcv_df(60)
         state = MarketStateBuilder(min_bars=10).build_for_backtest(
             {"AAPL": df},
