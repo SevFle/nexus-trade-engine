@@ -12,6 +12,13 @@ from engine.api.auth.local import LocalAuthProvider
 from engine.api.auth.registry import AuthProviderRegistry
 from engine.api.router import api_router
 from engine.config import settings
+from engine.data.providers import (
+    AssetClass,
+    ProviderRegistration,
+    YahooDataProvider,
+    configure_from_file,
+    get_registry,
+)
 from engine.db.session import dispose_engine, get_session_factory
 from engine.legal.sync import sync_legal_documents
 from engine.observability.logging import setup_logging
@@ -21,6 +28,47 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 logger = structlog.get_logger()
+
+
+def _configure_data_providers() -> None:
+    """Wire data providers into the registry on app start.
+
+    Loads YAML at ``settings.data_providers_config`` if set; otherwise
+    registers a keyless Yahoo adapter so the API works in dev without any
+    further setup. Failures are logged but never abort startup — the API
+    will still serve a 503 from the provider routes.
+    """
+    registry = get_registry()
+    if registry.list_providers():
+        return  # already configured (e.g. by tests)
+
+    if settings.data_providers_config:
+        try:
+            configure_from_file(settings.data_providers_config, registry)
+        except Exception:
+            logger.exception(
+                "data_provider.bootstrap.failed", path=settings.data_providers_config
+            )
+        else:
+            logger.info(
+                "data_provider.bootstrap.from_file",
+                path=settings.data_providers_config,
+                count=len(registry.list_providers()),
+            )
+            return
+
+    try:
+        registry.register(
+            ProviderRegistration(
+                provider=YahooDataProvider(),
+                priority=99,
+                asset_classes=frozenset({AssetClass.EQUITY, AssetClass.ETF}),
+            )
+        )
+        logger.info("data_provider.bootstrap.default", provider="yahoo")
+    except ValueError:
+        # Already registered by a parallel bootstrap; ignore.
+        pass
 
 
 def _build_auth_registry() -> AuthProviderRegistry:
@@ -62,6 +110,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.valkey = Valkey.from_url(settings.valkey_url)
     app.state.auth_registry = _build_auth_registry()
     logger.info("auth.providers_loaded", providers=list(app.state.auth_registry.providers.keys()))
+    _configure_data_providers()
     try:
         session_factory = get_session_factory()
         async with session_factory() as db:

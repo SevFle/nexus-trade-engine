@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Zap, Rewind, Store, BarChart3, Shield, Terminal, DollarSign, LogOut, Settings as SettingsIcon } from "lucide-react";
+import { LayoutDashboard, Zap, Rewind, Store, BarChart3, Shield, Terminal, DollarSign, LogOut, Settings as SettingsIcon, CandlestickChart } from "lucide-react";
 import clsx from "clsx";
 import { useTheme } from "../../hooks/useTheme";
 import { useAuth } from "../../auth/useAuth";
@@ -8,6 +8,7 @@ import { Footer } from "./Footer";
 
 const navItems = [
   { to: "/", label: "DASHBOARD", icon: LayoutDashboard },
+  { to: "/market-watch", label: "MARKET WATCH", icon: CandlestickChart },
   { to: "/strategies", label: "STRATEGIES", icon: Zap },
   { to: "/backtest", label: "BACKTEST", icon: Rewind },
   { to: "/marketplace", label: "MARKETPLACE", icon: Store },

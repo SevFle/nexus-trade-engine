@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import OAuthCallback from "./pages/OAuthCallback";
 import Dashboard from "./screens/Dashboard";
+import MarketWatch from "./screens/MarketWatch";
 import Strategies from "./screens/Strategies";
 import Backtest from "./screens/Backtest";
 import Marketplace from "./screens/Marketplace";
@@ -59,6 +60,7 @@ export default function App() {
               }
             >
               <Route path="/" element={<Dashboard />} />
+              <Route path="/market-watch" element={<MarketWatch />} />
               <Route path="/strategies" element={<Strategies />} />
               <Route path="/backtest" element={<Backtest />} />
               <Route path="/marketplace" element={<Marketplace />} />
