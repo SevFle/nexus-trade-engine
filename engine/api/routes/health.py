@@ -6,6 +6,7 @@ import structlog
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import text
 
+from engine.data.providers import get_registry
 from engine.deps import get_db
 
 if TYPE_CHECKING:
@@ -18,6 +19,24 @@ logger = structlog.get_logger()
 @router.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/health/providers")
+async def provider_health() -> dict[str, object]:
+    registry = get_registry()
+    results = await registry.health()
+    summary = {
+        r.name: {
+            "status": r.status.value,
+            "latency_ms": r.latency_ms,
+            "detail": r.detail,
+        }
+        for r in results
+    }
+    overall = "ok" if all(r.status.value == "up" for r in results) else "degraded"
+    if results and all(r.status.value == "down" for r in results):
+        overall = "down"
+    return {"status": overall, "providers": summary}
 
 
 @router.get("/ready")
