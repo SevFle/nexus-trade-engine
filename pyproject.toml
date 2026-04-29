@@ -82,7 +82,10 @@ ignore = ["S101", "TRY003", "PLR0913"]
 "engine/app.py" = ["PLC0415"]
 "engine/config.py" = ["S105"]
 "engine/data/providers/*.py" = ["ARG002", "PLC0415", "TRY300", "TRY004"]
-"tests/*" = ["PLR2004", "S105", "S106", "PT019", "PLC0415", "ARG001", "ARG002", "ARG005", "PT011", "PT018", "E501", "SLF001"]
+"engine/plugins/registry.py" = ["PLC0415"]
+"engine/db/models.py" = ["UP042"]
+"sdk/nexus_sdk/scoring.py" = ["UP042"]
+"tests/*" = ["PLR2004", "S105", "S106", "PT019", "PLC0415", "ARG001", "ARG002", "ARG005", "PT011", "PT018", "E501", "SLF001", "TC002", "TC003"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["engine"]
@@ -92,13 +95,14 @@ pythonVersion = "3.12"
 typeCheckingMode = "standard"
 reportMissingTypeStubs = false
 reportUnknownMemberType = false
+extraPaths = ["sdk"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "sdk"]
 addopts = "-ra --strict-markers --cov=engine --cov-report=term-missing --cov-report=html --cov-fail-under=70"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",

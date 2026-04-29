@@ -252,3 +252,16 @@ class RefreshToken(Base):
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="refresh_tokens")
+
+
+class ScoringSnapshot(Base):
+    __tablename__ = "scoring_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    strategy_id: Mapped[str] = mapped_column(String(100), index=True)
+    universe_size: Mapped[int] = mapped_column(default=0)
+    excluded_factors: Mapped[list] = mapped_column(JSONB, default=list)  # type: ignore[assignment]
+    results: Mapped[dict] = mapped_column(JSONB, default=dict)  # type: ignore[assignment]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (Index("ix_scoring_snapshot_strategy_time", "strategy_id", "created_at"),)
