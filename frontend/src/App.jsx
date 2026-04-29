@@ -32,9 +32,12 @@ const queryClient = new QueryClient({
 
 function ShellLayout() {
   return (
-    <Shell>
-      <Outlet />
-    </Shell>
+    <LegalProvider>
+      <ConsentModal />
+      <Shell>
+        <Outlet />
+      </Shell>
+    </LegalProvider>
   );
 }
 
@@ -43,34 +46,31 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <LegalProvider>
-            <ConsentModal />
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/auth/callback" element={<OAuthCallback />} />
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route
-                element={
-                  <ProtectedRoute>
-                    <ShellLayout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/strategies" element={<Strategies />} />
-                <Route path="/backtest" element={<Backtest />} />
-                <Route path="/marketplace" element={<Marketplace />} />
-                <Route path="/positions" element={<Positions />} />
-                <Route path="/costs" element={<CostAnalysis />} />
-                <Route path="/risk" element={<RiskMonitor />} />
-                <Route path="/dev" element={<DevConsole />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/legal/:slug" element={<LegalDocument />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Route>
-            </Routes>
-          </LegalProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/auth/callback" element={<OAuthCallback />} />
+            <Route path="/onboarding" element={<Onboarding />} />
+            <Route
+              element={
+                <ProtectedRoute>
+                  <ShellLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/strategies" element={<Strategies />} />
+              <Route path="/backtest" element={<Backtest />} />
+              <Route path="/marketplace" element={<Marketplace />} />
+              <Route path="/positions" element={<Positions />} />
+              <Route path="/costs" element={<CostAnalysis />} />
+              <Route path="/risk" element={<RiskMonitor />} />
+              <Route path="/dev" element={<DevConsole />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/legal/:slug" element={<LegalDocument />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          </Routes>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

@@ -52,7 +52,7 @@ The `ICostModel` is passed directly into every strategy's `evaluate()` call. Str
 ### Prerequisites
 
 - Docker & Docker Compose
-- Python 3.11+
+- Python 3.12+ and [uv](https://github.com/astral-sh/uv)
 - Node.js 20+
 - Git
 
@@ -63,23 +63,20 @@ The `ICostModel` is passed directly into every strategy's `evaluate()` call. Str
 git clone https://github.com/your-org/nexus-trade-engine.git
 cd nexus-trade-engine
 
-# Start infrastructure (Postgres, TimescaleDB, Redis)
-docker compose up -d
+# Start infrastructure (Postgres/TimescaleDB, Valkey)
+docker compose up -d db valkey
 
-# Install engine dependencies
-cd engine
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+# Install engine dependencies (creates .venv from pyproject.toml + uv.lock)
+uv sync --all-extras
 
 # Run database migrations
-python -m alembic upgrade head
+.venv/bin/alembic upgrade head
 
 # Seed sample market data
-python ../scripts/seed_data.py
+.venv/bin/python scripts/seed_data.py
 
 # Start the engine
-uvicorn main:app --reload --port 8000
+.venv/bin/uvicorn engine.app:create_app --factory --host 0.0.0.0 --port 8000
 ```
 
 ```bash

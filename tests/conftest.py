@@ -43,7 +43,7 @@ def _bypass_auth(request, monkeypatch):
     that build their own isolated FastAPI instances. Tests in test_auth*
     opt out so they exercise real auth behavior."""
     nodeid = request.node.nodeid
-    if "test_auth" in nodeid:
+    if "test_auth" in nodeid or "_requires_auth" in nodeid:
         return
 
     from fastapi import FastAPI
