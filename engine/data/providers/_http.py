@@ -85,6 +85,36 @@ def redact_secrets(text: str) -> str:
     return out
 
 
+async def _read_capped(
+    response: httpx.Response,
+    cap: int,
+    *,
+    strict: bool = False,
+    provider: str = "provider",
+) -> bytes:
+    """Stream-read at most ``cap`` bytes from ``response``.
+
+    With ``strict=False`` (error-preview mode) the read silently stops at
+    ``cap`` and returns whatever was collected. With ``strict=True`` (success
+    body) the read raises :class:`FatalProviderError` the moment the
+    accumulated size would exceed ``cap`` — so we never buffer a hostile
+    multi-GB body just to reject it after the fact.
+    """
+    buf = bytearray()
+    async for chunk in response.aiter_bytes():
+        if not chunk:
+            continue
+        if len(buf) + len(chunk) > cap:
+            if strict:
+                raise FatalProviderError(
+                    f"{provider} response too large: exceeded {cap} bytes"
+                )
+            buf.extend(chunk[: cap - len(buf)])
+            break
+        buf.extend(chunk)
+    return bytes(buf)
+
+
 def normalise_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """Project a raw bars DataFrame onto the canonical OHLCV layout.
 
@@ -191,37 +221,60 @@ class HTTPProviderBase:
         async def call() -> Any:
             await self._bucket.acquire()
             try:
-                response = await client.request(
+                async with client.stream(
                     method, target, params=params, json=json, headers=merged_headers
-                )
+                ) as response:
+                    status = response.status_code
+
+                    # For error statuses, read up to the preview cap only —
+                    # never buffer the full body of a hostile/malformed reply.
+                    if (
+                        status in TRANSIENT_STATUS
+                        or HTTP_SERVER_ERROR_MIN <= status < HTTP_SERVER_ERROR_MAX
+                    ):
+                        preview = redact_secrets(
+                            (await _read_capped(response, ERROR_BODY_PREVIEW)).decode(
+                                "utf-8", errors="replace"
+                            )
+                        )
+                        raise TransientProviderError(
+                            f"{self.capability.name} HTTP {status}: {preview}"
+                        )
+                    if status in AUTH_STATUS:
+                        raise FatalProviderError(
+                            f"{self.capability.name} auth error {status}"
+                        )
+                    if status >= HTTP_CLIENT_ERROR_MIN:
+                        preview = redact_secrets(
+                            (await _read_capped(response, ERROR_BODY_PREVIEW)).decode(
+                                "utf-8", errors="replace"
+                            )
+                        )
+                        raise FatalProviderError(
+                            f"{self.capability.name} HTTP {status}: {preview}"
+                        )
+
+                    # 2xx: stream body up to RESPONSE_BYTE_CAP and abort hard
+                    # if the cap is exceeded — without ever buffering past it.
+                    body = await _read_capped(
+                        response,
+                        RESPONSE_BYTE_CAP,
+                        strict=True,
+                        provider=self.capability.name,
+                    )
             except httpx.TimeoutException as exc:
-                raise TransientProviderError(f"{self.capability.name} timeout") from exc
+                raise TransientProviderError(
+                    f"{self.capability.name} timeout"
+                ) from exc
             except httpx.RequestError as exc:
                 raise TransientProviderError(
                     f"{self.capability.name} network: {type(exc).__name__}"
                 ) from exc
 
-            status = response.status_code
-            preview = redact_secrets(response.text[:ERROR_BODY_PREVIEW])
-            if (
-                status in TRANSIENT_STATUS
-                or HTTP_SERVER_ERROR_MIN <= status < HTTP_SERVER_ERROR_MAX
-            ):
-                raise TransientProviderError(
-                    f"{self.capability.name} HTTP {status}: {preview}"
-                )
-            if status in AUTH_STATUS:
-                raise FatalProviderError(f"{self.capability.name} auth error {status}")
-            if status >= HTTP_CLIENT_ERROR_MIN:
-                raise FatalProviderError(f"{self.capability.name} HTTP {status}: {preview}")
-
-            content = response.content
-            if len(content) > RESPONSE_BYTE_CAP:
-                raise FatalProviderError(
-                    f"{self.capability.name} response too large: {len(content)} bytes"
-                )
             try:
-                return response.json()
+                import json as _json
+
+                return _json.loads(body)
             except ValueError as exc:
                 raise FatalProviderError(
                     f"{self.capability.name} returned non-JSON"

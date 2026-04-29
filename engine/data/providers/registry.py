@@ -81,8 +81,11 @@ class DataProviderRegistry:
     """Holds the set of configured providers and routes calls to them."""
 
     def __init__(self) -> None:
+        # Concurrency posture: register/deregister are sync and rely on
+        # CPython dict op atomicity; async readers (candidates_for, health)
+        # snapshot the dict to a list before iterating so a concurrent
+        # mutation cannot raise or expose a torn view.
         self._registrations: dict[str, ProviderRegistration] = {}
-        self._lock = asyncio.Lock()
 
     def register(self, registration: ProviderRegistration) -> None:
         if registration.name in self._registrations:
@@ -112,9 +115,13 @@ class DataProviderRegistry:
         asset_class: AssetClass,
         capability: CapabilityPredicate | None = None,
     ) -> list[ProviderRegistration]:
+        # Snapshot before filtering so concurrent register/deregister cannot
+        # raise "dictionary changed size during iteration" or surface a torn
+        # view to the caller.
+        snapshot = list(self._registrations.values())
         matched = [
             reg
-            for reg in self._registrations.values()
+            for reg in snapshot
             if reg.enabled
             and asset_class in reg.asset_classes
             and (capability is None or capability(reg.provider))
@@ -205,18 +212,27 @@ class DataProviderRegistry:
         )
 
     async def health(self) -> list[HealthCheckResult]:
+        # Run probes concurrently so /health/providers returns in
+        # max(provider_timeout) rather than sum(provider_timeout).
+        snapshot = list(self._registrations.values())
+        if not snapshot:
+            return []
+        outcomes = await asyncio.gather(
+            *(reg.provider.health_check() for reg in snapshot),
+            return_exceptions=True,
+        )
         results: list[HealthCheckResult] = []
-        for reg in self._registrations.values():
-            try:
-                results.append(await reg.provider.health_check())
-            except Exception as exc:  # per-provider isolation
+        for reg, outcome in zip(snapshot, outcomes, strict=True):
+            if isinstance(outcome, BaseException):
                 results.append(
                     HealthCheckResult(
                         name=reg.name,
                         status=HealthStatus.DOWN,
-                        detail=type(exc).__name__,
+                        detail=type(outcome).__name__,
                     )
                 )
+            else:
+                results.append(outcome)
         return results
 
     async def _run_with_failover(

@@ -1096,3 +1096,123 @@ async def test_health_provider_endpoint(monkeypatch):
     payload = await health_module.provider_health()
     assert payload["status"] == "degraded"
     assert set(payload["providers"]) == {"foo", "bar"}
+
+
+# ---------- adversarial-review hardening tests ----------
+
+
+@pytest.mark.asyncio
+async def test_registry_candidates_snapshots_dict_under_concurrent_registration():
+    """Concurrent register/deregister must not break a candidates_for read.
+
+    Without snapshotting, a coroutine iterating registrations while another
+    mutates the dict raises 'dictionary changed size during iteration'.
+    """
+    registry = DataProviderRegistry()
+    base = [_FakeProvider(f"p{i}", {AssetClass.EQUITY}) for i in range(10)]
+    for i, p in enumerate(base):
+        registry.register(ProviderRegistration(provider=p, priority=i))
+
+    async def reader() -> int:
+        n = 0
+        for _ in range(50):
+            n += len(registry.candidates_for(AssetClass.EQUITY))
+            await asyncio.sleep(0)
+        return n
+
+    async def mutator() -> None:
+        for i in range(50):
+            name = f"churn{i}"
+            registry.register(
+                ProviderRegistration(
+                    provider=_FakeProvider(name, {AssetClass.EQUITY}),
+                    priority=99,
+                )
+            )
+            await asyncio.sleep(0)
+            registry.deregister(name)
+
+    counts, _ = await asyncio.gather(reader(), mutator())
+    # No exception means snapshotting worked.
+    assert counts >= 50
+
+
+@pytest.mark.asyncio
+async def test_registry_health_runs_probes_concurrently():
+    """health() must not serialize per-provider probes."""
+
+    class _SlowFake(_FakeProvider):
+        def __init__(self, name: str, delay: float) -> None:
+            super().__init__(name, {AssetClass.EQUITY})
+            self._delay = delay
+
+        async def health_check(self):
+            await asyncio.sleep(self._delay)
+            return HealthCheckResult(name=self.capability.name, status=HealthStatus.UP)
+
+    registry = DataProviderRegistry()
+    delay = 0.1
+    for i in range(5):
+        registry.register(
+            ProviderRegistration(provider=_SlowFake(f"slow{i}", delay), priority=i)
+        )
+    started = asyncio.get_event_loop().time()
+    out = await registry.health()
+    elapsed = asyncio.get_event_loop().time() - started
+    assert len(out) == 5
+    # 5 sequential 0.1s probes = 0.5s. Concurrent should be ~0.1s. Allow slack.
+    assert elapsed < 0.35, f"health() took {elapsed:.3f}s — probes ran serially"
+
+
+@pytest.mark.asyncio
+async def test_request_json_aborts_response_above_byte_cap(monkeypatch):
+    """A response streaming past the cap must raise without buffering it all."""
+    from engine.data.providers import _http as http_mod
+
+    monkeypatch.setattr(http_mod, "RESPONSE_BYTE_CAP", 1024)
+
+    async def hostile_body():
+        chunk = b"x" * 4096
+        for _ in range(5):
+            yield chunk
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=hostile_body())
+
+    cap = DataProviderCapability(
+        name="hostile", asset_classes=frozenset({AssetClass.EQUITY})
+    )
+    async with _mock_transport(handler) as client:
+        provider_base = http_mod.HTTPProviderBase(
+            cap, base_url="http://mock", client=client, cache=_make_cache()
+        )
+        with pytest.raises(FatalProviderError, match="response too large"):
+            await provider_base._request_json("GET", "/anything")
+
+
+@pytest.mark.asyncio
+async def test_read_capped_strict_caps_collection():
+    """_read_capped(strict=True) raises before collecting more than cap bytes."""
+    from engine.data.providers import _http as http_mod
+
+    class _FakeResp:
+        async def aiter_bytes(self):
+            yield b"a" * 600
+            yield b"b" * 600
+
+    with pytest.raises(FatalProviderError):
+        await http_mod._read_capped(_FakeResp(), 1000, strict=True, provider="t")
+
+
+@pytest.mark.asyncio
+async def test_read_capped_lenient_truncates():
+    """_read_capped(strict=False) returns at most cap bytes silently."""
+    from engine.data.providers import _http as http_mod
+
+    class _FakeResp:
+        async def aiter_bytes(self):
+            yield b"a" * 800
+            yield b"b" * 800
+
+    out = await http_mod._read_capped(_FakeResp(), 1000, strict=False, provider="t")
+    assert len(out) == 1000
