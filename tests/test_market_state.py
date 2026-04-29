@@ -267,3 +267,22 @@ class TestMarketStateToSdk:
         )
         with pytest.raises(ModuleNotFoundError):
             state.to_sdk_state()
+
+
+class TestM6BuildForLiveMinBarsCheck:
+    @pytest.fixture
+    def provider(self):
+        class FakeProvider:
+            async def get_multiple_prices(self, symbols):
+                return dict.fromkeys(symbols, 100.0)
+
+            async def get_ohlcv(self, _symbol):
+                return None
+
+        return FakeProvider()
+
+    @pytest.mark.asyncio
+    async def test_build_for_live_returns_state_for_valid_data(self, provider):
+        builder = MarketStateBuilder(min_bars=10, use_data_validator=True)
+        state = await builder.build_for_live(provider, ["AAPL"])
+        assert "AAPL" in state.prices
