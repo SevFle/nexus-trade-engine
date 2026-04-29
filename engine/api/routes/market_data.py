@@ -12,6 +12,7 @@ to bypass registry routing — useful for parity testing across adapters.
 
 from __future__ import annotations
 
+import math
 import re
 from typing import TYPE_CHECKING
 
@@ -29,7 +30,10 @@ from engine.data.providers import (
     get_registry,
 )
 from engine.data.providers.base import SYMBOL_PATTERN
-from engine.data.providers.registry import CapabilityNotSupportedError
+from engine.data.providers.registry import (
+    CapabilityNotSupportedError,
+    DataProviderRegistry,
+)
 from engine.db.models import User
 
 if TYPE_CHECKING:
@@ -44,8 +48,12 @@ _SYMBOL_RE = re.compile(SYMBOL_PATTERN)
 # Heuristics for asset-class detection based on the symbol shape we see in
 # the wild. Order matters — first match wins.
 _FOREX_SUFFIX = re.compile(r"=X$", re.IGNORECASE)
-_FOREX_PAIR = re.compile(r"^[A-Z]{3}/[A-Z]{3}$")
-_CRYPTO_QUOTES = ("USD", "USDT", "USDC", "BUSD", "BTC", "ETH", "EUR", "GBP")
+# Conservative fiat allowlist for the slash-pair forex form. Anything outside
+# this set with a slash is treated as crypto when the quote currency matches
+# _CRYPTO_QUOTES — keeps `BTC/USD` and `ETH/USDT` out of the forex bucket.
+_FIAT_CCY = frozenset({"USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "NZD"})
+_CRYPTO_QUOTES = frozenset({"USD", "USDT", "USDC", "BUSD", "BTC", "ETH", "EUR", "GBP"})
+_CRYPTO_DASH_QUOTES = _CRYPTO_QUOTES  # dash form: BTC-USD, ETH-USDT
 
 
 def detect_asset_class(symbol: str) -> AssetClass:
@@ -53,38 +61,59 @@ def detect_asset_class(symbol: str) -> AssetClass:
 
     Used only when the caller hasn't pinned ``asset_class`` via query param.
     Conservative: equities are the default since they cover the long tail.
+    Crypto is checked before forex because the fiat/crypto quote sets
+    overlap (``BTC/USD`` would otherwise misclassify as forex).
     """
     upper = symbol.upper()
-    if _FOREX_SUFFIX.search(upper) or _FOREX_PAIR.match(upper):
+
+    # Yahoo-style forex first — unambiguous shape.
+    if _FOREX_SUFFIX.search(upper):
         return AssetClass.FOREX
-    if "-" in upper or "/" in upper:
-        # Treat hyphen/slash pairs as crypto when the quote currency looks
-        # like a crypto/stable. Otherwise leave as equity (e.g. BRK-B).
-        sep = "-" if "-" in upper else "/"
-        parts = upper.split(sep)
-        if len(parts) == 2 and parts[1] in _CRYPTO_QUOTES:
+
+    if "-" in upper:
+        parts = upper.split("-", 1)
+        if len(parts) == 2 and parts[1] in _CRYPTO_DASH_QUOTES:
             return AssetClass.CRYPTO
+        # Fall through to equity for things like BRK-B.
+        return AssetClass.EQUITY
+
+    if "/" in upper:
+        parts = upper.split("/", 1)
+        if len(parts) == 2:
+            base, quote = parts
+            if quote in _CRYPTO_QUOTES and base not in _FIAT_CCY:
+                return AssetClass.CRYPTO
+            if base in _FIAT_CCY and quote in _FIAT_CCY:
+                return AssetClass.FOREX
+
     return AssetClass.EQUITY
 
 
 def _validate_symbol(symbol: str) -> str:
-    if not _SYMBOL_RE.match(symbol):
+    """Normalise + validate a symbol from a path parameter.
+
+    Uses ``fullmatch`` (not ``match``) so trailing newlines or stray bytes
+    can't satisfy the trailing ``$`` anchor and slip an unsanitised value
+    into logs or response echoes. Mirrors the provider-layer ``..`` reject.
+    """
+    cleaned = symbol.strip()
+    if not cleaned or ".." in cleaned or not _SYMBOL_RE.fullmatch(cleaned):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid symbol format",
         )
-    return symbol
+    return cleaned
 
 
 def _resolve_asset_class(value: str | None, symbol: str) -> AssetClass:
     if not value:
         return detect_asset_class(symbol)
     try:
-        return AssetClass(value.lower())
+        return AssetClass(value.strip().lower())
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown asset_class: {value}",
+            detail=f"Unknown asset_class: {value!r}",
         ) from None
 
 
@@ -113,24 +142,51 @@ class QuoteResponse(BaseModel):
     price: float
 
 
+def _safe_float(value: object) -> float:
+    """Coerce a provider value to a finite float or raise.
+
+    Real provider feeds emit NaN for low-volume bars or `null` for delisted
+    fields; serialising NaN produces invalid JSON, so callers skip rows
+    where any field can't be made finite.
+    """
+    if value is None:
+        raise ValueError("None is not a finite float")
+    f = float(value)
+    if not math.isfinite(f):
+        raise ValueError("non-finite float")
+    return f
+
+
 def _df_to_bars(df: pd.DataFrame) -> list[Bar]:
     if df is None or df.empty:
         return []
     out: list[Bar] = []
-    # Provider contract: index is ascending UTC DatetimeIndex with the
-    # canonical lowercase OHLCV columns.
     for ts, row in df.iterrows():
-        out.append(
-            Bar(
+        try:
+            bar = Bar(
                 timestamp=ts.isoformat(),
-                open=float(row["open"]),
-                high=float(row["high"]),
-                low=float(row["low"]),
-                close=float(row["close"]),
-                volume=float(row["volume"]),
+                open=_safe_float(row.get("open")),
+                high=_safe_float(row.get("high")),
+                low=_safe_float(row.get("low")),
+                close=_safe_float(row.get("close")),
+                volume=_safe_float(row.get("volume")),
             )
-        )
+        except (ValueError, TypeError, KeyError):
+            # Provider returned NaN/None or missing columns — drop the bar
+            # rather than serialise invalid JSON.
+            continue
+        out.append(bar)
     return out
+
+
+def _resolve_pinned_provider(name: str, registry: DataProviderRegistry):
+    adapter = registry.get(name)
+    if adapter is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Provider not registered: {name}",
+        )
+    return adapter
 
 
 @router.get("/{symbol}/bars", response_model=BarsResponse)
@@ -147,12 +203,7 @@ async def get_bars(
     registry = get_registry()
 
     if provider:
-        adapter = registry.get(provider)
-        if adapter is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Provider not registered: {provider}",
-            )
+        adapter = _resolve_pinned_provider(provider, registry)
         try:
             df = await adapter.get_ohlcv(symbol, period=period, interval=interval)
         except FatalProviderError as exc:
@@ -170,10 +221,10 @@ async def get_bars(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Upstream provider unavailable",
             ) from None
-        provider_name = provider
+        served_provider = provider
     else:
         try:
-            df = await registry.get_ohlcv(
+            df, served_provider = await registry.get_ohlcv_traced(
                 symbol,
                 period=period,
                 interval=interval,
@@ -188,17 +239,21 @@ async def get_bars(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
             ) from None
         except FatalProviderError as exc:
+            logger.warning(
+                "market_data.fatal_provider_error",
+                symbol=symbol,
+                error=type(exc).__name__,
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
             ) from None
-        provider_name = _last_provider_for(registry, resolved_class)
 
     return BarsResponse(
         symbol=symbol,
         interval=interval,
         period=period,
         asset_class=resolved_class.value,
-        provider=provider_name,
+        provider=served_provider,
         bars=_df_to_bars(df),
     )
 
@@ -216,22 +271,55 @@ async def get_quote(
 
     price: float | None
     if provider:
-        adapter = registry.get(provider)
-        if adapter is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Provider not registered: {provider}",
-            )
+        adapter = _resolve_pinned_provider(provider, registry)
         try:
             price = await adapter.get_latest_price(symbol)
+        except FatalProviderError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+            ) from None
+        except (TransientProviderError, TimeoutError) as exc:
+            logger.warning(
+                "market_data.provider_transient",
+                provider=provider,
+                symbol=symbol,
+                error=type(exc).__name__,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Upstream provider unavailable",
+            ) from None
         except ProviderError as exc:
+            logger.warning(
+                "market_data.provider_error",
+                provider=provider,
+                symbol=symbol,
+                error=type(exc).__name__,
+            )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
             ) from None
-        provider_name = provider
+        served_provider = provider
     else:
-        price = await registry.get_latest_price(symbol, asset_class=resolved_class)
-        provider_name = _last_provider_for(registry, resolved_class)
+        try:
+            price, served_provider = await registry.get_latest_price_traced(
+                symbol, asset_class=resolved_class
+            )
+        except CapabilityNotSupportedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=str(exc)
+            ) from None
+        except NoProviderAvailableError as exc:
+            # Distinguish "no providers configured" from "no price for symbol":
+            # NoProviderAvailableError raised here means every candidate
+            # adapter failed (or none registered); 503 is the honest signal.
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+            ) from None
+        except FatalProviderError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+            ) from None
 
     if price is None:
         raise HTTPException(
@@ -242,17 +330,6 @@ async def get_quote(
     return QuoteResponse(
         symbol=symbol,
         asset_class=resolved_class.value,
-        provider=provider_name,
-        price=float(price),
+        provider=served_provider,
+        price=_safe_float(price),
     )
-
-
-def _last_provider_for(registry, asset_class: AssetClass) -> str:
-    """Best-effort name of the registry's first candidate for an asset class.
-
-    The registry doesn't expose which provider actually served a request, but
-    surfacing the *intended* primary in the response header is still useful
-    for the client. If nothing matches, returns an empty string.
-    """
-    candidates = registry.candidates_for(asset_class)
-    return candidates[0].name if candidates else ""
