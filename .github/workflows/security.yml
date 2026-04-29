@@ -1,0 +1,164 @@
+name: Security
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Daily at 06:00 UTC so freshly-disclosed CVEs surface even when no PRs
+    # land that day.
+    - cron: "0 6 * * *"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  python-sast:
+    name: Python SAST (bandit)
+    runs-on: [self-hosted, nexus]
+    container:
+      image: python:3.12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bandit
+        run: pip install --no-cache-dir "bandit[toml]==1.7.10"
+
+      - name: Run bandit
+        # -ll: report Medium severity and above; tests/ excluded because
+        # fixtures intentionally use synthetic credentials.
+        run: |
+          bandit -r engine sdk \
+            --exclude tests \
+            -ll \
+            --format json \
+            --output bandit-report.json \
+            || EXIT=$?
+          bandit -r engine sdk --exclude tests -ll
+          exit ${EXIT:-0}
+
+      - name: Upload bandit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+  python-deps:
+    name: Python deps (pip-audit)
+    runs-on: [self-hosted, nexus]
+    container:
+      image: python:3.12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pip-audit
+        run: pip install --no-cache-dir "pip-audit==2.7.3"
+
+      - name: Audit installed dependencies
+        run: |
+          pip install -e .
+          pip-audit --strict --format json --output pip-audit.json \
+            || EXIT=$?
+          pip-audit --strict
+          exit ${EXIT:-0}
+
+      - name: Upload pip-audit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pip-audit-report
+          path: pip-audit.json
+
+  node-deps:
+    name: Node deps (npm audit)
+    runs-on: [self-hosted, nexus]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Audit frontend deps
+        working-directory: frontend
+        run: |
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
+          # --audit-level=high so transient moderate dev-only findings
+          # (rollup/vite-dev) don't fail the gate; high+ still blocks.
+          npm audit --audit-level=high --json > npm-audit.json || EXIT=$?
+          npm audit --audit-level=high
+          exit ${EXIT:-0}
+
+      - name: Upload npm-audit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-audit-report
+          path: frontend/npm-audit.json
+
+  secrets-scan:
+    name: Secrets (gitleaks)
+    runs-on: [self-hosted, nexus]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "true"
+
+  container-scan:
+    name: Container scan (trivy)
+    runs-on: [self-hosted, nexus]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build engine image
+        run: docker build -t nexus-engine:scan .
+
+      - name: Run Trivy on engine image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: nexus-engine:scan
+          format: sarif
+          output: trivy-engine.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Upload trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-engine.sarif
+          category: trivy-engine
+
+  sbom:
+    name: SBOM (syft)
+    runs-on: [self-hosted, nexus]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate SBOM (CycloneDX) for repo
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom-repo.cdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sbom
+          path: sbom-repo.cdx.json
