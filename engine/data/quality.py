@@ -47,6 +47,10 @@ class CorrectionRecord:
 class DataQualityReport:
     def __init__(self) -> None:
         self.corrections: list[CorrectionRecord] = []
+        self._symbols_seen: set[str] = set()
+
+    def record_symbol(self, symbol: str) -> None:
+        self._symbols_seen.add(symbol)
 
     def add_correction(
         self,
@@ -70,14 +74,18 @@ class DataQualityReport:
 
     @property
     def flagged_percentage(self) -> float:
-        return 0.0
+        flagged = {c.symbol for c in self.corrections}
+        if not self._symbols_seen:
+            return 0.0
+        return len(flagged) / len(self._symbols_seen) * 100.0
 
     def flagged_percentage_for_universe(self, universe: list[str]) -> float:
         flagged = {c.symbol for c in self.corrections}
-        if not universe:
+        unique_universe = set(universe)
+        if not unique_universe:
             return 0.0
-        flagged_in_universe = flagged.intersection(universe)
-        return len(flagged_in_universe) / len(universe) * 100.0
+        flagged_in_universe = flagged.intersection(unique_universe)
+        return len(flagged_in_universe) / len(unique_universe) * 100.0
 
     def should_warn(self, universe: list[str], threshold_pct: float = 10.0) -> bool:
         return self.flagged_percentage_for_universe(universe) > threshold_pct
@@ -153,7 +161,7 @@ class RatioSanityRule(ValidationRule):
         fundamentals = kwargs.get("fundamentals")
         if fundamentals is not None:
             fundamentals_df = cast("pd.DataFrame", fundamentals)
-            self.apply_fundamentals(symbol, report, fundamentals_df)
+            fundamentals_df = self.apply_fundamentals(symbol, report, fundamentals_df)
 
             if "eps" in fundamentals_df.columns:
                 last_eps = fundamentals_df["eps"].iloc[-1] if len(fundamentals_df) > 0 else None
@@ -194,7 +202,7 @@ class RatioSanityRule(ValidationRule):
         report: DataQualityReport,
         fundamentals: pd.DataFrame,
     ) -> pd.DataFrame:
-        revenue = fundamentals["revenue"].values
+        revenue = fundamentals["revenue"].values.copy()
         neg_indices = self._find_suspect_negative_revenue_indices(revenue)
 
         if not neg_indices:
@@ -204,33 +212,45 @@ class RatioSanityRule(ValidationRule):
         if all_negative:
             return fundamentals
 
-        for i in neg_indices:
-            report.add_correction(
-                symbol=symbol,
-                field="revenue",
-                original_value=float(revenue[i]),
-                corrected_value=None,
-                reason="negative_revenue",
-                action="interpolate",
-            )
+        positive_revenues = [r for r in revenue if r > 0]
+        mean_positive = (
+            sum(positive_revenues) / len(positive_revenues) if positive_revenues else 0.0
+        )
+        tolerance = self._config.negative_revenue_tolerance
 
         for i in neg_indices:
+            if (
+                tolerance > 0
+                and mean_positive > 0
+                and abs(revenue[i]) <= tolerance * mean_positive
+            ):
+                continue
             neighbors = []
             if i > 0 and revenue[i - 1] > 0:
                 neighbors.append(revenue[i - 1])
             if i < len(revenue) - 1 and revenue[i + 1] > 0:
                 neighbors.append(revenue[i + 1])
+            original_value = float(revenue[i])
             if neighbors:
                 interpolated = sum(neighbors) / len(neighbors)
                 fundamentals.iloc[i, fundamentals.columns.get_loc("revenue")] = interpolated
-                for c in report.corrections:
-                    if (
-                        c.symbol == symbol
-                        and c.field == "revenue"
-                        and c.reason == "negative_revenue"
-                        and c.corrected_value is None
-                    ):
-                        object.__setattr__(c, "corrected_value", interpolated)
+                report.add_correction(
+                    symbol=symbol,
+                    field="revenue",
+                    original_value=original_value,
+                    corrected_value=interpolated,
+                    reason="negative_revenue",
+                    action="interpolate",
+                )
+            else:
+                report.add_correction(
+                    symbol=symbol,
+                    field="revenue",
+                    original_value=original_value,
+                    corrected_value=None,
+                    reason="negative_revenue",
+                    action="interpolate",
+                )
 
         return fundamentals
 
@@ -287,6 +307,8 @@ class GBpGBPRule(ValidationRule):
             return df
 
         sector_median = float(cast("float", sector_median_price))
+        if sector_median <= 0:
+            return df
         median_close = float(cast("float", df["close"].median()))
         ratio = median_close / sector_median
 
@@ -372,6 +394,8 @@ class DataValidator:
         self._rules: list[ValidationRule] = [
             PriceBoundsRule(self._config),
             StaleDataRule(self._config),
+            RatioSanityRule(self._config),
+            GBpGBPRule(self._config),
         ]
 
     def validate(
@@ -382,29 +406,24 @@ class DataValidator:
         fundamentals: pd.DataFrame | None = None,
         sector_median_price: float | None = None,
     ) -> pd.DataFrame:
+        report.record_symbol(symbol)
         kwargs: dict = {}
         if fundamentals is not None:
             kwargs["fundamentals"] = fundamentals
         if sector_median_price is not None:
             kwargs["sector_median_price"] = sector_median_price
 
+        pre_count = len(report.corrections)
         for rule in self._rules:
             df = rule.apply(df, symbol, report, **kwargs)
 
-        if fundamentals is not None:
-            ratio_rule = RatioSanityRule(self._config)
-            df = ratio_rule.apply(df, symbol, report, **kwargs)
-
-        if sector_median_price is not None:
-            gbp_rule = GBpGBPRule(self._config)
-            df = gbp_rule.apply(df, symbol, report, **kwargs)
-
-        if report.corrections:
+        new_corrections = len(report.corrections) - pre_count
+        if new_corrections > 0:
             logger.info(
                 "data_quality.corrections_applied",
                 symbol=symbol,
-                correction_count=len(report.corrections),
-                reasons=list({c.reason for c in report.corrections}),
+                correction_count=new_corrections,
+                reasons=list({c.reason for c in report.corrections[pre_count:]}),
             )
 
         return df

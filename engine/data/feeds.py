@@ -1,22 +1,36 @@
-"""
-Market data feeds — abstraction layer for fetching price data.
+"""Backwards-compatible shim that delegates to :mod:`engine.data.providers`.
 
-Supports multiple providers (Yahoo, Alpaca, Polygon, etc.)
-with a unified interface.
+Earlier code paths imported :class:`MarketDataProvider` and
+``get_data_provider`` from this module. Those names are kept so existing
+callers (backtest runner, plugins SDK, tests) keep working while the new
+:mod:`engine.data.providers` package is the canonical home.
+
+New code should import from :mod:`engine.data.providers` directly.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-import pandas as pd
 import structlog
+
+from engine.data.providers.registry import get_registry
+from engine.data.providers.yahoo import YahooDataProvider
+
+if TYPE_CHECKING:
+    import pandas as pd
+
+    from engine.data.providers.base import IDataProvider
 
 logger = structlog.get_logger()
 
 
 class MarketDataProvider(ABC):
-    """Abstract market data provider."""
+    """Legacy abstract base. Concrete impls now live under
+    :mod:`engine.data.providers`; this class stays so test doubles and
+    plugins implementing the old shape keep working.
+    """
 
     @abstractmethod
     async def get_latest_price(self, symbol: str) -> float | None:
@@ -29,10 +43,6 @@ class MarketDataProvider(ABC):
         period: str = "1y",
         interval: str = "1d",
     ) -> pd.DataFrame:
-        """
-        Returns DataFrame with columns: open, high, low, close, volume
-        Indexed by datetime.
-        """
         ...
 
     @abstractmethod
@@ -40,20 +50,14 @@ class MarketDataProvider(ABC):
         ...
 
 
-class YahooDataProvider(MarketDataProvider):
-    """Yahoo Finance data provider (free, good for development)."""
+class _LegacyAdapter(MarketDataProvider):
+    """Wrap a new :class:`IDataProvider` so it satisfies the legacy ABC."""
+
+    def __init__(self, inner: IDataProvider) -> None:
+        self._inner = inner
 
     async def get_latest_price(self, symbol: str) -> float | None:
-        try:
-            import yfinance as yf
-            ticker = yf.Ticker(symbol)
-            data = ticker.history(period="1d")
-            if not data.empty:
-                return float(data["Close"].iloc[-1])
-            return None
-        except Exception as e:
-            logger.error("yahoo.price_error", symbol=symbol, error=str(e))
-            return None
+        return await self._inner.get_latest_price(symbol)
 
     async def get_ohlcv(
         self,
@@ -61,40 +65,27 @@ class YahooDataProvider(MarketDataProvider):
         period: str = "1y",
         interval: str = "1d",
     ) -> pd.DataFrame:
-        try:
-            import yfinance as yf
-            ticker = yf.Ticker(symbol)
-            df = ticker.history(period=period, interval=interval)
-            df.columns = [c.lower() for c in df.columns]
-            return df[["open", "high", "low", "close", "volume"]]
-        except Exception as e:
-            logger.error("yahoo.ohlcv_error", symbol=symbol, error=str(e))
-            return pd.DataFrame()
+        return await self._inner.get_ohlcv(symbol, period=period, interval=interval)
 
     async def get_multiple_prices(self, symbols: list[str]) -> dict[str, float]:
-        import yfinance as yf
-        prices = {}
-        try:
-            data = yf.download(symbols, period="1d", group_by="ticker", progress=False)
-            for sym in symbols:
-                try:
-                    if len(symbols) == 1:
-                        prices[sym] = float(data["Close"].iloc[-1])
-                    else:
-                        prices[sym] = float(data[sym]["Close"].iloc[-1])
-                except (KeyError, IndexError):
-                    pass
-        except Exception as e:
-            logger.error("yahoo.batch_error", error=str(e))
-        return prices
+        return await self._inner.get_multiple_prices(symbols)
 
 
 def get_data_provider(provider_name: str = "yahoo") -> MarketDataProvider:
-    """Factory for market data providers."""
-    providers = {
-        "yahoo": YahooDataProvider,
-    }
-    provider_class = providers.get(provider_name)
-    if not provider_class:
-        raise ValueError(f"Unknown data provider: {provider_name}. Available: {list(providers.keys())}")
-    return provider_class()
+    """Return a legacy-compatible provider for ``provider_name``.
+
+    Defaults to Yahoo (no key required) so callers without a configured
+    registry keep working in development. Production callers should use the
+    :class:`engine.data.providers.DataProviderRegistry` directly.
+    """
+    if provider_name == "yahoo":
+        return _LegacyAdapter(YahooDataProvider())
+
+    registry = get_registry()
+    inner = registry.get(provider_name)
+    if inner is None:
+        raise ValueError(
+            f"Unknown data provider: {provider_name}. "
+            "Configure it via engine.data.providers.configure_from_file()."
+        )
+    return _LegacyAdapter(inner)
