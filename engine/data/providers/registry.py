@@ -136,29 +136,58 @@ class DataProviderRegistry:
         interval: str = "1d",
         asset_class: AssetClass = AssetClass.EQUITY,
     ) -> pd.DataFrame:
+        df, _ = await self.get_ohlcv_traced(
+            symbol, period=period, interval=interval, asset_class=asset_class
+        )
+        return df
+
+    async def get_ohlcv_traced(
+        self,
+        symbol: str,
+        period: str = "1y",
+        interval: str = "1d",
+        asset_class: AssetClass = AssetClass.EQUITY,
+    ) -> tuple[pd.DataFrame, str]:
+        """Like :meth:`get_ohlcv` but also returns the provider that served the
+        result. The second element is the name of the provider that produced
+        the returned (possibly-empty) frame, useful for honest observability
+        instead of guessing the registry's intended primary."""
+
         async def call(p: IDataProvider) -> pd.DataFrame:
             return await p.get_ohlcv(symbol, period=period, interval=interval)
 
-        return await self._run_with_failover(
+        return await self._run_with_failover_traced(
             asset_class, "get_ohlcv", call, symbol=symbol, retry_on_empty=True
         )
 
     async def get_latest_price(
         self, symbol: str, asset_class: AssetClass = AssetClass.EQUITY
     ) -> float | None:
+        try:
+            price, _ = await self.get_latest_price_traced(symbol, asset_class=asset_class)
+        except NoProviderAvailableError:
+            return None
+        return price
+
+    async def get_latest_price_traced(
+        self, symbol: str, asset_class: AssetClass = AssetClass.EQUITY
+    ) -> tuple[float | None, str]:
+        """Trace variant: returns ``(price, served_provider_name)``.
+
+        Raises :class:`NoProviderAvailableError` when no provider is configured
+        for the asset class so callers can distinguish "no providers" (503)
+        from "no price for this symbol" (404)."""
+
         async def call(p: IDataProvider) -> float | None:
             return await p.get_latest_price(symbol)
 
-        try:
-            return await self._run_with_failover(
-                asset_class,
-                "get_latest_price",
-                call,
-                symbol=symbol,
-                retry_on_empty=True,
-            )
-        except NoProviderAvailableError:
-            return None
+        return await self._run_with_failover_traced(
+            asset_class,
+            "get_latest_price",
+            call,
+            symbol=symbol,
+            retry_on_empty=True,
+        )
 
     async def get_multiple_prices(
         self, symbols: list[str], asset_class: AssetClass = AssetClass.EQUITY
@@ -245,6 +274,26 @@ class DataProviderRegistry:
         capability: CapabilityPredicate | None = None,
         retry_on_empty: bool = False,
     ) -> T:
+        result, _ = await self._run_with_failover_traced(
+            asset_class,
+            method,
+            call,
+            symbol=symbol,
+            capability=capability,
+            retry_on_empty=retry_on_empty,
+        )
+        return result
+
+    async def _run_with_failover_traced(
+        self,
+        asset_class: AssetClass,
+        method: str,
+        call: Callable[[IDataProvider], Awaitable[T]],
+        *,
+        symbol: str = "",
+        capability: CapabilityPredicate | None = None,
+        retry_on_empty: bool = False,
+    ) -> tuple[T, str]:
         candidates = self.candidates_for(asset_class, capability=capability)
         if not candidates:
             if capability is not None:
@@ -258,6 +307,8 @@ class DataProviderRegistry:
 
         last_exc: BaseException | None = None
         last_empty: T | None = None
+        last_empty_name: str = ""
+        saw_empty = False
         for reg in candidates:
             try:
                 result = await call(reg.provider)
@@ -288,6 +339,8 @@ class DataProviderRegistry:
                 or (isinstance(result, dict) and not result)
             ):
                 last_empty = result
+                last_empty_name = reg.name
+                saw_empty = True
                 logger.info(
                     "data_provider.registry.empty_result",
                     provider=reg.name,
@@ -296,10 +349,14 @@ class DataProviderRegistry:
                 )
                 continue
 
-            return result
+            return result, reg.name
 
-        if last_empty is not None:
-            return last_empty
+        if saw_empty:
+            # A provider answered with an empty/None result — symbol is
+            # unknown to the configured providers, not that providers were
+            # missing. Surface the empty result so callers can map to 404
+            # instead of 503.
+            return last_empty, last_empty_name  # type: ignore[return-value]
 
         raise NoProviderAvailableError(
             f"All providers failed for asset_class={asset_class.value} "

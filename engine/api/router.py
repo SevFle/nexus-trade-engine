@@ -6,6 +6,7 @@ from engine.api.routes.auth import router as auth_router
 from engine.api.routes.backtest import router as backtest_router
 from engine.api.routes.health import router as health_router
 from engine.api.routes.legal import router as legal_router
+from engine.api.routes.market_data import router as market_data_router
 from engine.api.routes.marketplace import router as marketplace_router
 from engine.api.routes.portfolio import router as portfolio_router
 from engine.api.routes.scoring import router as scoring_router
@@ -29,5 +30,11 @@ api_router.include_router(
     scoring_router,
     prefix="/api/v1/scoring",
     tags=["scoring"],
+    dependencies=[Depends(require_legal_acceptance)],
+)
+api_router.include_router(
+    market_data_router,
+    prefix="/api/v1/market-data",
+    tags=["market-data"],
     dependencies=[Depends(require_legal_acceptance)],
 )
