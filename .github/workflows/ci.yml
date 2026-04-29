@@ -81,7 +81,12 @@ jobs:
       - name: Install & lint
         run: |
           cd frontend
-          npm ci
+          # Workaround npm bug #4828: lockfile-pinned optional platform deps
+          # (e.g. @rollup/rollup-linux-x64-gnu) get skipped when the lockfile
+          # was generated on a different platform. Drop the lock so npm
+          # resolves rollup's platform binary fresh on Linux.
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
           npm run build
 
   docker:

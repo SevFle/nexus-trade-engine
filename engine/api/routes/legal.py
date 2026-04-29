@@ -30,7 +30,7 @@ _MD_SPECIAL_RE = re.compile(r"([\\`*_{}\[\]()#+\-.!|~>])")
 
 async def _optional_user(
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> User | None:
     """Return current user if Bearer token is present and valid; else None."""
     auth = request.headers.get("authorization") or ""
@@ -85,7 +85,7 @@ def _strip_front_matter(text: str) -> str:
 async def list_documents(
     category: str | None = Query(None),
     user: User | None = Depends(_optional_user),
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> DocumentListResponse:
     user_id = user.id if user else None
     summaries = await legal_service.list_documents(db, user_id=user_id, category=category)
@@ -99,7 +99,7 @@ async def list_documents(
 async def get_document(
     slug: str = Path(pattern=r"^[a-z0-9-]+$"),
     version: str | None = Query(None),
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> DocumentDetailResponse:
     result = await legal_service.get_document_content(db, slug, version)
     if result is None:
@@ -121,7 +121,7 @@ async def accept_documents(
     request: Request,
     body: AcceptRequest,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> AcceptResponse:
     ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "unknown")
@@ -140,7 +140,7 @@ async def accept_documents(
 async def list_my_acceptances(
     document_slug: str | None = Query(None),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> AcceptanceListResponse:
     acceptances = await legal_service.list_user_acceptances(
         db, user_id=user.id, document_slug=document_slug
@@ -151,7 +151,7 @@ async def list_my_acceptances(
 @router.get("/api/v1/legal/attributions", response_model=AttributionListResponse)
 async def list_attributions(
     context: str | None = Query(None),
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> AttributionListResponse:
     items = await legal_service.list_attributions(db, context=context)
     return AttributionListResponse(attributions=items)
