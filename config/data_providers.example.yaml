@@ -1,0 +1,47 @@
+# Example provider config — copy to `data_providers.yaml` and edit.
+#
+# Resolution rules:
+#   - `${VAR}` placeholders are replaced from the environment.
+#   - A `NEXUS_<PROVIDER>_<KEY>` env var overrides the YAML value at runtime,
+#     so secrets never need to live on disk.
+#   - Lower `priority` wins. Identical priorities tie-break alphabetically.
+#   - `enabled: false` keeps the entry visible to operators but skips
+#     registration on startup.
+
+data_providers:
+  polygon:
+    enabled: true
+    priority: 1
+    asset_classes: [equity, options, forex]
+    api_key: ${POLYGON_API_KEY}
+
+  alpaca:
+    enabled: true
+    priority: 2
+    asset_classes: [equity]
+    api_key: ${ALPACA_API_KEY}
+    api_secret: ${ALPACA_API_SECRET}
+
+  binance:
+    enabled: true
+    priority: 1
+    asset_classes: [crypto]
+    api_key: ${BINANCE_API_KEY}
+    api_secret: ${BINANCE_API_SECRET}
+
+  coingecko:
+    enabled: true
+    priority: 50
+    asset_classes: [crypto]
+
+  oanda:
+    enabled: false
+    priority: 1
+    asset_classes: [forex]
+    api_key: ${OANDA_API_KEY}
+    environment: practice
+
+  yahoo:
+    enabled: true
+    priority: 99
+    asset_classes: [equity, etf]

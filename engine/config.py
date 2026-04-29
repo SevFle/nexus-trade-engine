@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # Worker
     worker_concurrency: int = 4
 
+    # Data providers
+    data_providers_config: str = ""
+    data_providers_default: str = "yahoo"
+
     # Legal / Operator
     legal_documents_dir: str = "legal"
     operator_name: str = "Nexus Trade Engine"
