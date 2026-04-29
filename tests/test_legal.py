@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 import pathlib
-import tempfile
 from http import HTTPStatus
 from typing import TYPE_CHECKING
 from unittest.mock import patch
@@ -512,15 +511,18 @@ class TestEffectiveDateSubstitution:
     async def test_effective_date_replaced_in_content(
         self, legal_client: AsyncClient, db_session: AsyncSession
     ):
+        # Slug must match the route's pattern ^[a-z0-9-]+$. tempfile names
+        # can include uppercase, so build a deterministic lowercase slug.
+        import uuid
+
         content = (
             "---\ntitle: Test\nversion: 1.0.0\neffective_date: 2026-03-15\n---\n\n"
             "Effective as of {{EFFECTIVE_DATE}}.\n"
         )
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, dir="legal") as f:
-            f.write(content)
-            tmp_path = f.name
+        slug = f"ed-test-{uuid.uuid4().hex}"
+        tmp_path = pathlib.Path("legal") / f"{slug}.md"
+        tmp_path.write_text(content, encoding="utf-8")
 
-        slug = pathlib.Path(tmp_path).stem
         try:
             doc = LegalDocument(
                 slug=slug,
@@ -530,7 +532,7 @@ class TestEffectiveDateSubstitution:
                 requires_acceptance=True,
                 category="general",
                 display_order=0,
-                file_path=tmp_path,
+                file_path=str(tmp_path),
             )
             db_session.add(doc)
             await db_session.flush()
@@ -541,4 +543,4 @@ class TestEffectiveDateSubstitution:
             assert "2026-03-15" in data["content_markdown"]
             assert "{{EFFECTIVE_DATE}}" not in data["content_markdown"]
         finally:
-            pathlib.Path(tmp_path).unlink(missing_ok=True)
+            tmp_path.unlink(missing_ok=True)
