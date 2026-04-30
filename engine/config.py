@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     # Worker
     worker_concurrency: int = 4
 
+    # Rate limit (global default; per-route overrides live in code)
+    rate_limit_per_minute: int = 600
+    rate_limit_burst: int = 60
+    rate_limit_exempt_paths: str = "/health,/metrics"
+
     # Data providers
     data_providers_config: str = ""
     data_providers_default: str = "yahoo"
