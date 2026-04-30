@@ -51,18 +51,58 @@ class SearchIndex:
         return [rec for _, rec in top]
 
     @staticmethod
-    def _score(rec: RefInstrument, q: str) -> int:
+    def _score(rec: RefInstrument, q: str) -> int:  # noqa: PLR0911 - one return per scoring tier
+        """Rank both ticker and company-name matches.
+
+        Both symbol-style queries (e.g. ``AAPL``) and company-name
+        queries (e.g. ``Apple``) reach the target instrument; the
+        caller does not have to know which form the catalog stores.
+
+        Tiers (high -> low):
+
+        - 100: ticker exact match
+        - 90:  name exact match
+        - 80:  ticker prefix match
+        - 70:  name prefix match
+        - 60:  ticker contains q
+        - 50:  any name token starts with q (word-prefix)
+        - 25:  q anywhere inside name
+        """
         ticker = rec.primary_ticker.lower()
         name = rec.name.lower()
         if ticker == q:
             return 100
+        if name == q:
+            return 90
         if ticker.startswith(q):
-            return 75
+            return 80
+        if name.startswith(q):
+            return 70
         if q in ticker:
-            return 50
+            return 60
+        # Word-token prefix: catches "Berk" -> "Berkshire" inside
+        # "Berkshire Hathaway Inc." even when the ticker is BRK.B.
+        for token in _tokenize_name(name):
+            if token.startswith(q):
+                return 50
         if q in name:
             return 25
         return 0
+
+
+def _tokenize_name(name: str) -> list[str]:
+    """Split a name into lowercase alphanumeric word tokens."""
+    out: list[str] = []
+    current: list[str] = []
+    for ch in name:
+        if ch.isalnum():
+            current.append(ch)
+        elif current:
+            out.append("".join(current))
+            current = []
+    if current:
+        out.append("".join(current))
+    return out
 
 
 __all__ = ["SearchIndex"]
