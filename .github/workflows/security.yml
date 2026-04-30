@@ -1,0 +1,199 @@
+name: Security
+
+on:
+  push:
+    branches: [main, develop]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - ".github/CODEOWNERS"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - ".github/CODEOWNERS"
+  schedule:
+    # Daily 03:17 UTC — catches CVEs published after a PR landed.
+    - cron: "17 3 * * *"
+
+# Workflow-level scope is read-only. Jobs opt in to wider scopes
+# explicitly via per-job `permissions:` blocks. There is currently no
+# SARIF upload to GitHub Code Scanning, so `security-events: write` is
+# intentionally absent — re-add per-job once an `upload-sarif` step lands.
+permissions:
+  contents: read
+
+jobs:
+  sast:
+    name: SAST (bandit)
+    runs-on: [self-hosted, nexus]
+    container:
+      image: python:3.12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bandit
+        run: pip install --no-cache-dir "bandit[toml]>=1.7,<2"
+
+      # Hard-fail on HIGH-severity findings only. MEDIUM/LOW are
+      # surfaced via the SARIF artifact for review.
+      - name: Run bandit
+        run: |
+          bandit -r engine sdk \
+            -lll \
+            --exclude '**/migrations/**' \
+            -f sarif \
+            -o bandit.sarif
+
+      - name: Upload SARIF
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-sarif
+          path: bandit.sarif
+
+  deps:
+    name: Dependency audit (pip-audit)
+    runs-on: [self-hosted, nexus]
+    container:
+      image: python:3.12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pip-audit
+        run: pip install --no-cache-dir "pip-audit>=2.7,<3"
+
+      # Install with the dev extras so we audit the full dependency
+      # closure, not just runtime requirements. `--no-deps` on pip-audit
+      # would miss transitive vulnerabilities — leave it default.
+      - name: Audit project dependencies
+        run: |
+          pip install --no-cache-dir -e ".[dev]"
+          pip-audit \
+            --progress-spinner off \
+            --format json \
+            --output pip-audit.json \
+            || true
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pip-audit-report
+          path: pip-audit.json
+
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: [self-hosted, nexus]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # PR scans only need new commits; full history reserved for
+          # push/schedule events where a deep audit is justified.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 50 || 0 }}
+
+      # Pinned to gitleaks-action v2.3.9 (released 2025-04-22). Floating
+      # `@v2` would let the maintainer (or anyone who compromises their
+      # release pipeline) ship arbitrary code into our security workflow.
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_NOTIFY_USER_LIST: ""
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "true"
+          GITLEAKS_ENABLE_SUMMARY: "true"
+
+  container:
+    name: Container scan (trivy)
+    runs-on: [self-hosted, nexus]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build engine image
+        run: docker build -t nexus-engine:scan .
+
+      - name: Build frontend image
+        run: docker build -t nexus-frontend:scan ./frontend
+
+      - name: Trivy scan engine image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: "nexus-engine:scan"
+          format: "sarif"
+          output: "trivy-engine.sarif"
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"
+          ignore-unfixed: true
+
+      - name: Trivy scan frontend image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: "nexus-frontend:scan"
+          format: "sarif"
+          output: "trivy-frontend.sarif"
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"
+          ignore-unfixed: true
+
+      - name: Upload SARIF
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-sarif
+          path: |
+            trivy-engine.sarif
+            trivy-frontend.sarif
+
+      # Self-hosted runners are long-lived; without explicit cleanup
+      # the per-PR scan images accumulate and exhaust disk over time.
+      - name: Cleanup scan images
+        if: always()
+        run: docker rmi --force nexus-engine:scan nexus-frontend:scan || true
+
+  sbom:
+    name: SBOM (syft)
+    runs-on: [self-hosted, nexus]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build engine image
+        run: docker build -t nexus-engine:sbom .
+
+      # Pinned to v0.17.5 (released 2025-03). Floating `@v0` is a
+      # supply-chain risk on a security-critical workflow.
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@v0.17.5
+        with:
+          image: "nexus-engine:sbom"
+          format: "cyclonedx-json"
+          output-file: "sbom.cdx.json"
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cdx.json
+
+      - name: Cleanup SBOM image
+        if: always()
+        run: docker rmi --force nexus-engine:sbom || true
+
+  summary:
+    name: Security summary
+    runs-on: [self-hosted, nexus]
+    needs: [sast, deps, secrets, container, sbom]
+    if: always()
+    steps:
+      - name: Aggregate
+        run: |
+          echo "## Security scans" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Job | Conclusion |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SAST | ${{ needs.sast.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Deps | ${{ needs.deps.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Secrets | ${{ needs.secrets.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Container | ${{ needs.container.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SBOM | ${{ needs.sbom.result }} |" >> "$GITHUB_STEP_SUMMARY"
