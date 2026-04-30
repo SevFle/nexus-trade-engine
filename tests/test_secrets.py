@@ -53,9 +53,53 @@ class TestPutGet:
             await service.put("", "v")
 
     @pytest.mark.asyncio
+    async def test_whitespace_only_name_rejected(
+        self, service: SecretsService
+    ) -> None:
+        with pytest.raises(SecretsError):
+            await service.put("   ", "v")
+
+    @pytest.mark.asyncio
     async def test_empty_value_rejected(self, service: SecretsService) -> None:
         with pytest.raises(SecretsError):
             await service.put("k", "")
+
+    @pytest.mark.asyncio
+    async def test_name_normalized_consistently(
+        self, service: SecretsService
+    ) -> None:
+        await service.put("  api_key  ", "v")
+        assert await service.get("api_key") == "v"
+        assert await service.get("  api_key  ") == "v"
+
+    @pytest.mark.asyncio
+    async def test_unicode_name_round_trip(self, service: SecretsService) -> None:
+        await service.put("密钥", "v")
+        assert await service.get("密钥") == "v"
+
+    @pytest.mark.asyncio
+    async def test_corrupted_ciphertext_raises(
+        self, service: SecretsService
+    ) -> None:
+        from engine.core.secrets import SecretRecord
+
+        await service.store.put_record(
+            SecretRecord(
+                name="garbage",
+                ciphertext=b"not-a-fernet-token",
+                created_at_epoch=0.0,
+                updated_at_epoch=0.0,
+            )
+        )
+        with pytest.raises(SecretsError):
+            await service.get("garbage")
+
+    @pytest.mark.asyncio
+    async def test_get_whitespace_only_name_rejected(
+        self, service: SecretsService
+    ) -> None:
+        with pytest.raises(SecretsError):
+            await service.get("   ")
 
 
 class TestDelete:
@@ -68,6 +112,13 @@ class TestDelete:
     @pytest.mark.asyncio
     async def test_delete_missing_is_noop(self, service: SecretsService) -> None:
         await service.delete("never-existed")
+
+    @pytest.mark.asyncio
+    async def test_delete_whitespace_only_name_rejected(
+        self, service: SecretsService
+    ) -> None:
+        with pytest.raises(SecretsError):
+            await service.delete("   ")
 
 
 class TestList:
@@ -106,14 +157,14 @@ class TestRotation:
         assert await service.get("k") == "v"
 
     @pytest.mark.asyncio
-    async def test_after_reencrypt_previous_key_unused(
+    async def test_drop_previous_key_after_reencrypt(
         self, service: SecretsService
     ) -> None:
         await service.put("k", "v")
         new_key = generate_master_key()
         service.rotate_master_key(new_current=new_key)
         await service.reencrypt_all()
-        service._master_key = MasterKey(current=new_key)
+        service.drop_previous_key()
         assert await service.get("k") == "v"
 
     @pytest.mark.asyncio
@@ -129,6 +180,63 @@ class TestRotation:
         with pytest.raises(SecretsError):
             await svc2.get("k")
 
+    @pytest.mark.asyncio
+    async def test_double_rotation_without_reencrypt_rejected(
+        self, service: SecretsService
+    ) -> None:
+        service.rotate_master_key(new_current=generate_master_key())
+        with pytest.raises(SecretsError, match="previous key is still held"):
+            service.rotate_master_key(new_current=generate_master_key())
+
+    @pytest.mark.asyncio
+    async def test_reencrypt_all_aborts_on_undecryptable_record(self) -> None:
+        from engine.core.secrets import SecretRecord
+
+        store = InMemorySecretStore()
+        svc = SecretsService(
+            store=store, master_key=MasterKey(current=generate_master_key())
+        )
+        await svc.put("good", "v")
+        # Insert a record that decrypts under neither key.
+        await store.put_record(
+            SecretRecord(
+                name="bad",
+                ciphertext=b"not-a-fernet-token",
+                created_at_epoch=0.0,
+                updated_at_epoch=0.0,
+            )
+        )
+        good_before = await store.get_record("good")
+        assert good_before is not None
+        new_key = generate_master_key()
+        svc.rotate_master_key(new_current=new_key)
+        with pytest.raises(SecretsError, match="No records were modified"):
+            await svc.reencrypt_all()
+        # Good record must be untouched (atomic abort).
+        good_after = await store.get_record("good")
+        assert good_after is not None
+        assert good_after.ciphertext == good_before.ciphertext
+
+    @pytest.mark.asyncio
+    async def test_reencrypt_error_does_not_leak_names(self) -> None:
+        from engine.core.secrets import SecretRecord
+
+        store = InMemorySecretStore()
+        svc = SecretsService(
+            store=store, master_key=MasterKey(current=generate_master_key())
+        )
+        await store.put_record(
+            SecretRecord(
+                name="prod_stripe_key",
+                ciphertext=b"not-a-fernet-token",
+                created_at_epoch=0.0,
+                updated_at_epoch=0.0,
+            )
+        )
+        with pytest.raises(SecretsError) as exc_info:
+            await svc.reencrypt_all()
+        assert "prod_stripe_key" not in str(exc_info.value)
+
 
 class TestMasterKey:
     def test_generate_master_key_returns_bytes(self) -> None:
@@ -142,3 +250,29 @@ class TestMasterKey:
     def test_master_key_rejects_empty_current(self) -> None:
         with pytest.raises(SecretsError):
             MasterKey(current=b"")
+
+    def test_master_key_rejects_short_key(self) -> None:
+        with pytest.raises(SecretsError, match="32 bytes"):
+            MasterKey(current=b"tooshort")
+
+    def test_master_key_rejects_non_base64_key(self) -> None:
+        # 32 random raw bytes — not url-safe-base64-encoded.
+        raw_bytes = bytes(range(32))
+        with pytest.raises(SecretsError):
+            MasterKey(current=raw_bytes)
+
+    def test_master_key_rejects_invalid_previous(self) -> None:
+        with pytest.raises(SecretsError):
+            MasterKey(current=generate_master_key(), previous=b"garbage")
+
+    def test_rotate_rejects_invalid_new_key(
+        self, service: SecretsService
+    ) -> None:
+        with pytest.raises(SecretsError):
+            service.rotate_master_key(new_current=b"")
+
+    def test_rotate_rejects_short_new_key(
+        self, service: SecretsService
+    ) -> None:
+        with pytest.raises(SecretsError, match="32 bytes"):
+            service.rotate_master_key(new_current=b"tooshort")
