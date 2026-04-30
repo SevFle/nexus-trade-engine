@@ -10,6 +10,7 @@ from valkey.asyncio import Valkey
 
 from engine.api.auth.local import LocalAuthProvider
 from engine.api.auth.registry import AuthProviderRegistry
+from engine.api.rate_limit import RateLimitConfig, RateLimitMiddleware
 from engine.api.router import api_router
 from engine.config import settings
 from engine.data.providers import (
@@ -139,6 +140,17 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+    exempt_paths = tuple(
+        p.strip() for p in settings.rate_limit_exempt_paths.split(",") if p.strip()
+    )
+    app.add_middleware(
+        RateLimitMiddleware,
+        config=RateLimitConfig(
+            default_per_minute=settings.rate_limit_per_minute,
+            default_burst=settings.rate_limit_burst,
+            exempt_paths=exempt_paths,
+        ),
     )
     app.add_middleware(CorrelationIdMiddleware)
 
