@@ -12,6 +12,10 @@ from engine.api.auth.local import LocalAuthProvider
 from engine.api.auth.registry import AuthProviderRegistry
 from engine.api.rate_limit import RateLimitConfig, RateLimitMiddleware
 from engine.api.router import api_router
+from engine.api.security_headers import (
+    SecurityHeadersConfig,
+    SecurityHeadersMiddleware,
+)
 from engine.config import settings
 from engine.data.providers import (
     AssetClass,
@@ -134,6 +138,10 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        config=SecurityHeadersConfig(),
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
