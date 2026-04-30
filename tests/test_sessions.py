@@ -12,6 +12,7 @@ from engine.api.sessions import (
     Session,
     SessionConfig,
     SessionExpiredError,
+    SessionNotFoundError,
     SessionRevokedError,
     SessionService,
     hash_ip,
@@ -208,6 +209,102 @@ class TestPrivacyHashing:
         a = hash_ip("203.0.113.42", salt="s1")
         b = hash_ip("203.0.113.42", salt="s2")
         assert a != b
+
+
+class TestInputValidation:
+    @pytest.mark.asyncio
+    async def test_oversize_device_label_rejected(self, service: SessionService):
+        with pytest.raises(ValueError, match="device_label"):
+            await service.create(
+                _user(), "x" * 1000, "1.2.3.4", "ua"
+            )
+
+    @pytest.mark.asyncio
+    async def test_oversize_ip_rejected(self, service: SessionService):
+        with pytest.raises(ValueError, match="ip"):
+            await service.create(_user(), "d", "1." * 200, "ua")
+
+    @pytest.mark.asyncio
+    async def test_oversize_user_agent_rejected(self, service: SessionService):
+        with pytest.raises(ValueError, match="user_agent"):
+            await service.create(_user(), "d", "1.2.3.4", "ua" * 1000)
+
+
+class TestNotFoundDistinctFromRevoked:
+    @pytest.mark.asyncio
+    async def test_unknown_session_raises_not_found(
+        self, service: SessionService
+    ):
+        with pytest.raises(SessionNotFoundError):
+            await service.touch("definitely-not-real")
+
+    @pytest.mark.asyncio
+    async def test_error_messages_do_not_leak_token(
+        self, service: SessionService
+    ):
+        s = await service.create(_user(), "d", "1.2.3.4", "ua")
+        await service.revoke(s.id)
+        with pytest.raises(SessionRevokedError) as exc:
+            await service.touch(s.id)
+        assert s.id not in str(exc.value)
+
+
+class TestConcurrencySafety:
+    @pytest.mark.asyncio
+    async def test_concurrent_creates_respect_cap(self, store):
+        import asyncio
+
+        svc = SessionService(
+            store=store,
+            config=SessionConfig(
+                idle_timeout_sec=900,
+                absolute_timeout_sec=86_400,
+                max_concurrent=2,
+            ),
+        )
+        u = _user()
+        await asyncio.gather(
+            *(svc.create(u, f"d-{i}", "1.2.3.4", "ua") for i in range(10))
+        )
+        active = await svc.list_active_for_user(u)
+        assert len(active) <= 2
+
+    @pytest.mark.asyncio
+    async def test_revoke_during_touch_wins(self, service: SessionService):
+        import asyncio
+
+        s = await service.create(_user(), "d", "1.2.3.4", "ua")
+
+        async def touch_loop():
+            for _ in range(20):
+                try:
+                    await service.touch(s.id)
+                except SessionRevokedError:
+                    return
+
+        async def revoke_once():
+            await service.revoke(s.id)
+
+        await asyncio.gather(touch_loop(), revoke_once())
+        out = await service.get(s.id)
+        assert out is not None
+        # After revoke, no touch can resurrect the revoked flag.
+        assert out.revoked is True
+
+
+class TestStorePerUserBound:
+    @pytest.mark.asyncio
+    async def test_per_user_record_count_is_capped(self):
+        store = InMemorySessionStore(max_total_per_user=4)
+        svc = SessionService(
+            store=store,
+            config=SessionConfig(max_concurrent=4, max_total_per_user=4),
+        )
+        u = _user()
+        for i in range(10):
+            await svc.create(u, f"d-{i}", "1.2.3.4", "ua")
+        all_for_user = await store.list_for_user(u)
+        assert len(all_for_user) <= 4
 
 
 class TestSessionEntity:
