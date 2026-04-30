@@ -64,10 +64,12 @@ class TestStaticHeaders:
 
 class TestHSTS:
     @pytest.mark.asyncio
-    async def test_hsts_present_when_enabled(self):
+    async def test_hsts_present_when_enabled_over_https(self):
+        # Browsers ignore HSTS over HTTP; emit only when scheme is https
+        # (or X-Forwarded-Proto: https when behind a TLS-terminating proxy).
         app = _build_app(SecurityHeadersConfig(hsts_enabled=True))
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="https://test"
         ) as ac:
             r = await ac.get("/x")
         v = r.headers.get("Strict-Transport-Security", "")
@@ -75,10 +77,30 @@ class TestHSTS:
         assert "includeSubDomains" in v
 
     @pytest.mark.asyncio
+    async def test_hsts_present_via_x_forwarded_proto(self):
+        # TLS-terminating proxy forwards plain HTTP to the app but flags
+        # the original scheme via X-Forwarded-Proto. HSTS must still emit.
+        app = _build_app(SecurityHeadersConfig(hsts_enabled=True))
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            r = await ac.get("/x", headers={"X-Forwarded-Proto": "https"})
+        assert "Strict-Transport-Security" in r.headers
+
+    @pytest.mark.asyncio
+    async def test_hsts_omitted_on_plain_http(self):
+        app = _build_app(SecurityHeadersConfig(hsts_enabled=True))
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            r = await ac.get("/x")
+        assert "Strict-Transport-Security" not in r.headers
+
+    @pytest.mark.asyncio
     async def test_hsts_omitted_when_disabled(self):
         app = _build_app(SecurityHeadersConfig(hsts_enabled=False))
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="https://test"
         ) as ac:
             r = await ac.get("/x")
         assert "Strict-Transport-Security" not in r.headers
@@ -123,6 +145,61 @@ class TestCSPBuilder:
         csp = build_csp()
         script_segment = csp.split("script-src", 1)[-1].split(";", 1)[0]
         assert "'unsafe-inline'" not in script_segment
+
+    def test_build_csp_includes_upgrade_insecure_requests(self):
+        csp = build_csp()
+        assert "upgrade-insecure-requests" in csp
+
+    def test_build_csp_includes_report_uri_when_set(self):
+        csp = build_csp(report_uri="/csp-report")
+        assert "report-uri /csp-report" in csp
+
+    def test_build_csp_rejects_unsafe_inline_in_script_src(self):
+        with pytest.raises(ValueError, match="script_src"):
+            build_csp(script_src=("'self'", "'unsafe-inline'"))
+
+    def test_build_csp_rejects_unsafe_eval_in_script_src(self):
+        with pytest.raises(ValueError, match="script_src"):
+            build_csp(script_src=("'self'", "'unsafe-eval'"))
+
+    def test_build_csp_rejects_wildcard_in_script_src(self):
+        with pytest.raises(ValueError, match="script_src"):
+            build_csp(script_src=("*",))
+
+    def test_build_csp_rejects_wildcard_in_default_src(self):
+        with pytest.raises(ValueError, match="default_src"):
+            build_csp(default_src=("*",))
+
+
+class TestPermissionsPolicy:
+    @pytest.mark.asyncio
+    async def test_browsing_topics_disabled(self, client: AsyncClient):
+        # Topics API replaced FLoC; the new opt-out token must be present.
+        r = await client.get("/x")
+        assert "browsing-topics=()" in r.headers.get("Permissions-Policy", "")
+
+
+class TestServerHeaderSuppression:
+    @pytest.mark.asyncio
+    async def test_server_header_blanked(self):
+        # An upstream `Server: uvicorn` should not leak through.
+        from fastapi import Response
+
+        app = FastAPI()
+        app.add_middleware(SecurityHeadersMiddleware, config=SecurityHeadersConfig())
+
+        @app.get("/leaky")
+        async def leaky() -> Response:
+            r = Response('{"ok":true}', media_type="application/json")
+            r.headers["Server"] = "uvicorn/0.99"
+            return r
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            resp = await ac.get("/leaky")
+        # Either absent or empty — never carrying the runtime fingerprint.
+        assert resp.headers.get("Server", "") == ""
 
 
 class TestExistingHeadersNotOverwritten:
