@@ -10,7 +10,7 @@ from engine.core.strategy_versioning import (
     InMemoryStrategyRegistry,
     StrategyVersion,
     StrategyVersionService,
-    VersionAlreadyExistsError,
+    VersionInvalidConfigError,
     VersionNotFoundError,
     VersionStatus,
 )
@@ -131,11 +131,21 @@ class TestRetire:
             await service.activate(version_id=v.id)
 
     @pytest.mark.asyncio
-    async def test_retire_active_version_clears_active_pointer(self, service):
+    async def test_retire_active_requires_explicit_flag(self, service):
         sid = _strategy()
         v = await service.deploy(sid, CODE_A, {})
         await service.activate(version_id=v.id)
-        await service.retire(version_id=v.id)
+        with pytest.raises(ValueError, match="active deployment"):
+            await service.retire(version_id=v.id)
+
+    @pytest.mark.asyncio
+    async def test_retire_active_version_with_explicit_flag_clears_pointer(
+        self, service
+    ):
+        sid = _strategy()
+        v = await service.deploy(sid, CODE_A, {})
+        await service.activate(version_id=v.id)
+        await service.retire(version_id=v.id, allow_retire_active=True)
         active = await service.get_active(strategy_id=sid)
         assert active is None
 
@@ -210,5 +220,61 @@ class TestEntity:
         )
         assert v.strategy_id == sid
 
-    def test_already_exists_error_class(self):
-        assert issubclass(VersionAlreadyExistsError, Exception)
+    def test_invalid_config_error_class(self):
+        assert issubclass(VersionInvalidConfigError, ValueError)
+
+
+class TestConfigValidation:
+    @pytest.mark.asyncio
+    async def test_deploy_rejects_nan_floats(self, service):
+        sid = _strategy()
+        with pytest.raises(VersionInvalidConfigError):
+            await service.deploy(sid, CODE_A, {"threshold": float("nan")})
+
+    @pytest.mark.asyncio
+    async def test_deploy_rejects_non_serializable(self, service):
+        sid = _strategy()
+        with pytest.raises(VersionInvalidConfigError):
+            await service.deploy(sid, CODE_A, {"f": lambda: 1})
+
+    @pytest.mark.asyncio
+    async def test_deploy_rejects_oversize_code(self, service):
+        sid = _strategy()
+        with pytest.raises(ValueError, match="exceeds"):
+            await service.deploy(sid, b"x" * (10 * 1024 * 1024), {})
+
+
+class TestRollbackTarget:
+    @pytest.mark.asyncio
+    async def test_rollback_picks_previously_active_not_highest_retired(
+        self, service
+    ):
+        # Sequence: deploy v1, v2, v3; activate v1, then v3 (skipping
+        # v2). Rollback should restore v1 (the only previously-live
+        # version), not v2 (deployed but never activated).
+        sid = _strategy()
+        v1 = await service.deploy(sid, CODE_A, {})
+        v2 = await service.deploy(sid, CODE_B, {})
+        v3 = await service.deploy(sid, b"def evaluate(): return 3\n", {})
+        await service.activate(version_id=v1.id)
+        await service.activate(version_id=v3.id)
+        # Retire v2 deliberately so it sits in the retired pool with no
+        # last_activated_at — without the fix it would be the rollback
+        # target by version_number.
+        await service.retire(version_id=v2.id)
+        rolled = await service.rollback(strategy_id=sid)
+        assert rolled.id == v1.id
+
+
+class TestActivateConcurrencySafety:
+    @pytest.mark.asyncio
+    async def test_retired_check_inside_lock(self, service):
+        # Even though the test cannot reliably interleave a concurrent
+        # retire mid-activate, the contract change is that the retired
+        # check happens after the in-lock re-fetch. Smoke-test: a
+        # version retired between activate calls remains rejected.
+        sid = _strategy()
+        v = await service.deploy(sid, CODE_A, {})
+        await service.retire(version_id=v.id)
+        with pytest.raises(ValueError, match="retired"):
+            await service.activate(version_id=v.id)
