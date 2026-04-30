@@ -11,7 +11,9 @@ import uuid
 from datetime import UTC, datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from engine.core.instruments import Instrument
 
 
 class Side(str, Enum):
@@ -40,6 +42,13 @@ class Signal(BaseModel):
 
     # ── What to trade ──
     symbol: str = Field(..., description="Ticker symbol, e.g. 'AAPL'")
+    instrument: Instrument | None = Field(
+        default=None,
+        description=(
+            "Typed instrument. Auto-derived from `symbol` when omitted "
+            "(see Instrument.from_string for inference rules)."
+        ),
+    )
     side: Side = Field(..., description="BUY, SELL, or HOLD")
 
     # ── How much ──
@@ -67,6 +76,14 @@ class Signal(BaseModel):
         default=None,
         description="Max total cost (fees+spread+slippage) as % of trade value. Skip if exceeded.",
     )
+
+    @model_validator(mode="after")
+    def _ensure_instrument(self) -> Signal:
+        """Backward-compat: auto-wrap `symbol` as an :class:`Instrument`
+        when the caller didn't supply one explicitly."""
+        if self.instrument is None:
+            object.__setattr__(self, "instrument", Instrument.from_string(self.symbol))
+        return self
 
     # ── Convenience constructors ──
     @classmethod
