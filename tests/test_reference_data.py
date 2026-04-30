@@ -332,6 +332,94 @@ class TestSearchIndex:
         assert len(results) == 10
 
 
+class TestSymbolAndNameSearch:
+    """Both ticker and company-name queries are first-class entry points."""
+
+    def _idx(self) -> SearchIndex:
+        idx = SearchIndex()
+        idx.add(_aapl())
+        idx.add(
+            RefInstrument(
+                primary_ticker="MSFT",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Microsoft Corp.",
+            )
+        )
+        idx.add(
+            RefInstrument(
+                primary_ticker="BRK.B",
+                primary_venue="XNYS",
+                asset_class="equity",
+                name="Berkshire Hathaway Inc.",
+            )
+        )
+        idx.add(
+            RefInstrument(
+                primary_ticker="WDFC",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="WD-40 Company",
+            )
+        )
+        return idx
+
+    def test_name_full_word_finds_ticker(self):
+        results = self._idx().search("Apple")
+        assert results
+        assert results[0].primary_ticker == "AAPL"
+
+    def test_name_prefix_finds_ticker(self):
+        results = self._idx().search("Micro")
+        assert results
+        assert results[0].primary_ticker == "MSFT"
+
+    def test_name_word_token_finds_ticker(self):
+        # Multi-word names: "Berk" matches the first word of
+        # "Berkshire Hathaway Inc." and ranks BRK.B above non-matches.
+        results = self._idx().search("Berk")
+        assert results
+        assert results[0].primary_ticker == "BRK.B"
+
+    def test_ticker_exact_still_wins_over_name_partial(self):
+        # If query matches one record's ticker exactly AND another
+        # record's name as a substring, the ticker-exact match comes
+        # first.
+        idx = SearchIndex()
+        idx.add(
+            RefInstrument(
+                primary_ticker="ABC",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Some Company",
+            )
+        )
+        idx.add(
+            RefInstrument(
+                primary_ticker="ZZZ",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="ABC Industries",
+            )
+        )
+        results = idx.search("ABC")
+        assert results[0].primary_ticker == "ABC"
+
+    def test_name_search_is_case_insensitive(self):
+        results = self._idx().search("MICROSOFT")
+        assert results
+        assert results[0].primary_ticker == "MSFT"
+
+    def test_name_internal_substring_still_matches(self):
+        results = self._idx().search("soft")
+        tickers = [r.primary_ticker for r in results]
+        assert "MSFT" in tickers
+
+    def test_no_match_returns_empty(self):
+        results = self._idx().search("xyznotapresent")
+        assert results == []
+
+
 class TestGICSNode:
     def test_construction(self):
         node = GICSNode(code="45", name="Information Technology", level="sector")
