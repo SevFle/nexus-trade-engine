@@ -22,6 +22,7 @@ from engine.data.providers import (
 from engine.db.session import dispose_engine, get_session_factory
 from engine.legal.sync import sync_legal_documents
 from engine.observability.logging import setup_logging
+from engine.observability.middleware import CorrelationIdMiddleware
 from engine.observability.tracing import setup_tracing
 
 if TYPE_CHECKING:
@@ -139,6 +140,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(CorrelationIdMiddleware)
 
     app.include_router(api_router)
 
