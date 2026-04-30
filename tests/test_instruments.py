@@ -50,7 +50,10 @@ class TestForexFactory:
         assert inst.asset_class == InstrumentAssetClass.FOREX
         assert inst.base_asset == "EUR"
         assert inst.quote_asset == "USD"
-        assert inst.uid == "EUR/USD"
+        # uid carries an explicit FX marker so it cannot collide with a
+        # crypto pair on the same base/quote letters (e.g. EUR/USD vs
+        # a hypothetical EUR/USD crypto listing).
+        assert inst.uid == "EUR/USD:FX"
         assert inst.pip_size == pytest.approx(0.0001)
         assert inst.lot_size == 100_000
 
@@ -109,6 +112,80 @@ class TestUidUniqueness:
             "AAPL", 210.0, date(2026, 6, 19), OptionType.CALL
         )
         assert a.uid != b.uid
+
+    def test_spot_vs_perp_vs_future_uids_distinct(self):
+        spot = Instrument.crypto("BTC", "USDT")
+        perp = Instrument.crypto_perp("BTC", "USDT")
+        # CRYPTO_FUTURE uid includes expiration when set; without
+        # expiration falls back to ":FUT" suffix.
+        future_dated = Instrument(
+            symbol="BTC/USDT",
+            asset_class=InstrumentAssetClass.CRYPTO_FUTURE,
+            base_asset="BTC",
+            quote_asset="USDT",
+            expiration=date(2026, 12, 26),
+        )
+        future_perpetual = Instrument(
+            symbol="BTC/USDT",
+            asset_class=InstrumentAssetClass.CRYPTO_FUTURE,
+            base_asset="BTC",
+            quote_asset="USDT",
+        )
+        uids = {spot.uid, perp.uid, future_dated.uid, future_perpetual.uid}
+        assert len(uids) == 4, f"expected 4 distinct uids, got {uids}"
+
+    def test_forex_pair_uid_includes_fx_marker(self):
+        fx = Instrument.forex("EUR", "USD")
+        crypto = Instrument.crypto("EUR", "USD")
+        assert fx.uid != crypto.uid
+
+
+class TestSymbolValidation:
+    def test_empty_symbol_rejected(self):
+        with pytest.raises((ValueError, TypeError)):
+            Instrument.equity("")
+
+    def test_whitespace_symbol_rejected(self):
+        with pytest.raises((ValueError, TypeError)):
+            Instrument.equity("   ")
+
+    def test_from_string_rejects_empty(self):
+        with pytest.raises(ValueError, match="non-empty"):
+            Instrument.from_string("")
+
+    def test_from_string_rejects_whitespace(self):
+        with pytest.raises(ValueError, match="non-empty"):
+            Instrument.from_string("   ")
+
+    def test_from_string_strips_and_classifies_as_equity(self):
+        # Conservative default: "/" no longer routes to crypto; share
+        # classes and forex pairs survive without misclassification.
+        for raw in ("AAPL", "EUR/USD", "BRK/B", "AAPL "):
+            inst = Instrument.from_string(raw)
+            assert inst.asset_class == InstrumentAssetClass.EQUITY
+
+
+class TestSerializationRoundtrip:
+    def test_string_enum_serializes_cleanly(self):
+        import json
+
+        inst = Instrument.equity("AAPL")
+        payload = json.loads(inst.model_dump_json())
+        assert payload["asset_class"] == "equity"
+
+    def test_perp_round_trips_via_model_dump(self):
+        a = Instrument.crypto_perp("BTC", "USDT", exchange="BINANCE")
+        b = Instrument.model_validate(a.model_dump(mode="json"))
+        assert b.asset_class == InstrumentAssetClass.CRYPTO_PERP
+        assert b.uid == a.uid
+
+
+class TestStrikeBoundary:
+    def test_zero_strike_rejected(self):
+        with pytest.raises((ValueError, TypeError)):
+            Instrument.option(
+                "AAPL", 0.0, date(2026, 6, 19), OptionType.CALL
+            )
 
 
 class TestInstrumentValidation:

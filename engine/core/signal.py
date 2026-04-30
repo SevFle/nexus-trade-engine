@@ -42,12 +42,17 @@ class Signal(BaseModel):
 
     # ── What to trade ──
     symbol: str = Field(..., description="Ticker symbol, e.g. 'AAPL'")
-    instrument: Instrument | None = Field(
-        default=None,
+    # Always populated post-validation (see ``_ensure_instrument``).
+    # Optional in the schema only so callers that pass a bare ``symbol``
+    # don't have to construct an Instrument themselves.
+    instrument: Instrument = Field(
+        default=None,  # type: ignore[assignment]
         description=(
             "Typed instrument. Auto-derived from `symbol` when omitted "
-            "(see Instrument.from_string for inference rules)."
+            "via Instrument.from_string (defaults to equity for free-form "
+            "strings; use Instrument factories for crypto/forex/options)."
         ),
+        validate_default=False,
     )
     side: Side = Field(..., description="BUY, SELL, or HOLD")
 
@@ -80,9 +85,11 @@ class Signal(BaseModel):
     @model_validator(mode="after")
     def _ensure_instrument(self) -> Signal:
         """Backward-compat: auto-wrap `symbol` as an :class:`Instrument`
-        when the caller didn't supply one explicitly."""
-        if self.instrument is None:
-            object.__setattr__(self, "instrument", Instrument.from_string(self.symbol))
+        when the caller didn't supply one explicitly. After this validator
+        runs, ``instrument`` is guaranteed non-None (annotation reflects
+        post-validation state)."""
+        if self.instrument is None:  # type: ignore[unreachable]
+            self.instrument = Instrument.from_string(self.symbol)
         return self
 
     # ── Convenience constructors ──

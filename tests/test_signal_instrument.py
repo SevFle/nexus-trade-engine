@@ -14,6 +14,16 @@ class TestSymbolOnlyStillWorks:
         assert s.instrument.asset_class == InstrumentAssetClass.EQUITY
         assert s.instrument.uid == "AAPL"
 
+    def test_forex_pair_string_does_not_misclassify_as_crypto(self):
+        # Conservative default: bare strings are always equity-by-default.
+        # Forex/crypto callers must use the explicit factory.
+        s = Signal(symbol="EUR/USD", side=Side.BUY, strategy_id="strat-fx")
+        assert s.instrument.asset_class == InstrumentAssetClass.EQUITY
+
+    def test_share_class_notation_does_not_misclassify_as_crypto(self):
+        s = Signal(symbol="BRK/B", side=Side.BUY, strategy_id="strat-eq")
+        assert s.instrument.asset_class == InstrumentAssetClass.EQUITY
+
 
 class TestExplicitInstrument:
     def test_signal_with_full_instrument(self):

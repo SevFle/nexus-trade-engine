@@ -38,8 +38,10 @@ class InstrumentAssetClass(StrEnum):
     OPTION = "option"
     FUTURE = "future"
 
-    def to_provider_class(self) -> ProviderAssetClass:
+    def to_provider_class(self) -> ProviderAssetClass:  # noqa: PLR0911 - one return per case
         """Map to the data-routing :class:`AssetClass` used by providers."""
+        from typing import assert_never  # noqa: PLC0415
+
         from engine.data.providers.base import AssetClass as P  # noqa: PLC0415
 
         match self:
@@ -59,8 +61,9 @@ class InstrumentAssetClass(StrEnum):
                 return P.OPTIONS
             case InstrumentAssetClass.FUTURE:
                 return P.FUTURES
-        msg = f"Unmapped InstrumentAssetClass: {self!r}"
-        raise ValueError(msg)
+            case _:
+                assert_never(self)
+        return P.EQUITY  # unreachable — assert_never never returns
 
 
 class OptionType(StrEnum):
@@ -84,7 +87,11 @@ class Instrument(BaseModel):
     model_config = {"frozen": False, "validate_assignment": True}
 
     # Identity
-    symbol: str = Field(..., description="Canonical symbol — e.g. 'AAPL', 'BTC/USDT'")
+    symbol: str = Field(
+        ...,
+        min_length=1,
+        description="Canonical symbol — e.g. 'AAPL', 'BTC/USDT'",
+    )
     asset_class: InstrumentAssetClass
 
     # Listing
@@ -101,16 +108,16 @@ class Instrument(BaseModel):
 
     # Options
     underlying: str | None = Field(default=None)
-    strike: float | None = Field(default=None, ge=0.0)
+    strike: float | None = Field(default=None, gt=0.0)
     expiration: date | None = Field(default=None)
     option_type: OptionType | None = Field(default=None)
     multiplier: int = Field(default=1, ge=1)
 
-    @field_validator("strike")
+    @field_validator("symbol")
     @classmethod
-    def _strike_positive(cls, v: float | None) -> float | None:
-        if v is not None and v <= 0:
-            msg = "strike must be > 0"
+    def _symbol_no_whitespace(cls, v: str) -> str:
+        if not v.strip() or v.strip() != v:
+            msg = "symbol must be non-empty and contain no leading/trailing whitespace"
             raise ValueError(msg)
         return v
 
@@ -146,26 +153,32 @@ class Instrument(BaseModel):
     # ── Derived properties ───────────────────────────────────────────
 
     @property
-    def uid(self) -> str:
-        """Stable identifier across all instrument types."""
-        if self.asset_class == InstrumentAssetClass.OPTION:
-            # The model validator guarantees these are non-None when
-            # asset_class == OPTION, so this branch never reads None.
-            assert self.expiration is not None
-            assert self.option_type is not None
-            assert self.strike is not None
+    def uid(self) -> str:  # noqa: PLR0911 - one return per asset class
+        """Stable identifier — distinct per (asset_class, identifying fields).
+
+        Spot, perpetual, and dated future on the same pair MUST produce
+        different uids; otherwise positions in different products silently
+        collapse onto the same key.
+        """
+        ac = self.asset_class
+        if ac == InstrumentAssetClass.OPTION:
+            if self.expiration is None or self.option_type is None or self.strike is None:
+                msg = "option uid requires expiration, option_type, strike"
+                raise ValueError(msg)
             yyyymmdd = self.expiration.strftime("%Y%m%d")
             cp = "C" if self.option_type == OptionType.CALL else "P"
             return f"{self.underlying}_{yyyymmdd}_{cp}_{self.strike:.2f}"
-        if self.asset_class == InstrumentAssetClass.FUTURE and self.expiration:
+        if ac == InstrumentAssetClass.FUTURE and self.expiration:
             return f"{self.symbol}_{self.expiration.strftime('%Y%m%d')}"
-        if self.asset_class in {
-            InstrumentAssetClass.CRYPTO,
-            InstrumentAssetClass.CRYPTO_PERP,
-            InstrumentAssetClass.CRYPTO_FUTURE,
-            InstrumentAssetClass.FOREX,
-        } and self.base_asset and self.quote_asset:
+        if ac == InstrumentAssetClass.CRYPTO and self.base_asset and self.quote_asset:
             return f"{self.base_asset}/{self.quote_asset}"
+        if ac == InstrumentAssetClass.CRYPTO_PERP and self.base_asset and self.quote_asset:
+            return f"{self.base_asset}/{self.quote_asset}:PERP"
+        if ac == InstrumentAssetClass.CRYPTO_FUTURE and self.base_asset and self.quote_asset:
+            suffix = self.expiration.strftime("%Y%m%d") if self.expiration else "FUT"
+            return f"{self.base_asset}/{self.quote_asset}:{suffix}"
+        if ac == InstrumentAssetClass.FOREX and self.base_asset and self.quote_asset:
+            return f"{self.base_asset}/{self.quote_asset}:FX"
         return self.symbol
 
     @property
@@ -269,17 +282,20 @@ class Instrument(BaseModel):
 
     @classmethod
     def from_string(cls, raw: str) -> Instrument:
-        """Best-effort coercion from a free-form symbol string.
+        """Conservative coercion from a free-form symbol string.
 
-        - ``"AAPL"`` → equity
-        - ``"BTC/USDT"`` → crypto (default — forex requires explicit factory)
-        - Unknown shapes fall back to equity to preserve backward compat.
+        Defaults to **equity**. Symbol strings containing ``/`` are still
+        treated as equity to avoid silently misclassifying forex pairs
+        (``EUR/USD``), share-class notation (``BRK/B``), or non-pair
+        slashes as crypto. Crypto/forex callers must use the explicit
+        factories so the asset class is unambiguous.
+
+        Raises ``ValueError`` for empty / whitespace-only strings.
         """
-        if "/" in raw:
-            parts = raw.split("/", 1)
-            if len(parts) == 2 and all(parts):  # noqa: PLR2004 - tuple width
-                return cls.crypto(parts[0], parts[1])
-        return cls.equity(raw)
+        if not raw or not raw.strip():
+            msg = "from_string requires a non-empty symbol"
+            raise ValueError(msg)
+        return cls.equity(raw.strip())
 
     @classmethod
     def coerce(cls, value: Any) -> Instrument:
