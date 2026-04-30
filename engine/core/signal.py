@@ -11,7 +11,9 @@ import uuid
 from datetime import UTC, datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from engine.core.instruments import Instrument
 
 
 class Side(str, Enum):
@@ -40,6 +42,18 @@ class Signal(BaseModel):
 
     # ── What to trade ──
     symbol: str = Field(..., description="Ticker symbol, e.g. 'AAPL'")
+    # Always populated post-validation (see ``_ensure_instrument``).
+    # Optional in the schema only so callers that pass a bare ``symbol``
+    # don't have to construct an Instrument themselves.
+    instrument: Instrument = Field(
+        default=None,  # type: ignore[assignment]
+        description=(
+            "Typed instrument. Auto-derived from `symbol` when omitted "
+            "via Instrument.from_string (defaults to equity for free-form "
+            "strings; use Instrument factories for crypto/forex/options)."
+        ),
+        validate_default=False,
+    )
     side: Side = Field(..., description="BUY, SELL, or HOLD")
 
     # ── How much ──
@@ -67,6 +81,16 @@ class Signal(BaseModel):
         default=None,
         description="Max total cost (fees+spread+slippage) as % of trade value. Skip if exceeded.",
     )
+
+    @model_validator(mode="after")
+    def _ensure_instrument(self) -> Signal:
+        """Backward-compat: auto-wrap `symbol` as an :class:`Instrument`
+        when the caller didn't supply one explicitly. After this validator
+        runs, ``instrument`` is guaranteed non-None (annotation reflects
+        post-validation state)."""
+        if self.instrument is None:  # type: ignore[unreachable]
+            self.instrument = Instrument.from_string(self.symbol)
+        return self
 
     # ── Convenience constructors ──
     @classmethod
