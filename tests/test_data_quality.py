@@ -16,9 +16,12 @@ from engine.data.quality import (
     CorrectionRecord,
     DataQualityReport,
     DataValidator,
+    DuplicateTimestampRule,
     GBpGBPRule,
+    OHLCConsistencyRule,
     PriceBoundsRule,
     RatioSanityRule,
+    ReturnSpikeRule,
     StaleDataRule,
     ValidationConfig,
 )
@@ -595,3 +598,155 @@ class TestM5NegativeRevenueTolerance:
         rule.apply_fundamentals("AAPL", report, fundamentals)
         rev_corrections = [c for c in report.corrections if c.reason == "negative_revenue"]
         assert len(rev_corrections) == 1
+
+
+class TestOHLCConsistencyRule:
+    def test_clean_bars_pass(self):
+        df = _make_ohlcv_df(20)
+        rule = OHLCConsistencyRule()
+        report = DataQualityReport()
+        out = rule.apply(df, "AAPL", report)
+        assert len(out) == len(df)
+        assert not [c for c in report.corrections if c.reason.startswith("ohlc_")]
+
+    def test_high_below_open_flagged(self):
+        df = _make_ohlcv_df(5)
+        df.iloc[2, df.columns.get_loc("high")] = float(df.iloc[2]["open"]) - 1.0
+        rule = OHLCConsistencyRule()
+        report = DataQualityReport()
+        rule.apply(df, "AAPL", report)
+        reasons = {c.reason for c in report.corrections}
+        assert "ohlc_high_below_body" in reasons
+
+    def test_low_above_close_flagged(self):
+        df = _make_ohlcv_df(5)
+        df.iloc[1, df.columns.get_loc("low")] = float(df.iloc[1]["close"]) + 1.0
+        rule = OHLCConsistencyRule()
+        report = DataQualityReport()
+        rule.apply(df, "AAPL", report)
+        reasons = {c.reason for c in report.corrections}
+        assert "ohlc_low_above_body" in reasons
+
+    def test_high_below_low_flagged(self):
+        df = _make_ohlcv_df(5)
+        df.iloc[3, df.columns.get_loc("high")] = 50.0
+        df.iloc[3, df.columns.get_loc("low")] = 60.0
+        rule = OHLCConsistencyRule()
+        report = DataQualityReport()
+        rule.apply(df, "AAPL", report)
+        reasons = {c.reason for c in report.corrections}
+        assert "ohlc_high_below_low" in reasons
+
+    def test_negative_volume_flagged(self):
+        df = _make_ohlcv_df(5)
+        df.iloc[0, df.columns.get_loc("volume")] = -1
+        rule = OHLCConsistencyRule()
+        report = DataQualityReport()
+        rule.apply(df, "AAPL", report)
+        reasons = {c.reason for c in report.corrections}
+        assert "ohlc_negative_volume" in reasons
+
+    def test_default_action_is_flag_not_drop(self):
+        df = _make_ohlcv_df(5)
+        df.iloc[2, df.columns.get_loc("high")] = float(df.iloc[2]["open"]) - 1.0
+        rule = OHLCConsistencyRule()
+        report = DataQualityReport()
+        out = rule.apply(df, "AAPL", report)
+        assert len(out) == len(df)
+
+
+class TestReturnSpikeRule:
+    def test_clean_returns_pass(self):
+        df = _make_ohlcv_df(60, seed=7)
+        rule = ReturnSpikeRule()
+        report = DataQualityReport()
+        rule.apply(df, "AAPL", report)
+        assert not [c for c in report.corrections if c.reason == "return_spike"]
+
+    def test_extreme_spike_flagged(self):
+        df = _make_ohlcv_df(60, seed=7)
+        col = df.columns.get_loc("close")
+        df.iloc[40, col] = float(df.iloc[40]["close"]) * 5.0  # 400% jump
+        rule = ReturnSpikeRule()
+        report = DataQualityReport()
+        rule.apply(df, "AAPL", report)
+        spikes = [c for c in report.corrections if c.reason == "return_spike"]
+        assert len(spikes) >= 1
+
+    def test_short_series_skipped(self):
+        df = _make_ohlcv_df(3)
+        rule = ReturnSpikeRule()
+        report = DataQualityReport()
+        rule.apply(df, "AAPL", report)
+        assert not report.corrections
+
+    def test_zstar_threshold_configurable(self):
+        df = _make_ohlcv_df(60, seed=7)
+        col = df.columns.get_loc("close")
+        df.iloc[40, col] = float(df.iloc[40]["close"]) * 1.20  # 20% jump
+        # Default z-threshold (8) should not flag a moderate jump.
+        report_default = DataQualityReport()
+        ReturnSpikeRule().apply(df, "AAPL", report_default)
+        # Tight threshold should flag it.
+        config = ValidationConfig(return_spike_zscore=2.0)
+        report_tight = DataQualityReport()
+        ReturnSpikeRule(config).apply(df, "AAPL", report_tight)
+        default_spikes = [
+            c for c in report_default.corrections if c.reason == "return_spike"
+        ]
+        tight_spikes = [
+            c for c in report_tight.corrections if c.reason == "return_spike"
+        ]
+        assert len(tight_spikes) > len(default_spikes)
+
+
+class TestDuplicateTimestampRule:
+    def test_unique_timestamps_pass(self):
+        df = _make_ohlcv_df(10)
+        rule = DuplicateTimestampRule()
+        report = DataQualityReport()
+        out = rule.apply(df, "AAPL", report)
+        assert len(out) == len(df)
+        assert not report.corrections
+
+    def test_duplicate_index_flagged_and_deduped(self):
+        df = _make_ohlcv_df(5)
+        # Synthesize a duplicate at the second timestamp.
+        dup_row = df.iloc[[1]]
+        df_with_dup = pd.concat([df, dup_row]).sort_index()
+        rule = DuplicateTimestampRule()
+        report = DataQualityReport()
+        out = rule.apply(df_with_dup, "AAPL", report)
+        assert len(out) == len(df)
+        reasons = {c.reason for c in report.corrections}
+        assert "duplicate_timestamp" in reasons
+
+    def test_dedup_keeps_last_occurrence(self):
+        df = _make_ohlcv_df(3)
+        dup_row = df.iloc[[0]].copy()
+        dup_row.iloc[0, dup_row.columns.get_loc("close")] = 999.0
+        df_with_dup = pd.concat([df, dup_row]).sort_index()
+        rule = DuplicateTimestampRule()
+        report = DataQualityReport()
+        out = rule.apply(df_with_dup, "AAPL", report)
+        first_ts = df.index[0]
+        assert float(out.loc[first_ts, "close"]) == 999.0
+
+
+class TestExtendedDataValidator:
+    def test_pipeline_chains_new_rules(self):
+        df = _make_ohlcv_df(40, seed=11)
+        # Inject one of each anomaly type.
+        df.iloc[5, df.columns.get_loc("high")] = float(df.iloc[5]["open"]) - 1.0
+        df.iloc[10, df.columns.get_loc("close")] = (
+            float(df.iloc[10]["close"]) * 5.0
+        )
+        dup_row = df.iloc[[20]]
+        df = pd.concat([df, dup_row]).sort_index()
+        validator = DataValidator()
+        report = DataQualityReport()
+        validator.validate(df, "AAPL", report)
+        reasons = {c.reason for c in report.corrections}
+        assert "ohlc_high_below_body" in reasons
+        assert "return_spike" in reasons
+        assert "duplicate_timestamp" in reasons
