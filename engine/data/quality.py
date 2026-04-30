@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
+import numpy as np
 import structlog
 
 if TYPE_CHECKING:
@@ -27,6 +28,8 @@ class ValidationConfig:
     stale_volume_threshold: int = 0
     gbp_detection_factor: float = 80.0
     negative_revenue_tolerance: float = 0.1
+    return_spike_zscore: float = 8.0
+    return_spike_min_window: int = 20
 
     @classmethod
     def from_dict(cls, data: dict) -> ValidationConfig:
@@ -388,11 +391,207 @@ class StaleDataRule(ValidationRule):
         )
 
 
+class OHLCConsistencyRule(ValidationRule):
+    """Flag bars where OHLC fields violate basic ordering invariants.
+
+    Detects:
+    - high < max(open, close)  → ohlc_high_below_body
+    - low  > min(open, close)  → ohlc_low_above_body
+    - high < low               → ohlc_high_below_low
+    - volume < 0               → ohlc_negative_volume
+
+    Default action is "flag" — bars are not dropped because OHLC bands
+    can be subtly off from data-vendor rounding without being unusable
+    for backtests. The downstream cost / risk path can decide.
+    """
+
+    def __init__(self, config: ValidationConfig | None = None) -> None:
+        self._config = config or ValidationConfig()
+
+    def apply(
+        self,
+        df: pd.DataFrame,
+        symbol: str,
+        report: DataQualityReport,
+        **_kwargs: object,
+    ) -> pd.DataFrame:
+        if df.empty:
+            return df
+        required = ("open", "high", "low", "close")
+        if not all(c in df.columns for c in required):
+            return df
+        nan_mask = df[list(required)].isna().any(axis=1)
+        for _ in df.index[nan_mask]:
+            report.add_correction(
+                symbol=symbol,
+                field="ohlc",
+                original_value=None,
+                corrected_value=None,
+                reason="ohlc_nan_field",
+                action="flag",
+            )
+        # Comparisons against NaN evaluate False; restrict checks to clean rows.
+        clean = cast("pd.DataFrame", df[~nan_mask])
+        if clean.empty:
+            return df
+        body_max = clean[["open", "close"]].max(axis=1)
+        body_min = clean[["open", "close"]].min(axis=1)
+        high_below_body = clean["high"] < body_max
+        low_above_body = clean["low"] > body_min
+        high_below_low = clean["high"] < clean["low"]
+        for idx in clean.index[high_below_body]:
+            report.add_correction(
+                symbol=symbol,
+                field="high",
+                original_value=float(clean.loc[idx, "high"]),
+                corrected_value=None,
+                reason="ohlc_high_below_body",
+                action="flag",
+            )
+        for idx in clean.index[low_above_body]:
+            report.add_correction(
+                symbol=symbol,
+                field="low",
+                original_value=float(clean.loc[idx, "low"]),
+                corrected_value=None,
+                reason="ohlc_low_above_body",
+                action="flag",
+            )
+        for idx in clean.index[high_below_low]:
+            report.add_correction(
+                symbol=symbol,
+                field="high",
+                original_value=float(clean.loc[idx, "high"]),
+                corrected_value=None,
+                reason="ohlc_high_below_low",
+                action="flag",
+            )
+        if "volume" in df.columns:
+            neg_vol = df["volume"] < 0
+            for idx in df.index[neg_vol]:
+                report.add_correction(
+                    symbol=symbol,
+                    field="volume",
+                    original_value=float(df.loc[idx, "volume"]),
+                    corrected_value=None,
+                    reason="ohlc_negative_volume",
+                    action="flag",
+                )
+        return df
+
+
+class ReturnSpikeRule(ValidationRule):
+    """Flag bars whose log return modified-z-score exceeds a threshold.
+
+    Uses a MAD-based modified z-score (Iglewicz & Hoaglin) rather than
+    classical mean/std because std is dragged up by the very outliers
+    we want to flag — a single 5x spike in a 60-bar series can
+    self-mask under classical sigma. MAD is robust to a small fraction
+    of contamination.
+
+    Skips series shorter than ``return_spike_min_window``: a small
+    sample has unreliable scale estimates and produces false positives.
+    """
+
+    _MAD_FACTOR = 0.6745  # 75th percentile of standard normal — makes
+    # MAD-z comparable to classical z under normality.
+
+    def __init__(self, config: ValidationConfig | None = None) -> None:
+        self._config = config or ValidationConfig()
+
+    def apply(
+        self,
+        df: pd.DataFrame,
+        symbol: str,
+        report: DataQualityReport,
+        **_kwargs: object,
+    ) -> pd.DataFrame:
+        window = self._config.return_spike_min_window
+        if len(df) < window:
+            return df
+        closes = df["close"].astype(float)
+        if (closes <= 0).any():
+            return df
+        log_returns = np.log(closes / closes.shift(1)).dropna()
+        if log_returns.empty:
+            return df
+        median = float(log_returns.median())
+        abs_dev = (log_returns - median).abs()
+        mad = float(abs_dev.median())
+        if not np.isfinite(mad):
+            return df
+        if mad == 0.0:
+            # Sparse-outlier series: most returns identical, ≥1 differs.
+            # MAD collapses to zero and would silently miss the outlier.
+            # Fall back to standard deviation; if that is also zero the
+            # series is genuinely constant and there is no anomaly.
+            std = float(log_returns.std(ddof=0))
+            if std == 0.0 or not np.isfinite(std):
+                return df
+            z = (log_returns - median) / std
+        else:
+            z = self._MAD_FACTOR * (log_returns - median) / mad
+        threshold = self._config.return_spike_zscore
+        flagged_idx = log_returns.index[z.abs() > threshold]
+        for idx in flagged_idx:
+            report.add_correction(
+                symbol=symbol,
+                field="close",
+                original_value=float(df.loc[idx, "close"]),
+                corrected_value=None,
+                reason="return_spike",
+                action="flag",
+            )
+        return df
+
+
+class DuplicateTimestampRule(ValidationRule):
+    """Drop duplicate timestamps, keeping the last (most recent) write.
+
+    Vendor backfill jobs can re-emit a previously seen bar. Keeping the
+    later write matches what a streaming consumer would have observed
+    after backfill resolution.
+    """
+
+    def apply(
+        self,
+        df: pd.DataFrame,
+        symbol: str,
+        report: DataQualityReport,
+        **_kwargs: object,
+    ) -> pd.DataFrame:
+        dup_mask = df.index.duplicated(keep="last")
+        if not dup_mask.any():
+            return df
+        for ts in df.index[dup_mask].unique():
+            report.add_correction(
+                symbol=symbol,
+                field="timestamp",
+                original_value=None,
+                corrected_value=None,
+                reason="duplicate_timestamp",
+                action="dedup",
+            )
+            logger.warning(
+                "data_quality.duplicate_timestamp",
+                symbol=symbol,
+                timestamp=str(ts),
+            )
+        # Sort after dedup so downstream return-based rules (which use
+        # positional shift) operate on a monotonic time series even if
+        # the upstream feed delivered rows out of order.
+        deduped = cast("pd.DataFrame", df[~dup_mask].copy())
+        return deduped.sort_index()
+
+
 class DataValidator:
     def __init__(self, config: ValidationConfig | None = None) -> None:
         self._config = config or ValidationConfig()
         self._rules: list[ValidationRule] = [
+            DuplicateTimestampRule(),
             PriceBoundsRule(self._config),
+            OHLCConsistencyRule(self._config),
+            ReturnSpikeRule(self._config),
             StaleDataRule(self._config),
             RatioSanityRule(self._config),
             GBpGBPRule(self._config),
