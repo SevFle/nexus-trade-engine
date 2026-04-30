@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from engine.observability.redact import REDACTED, redact_processor
+from engine.observability.redact import (
+    _BANNED_KEYS_LOWER,
+    REDACTED,
+    redact_processor,
+)
 
 
 def _emit(event_dict: dict) -> dict:
@@ -43,10 +47,20 @@ class TestExactKeyRedaction:
 
 
 class TestNestedRedaction:
-    def test_nested_dict_redacted(self):
+    def test_outer_banned_key_replaces_whole_value(self):
+        # `auth` is itself a banned key; the entire payload it holds is
+        # treated as sensitive and replaced wholesale.
         out = _emit({"event": "x", "auth": {"token": "leak", "user": "ok"}})
-        assert out["auth"]["token"] == REDACTED
-        assert out["auth"]["user"] == "ok"
+        assert out["auth"] == REDACTED
+
+    def test_nested_dict_redacts_inner_banned_key(self):
+        # When the outer key is *not* banned, recursion redacts the
+        # banned inner key while preserving siblings.
+        out = _emit(
+            {"event": "x", "payload": {"token": "leak", "user": "ok"}}
+        )
+        assert out["payload"]["token"] == REDACTED
+        assert out["payload"]["user"] == "ok"
 
     def test_list_of_dicts_redacted(self):
         out = _emit({"event": "x", "items": [{"password": "p"}, {"name": "n"}]})
@@ -60,7 +74,13 @@ class TestPatternRedaction:
         assert "eyJhbGciOi" not in str(out["header"])
 
     def test_jwt_like_string_value_redacted(self):
-        jwt_like = "aaaaaaaaaa.bbbbbbbbbb.cccccccccc-dddddd_eeee"
+        # Real JWT segments are 16+ chars; the regex requires that to
+        # avoid matching dotted module paths.
+        jwt_like = (
+            "aaaaaaaaaaaaaaaaaaaa."
+            "bbbbbbbbbbbbbbbbbbbb."
+            "cccccccccccccccc-dddd"
+        )
         out = _emit({"event": "x", "note": f"token={jwt_like}"})
         assert jwt_like not in str(out["note"])
 
@@ -76,3 +96,50 @@ class TestPreservesShape:
         assert isinstance(result, dict)
         assert "event" in result
         assert "password" in result
+
+
+class TestBannedKeyAllCovered:
+    """Auto-covers every banned key without needing manual updates."""
+
+    @pytest.mark.parametrize("key", sorted(_BANNED_KEYS_LOWER))
+    def test_each_banned_key_redacted(self, key: str):
+        out = _emit({"event": "x", key: "leak-me"})
+        assert out[key] == REDACTED
+
+
+class TestBytesValue:
+    def test_bytes_secret_is_scrubbed(self):
+        pem = (
+            b"-----BEGIN RSA PRIVATE KEY-----\n"
+            b"MIIEowIBAAKCAQEAxxxxxxx\n"
+            b"-----END RSA PRIVATE KEY-----"
+        )
+        out = _emit({"event": "x", "blob": pem})
+        assert b"BEGIN RSA PRIVATE KEY" not in str(out["blob"]).encode()
+        assert "BEGIN RSA PRIVATE KEY" not in str(out["blob"])
+
+
+class TestPemBlock:
+    def test_pem_block_in_string_value_is_redacted(self):
+        s = (
+            "header\n-----BEGIN RSA PRIVATE KEY-----\n"
+            "MIIE...secret\n"
+            "-----END RSA PRIVATE KEY-----\nfooter"
+        )
+        out = _emit({"event": "x", "data": s})
+        assert "BEGIN RSA PRIVATE KEY" not in out["data"]
+        assert "MIIE...secret" not in out["data"]
+        assert "header" in out["data"]
+        assert "footer" in out["data"]
+
+
+class TestNonStringKey:
+    def test_non_string_banned_key_still_redacts(self):
+        # Edge case: structlog may receive an Enum key from upstream code
+        from enum import Enum
+
+        class K(Enum):
+            TOKEN = "token"
+
+        out = _emit({"event": "x", K.TOKEN.value: "leak"})
+        assert out["token"] == REDACTED

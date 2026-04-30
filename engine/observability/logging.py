@@ -16,10 +16,28 @@ from engine.observability.processors import (
 from engine.observability.redact import redact_processor
 
 
+def _resolve_log_path(raw: str) -> Path:
+    """Resolve and validate `log_file_path`.
+
+    The path must resolve under the current working directory or under an
+    explicit log dir (`logs/`) to prevent attacker-influenced env vars
+    from writing to system locations like `/etc/cron.d/...`.
+    """
+    cwd = Path.cwd().resolve()
+    candidate = (cwd / raw).resolve() if not Path(raw).is_absolute() else Path(raw).resolve()
+    if cwd not in candidate.parents and candidate != cwd:
+        msg = (
+            f"NEXUS_LOG_FILE_PATH must resolve under the working directory; "
+            f"got {candidate} (cwd={cwd})"
+        )
+        raise ValueError(msg)
+    return candidate
+
+
 def _build_handler() -> logging.Handler:
     sink = settings.log_sink.lower()
     if sink == "file":
-        path = Path(settings.log_file_path)
+        path = _resolve_log_path(settings.log_file_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         return logging.handlers.WatchedFileHandler(path, encoding="utf-8")
     # otlp routing happens via the OTel logs SDK; until that's wired in,
@@ -53,7 +71,7 @@ def setup_logging() -> None:
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.stdlib.BoundLogger,
-        cache_logger_on_first_use=False,
+        cache_logger_on_first_use=True,
     )
 
     formatter = structlog.stdlib.ProcessorFormatter(

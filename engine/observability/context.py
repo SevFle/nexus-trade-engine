@@ -42,6 +42,29 @@ def _get(field: str) -> str | None:
     return _VARS[field].get()
 
 
+def bind_request_scope(
+    *, correlation_id: str, request_id: str, span_id: str
+) -> list[Any]:
+    """Bind the per-request triple and return tokens for later
+    :func:`reset_tokens`. Use this when you must restore the prior context
+    (e.g., from raw ASGI middleware running inside an inlined caller)."""
+    return [
+        _VARS["correlation_id"].set(correlation_id),
+        _VARS["request_id"].set(request_id),
+        _VARS["span_id"].set(span_id),
+    ]
+
+
+def reset_tokens(tokens: list[Any]) -> None:
+    """Reset previously captured contextvars tokens in reverse order."""
+    for tok in reversed(tokens):
+        try:
+            tok.var.reset(tok)
+        except (LookupError, ValueError):
+            # token may already have been reset, e.g., test teardown
+            continue
+
+
 def bind_correlation_id(value: str) -> None:
     _set("correlation_id", value)
 
@@ -128,6 +151,7 @@ __all__ = [
     "bind_correlation_id",
     "bind_domain_context",
     "bind_request_id",
+    "bind_request_scope",
     "bind_user_context",
     "clear_context",
     "ensure_correlation_id",
@@ -135,6 +159,7 @@ __all__ = [
     "get_request_id",
     "get_span_id",
     "new_span_id",
+    "reset_tokens",
     "snapshot",
     "use_correlation_id",
 ]

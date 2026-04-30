@@ -72,5 +72,52 @@ class TestRequestId:
 class TestContextLeak:
     @pytest.mark.asyncio
     async def test_context_cleared_after_response(self, client: AsyncClient):
-        await client.get("/echo", headers={"X-Correlation-Id": "leak-check"})
-        assert ctx.get_correlation_id() != "leak-check"
+        await client.get(
+            "/echo", headers={"X-Correlation-Id": "leak-check-abc-123"}
+        )
+        # Each ASGI request runs in its own task; outer test scope must
+        # never inherit the request-scoped correlation id.
+        assert ctx.get_correlation_id() is None
+
+
+class TestConcurrentRequests:
+    @pytest.mark.asyncio
+    async def test_concurrent_requests_keep_isolated_ids(
+        self, client: AsyncClient
+    ):
+        import asyncio
+
+        async def fire(cid: str) -> str:
+            resp = await client.get("/echo", headers={"X-Correlation-Id": cid})
+            return resp.json()["correlation_id"]
+
+        ids = ("alpha-correlation-id", "beta-correlation-id")
+        results = await asyncio.gather(*(fire(c) for c in ids))
+        assert tuple(results) == ids
+
+
+class TestHeaderInjectionDefense:
+    @pytest.mark.asyncio
+    async def test_crlf_in_header_is_rejected(self, client: AsyncClient):
+        # httpx blocks CRLF in raw headers, so we drive a manually
+        # constructed value through the validator instead.
+        from engine.observability.middleware import _safe_correlation_id
+
+        out = _safe_correlation_id("legit\r\nSet-Cookie: pwn=1")
+        assert "\r" not in out
+        assert "\n" not in out
+        assert "Set-Cookie" not in out
+
+    @pytest.mark.asyncio
+    async def test_oversized_header_is_replaced(self, client: AsyncClient):
+        from engine.observability.middleware import _safe_correlation_id
+
+        out = _safe_correlation_id("x" * 10_000)
+        assert len(out) <= 128
+
+    @pytest.mark.asyncio
+    async def test_control_chars_rejected(self, client: AsyncClient):
+        from engine.observability.middleware import _safe_correlation_id
+
+        out = _safe_correlation_id("\x1b[31mred")
+        assert "\x1b" not in out

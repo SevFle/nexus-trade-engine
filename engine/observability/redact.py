@@ -17,47 +17,85 @@ REDACTED = "***REDACTED***"
 
 _BANNED_KEYS_LOWER = frozenset(
     {
+        # explicit secrets
         "password",
         "passwd",
+        "pw",
+        "pass",
         "token",
+        "auth_token",
+        "access_token",
+        "refresh_token",
+        "session_token",
+        "id_token",
         "secret",
+        "client_secret",
+        "private_key",
+        "ssh_key",
         "api_key",
         "apikey",
+        "x_api_key",
+        "x_auth_token",
+        # auth payloads
         "authorization",
+        "auth",
+        "bearer",
+        "cookie",
+        "set_cookie",
+        # PII / cards
         "credit_card",
         "creditcard",
         "card_number",
         "cardnumber",
+        "cvv",
         "ssn",
-        "access_token",
-        "refresh_token",
-        "client_secret",
-        "private_key",
-        "session_token",
-        "cookie",
-        "set_cookie",
     }
 )
 
 
-def _is_banned(key: str) -> bool:
-    return key.lower().replace("-", "_") in _BANNED_KEYS_LOWER
+def _is_banned(key: object) -> bool:
+    if isinstance(key, str):
+        return key.lower().replace("-", "_") in _BANNED_KEYS_LOWER
+    # non-string keys (Enum, int, …) — coerce and test
+    try:
+        return str(key).lower().replace("-", "_") in _BANNED_KEYS_LOWER
+    except Exception:
+        return False
 
 
 _VALUE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    # Bearer / authorization tokens
     re.compile(r"(?i)\bBearer\s+[\w\-._~+/=]+"),
-    re.compile(r"\b[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\b"),
+    # JWT-shaped: 3 dot-separated base64url segments, each ≥16 chars to
+    # avoid matching dotted module paths or version strings
+    re.compile(r"\b[A-Za-z0-9_\-]{16,}\.[A-Za-z0-9_\-]{16,}\.[A-Za-z0-9_\-]{16,}\b"),
+    # 13-19 digit blocks with optional separators (PAN-shaped). Anchored
+    # to non-word boundaries so it survives most word-boundary edge cases.
     re.compile(r"\b(?:\d[ \-]?){13,19}\b"),
+    # Prefixed secrets (Slack, Stripe, GitHub, AWS access keys)
     re.compile(r"\b(?:sk|xoxb|xoxp|ghp|ghs|AKIA)[A-Za-z0-9_\-]{16,}\b"),
+    # PEM blocks (multi-line). Use [\s\S] so it crosses newlines without
+    # needing re.DOTALL on the engine.
+    re.compile(r"-----BEGIN [A-Z0-9 ]+-----[\s\S]+?-----END [A-Z0-9 ]+-----"),
 )
 
 
-def _scrub_value(value: Any) -> Any:
+def _scrub_string(s: str) -> str:
+    out = s
+    for pat in _VALUE_PATTERNS:
+        out = pat.sub(REDACTED, out)
+    return out
+
+
+def _scrub_value(value: Any) -> Any:  # noqa: PLR0911 - clear branch per type
     if isinstance(value, str):
-        out = value
-        for pat in _VALUE_PATTERNS:
-            out = pat.sub(REDACTED, out)
-        return out
+        return _scrub_string(value)
+    if isinstance(value, bytes):
+        try:
+            decoded = value.decode("utf-8", errors="replace")
+        except Exception:
+            return REDACTED
+        return _scrub_string(decoded)
     if isinstance(value, dict):
         return _scrub_dict(value)
     if isinstance(value, list):
@@ -67,10 +105,10 @@ def _scrub_value(value: Any) -> Any:
     return value
 
 
-def _scrub_dict(d: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
+def _scrub_dict(d: dict[Any, Any]) -> dict[Any, Any]:
+    out: dict[Any, Any] = {}
     for k, v in d.items():
-        if isinstance(k, str) and _is_banned(k):
+        if _is_banned(k):
             out[k] = REDACTED
         else:
             out[k] = _scrub_value(v)

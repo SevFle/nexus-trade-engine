@@ -13,7 +13,10 @@ from engine.observability import context as ctx
 if TYPE_CHECKING:
     from structlog.typing import EventDict, WrappedLogger
 
-_ALWAYS_KEEP = frozenset({"warning", "warn", "error", "critical", "exception"})
+# structlog normalizes `logger.exception(...)` to method_name="error",
+# so "exception" never reaches the filter — keep just the actual names
+# that arrive.
+_ALWAYS_KEEP = frozenset({"warning", "warn", "error", "critical"})
 
 
 def add_service_metadata(

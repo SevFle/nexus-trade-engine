@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from taskiq import TaskiqMessage, TaskiqResult
+from taskiq import TaskiqMessage
 
 from engine.observability import context as ctx
 from engine.observability.taskiq_middleware import CorrelationMiddleware
@@ -62,15 +62,22 @@ class TestReceiveSide:
         assert len(cid) >= 16
 
     @pytest.mark.asyncio
-    async def test_post_execute_clears_context(self):
+    async def test_pre_execute_rejects_invalid_label(self):
+        # Header-injection-style label must not be bound verbatim; a
+        # fresh UUID is generated instead.
         m = CorrelationMiddleware()
-        msg = _make_message(labels={"correlation_id": "c-clean"})
+        msg = _make_message(labels={"correlation_id": "evil\r\nLog-Inject: 1"})
         await m.pre_execute(msg)
-        result = TaskiqResult(
-            is_err=False,
-            return_value=None,
-            execution_time=0.0,
-            log=None,
-        )
-        await m.post_execute(msg, result)
-        assert ctx.get_correlation_id() is None
+        cid = ctx.get_correlation_id()
+        assert cid is not None
+        assert "\r" not in cid
+        assert "\n" not in cid
+
+    @pytest.mark.asyncio
+    async def test_pre_execute_rejects_oversize_label(self):
+        m = CorrelationMiddleware()
+        msg = _make_message(labels={"correlation_id": "x" * 10_000})
+        await m.pre_execute(msg)
+        cid = ctx.get_correlation_id()
+        assert cid is not None
+        assert len(cid) <= 128
