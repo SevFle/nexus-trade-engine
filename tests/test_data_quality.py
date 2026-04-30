@@ -750,3 +750,108 @@ class TestExtendedDataValidator:
         assert "ohlc_high_below_body" in reasons
         assert "return_spike" in reasons
         assert "duplicate_timestamp" in reasons
+
+
+class TestOHLCNanHandling:
+    def test_nan_in_ohlc_field_flagged(self):
+        df = _make_ohlcv_df(5)
+        df.iloc[2, df.columns.get_loc("high")] = float("nan")
+        rule = OHLCConsistencyRule()
+        report = DataQualityReport()
+        rule.apply(df, "AAPL", report)
+        reasons = {c.reason for c in report.corrections}
+        assert "ohlc_nan_field" in reasons
+
+    def test_nan_row_does_not_silently_pass_other_checks(self):
+        df = _make_ohlcv_df(5)
+        # Row with NaN high AND a low > close inconsistency; NaN should
+        # block the body comparison from silently evaluating to False.
+        df.iloc[2, df.columns.get_loc("high")] = float("nan")
+        df.iloc[2, df.columns.get_loc("low")] = float(df.iloc[2]["close"]) + 1.0
+        rule = OHLCConsistencyRule()
+        report = DataQualityReport()
+        rule.apply(df, "AAPL", report)
+        reasons = [c.reason for c in report.corrections]
+        # NaN row gets flagged once for ohlc_nan_field; we should not
+        # double-flag it under ohlc_low_above_body since comparisons
+        # against NaN are unreliable.
+        assert "ohlc_nan_field" in reasons
+        nan_row_low_flags = [
+            c for c in report.corrections
+            if c.reason == "ohlc_low_above_body"
+            and c.original_value is not None
+        ]
+        assert len(nan_row_low_flags) == 0
+
+    def test_missing_required_column_skipped_without_error(self):
+        df = _make_ohlcv_df(5).drop(columns=["high"])
+        rule = OHLCConsistencyRule()
+        report = DataQualityReport()
+        out = rule.apply(df, "AAPL", report)
+        assert len(out) == len(df)
+        assert not [c for c in report.corrections if c.reason.startswith("ohlc_")]
+
+
+class TestReturnSpikeMADFallback:
+    def test_single_outlier_in_otherwise_flat_series_caught(self):
+        # 30 bars: closes constant at 100 except one spike to 150 at
+        # idx 20. MAD on this series is 0 (>50% of returns are zero);
+        # the fallback std path must engage so the spike is not silently
+        # dropped. Note: a single isolated outlier has z bounded by
+        # ~sqrt(n-1) ≈ 5.4 here, so use a tighter test threshold (3.0).
+        n = 30
+        closes = [100.0] * n
+        closes[20] = 150.0
+        df = pd.DataFrame(
+            {
+                "open": closes,
+                "high": [c + 1 for c in closes],
+                "low": [c - 1 for c in closes],
+                "close": closes,
+                "volume": [1000] * n,
+            },
+            index=pd.date_range("2025-01-01", periods=n, freq="D", tz="UTC"),
+        )
+        rule = ReturnSpikeRule(ValidationConfig(return_spike_zscore=3.0))
+        report = DataQualityReport()
+        rule.apply(df, "AAPL", report)
+        spikes = [c for c in report.corrections if c.reason == "return_spike"]
+        assert len(spikes) >= 1
+
+    def test_genuinely_constant_returns_no_false_positive(self):
+        # All closes identical → all returns zero → MAD == std == 0 → skip.
+        n = 30
+        df = pd.DataFrame(
+            {
+                "open": [100.0] * n,
+                "high": [101.0] * n,
+                "low": [99.0] * n,
+                "close": [100.0] * n,
+                "volume": [1000] * n,
+            },
+            index=pd.date_range("2025-01-01", periods=n, freq="D", tz="UTC"),
+        )
+        rule = ReturnSpikeRule()
+        report = DataQualityReport()
+        rule.apply(df, "AAPL", report)
+        assert not [c for c in report.corrections if c.reason == "return_spike"]
+
+
+class TestDuplicateTimestampSorting:
+    def test_non_monotonic_input_with_duplicates_sorted_after_dedup(self):
+        # Construct a frame whose duplicates arrive out of order: the
+        # later positional duplicate has an earlier timestamp, so plain
+        # `keep="last"` without a subsequent sort would leave the index
+        # non-monotonic and break ReturnSpikeRule's positional shift.
+        df = _make_ohlcv_df(5)
+        dup_first = df.iloc[[1]]
+        # Append a duplicate of an early timestamp at the end so the
+        # raw index is monotonic-broken even after `keep="last"`.
+        with_dup = pd.concat([df, dup_first])
+        rule = DuplicateTimestampRule()
+        report = DataQualityReport()
+        out = rule.apply(with_dup, "AAPL", report)
+        assert out.index.is_monotonic_increasing
+        assert len(out) == len(df)
+        reasons = {c.reason for c in report.corrections}
+        assert "duplicate_timestamp" in reasons

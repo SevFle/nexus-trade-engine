@@ -417,34 +417,51 @@ class OHLCConsistencyRule(ValidationRule):
     ) -> pd.DataFrame:
         if df.empty:
             return df
-        body_max = df[["open", "close"]].max(axis=1)
-        body_min = df[["open", "close"]].min(axis=1)
-        high_below_body = df["high"] < body_max
-        low_above_body = df["low"] > body_min
-        high_below_low = df["high"] < df["low"]
-        for idx in df.index[high_below_body]:
+        required = ("open", "high", "low", "close")
+        if not all(c in df.columns for c in required):
+            return df
+        nan_mask = df[list(required)].isna().any(axis=1)
+        for _ in df.index[nan_mask]:
+            report.add_correction(
+                symbol=symbol,
+                field="ohlc",
+                original_value=None,
+                corrected_value=None,
+                reason="ohlc_nan_field",
+                action="flag",
+            )
+        # Comparisons against NaN evaluate False; restrict checks to clean rows.
+        clean = cast("pd.DataFrame", df[~nan_mask])
+        if clean.empty:
+            return df
+        body_max = clean[["open", "close"]].max(axis=1)
+        body_min = clean[["open", "close"]].min(axis=1)
+        high_below_body = clean["high"] < body_max
+        low_above_body = clean["low"] > body_min
+        high_below_low = clean["high"] < clean["low"]
+        for idx in clean.index[high_below_body]:
             report.add_correction(
                 symbol=symbol,
                 field="high",
-                original_value=float(df.loc[idx, "high"]),
+                original_value=float(clean.loc[idx, "high"]),
                 corrected_value=None,
                 reason="ohlc_high_below_body",
                 action="flag",
             )
-        for idx in df.index[low_above_body]:
+        for idx in clean.index[low_above_body]:
             report.add_correction(
                 symbol=symbol,
                 field="low",
-                original_value=float(df.loc[idx, "low"]),
+                original_value=float(clean.loc[idx, "low"]),
                 corrected_value=None,
                 reason="ohlc_low_above_body",
                 action="flag",
             )
-        for idx in df.index[high_below_low]:
+        for idx in clean.index[high_below_low]:
             report.add_correction(
                 symbol=symbol,
                 field="high",
-                original_value=float(df.loc[idx, "high"]),
+                original_value=float(clean.loc[idx, "high"]),
                 corrected_value=None,
                 reason="ohlc_high_below_low",
                 action="flag",
@@ -501,9 +518,19 @@ class ReturnSpikeRule(ValidationRule):
         median = float(log_returns.median())
         abs_dev = (log_returns - median).abs()
         mad = float(abs_dev.median())
-        if mad == 0.0 or not np.isfinite(mad):
+        if not np.isfinite(mad):
             return df
-        z = self._MAD_FACTOR * (log_returns - median) / mad
+        if mad == 0.0:
+            # Sparse-outlier series: most returns identical, ≥1 differs.
+            # MAD collapses to zero and would silently miss the outlier.
+            # Fall back to standard deviation; if that is also zero the
+            # series is genuinely constant and there is no anomaly.
+            std = float(log_returns.std(ddof=0))
+            if std == 0.0 or not np.isfinite(std):
+                return df
+            z = (log_returns - median) / std
+        else:
+            z = self._MAD_FACTOR * (log_returns - median) / mad
         threshold = self._config.return_spike_zscore
         flagged_idx = log_returns.index[z.abs() > threshold]
         for idx in flagged_idx:
@@ -536,7 +563,7 @@ class DuplicateTimestampRule(ValidationRule):
         dup_mask = df.index.duplicated(keep="last")
         if not dup_mask.any():
             return df
-        for _ in df.index[dup_mask].unique():
+        for ts in df.index[dup_mask].unique():
             report.add_correction(
                 symbol=symbol,
                 field="timestamp",
@@ -545,7 +572,16 @@ class DuplicateTimestampRule(ValidationRule):
                 reason="duplicate_timestamp",
                 action="dedup",
             )
-        return cast("pd.DataFrame", df[~dup_mask].copy())
+            logger.warning(
+                "data_quality.duplicate_timestamp",
+                symbol=symbol,
+                timestamp=str(ts),
+            )
+        # Sort after dedup so downstream return-based rules (which use
+        # positional shift) operate on a monotonic time series even if
+        # the upstream feed delivered rows out of order.
+        deduped = cast("pd.DataFrame", df[~dup_mask].copy())
+        return deduped.sort_index()
 
 
 class DataValidator:
