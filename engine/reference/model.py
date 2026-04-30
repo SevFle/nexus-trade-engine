@@ -43,6 +43,16 @@ _SEDOL = Annotated[str, StringConstraints(min_length=7, max_length=7)]
 _CIK = Annotated[str, StringConstraints(min_length=1, max_length=10, pattern=r"^[0-9]+$")]
 _MIC = Annotated[str, StringConstraints(min_length=4, max_length=4, pattern=r"^[A-Z0-9]{4}$")]
 _CCY = Annotated[str, StringConstraints(min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")]
+# Ticker allowlist — covers all real-world formats (BRK.B, BTC-USD, ES_F,
+# AAPL.L, ALV1, AAPL:US) without admitting path-traversal or injection
+# characters. 1-32 chars. Slash is intentionally excluded so listing
+# tickers cannot smuggle `../../etc/passwd`-shaped strings into the
+# resolver indexes.
+_TICKER = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9.\-_:]+$"),
+]
+_CLASSIFICATION_FIELD = Annotated[str, StringConstraints(max_length=128)]
 
 
 class InstrumentIds(BaseModel):
@@ -62,14 +72,14 @@ class Classification(BaseModel):
     their own taxonomies (see :mod:`engine.reference.classification`).
     """
 
-    gics_sector: str | None = None
-    gics_industry_group: str | None = None
-    gics_industry: str | None = None
-    gics_sub_industry: str | None = None
-    sic: str | None = None
-    naics: str | None = None
-    crypto_class: str | None = None
-    forex_class: str | None = None
+    gics_sector: _CLASSIFICATION_FIELD | None = None
+    gics_industry_group: _CLASSIFICATION_FIELD | None = None
+    gics_industry: _CLASSIFICATION_FIELD | None = None
+    gics_sub_industry: _CLASSIFICATION_FIELD | None = None
+    sic: _CLASSIFICATION_FIELD | None = None
+    naics: _CLASSIFICATION_FIELD | None = None
+    crypto_class: _CLASSIFICATION_FIELD | None = None
+    forex_class: _CLASSIFICATION_FIELD | None = None
 
 
 class Listing(BaseModel):
@@ -81,7 +91,7 @@ class Listing(BaseModel):
     """
 
     venue: _MIC
-    ticker: str = Field(..., min_length=1)
+    ticker: _TICKER
     currency: _CCY
     active_from: date
     active_to: date | None = None
@@ -115,7 +125,7 @@ class RefInstrument(BaseModel):
     model_config = {"validate_assignment": True}
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
-    primary_ticker: str = Field(..., min_length=1)
+    primary_ticker: _TICKER
     primary_venue: _MIC
     asset_class: AssetClassLiteral
     name: str = Field(..., min_length=1)

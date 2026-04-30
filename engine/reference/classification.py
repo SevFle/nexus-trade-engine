@@ -78,7 +78,6 @@ _CRYPTO_TAXONOMY: dict[str, str] = {
     "ARB": "l2",
     "OP": "l2",
     "MATIC": "l2",
-    "BASE": "l2",
     "USDT": "stablecoin",
     "USDC": "stablecoin",
     "DAI": "stablecoin",

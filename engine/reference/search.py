@@ -22,6 +22,8 @@ class SearchIndex:
     def add(self, inst: RefInstrument) -> None:
         self._records.append(inst)
 
+    MAX_QUERY_LEN = 64
+
     def search(
         self,
         query: str,
@@ -31,16 +33,22 @@ class SearchIndex:
     ) -> list[RefInstrument]:
         if not query or not query.strip():
             return []
+        if len(query) > self.MAX_QUERY_LEN:
+            return []
         q = query.strip().lower()
-        out: list[tuple[int, RefInstrument]] = []
+        scored: list[tuple[int, RefInstrument]] = []
         for rec in self._records:
             if asset_class is not None and rec.asset_class != asset_class:
                 continue
             score = self._score(rec, q)
             if score > 0:
-                out.append((score, rec))
-        out.sort(key=lambda t: -t[0])
-        return [rec for _, rec in out[:limit]]
+                scored.append((score, rec))
+        # Use heap-based top-k so 100k records with many partial matches
+        # stay O(n log limit) rather than O(n log n).
+        import heapq  # noqa: PLC0415 - local import keeps cold-path stdlib out of hot path
+
+        top = heapq.nlargest(limit, scored, key=lambda t: t[0])
+        return [rec for _, rec in top]
 
     @staticmethod
     def _score(rec: RefInstrument, q: str) -> int:

@@ -14,13 +14,17 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class IngestionResult:
-    """Outcome of one sync run from a single adapter."""
+    """Outcome of one sync run from a single adapter.
+
+    ``errors`` is a tuple so the dataclass is genuinely immutable:
+    callers cannot append after construction.
+    """
 
     adapter: str
     fetched: int
     new: int
     updated: int
-    errors: list[str] = field(default_factory=list)
+    errors: tuple[str, ...] = field(default_factory=tuple)
 
 
 class IngestionAdapter(ABC):

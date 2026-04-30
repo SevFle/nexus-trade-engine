@@ -348,6 +348,118 @@ class TestVenue:
             Venue(mic="NAS", name="Nasdaq", country="US", timezone="America/New_York")
 
 
+class TestRegisterIdempotence:
+    def test_double_register_is_noop(self):
+        r = Resolver()
+        inst = _aapl()
+        r.register(inst)
+        r.register(inst)
+        # If non-idempotent, _by_ticker would have duplicates and the
+        # ambiguity branch could trip; this just verifies resolve still works.
+        out = r.resolve("AAPL")
+        assert out is not None and out.id == inst.id
+
+
+class TestDottedSuffixNoFallthrough:
+    def test_known_suffix_unknown_venue_returns_none(self):
+        r = Resolver()
+        # Apple registered with XNAS only — no XLON listing.
+        inst = RefInstrument(
+            primary_ticker="AAPL",
+            primary_venue="XNAS",
+            asset_class="equity",
+            name="Apple",
+        )
+        r.register(inst)
+        # `.L` maps to XLON; no listing exists. Must NOT silently route
+        # to the XNAS-primary record.
+        assert r.resolve("AAPL.L") is None
+
+
+class TestTickerAllowlist:
+    def test_injection_payload_in_ticker_rejected(self):
+        with pytest.raises((ValueError, TypeError)):
+            RefInstrument(
+                primary_ticker="<script>alert(1)</script>",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="x",
+            )
+
+    def test_path_traversal_in_listing_ticker_rejected(self):
+        with pytest.raises((ValueError, TypeError)):
+            Listing(
+                venue="XNAS",
+                ticker="../../etc/passwd",
+                currency="USD",
+                active_from=date(2020, 1, 1),
+            )
+
+    def test_legitimate_separators_accepted(self):
+        # Real-world ticker formats: BRK.B (NYSE share class),
+        # BTC-USD (crypto), ES_F (futures), AAPL.L (LSE), AAPL:US.
+        for tk in ("BRK.B", "BTC-USD", "ES_F", "AAPL.L", "AAPL:US"):
+            inst = RefInstrument(
+                primary_ticker=tk,
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="x",
+            )
+            assert inst.primary_ticker == tk
+
+
+class TestUnicodeGarbageGuard:
+    def test_bidi_override_in_query_returns_none(self):
+        r = Resolver()
+        r.register(_aapl())
+        rlo = chr(0x202E)  # RIGHT-TO-LEFT OVERRIDE
+        assert r.resolve(f"AAPL{rlo}") is None
+
+    def test_zero_width_space_in_query_returns_none(self):
+        r = Resolver()
+        r.register(_aapl())
+        zwsp = chr(0x200B)  # ZERO-WIDTH SPACE
+        assert r.resolve(f"A{zwsp}APL") is None
+
+    def test_dict_path_ticker_garbage_filtered(self):
+        r = Resolver()
+        r.register(_aapl())
+        assert r.resolve({"ticker": "<script>"}) is None
+
+
+class TestSearchQueryLengthCap:
+    def test_oversize_query_returns_empty(self):
+        idx = SearchIndex()
+        idx.add(_aapl())
+        results = idx.search("a" * 1000)
+        assert results == []
+
+
+class TestOpenFIGIRepr:
+    def test_repr_masks_api_key(self):
+        from engine.reference.ingestion.openfigi import OpenFIGIAdapter
+
+        adapter = OpenFIGIAdapter(api_key="sk-live-very-secret")
+        rendered = repr(adapter)
+        assert "sk-live-very-secret" not in rendered
+        assert "***" in rendered
+
+    def test_repr_with_no_key(self):
+        from engine.reference.ingestion.openfigi import OpenFIGIAdapter
+
+        adapter = OpenFIGIAdapter()
+        rendered = repr(adapter)
+        assert "None" in rendered
+
+
+class TestIngestionResultImmutability:
+    def test_errors_is_tuple(self):
+        from engine.reference.ingestion import IngestionResult
+
+        r = IngestionResult(adapter="x", fetched=0, new=0, updated=0)
+        assert isinstance(r.errors, tuple)
+
+
 class TestSymbolChange:
     def test_old_ticker_still_resolves_via_listing_history(self):
         r = Resolver()

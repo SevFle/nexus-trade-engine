@@ -26,6 +26,11 @@ class OpenFIGIAdapter(IngestionAdapter):
     def __init__(self, api_key: str | None = None) -> None:
         self.api_key = api_key
 
+    def __repr__(self) -> str:
+        # Always mask the key — debug logging or pickling must not leak it.
+        masked = "***" if self.api_key else "None"
+        return f"OpenFIGIAdapter(api_key={masked})"
+
     async def fetch(self) -> Iterable[RefInstrument]:  # pragma: no cover - skeleton
         return []
 
