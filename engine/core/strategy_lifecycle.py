@@ -41,13 +41,20 @@ class LifecycleStage(StrEnum):
 
 @dataclass(frozen=True)
 class LifecycleEvidence:
-    """Payload that accompanies a promotion request."""
+    """Payload that accompanies a promotion request.
+
+    ``paper_window_start_epoch`` lets the gate verify the paper window
+    actually elapsed in wall-clock time, not just on the caller's
+    say-so. ``reason`` is captured on every transition for audit.
+    """
 
     backtest_id: str | None = None
     sharpe: float | None = None
     max_drawdown_pct: float | None = None
     paper_days: int | None = None
     paper_sharpe: float | None = None
+    paper_window_start_epoch: float | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -69,6 +76,17 @@ _MAX_DRAWDOWN_PCT_FOR_PAPER = 25.0
 _MIN_PAPER_DAYS = 7
 _MIN_PAPER_SHARPE = 0.5
 
+# Sanity caps — reject implausible self-reported metrics that suggest
+# evidence tampering or a unit-conversion mistake.
+_MAX_PLAUSIBLE_SHARPE = 10.0
+_MAX_PLAUSIBLE_PAPER_DAYS = 730
+
+# Sanity caps — reject implausible self-reported metrics that suggest
+# evidence tampering or unit confusion.
+_MAX_PLAUSIBLE_SHARPE = 10.0
+_MAX_PLAUSIBLE_PAPER_DAYS = 730  # 2 years; longer windows are always
+# from a wrong unit conversion or a copy-paste from epoch seconds.
+
 
 _VALID_TRANSITIONS: dict[LifecycleStage, set[LifecycleStage]] = {
     LifecycleStage.DRAFT: {LifecycleStage.BACKTEST, LifecycleStage.RETIRED},
@@ -77,6 +95,30 @@ _VALID_TRANSITIONS: dict[LifecycleStage, set[LifecycleStage]] = {
     LifecycleStage.LIVE: {LifecycleStage.RETIRED},
     LifecycleStage.RETIRED: set(),
 }
+
+# Catch a future LifecycleStage addition that forgot to add an entry —
+# at import time, not at runtime when a promotion silently falls
+# through to "not allowed".
+_missing = set(LifecycleStage) - set(_VALID_TRANSITIONS)
+if _missing:
+    msg = (
+        "_VALID_TRANSITIONS is non-exhaustive over LifecycleStage; "
+        f"missing entries for {sorted(_missing)}"
+    )
+    raise RuntimeError(msg)
+del _missing
+
+# Exhaustiveness check: a future enum addition without a corresponding
+# `_VALID_TRANSITIONS` entry would silently fall through to "not allowed"
+# at runtime. Catch it at import time instead.
+_missing = set(LifecycleStage) - set(_VALID_TRANSITIONS)
+if _missing:
+    msg = (
+        f"_VALID_TRANSITIONS is non-exhaustive over LifecycleStage; "
+        f"missing entries for {sorted(_missing)}"
+    )
+    raise RuntimeError(msg)
+del _missing
 
 
 def _gate_backtest_to_paper(evidence: LifecycleEvidence) -> None:
@@ -87,6 +129,12 @@ def _gate_backtest_to_paper(evidence: LifecycleEvidence) -> None:
         msg = (
             f"BACKTEST -> PAPER requires sharpe >= {_MIN_SHARPE_FOR_PAPER} "
             f"(got {evidence.sharpe})"
+        )
+        raise InvalidTransitionError(msg)
+    if evidence.sharpe > _MAX_PLAUSIBLE_SHARPE:
+        msg = (
+            f"sharpe {evidence.sharpe} exceeds plausible cap "
+            f"{_MAX_PLAUSIBLE_SHARPE} — verify metric source"
         )
         raise InvalidTransitionError(msg)
     if (
@@ -107,6 +155,27 @@ def _gate_paper_to_live(evidence: LifecycleEvidence) -> None:
             f"(got {evidence.paper_days})"
         )
         raise InvalidTransitionError(msg)
+    if evidence.paper_days > _MAX_PLAUSIBLE_PAPER_DAYS:
+        msg = (
+            f"paper_days {evidence.paper_days} exceeds plausible cap "
+            f"{_MAX_PLAUSIBLE_PAPER_DAYS} — likely a unit mistake "
+            "(seconds vs days?)"
+        )
+        raise InvalidTransitionError(msg)
+    # Cross-check: if the caller supplied a window start, verify the
+    # claimed paper_days actually elapsed in wall clock. Defends
+    # against pure self-reporting.
+    if evidence.paper_window_start_epoch is not None:
+        elapsed_days = (
+            time.time() - evidence.paper_window_start_epoch
+        ) / 86_400.0
+        if elapsed_days < evidence.paper_days:
+            msg = (
+                f"paper_window_start_epoch indicates only "
+                f"{elapsed_days:.1f} days elapsed, but evidence claims "
+                f"{evidence.paper_days}"
+            )
+            raise InvalidTransitionError(msg)
     if (
         evidence.paper_sharpe is None
         or evidence.paper_sharpe < _MIN_PAPER_SHARPE
@@ -114,6 +183,12 @@ def _gate_paper_to_live(evidence: LifecycleEvidence) -> None:
         msg = (
             f"PAPER -> LIVE requires paper_sharpe >= {_MIN_PAPER_SHARPE} "
             f"(got {evidence.paper_sharpe})"
+        )
+        raise InvalidTransitionError(msg)
+    if evidence.paper_sharpe > _MAX_PLAUSIBLE_SHARPE:
+        msg = (
+            f"paper_sharpe {evidence.paper_sharpe} exceeds plausible cap "
+            f"{_MAX_PLAUSIBLE_SHARPE} — verify metric source"
         )
         raise InvalidTransitionError(msg)
 
@@ -141,10 +216,17 @@ class StrategyLifecycleService:
     async def set_stage(
         self, strategy_id: str, stage: LifecycleStage
     ) -> LifecycleTransition:
-        """Bootstrap or override a strategy's stage without running gates.
+        """Bootstrap a strategy's stage WITHOUT running gates.
 
-        Use only at registration time / for tests; production callers
-        should always go through :meth:`promote`.
+        DANGER: this method bypasses the entire promotion state machine
+        and the evidence gates. It is intended for one-time
+        registration on system boot or for tests that need to start
+        from a non-DRAFT stage. Production code paths (API handlers,
+        orchestrators) MUST call :meth:`promote` so promotions are
+        gated and audited.
+
+        A misuse of this method can take a strategy live without any
+        backtest or paper-trading evidence.
         """
         async with self._lock(strategy_id):
             self._stage[strategy_id] = stage

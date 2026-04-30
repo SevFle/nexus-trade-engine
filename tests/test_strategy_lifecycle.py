@@ -179,6 +179,8 @@ class TestEvidence:
         ev = LifecycleEvidence()
         assert ev.backtest_id is None
         assert ev.sharpe is None
+        assert ev.paper_window_start_epoch is None
+        assert ev.reason is None
 
     def test_evidence_dataclass_full(self):
         ev = LifecycleEvidence(
@@ -187,8 +189,73 @@ class TestEvidence:
             max_drawdown_pct=12.0,
             paper_days=30,
             paper_sharpe=1.1,
+            paper_window_start_epoch=1.0,
+            reason="post-incident-rollout",
         )
         assert ev.backtest_id == "bt-1"
+        assert ev.reason == "post-incident-rollout"
+
+
+class TestSanityCaps:
+    @pytest.mark.asyncio
+    async def test_implausibly_high_sharpe_rejected(self, service):
+        sid = "s-1"
+        await service.set_stage(sid, LifecycleStage.BACKTEST)
+        with pytest.raises(InvalidTransitionError, match="plausible"):
+            await service.promote(
+                sid,
+                target=LifecycleStage.PAPER,
+                evidence=_ev(
+                    backtest_id="bt-1", sharpe=999.0, max_drawdown_pct=8.0
+                ),
+            )
+
+    @pytest.mark.asyncio
+    async def test_implausibly_long_paper_window_rejected(self, service):
+        sid = "s-1"
+        await service.set_stage(sid, LifecycleStage.PAPER)
+        with pytest.raises(InvalidTransitionError, match="plausible"):
+            await service.promote(
+                sid,
+                target=LifecycleStage.LIVE,
+                evidence=_ev(paper_days=10_000, paper_sharpe=1.0),
+            )
+
+
+class TestPaperWindowVerification:
+    @pytest.mark.asyncio
+    async def test_window_start_epoch_too_recent_rejected(self, service):
+        import time as _t
+
+        sid = "s-1"
+        await service.set_stage(sid, LifecycleStage.PAPER)
+        with pytest.raises(InvalidTransitionError, match="elapsed"):
+            await service.promote(
+                sid,
+                target=LifecycleStage.LIVE,
+                evidence=_ev(
+                    paper_days=14,
+                    paper_sharpe=1.0,
+                    paper_window_start_epoch=_t.time() - 1.0,
+                ),
+            )
+
+    @pytest.mark.asyncio
+    async def test_window_start_epoch_long_enough_passes(self, service):
+        import time as _t
+
+        sid = "s-1"
+        await service.set_stage(sid, LifecycleStage.PAPER)
+        out = await service.promote(
+            sid,
+            target=LifecycleStage.LIVE,
+            evidence=_ev(
+                paper_days=14,
+                paper_sharpe=1.0,
+                paper_window_start_epoch=_t.time() - (14 * 86_400 + 100),
+            ),
+        )
+        assert out.target == LifecycleStage.LIVE
 
 
 class TestServiceIntrospection:
