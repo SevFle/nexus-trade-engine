@@ -8,14 +8,17 @@ from taskiq import TaskiqScheduler
 from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
 
 from engine.config import settings
+from engine.observability.taskiq_middleware import CorrelationMiddleware
 
 logger = structlog.get_logger()
 
 _parsed = urlparse(settings.valkey_url)
 _broker_url = urlunparse(_parsed._replace(scheme="redis"))
 
-broker = ListQueueBroker(url=_broker_url).with_result_backend(
-    RedisAsyncResultBackend(redis_url=_broker_url)
+broker = (
+    ListQueueBroker(url=_broker_url)
+    .with_result_backend(RedisAsyncResultBackend(redis_url=_broker_url))
+    .with_middlewares(CorrelationMiddleware())
 )
 
 scheduler = TaskiqScheduler(broker=broker, sources=[])

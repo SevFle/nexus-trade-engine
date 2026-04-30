@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     log_format: str = "console"
     otlp_endpoint: str = ""
     sentry_dsn: str = ""
+    app_version: str = "0.1.0"
+    log_sampling_info: float = 1.0
+    log_sampling_debug: float = 0.01
+    log_sink: str = "stdout"  # stdout | file | otlp
+    log_file_path: str = "logs/engine.log"
 
     # Worker
     worker_concurrency: int = 4
