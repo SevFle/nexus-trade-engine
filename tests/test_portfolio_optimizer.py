@@ -176,3 +176,44 @@ class TestNumericProperties:
         w1 = hierarchical_risk_parity(cov=cov)
         w2 = hierarchical_risk_parity(cov=cov)
         np.testing.assert_allclose(w1, w2)
+
+
+class TestInputValidation:
+    def test_mvo_rejects_nan_in_cov(self):
+        cov = np.array([[0.04, np.nan], [np.nan, 0.09]])
+        with pytest.raises(OptimizerError, match="non-finite"):
+            mean_variance_optimization(cov=cov)
+
+    def test_mvo_rejects_inf_in_returns(self):
+        cov = np.eye(2) * 0.04
+        with pytest.raises(OptimizerError, match="non-finite"):
+            mean_variance_optimization(
+                cov=cov, expected_returns=np.array([np.inf, 0.05])
+            )
+
+    def test_risk_parity_raises_on_non_convergence(self):
+        # max_iter=1 with the multi-asset convergent default cov should
+        # not converge — the iteration needs more steps.
+        cov = np.array(
+            [
+                [0.20, 0.02, 0.01, 0.01],
+                [0.02, 0.25, 0.02, 0.01],
+                [0.01, 0.02, 0.30, 0.02],
+                [0.01, 0.01, 0.02, 0.35],
+            ]
+        )
+        with pytest.raises(OptimizerError, match="not converge"):
+            risk_parity(cov=cov, max_iter=1, tol=1e-12)
+
+    def test_black_litterman_rejects_non_positive_tau(self):
+        prior = np.array([0.05, 0.05])
+        cov = np.eye(2) * 0.04
+        with pytest.raises(OptimizerError, match="tau"):
+            black_litterman(
+                prior_returns=prior,
+                prior_cov=cov,
+                views_p=np.zeros((0, 2)),
+                views_q=np.zeros(0),
+                view_uncertainty=np.zeros((0, 0)),
+                tau=0.0,
+            )

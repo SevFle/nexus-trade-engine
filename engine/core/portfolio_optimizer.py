@@ -40,6 +40,9 @@ def _validate_cov(cov: FloatArray) -> FloatArray:
     if cov.shape[0] == 0:
         msg = "cov must have at least one asset"
         raise OptimizerError(msg)
+    if not np.isfinite(cov).all():
+        msg = "cov contains non-finite entries (NaN / Inf)"
+        raise OptimizerError(msg)
     return cov
 
 
@@ -80,6 +83,9 @@ def mean_variance_optimization(
                 f"expected_returns shape {mu.shape} does not match cov "
                 f"shape ({n},{n})"
             )
+            raise OptimizerError(msg)
+        if not np.isfinite(mu).all():
+            msg = "expected_returns contains non-finite entries (NaN / Inf)"
             raise OptimizerError(msg)
         unscaled = inv @ mu
     total = unscaled.sum()
@@ -128,7 +134,11 @@ def risk_parity(
         if np.linalg.norm(new_w - w, ord=np.inf) < tol:
             return new_w
         w = new_w
-    return w
+    msg = (
+        f"risk parity did not converge in {max_iter} iterations "
+        f"(tol={tol})"
+    )
+    raise OptimizerError(msg)
 
 
 def _correlation_from_cov(cov: FloatArray) -> FloatArray:
@@ -256,6 +266,9 @@ def black_litterman(
     (posterior_mu, posterior_cov)
         Blended posterior expected returns and covariance.
     """
+    if tau <= 0:
+        msg = f"tau must be positive; got {tau}"
+        raise OptimizerError(msg)
     cov = _validate_cov(prior_cov)
     pi = np.asarray(prior_returns, dtype=np.float64)
     if pi.shape != (cov.shape[0],):
