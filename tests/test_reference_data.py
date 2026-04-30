@@ -21,7 +21,7 @@ from engine.reference.classification import (
     forex_pair_class,
     is_valid_gics_path,
 )
-from engine.reference.search import SearchIndex
+from engine.reference.search import SearchIndex, Suggestion
 
 
 def _aapl() -> RefInstrument:
@@ -577,3 +577,160 @@ class TestSymbolChange:
         new = r.resolve({"ticker": "META", "venue": "XNAS"})
         assert old is not None and new is not None
         assert old.id == new.id
+
+
+class TestTypeaheadSuggest:
+    """`suggest()` is the typeahead-optimized variant of search.
+
+    It prefers prefix completions (ticker-prefix, then word-token-prefix
+    in the company name) over substring matches, accepts very short
+    queries (a single character is enough to start narrowing), and
+    falls back to typo-tolerant fuzzy matching only when no prefix or
+    substring match is found.
+    """
+
+    def _idx(self) -> SearchIndex:
+        idx = SearchIndex()
+        idx.add(_aapl())
+        idx.add(
+            RefInstrument(
+                primary_ticker="MSFT",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Microsoft Corp.",
+            )
+        )
+        idx.add(
+            RefInstrument(
+                primary_ticker="GOOG",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Alphabet Inc.",
+            )
+        )
+        idx.add(
+            RefInstrument(
+                primary_ticker="BRK.B",
+                primary_venue="XNYS",
+                asset_class="equity",
+                name="Berkshire Hathaway Inc.",
+            )
+        )
+        idx.add(
+            RefInstrument(
+                primary_ticker="META",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Meta Platforms Inc.",
+            )
+        )
+        return idx
+
+    def test_single_char_ticker_prefix_suggests(self):
+        out = self._idx().suggest("M")
+        tickers = [s.record.primary_ticker for s in out]
+        assert "MSFT" in tickers
+        assert "META" in tickers
+
+    def test_single_char_name_prefix_suggests(self):
+        out = self._idx().suggest("A")
+        tickers = [s.record.primary_ticker for s in out]
+        # AAPL ticker prefix and Alphabet name prefix should both surface.
+        assert "AAPL" in tickers
+        assert "GOOG" in tickers
+
+    def test_two_char_name_prefix_narrows(self):
+        out = self._idx().suggest("Mi")
+        assert out
+        assert out[0].record.primary_ticker == "MSFT"
+
+    def test_returns_suggestion_objects_with_completion(self):
+        out = self._idx().suggest("Micro")
+        assert out
+        assert isinstance(out[0], Suggestion)
+        # The completion is a presentational hint of what the user is
+        # filling in: the matched word from name or ticker.
+        assert out[0].completion.lower().startswith("micro")
+
+    def test_typo_tolerant_one_edit_distance(self):
+        # "Aple" → "Apple" (one insertion). Pure substring search would
+        # miss this; suggest() falls back to Levenshtein ≤ 1 on tokens.
+        out = self._idx().suggest("Aple")
+        tickers = [s.record.primary_ticker for s in out]
+        assert "AAPL" in tickers
+
+    def test_typo_tolerant_on_company_name(self):
+        out = self._idx().suggest("Berksire")
+        tickers = [s.record.primary_ticker for s in out]
+        assert "BRK.B" in tickers
+
+    def test_default_limit_is_typeahead_friendly(self):
+        # Typeahead UI shows ~10 results max; default should reflect that.
+        idx = SearchIndex()
+        # 30 records all matching "A" prefix on either ticker or name.
+        for i in range(30):
+            idx.add(
+                RefInstrument(
+                    primary_ticker=f"A{i:02d}",
+                    primary_venue="XNAS",
+                    asset_class="equity",
+                    name=f"Acme{i:02d} Corp.",
+                )
+            )
+        out = idx.suggest("A")
+        assert len(out) <= 10
+
+    def test_explicit_limit_respected(self):
+        out = self._idx().suggest("A", limit=2)
+        assert len(out) <= 2
+
+    def test_empty_query_returns_empty(self):
+        assert self._idx().suggest("") == []
+        assert self._idx().suggest("   ") == []
+
+    def test_no_match_returns_empty(self):
+        out = self._idx().suggest("xyznotapresent")
+        assert out == []
+
+    def test_prefix_ranks_above_substring(self):
+        idx = SearchIndex()
+        idx.add(
+            RefInstrument(
+                primary_ticker="ZZZ",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="ZZZ has microsoft inside",
+            )
+        )
+        idx.add(
+            RefInstrument(
+                primary_ticker="MSFT",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Microsoft Corp.",
+            )
+        )
+        out = idx.suggest("Micr")
+        assert out
+        assert out[0].record.primary_ticker == "MSFT"
+
+    def test_asset_class_filter(self):
+        idx = self._idx()
+        idx.add(
+            RefInstrument(
+                primary_ticker="ETH",
+                primary_venue="XCRY",
+                asset_class="crypto",
+                name="Ethereum",
+            )
+        )
+        out = idx.suggest("E", asset_class="crypto")
+        assert all(s.record.asset_class == "crypto" for s in out)
+
+    def test_typo_only_kicks_in_when_no_exact_or_prefix_hit(self):
+        # If any prefix-tier result exists, fuzzy candidates should not
+        # dilute the top of the list — fuzzy is a fallback.
+        idx = self._idx()
+        out = idx.suggest("App")  # prefix hits Apple
+        assert out
+        assert out[0].record.primary_ticker == "AAPL"
