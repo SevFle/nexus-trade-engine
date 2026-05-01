@@ -158,6 +158,13 @@ def create_app() -> FastAPI:
             default_per_minute=settings.rate_limit_per_minute,
             default_burst=settings.rate_limit_burst,
             exempt_paths=exempt_paths,
+            # Tight per-route cap on client-error reporting so a buggy
+            # render loop in the frontend cannot accidentally DoS the
+            # log pipeline. 30 req / minute / IP is well above any
+            # legitimate ErrorBoundary trigger rate.
+            overrides={
+                "/api/v1/client/errors": (30, 30),
+            },
         ),
     )
     app.add_middleware(CorrelationIdMiddleware)
