@@ -124,6 +124,7 @@ class BacktestResultResponse(BaseModel):
     equity_curve: list[dict[str, Any]]
     drawdown_curve: list[float]
     error: str | None = None
+    evaluation: dict[str, Any] | None = None
 
 
 async def _run_backtest_background(
@@ -331,5 +332,6 @@ async def get_backtest_result(
             ),
             equity_curve=stored.get("equity_curve", []),
             drawdown_curve=metrics_data.get("drawdown_curve", []),
+            evaluation=metrics_data.get("evaluation"),
         ).model_dump(),
     )
