@@ -13,6 +13,7 @@ from engine.core.order_manager import OrderManager
 from engine.core.portfolio import Portfolio
 from engine.core.risk_engine import RiskEngine
 from engine.core.signal import Side
+from engine.core.strategy_evaluator import StrategyEvaluator
 from engine.data.market_state import MarketStateBuilder, ValidationError
 from engine.plugins.manifest import StrategyManifest
 from engine.plugins.sandbox import StrategySandbox
@@ -207,6 +208,11 @@ class BacktestRunner:
         )
         report = metrics.calculate()
         result.metrics = report.to_dict()
+        try:
+            evaluation = StrategyEvaluator().evaluate(report).to_dict()
+            result.metrics["evaluation"] = evaluation
+        except Exception:  # noqa: BLE001 — never let scoring fail the backtest
+            logger.exception("backtest.evaluation_failed")
 
         total_trades = len(result.trades)
         closed_trades = len([t for t in result.trades if t.get("side") == "sell"])

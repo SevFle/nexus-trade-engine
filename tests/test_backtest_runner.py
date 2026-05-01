@@ -178,6 +178,21 @@ class TestBacktestRunnerIntegration:
         assert "max_drawdown_pct" in result.metrics
         assert "total_trades" in result.metrics
 
+    async def test_evaluation_score_attached_to_metrics(self, provider, buy_config):
+        runner = BacktestRunner(
+            config=buy_config, strategy=_SimpleBuyStrategy(), provider=provider
+        )
+        result = await runner.run()
+
+        assert "evaluation" in result.metrics
+        evaluation = result.metrics["evaluation"]
+        assert "composite_score" in evaluation
+        assert 0.0 <= evaluation["composite_score"] <= 100.0
+        assert "grade" in evaluation
+        assert evaluation["grade"] in {"A+", "A", "B+", "B", "C+", "C", "D", "F"}
+        assert "dimensions" in evaluation
+        assert "warnings" in evaluation
+
 
 class TestBacktestRunnerErrors:
     async def test_no_provider_raises(self):

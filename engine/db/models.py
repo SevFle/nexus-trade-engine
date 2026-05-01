@@ -127,6 +127,8 @@ class BacktestResult(Base):
     start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     metrics: Mapped[dict] = mapped_column(JSONB, default=dict)  # type: ignore[assignment]
+    composite_score: Mapped[float | None] = mapped_column(nullable=True, default=None)
+    score_breakdown: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=None)  # type: ignore[assignment]
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
