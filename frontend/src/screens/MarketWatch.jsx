@@ -1,12 +1,154 @@
 import React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { CandlestickChart, LineChart, RefreshCw } from "lucide-react";
 import clsx from "clsx";
 import { getBars, getQuote } from "../api/marketData";
+import { getSuggestions } from "../api/reference";
 import { PriceChart } from "../components/data/PriceChart";
 import { StatusBadge } from "../components/primitives/StatusBadge";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
 import { EmptyState } from "../components/feedback/EmptyState";
+
+const SUGGEST_LIMIT = 5;
+const SUGGEST_DEBOUNCE_MS = 150;
+
+function useDebouncedValue(value, delay) {
+  const [debounced, setDebounced] = React.useState(value);
+  React.useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+function SymbolAutocomplete({ value, onChange, onSelect }) {
+  const [open, setOpen] = React.useState(false);
+  const [highlight, setHighlight] = React.useState(-1);
+  const containerRef = React.useRef(null);
+  const listboxId = React.useId();
+
+  const debouncedQuery = useDebouncedValue(value, SUGGEST_DEBOUNCE_MS);
+  const trimmed = debouncedQuery.trim();
+
+  const { data: suggestions = [] } = useQuery({
+    queryKey: ["reference", "suggest", trimmed.toUpperCase()],
+    queryFn: ({ signal }) =>
+      getSuggestions(trimmed, { limit: SUGGEST_LIMIT, signal }),
+    enabled: trimmed.length > 0 && open,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    retry: false,
+  });
+
+  const visible = suggestions.slice(0, SUGGEST_LIMIT);
+  const showDropdown = open && visible.length > 0;
+
+  React.useEffect(() => {
+    setHighlight(-1);
+  }, [trimmed]);
+
+  React.useEffect(() => {
+    function onDocClick(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  function commit(suggestion) {
+    onSelect(suggestion.symbol);
+    setOpen(false);
+    setHighlight(-1);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!visible.length) return;
+      setOpen(true);
+      setHighlight((h) => (h + 1) % visible.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!visible.length) return;
+      setOpen(true);
+      setHighlight((h) => (h <= 0 ? visible.length - 1 : h - 1));
+    } else if (e.key === "Enter") {
+      if (showDropdown && highlight >= 0 && visible[highlight]) {
+        e.preventDefault();
+        commit(visible[highlight]);
+      }
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  }
+
+  const activeId =
+    showDropdown && highlight >= 0 ? `${listboxId}-opt-${highlight}` : undefined;
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={handleKeyDown}
+        placeholder="AAPL, BTC-USD, EURUSD=X"
+        maxLength={32}
+        role="combobox"
+        aria-expanded={showDropdown}
+        aria-controls={listboxId}
+        aria-autocomplete="list"
+        aria-activedescendant={activeId}
+        autoComplete="off"
+        className="bg-nx-surface border border-nx-border rounded-md px-md py-sm font-mono uppercase tracking-wide text-nx-text-display placeholder:text-nx-text-disabled focus:outline-none focus:border-nx-accent w-72"
+        aria-label="Symbol"
+      />
+      {showDropdown && (
+        <ul
+          id={listboxId}
+          role="listbox"
+          className="absolute z-50 left-0 right-0 mt-xs bg-nx-surface border border-nx-border rounded-md shadow-lg overflow-hidden"
+        >
+          {visible.map((s, i) => {
+            const isActive = i === highlight;
+            return (
+              <li
+                key={`${s.symbol}-${i}`}
+                id={`${listboxId}-opt-${i}`}
+                role="option"
+                aria-selected={isActive}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  commit(s);
+                }}
+                onMouseEnter={() => setHighlight(i)}
+                className={clsx(
+                  "flex items-baseline gap-md px-md py-sm cursor-pointer transition-colors",
+                  isActive
+                    ? "bg-nx-accent-subtle text-nx-text-display"
+                    : "text-nx-text-primary hover:bg-nx-accent-subtle",
+                )}
+              >
+                <span className="font-mono uppercase text-nx-text-display tabular-nums min-w-[6ch]">
+                  {s.symbol}
+                </span>
+                <span className="text-body text-nx-text-secondary truncate">
+                  {s.name}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 const PERIODS = [
   { id: "5d", label: "5D", interval: "1d" },
@@ -203,14 +345,14 @@ export default function MarketWatch() {
             <span className="text-label font-mono uppercase text-nx-text-secondary">
               SYMBOL
             </span>
-            <input
-              type="text"
+            <SymbolAutocomplete
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="AAPL, BTC-USD, EURUSD=X"
-              maxLength={32}
-              className="bg-nx-surface border border-nx-border rounded-md px-md py-sm font-mono uppercase tracking-wide text-nx-text-display placeholder:text-nx-text-disabled focus:outline-none focus:border-nx-accent"
-              aria-label="Symbol"
+              onChange={setDraft}
+              onSelect={(picked) => {
+                const next = picked.trim().toUpperCase();
+                setDraft(next);
+                setSymbol(next);
+              }}
             />
           </label>
           <label className="flex items-center gap-sm">
