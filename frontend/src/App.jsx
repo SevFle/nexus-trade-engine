@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./auth/AuthContext";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { Shell } from "./components/layout/Shell";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LegalProvider } from "./context/LegalContext";
 import { ConsentModal } from "./components/legal/ConsentModal";
 import Login from "./pages/Login";
@@ -36,7 +37,11 @@ function ShellLayout() {
     <LegalProvider>
       <ConsentModal />
       <Shell>
-        <Outlet />
+        {/* Per-route boundary so a failure on one screen doesn't nuke
+            the shell, sidebar, or legal context. */}
+        <ErrorBoundary scope="page">
+          <Outlet />
+        </ErrorBoundary>
       </Shell>
     </LegalProvider>
   );
@@ -47,6 +52,10 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
+          {/* Top-level boundary catches anything the per-route boundary
+              missed (errors thrown above the route shell — auth init,
+              query-client setup, etc.). */}
+          <ErrorBoundary scope="app">
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
@@ -73,6 +82,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
+          </ErrorBoundary>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
