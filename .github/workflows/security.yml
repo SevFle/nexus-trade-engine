@@ -33,8 +33,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # bandit-sarif-formatter is required for `-f sarif` output;
+      # without it bandit prints a usage error and exits non-zero.
       - name: Install bandit
-        run: pip install --no-cache-dir "bandit[toml]>=1.7,<2"
+        run: pip install --no-cache-dir "bandit[toml]>=1.7,<2" "bandit-sarif-formatter>=1.1"
 
       # Hard-fail on HIGH-severity findings only. MEDIUM/LOW are
       # surfaced via the SARIF artifact for review.
@@ -93,6 +95,13 @@ jobs:
           # push/schedule events where a deep audit is justified.
           fetch-depth: ${{ github.event_name == 'pull_request' && 50 || 0 }}
 
+      # The self-hosted runner is long-lived; gitleaks-action's download
+      # step refuses to overwrite an existing /tmp/gitleaks.tmp from a
+      # prior run, so each subsequent run dies with `Destination file path
+      # /tmp/gitleaks.tmp already exists`. Wipe the staging dir first.
+      - name: Cleanup stale gitleaks staging files
+        run: rm -rf /tmp/gitleaks.tmp /tmp/gitleaks-*
+
       # Pinned to gitleaks-action v2.3.9 (released 2025-04-22). Floating
       # `@v2` would let the maintainer (or anyone who compromises their
       # release pipeline) ship arbitrary code into our security workflow.
@@ -117,7 +126,7 @@ jobs:
         run: docker build -t nexus-frontend:scan ./frontend
 
       - name: Trivy scan engine image
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: "nexus-engine:scan"
           format: "sarif"
@@ -127,7 +136,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Trivy scan frontend image
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: "nexus-frontend:scan"
           format: "sarif"
