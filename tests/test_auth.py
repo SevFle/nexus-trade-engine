@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import Boolean, Column, DateTime, MetaData, String, Table, Uuid
+from sqlalchemy import JSON, Boolean, Column, DateTime, MetaData, String, Table, Text, Uuid
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from engine.api.auth.jwt import create_access_token, decode_token
@@ -44,6 +44,9 @@ async def auth_engine():
         Column("role", String(20), default="user"),
         Column("auth_provider", String(20), default="local"),
         Column("external_id", String(255), nullable=True),
+        Column("mfa_enabled", Boolean, default=False, nullable=False),
+        Column("mfa_secret_encrypted", Text, nullable=True),
+        Column("mfa_backup_codes", JSON, nullable=True),
         Column("created_at", DateTime, default=datetime.now),
         Column("updated_at", DateTime, default=datetime.now, onupdate=datetime.now),
     )
@@ -139,6 +142,53 @@ class TestRegister:
             json={"email": "not-an-email", "password": "validpassword123"},
         )
         assert resp.status_code == 422
+
+
+class TestLoginMFA:
+    async def test_login_returns_mfa_challenge_when_enabled(
+        self,
+        auth_client: AsyncClient,
+        auth_db: AsyncSession,
+        registered_user: dict,
+        monkeypatch,
+    ):
+        from cryptography.fernet import Fernet
+        from sqlalchemy import update
+
+        from engine.api.auth import mfa_service
+
+        monkeypatch.setattr(
+            mfa_service.settings,
+            "mfa_encryption_key",
+            Fernet.generate_key().decode("ascii"),
+        )
+
+        await auth_client.post("/api/v1/auth/register", json=registered_user)
+        # Flip on MFA with a synthesized encrypted secret.
+        artifact = mfa_service.begin_enrollment(account=registered_user["email"])
+        encrypted = mfa_service.encrypt_secret(artifact.secret_b32)
+        from engine.db.models import User
+
+        await auth_db.execute(
+            update(User)
+            .where(User.email == registered_user["email"])
+            .values(
+                mfa_enabled=True,
+                mfa_secret_encrypted=encrypted,
+                mfa_backup_codes={"version": 1, "codes": []},
+            )
+        )
+        await auth_db.commit()
+
+        resp = await auth_client.post(
+            "/api/v1/auth/login",
+            json={"email": registered_user["email"], "password": registered_user["password"]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data.get("mfa_required") is True
+        assert "challenge_token" in data
+        assert "access_token" not in data
 
 
 class TestLogin:
