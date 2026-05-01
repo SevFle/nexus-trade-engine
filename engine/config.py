@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     auth_providers: str = "local"
     auth_local_allow_registration: bool = True
 
+    # MFA — Fernet key (url-safe base64, 32 bytes decoded) used to
+    # encrypt TOTP secrets at rest. Empty disables MFA enrollment.
+    mfa_encryption_key: str = ""
+    mfa_challenge_ttl_seconds: int = 300
+    mfa_backup_codes_count: int = 10
+
     # Google OAuth2
     google_client_id: str = ""
     google_client_secret: str = ""

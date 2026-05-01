@@ -29,6 +29,9 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default="user")
     auth_provider: Mapped[str] = mapped_column(String(20), default="local")
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mfa_enabled: Mapped[bool] = mapped_column(default=False, server_default="false")
+    mfa_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mfa_backup_codes: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=None)  # type: ignore[assignment]
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow

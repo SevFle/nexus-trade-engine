@@ -146,12 +146,17 @@ async def register(
     return _build_token_response(access_token, raw_refresh)
 
 
+class MFARequiredResponse(BaseModel):
+    mfa_required: bool = True
+    challenge_token: str
+
+
 @router.post("/login")
 async def login(
     req: LoginRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-) -> TokenResponse:
+):
     registry = _get_registry(request)
     result = await registry.authenticate("local", email=req.email, password=req.password, db=db)
     if not result.success:
@@ -161,6 +166,13 @@ async def login(
     user = db_result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    if user.mfa_enabled and user.mfa_secret_encrypted:
+        from engine.api.auth.mfa_service import issue_challenge
+
+        challenge = issue_challenge(str(user.id))
+        logger.info("auth.login_mfa_required", user_id=str(user.id))
+        return MFARequiredResponse(challenge_token=challenge).model_dump()
 
     access_token, raw_refresh = _mint_tokens(user)
     await _store_refresh_token(db, user.id, raw_refresh, request)
