@@ -253,5 +253,93 @@ class TestRiskDecisionShape:
         gate = RiskGate(RiskLimits())
         out = gate.check(_intent(), _state())
         assert out.approved is True
-        assert out.breached_limits == []
-        assert out.warnings == []
+        assert out.breached_limits == ()
+        assert out.warnings == ()
+
+
+class TestImmutability:
+    def test_account_state_dict_mutation_does_not_leak(self):
+        # Caller mutating their source dict after constructing AccountState
+        # must NOT change what the gate sees — defends against silent state
+        # corruption in long-running gates.
+        exposures = {"AAPL": 30_000.0}
+        state = AccountState(
+            cash=100_000.0,
+            total_value=100_000.0,
+            daily_pnl=0.0,
+            exposures=exposures,
+            sector_exposures={},
+            asset_class_exposures={},
+        )
+        exposures["AAPL"] = 999_999_999.0  # caller mutates AFTER construction
+        gate = RiskGate(RiskLimits(max_position_notional={"AAPL": 50_000.0}))
+        out = gate.check(_intent(symbol="AAPL", notional=10_000.0), state)
+        assert out.approved is True  # gate saw the snapshot, not the mutation
+
+    def test_risk_decision_breaches_are_immutable(self):
+        gate = RiskGate(RiskLimits(max_single_order_notional=1.0))
+        out = gate.check(_intent(notional=100.0), _state())
+        with pytest.raises((AttributeError, TypeError)):
+            out.breached_limits.append("forged")  # type: ignore[attr-defined]
+
+
+class TestNumericValidation:
+    def test_nan_notional_rejected(self):
+        with pytest.raises(RiskLimitsError):
+            OrderIntent(
+                symbol="AAPL",
+                side="buy",
+                notional=float("nan"),
+                sector="tech",
+                asset_class="equity",
+            )
+
+    def test_inf_notional_rejected(self):
+        with pytest.raises(RiskLimitsError):
+            OrderIntent(
+                symbol="AAPL",
+                side="buy",
+                notional=float("inf"),
+                sector="tech",
+                asset_class="equity",
+            )
+
+    def test_nan_daily_pnl_rejected(self):
+        with pytest.raises(RiskLimitsError):
+            AccountState(
+                cash=0.0,
+                total_value=1.0,
+                daily_pnl=float("nan"),
+                exposures={},
+                sector_exposures={},
+                asset_class_exposures={},
+            )
+
+
+class TestThreadSafety:
+    def test_concurrent_checks_do_not_corrupt_velocity_buffer(self):
+        # Drives 8 threads × 100 checks each at a 500-cap. With a lock the
+        # rolling buffer stays internally consistent (no IndexError, no
+        # list mutation during iteration).
+        import threading as _t
+
+        gate = RiskGate(
+            RiskLimits(max_orders_per_window=500, velocity_window_seconds=60)
+        )
+
+        errors: list[BaseException] = []
+
+        def worker():
+            try:
+                for _ in range(100):
+                    gate.check(_intent(), _state())
+            except BaseException as exc:  # noqa: BLE001 - want all failures
+                errors.append(exc)
+
+        threads = [_t.Thread(target=worker) for _ in range(8)]
+        for thr in threads:
+            thr.start()
+        for thr in threads:
+            thr.join()
+
+        assert errors == []
