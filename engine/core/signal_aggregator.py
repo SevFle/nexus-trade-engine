@@ -31,7 +31,9 @@ WEIGHTED
 PRIORITY
     Strategy with the highest weight that voted on the symbol wins
     outright. ``strategy_weights`` here is interpreted as priority
-    (higher number = higher priority).
+    (higher number = higher priority). Two strategies tied for the
+    highest priority on the same symbol with conflicting sides emit
+    HOLD (consistent with MAJORITY / WEIGHTED tie semantics).
 
 INDEPENDENT
     No aggregation. Concatenate every strategy's signals as-is and
@@ -92,6 +94,17 @@ class SignalAggregator:
                 raise SignalAggregatorError(
                     f"strategy_weights[{sid!r}] must be non-negative, got {w!r}"
                 )
+        # All-zero weights silently degenerate to HOLD on every symbol;
+        # treat that as a misconfiguration rather than allow it through.
+        if (
+            self.method is AggregationMethod.WEIGHTED
+            and weights
+            and sum(weights.values()) == 0
+        ):
+            raise SignalAggregatorError(
+                "WEIGHTED requires at least one positive strategy weight; "
+                "all configured weights sum to zero"
+            )
         self.weights = weights
 
     def aggregate(self, batches: Iterable[SignalBatch]) -> list[Signal]:
@@ -188,7 +201,10 @@ class SignalAggregator:
     ) -> Signal | None:
         # Highest priority wins. Strategies absent from `weights` are
         # treated as priority 0, so a configured strategy always beats
-        # an unconfigured one.
+        # an unconfigured one. Two strategies tied for the highest
+        # priority on conflicting sides emit HOLD — relying on dict
+        # iteration order for tie-break would be non-deterministic
+        # across Python versions.
         active = [
             (self.weights.get(sid, 0.0), sid, sig)
             for sid, sig in by_strategy.items()
@@ -196,8 +212,12 @@ class SignalAggregator:
         ]
         if not active:
             return _hold_like(next(iter(by_strategy.values())))
-        active.sort(key=lambda t: t[0], reverse=True)
-        _prio, _sid, sig = active[0]
+        top_prio = max(t[0] for t in active)
+        top = [t for t in active if t[0] == top_prio]
+        top_sides = {sig.side for _p, _sid, sig in top}
+        if len(top_sides) > 1:
+            return _hold_like(top[0][2])
+        _prio, _sid, sig = top[0]
         return _aggregated(sig, sig.side)
 
 
@@ -205,9 +225,15 @@ def _aggregated(template: Signal, side: Side) -> Signal:
     """Build a Signal whose side is the aggregator's decision but whose
     other metadata mirrors a representative input. ``strategy_id`` is
     overwritten so the audit log shows the aggregator, not the original
-    strategy."""
+    strategy. The ``metadata`` dict is shallow-copied so that downstream
+    mutation of the aggregated signal cannot leak back into the source
+    strategy's signal object."""
     return template.model_copy(
-        update={"side": side, "strategy_id": _AGGREGATED_STRATEGY_ID}
+        update={
+            "side": side,
+            "strategy_id": _AGGREGATED_STRATEGY_ID,
+            "metadata": dict(template.metadata),
+        }
     )
 
 
@@ -215,7 +241,14 @@ def _hold_like(template: Signal) -> Signal:
     return _aggregated(template, Side.HOLD)
 
 
+#: Public sentinel: aggregator output sets ``Signal.strategy_id`` to this
+#: so downstream audit code can distinguish aggregated decisions from raw
+#: per-strategy signals.
+AGGREGATED_STRATEGY_ID = _AGGREGATED_STRATEGY_ID
+
+
 __all__ = [
+    "AGGREGATED_STRATEGY_ID",
     "AggregationMethod",
     "SignalAggregator",
     "SignalAggregatorError",

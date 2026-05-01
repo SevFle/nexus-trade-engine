@@ -226,6 +226,67 @@ class TestEmptyInput:
         assert agg.aggregate([_batch("s1"), _batch("s2")]) == []
 
 
+class TestPriorityTie:
+    def test_equal_priority_conflicting_sides_emit_hold(self):
+        # s1 and s2 both have priority 5; they disagree -> HOLD rather
+        # than dict-order-dependent winner.
+        agg = SignalAggregator(
+            AggregationMethod.PRIORITY,
+            strategy_weights={"s1": 5.0, "s2": 5.0, "s3": 1.0},
+        )
+        out = agg.aggregate(
+            [
+                _batch("s1", _sig("AAPL", Side.BUY, "s1")),
+                _batch("s2", _sig("AAPL", Side.SELL, "s2")),
+                _batch("s3", _sig("AAPL", Side.BUY, "s3")),
+            ]
+        )
+        assert out[0].side == Side.HOLD
+
+    def test_equal_priority_agreeing_sides_emit_signal(self):
+        agg = SignalAggregator(
+            AggregationMethod.PRIORITY,
+            strategy_weights={"s1": 5.0, "s2": 5.0, "s3": 1.0},
+        )
+        out = agg.aggregate(
+            [
+                _batch("s1", _sig("AAPL", Side.BUY, "s1")),
+                _batch("s2", _sig("AAPL", Side.BUY, "s2")),
+                _batch("s3", _sig("AAPL", Side.SELL, "s3")),
+            ]
+        )
+        assert out[0].side == Side.BUY
+
+
+class TestDuplicateSignalsWithinBatch:
+    def test_last_signal_in_batch_overrides_earlier(self):
+        # If a strategy emits two signals on the same symbol within one
+        # batch, the LAST one is the one the aggregator considers.
+        agg = SignalAggregator(AggregationMethod.UNANIMOUS)
+        out = agg.aggregate(
+            [
+                _batch(
+                    "s1",
+                    _sig("AAPL", Side.BUY, "s1"),
+                    _sig("AAPL", Side.SELL, "s1"),
+                ),
+            ]
+        )
+        assert len(out) == 1
+        assert out[0].side == Side.SELL
+
+
+class TestMetadataIsolation:
+    def test_output_metadata_is_independent_of_source(self):
+        # Mutating the aggregated signal's metadata must not leak back
+        # into the source strategy's signal.
+        src = _sig("AAPL", Side.BUY, "s1", metadata={"k": 1})
+        agg = SignalAggregator(AggregationMethod.UNANIMOUS)
+        out = agg.aggregate([_batch("s1", src)])
+        out[0].metadata["k"] = 999
+        assert src.metadata == {"k": 1}
+
+
 class TestValidation:
     def test_unknown_method_rejected(self):
         with pytest.raises(SignalAggregatorError):
@@ -243,4 +304,11 @@ class TestValidation:
             SignalAggregator(
                 AggregationMethod.WEIGHTED,
                 strategy_weights={"s1": float("nan")},
+            )
+
+    def test_weighted_all_zero_weights_rejected(self):
+        with pytest.raises(SignalAggregatorError):
+            SignalAggregator(
+                AggregationMethod.WEIGHTED,
+                strategy_weights={"s1": 0.0, "s2": 0.0},
             )
