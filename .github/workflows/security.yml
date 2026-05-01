@@ -110,7 +110,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_NOTIFY_USER_LIST: ""
-          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "true"
+          # Artifact upload disabled: gitleaks-action v2.3.9 hard-codes
+          # rootDirectory=/root, which is not a parent of the self-hosted
+          # runner workspace (/opt/github-runners/...), so the upload step
+          # throws "rootDirectory ... is not a parent directory of the file".
+          # The SARIF report is still produced and shown in the run summary.
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
           GITLEAKS_ENABLE_SUMMARY: "true"
 
   container:
@@ -126,7 +131,7 @@ jobs:
         run: docker build -t nexus-frontend:scan ./frontend
 
       - name: Trivy scan engine image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: "nexus-engine:scan"
           format: "sarif"
@@ -136,7 +141,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Trivy scan frontend image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: "nexus-frontend:scan"
           format: "sarif"
