@@ -34,11 +34,11 @@ class TestErrorIngest:
                 "component_stack": "in Foo\n  in Bar",
                 "url": "https://example.com/dashboard",
                 "user_agent": "Mozilla/5.0",
-                "error_id": "abc-123",
+                "error_id": "550e8400-e29b-41d4-a716-446655440000",
             },
         )
         assert r.status_code == 201
-        assert r.json()["error_id"] == "abc-123"
+        assert r.json()["error_id"] == "550e8400-e29b-41d4-a716-446655440000"
 
     def test_post_rejects_empty_message(self, client: TestClient):
         r = client.post("/api/v1/client/errors", json={"message": ""})
@@ -91,3 +91,72 @@ class TestRateLimit:
                 assert "retry-after" in {k.lower() for k in r.headers}
                 return
         pytest.fail("rate limiter never tripped within 60 requests")
+
+
+class TestErrorIdValidation:
+    def test_caller_supplied_uuid_accepted(self, client: TestClient):
+        r = client.post(
+            "/api/v1/client/errors",
+            json={
+                "message": "boom",
+                "error_id": "550e8400-e29b-41d4-a716-446655440000",
+            },
+        )
+        assert r.status_code == 201
+        assert r.json()["error_id"] == "550e8400-e29b-41d4-a716-446655440000"
+
+    def test_caller_supplied_non_uuid_rejected(self, client: TestClient):
+        r = client.post(
+            "/api/v1/client/errors",
+            json={"message": "boom", "error_id": "abc-123"},
+        )
+        assert r.status_code == 422
+
+
+class TestBodySizeCap:
+    def test_request_body_over_1mib_returns_413(self, client: TestClient):
+        # 1.5 MiB JSON payload — well under the per-field 64 KiB limit
+        # if it parsed, but the body-size middleware should reject it
+        # before Pydantic ever sees it.
+        big = "x" * (1_500_000)
+        r = client.post(
+            "/api/v1/client/errors",
+            content=f'{{"message":"{big}"}}',
+            headers={"content-type": "application/json"},
+        )
+        assert r.status_code == 413
+
+
+class TestSanitization:
+    def test_url_query_string_dropped_before_logging(
+        self, client: TestClient, caplog: pytest.LogCaptureFixture
+    ):
+        # The endpoint logs through structlog; we assert behaviour via
+        # the response (still 201) and trust the structlog pipeline to
+        # carry the scrubbed value. The unit-level scrubbing is
+        # exercised below.
+        r = client.post(
+            "/api/v1/client/errors",
+            json={
+                "message": "boom",
+                "url": "https://app.example/dash?token=secret&code=abc",
+            },
+        )
+        assert r.status_code == 201
+
+    def test_scrub_strips_crlf_and_ansi(self):
+        from engine.api.routes.client_errors import _scrub
+
+        assert _scrub("hello\nworld") == "hello world"
+        assert _scrub("hello\r\nworld") == "hello  world"
+        assert _scrub("\x1b[31mred\x1b[0m") == "red"
+        assert _scrub(None) is None
+
+    def test_strip_query_drops_query_and_fragment(self):
+        from engine.api.routes.client_errors import _strip_query
+
+        assert (
+            _strip_query("https://app.example/dash?token=secret#x")
+            == "https://app.example/dash"
+        )
+        assert _strip_query(None) is None

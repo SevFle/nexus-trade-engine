@@ -10,6 +10,7 @@ from valkey.asyncio import Valkey
 
 from engine.api.auth.local import LocalAuthProvider
 from engine.api.auth.registry import AuthProviderRegistry
+from engine.api.body_size_limit import BodySizeLimitMiddleware
 from engine.api.rate_limit import RateLimitConfig, RateLimitMiddleware
 from engine.api.router import api_router
 from engine.api.security_headers import (
@@ -161,12 +162,18 @@ def create_app() -> FastAPI:
             # Tight per-route cap on client-error reporting so a buggy
             # render loop in the frontend cannot accidentally DoS the
             # log pipeline. 30 req / minute / IP is well above any
-            # legitimate ErrorBoundary trigger rate.
+            # legitimate ErrorBoundary trigger rate. ``trusted_proxy_depth``
+            # stays at the safe default of 0; only raise it after a
+            # trusted reverse proxy is verifiably the only path in.
             overrides={
                 "/api/v1/client/errors": (30, 30),
             },
         ),
     )
+    # Hard cap on request body size — Starlette has no default. 1 MiB
+    # is generous for every existing route and still well under the
+    # log-bombing limits the per-route Pydantic models impose.
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=1_048_576)
     app.add_middleware(CorrelationIdMiddleware)
 
     app.include_router(api_router)
