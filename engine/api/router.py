@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 
 from engine.api.routes.auth import router as auth_router
 from engine.api.routes.backtest import router as backtest_router
+from engine.api.routes.client_errors import router as client_errors_router
 from engine.api.routes.health import router as health_router
 from engine.api.routes.legal import router as legal_router
 from engine.api.routes.market_data import router as market_data_router
@@ -22,6 +23,9 @@ api_router.include_router(
     prefix="/api/v1/backtest",
     tags=["backtest"],
     dependencies=[Depends(require_legal_acceptance)],
+)
+api_router.include_router(
+    client_errors_router, prefix="/api/v1/client", tags=["client"]
 )
 api_router.include_router(legal_router, tags=["legal"])
 api_router.include_router(portfolio_router, prefix="/api/v1/portfolio", tags=["portfolio"])
