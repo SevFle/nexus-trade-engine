@@ -464,6 +464,114 @@ class TestSymbolChange:
             )
 
 
+class TestPR2NumericValidation:
+    def test_nan_spinoff_ratio_rejected(self):
+        with pytest.raises(CorporateActionError):
+            CorporateAction(
+                action_type="spinoff",
+                symbol="PARENT",
+                effective_date=date(2025, 6, 1),
+                ratio=float("nan"),
+            )
+
+    def test_nan_merger_ratio_rejected(self):
+        with pytest.raises(CorporateActionError):
+            CorporateAction(
+                action_type="merger",
+                symbol="TARGET",
+                effective_date=date(2025, 6, 1),
+                ratio=float("nan"),
+                new_symbol="ACQUIRER",
+            )
+
+    def test_inf_split_ratio_rejected(self):
+        with pytest.raises(CorporateActionError):
+            CorporateAction(
+                action_type="split",
+                symbol="AAPL",
+                effective_date=date(2025, 6, 1),
+                ratio=float("inf"),
+            )
+
+    def test_nan_cash_amount_rejected(self):
+        with pytest.raises(CorporateActionError):
+            CorporateAction(
+                action_type="cash_dividend",
+                symbol="AAPL",
+                effective_date=date(2025, 6, 1),
+                cash_amount=float("nan"),
+            )
+
+
+class TestZeroPriceContract:
+    # raw_price=0 is a legitimate input for halted/delisted bars; the
+    # adjustment must remain a numerically clean 0.0 rather than NaN.
+    def test_zero_price_through_split(self):
+        log = CorporateActionLog([_split(date(2025, 6, 1), 2.0)])
+        adj = adjust_price(
+            log,
+            symbol="AAPL",
+            bar_date=date(2025, 5, 31),
+            raw_price=0.0,
+            as_of=date(2025, 12, 31),
+        )
+        assert adj == 0.0
+
+    def test_zero_price_through_spinoff(self):
+        log = CorporateActionLog([_spinoff(date(2025, 6, 1), 0.80)])
+        adj = adjust_price(
+            log,
+            symbol="PARENT",
+            bar_date=date(2025, 5, 31),
+            raw_price=0.0,
+            as_of=date(2025, 12, 31),
+        )
+        assert adj == 0.0
+
+    def test_zero_price_through_stock_merger(self):
+        log = CorporateActionLog([_stock_merger(date(2025, 6, 1), 0.5)])
+        adj = adjust_price(
+            log,
+            symbol="TARGET",
+            bar_date=date(2025, 5, 31),
+            raw_price=0.0,
+            as_of=date(2025, 12, 31),
+        )
+        assert adj == 0.0
+
+
+class TestSpinoffPlusDividendComposition:
+    def test_dividend_factor_unchanged_by_spinoff_ordering(self):
+        # Multiplicative factors compose order-independently: the
+        # dividend factor (ex_close - cash) / ex_close is dimensionless,
+        # so it does not matter whether ex_close is in pre- or post-
+        # spinoff units. Verifies that spinoff + dividend on the same
+        # bar produces a stable result.
+        log = CorporateActionLog(
+            [
+                _spinoff(date(2025, 3, 1), 0.80, sym="PARENT"),
+                CorporateAction(
+                    action_type="cash_dividend",
+                    symbol="PARENT",
+                    effective_date=date(2025, 9, 1),
+                    cash_amount=1.50,
+                ),
+            ]
+        )
+        # bar pre-dates both events; ex-date close = 80 (post-spinoff parent).
+        adj = adjust_price(
+            log,
+            symbol="PARENT",
+            bar_date=date(2025, 1, 1),
+            raw_price=100.0,
+            as_of=date(2025, 12, 31),
+            ex_date_close=80.0,
+        )
+        # spinoff factor 0.80 * dividend factor (80 - 1.50)/80 = 0.98125
+        # -> total 0.785; 100 * 0.785 = 78.5
+        assert adj == pytest.approx(78.5, abs=1e-6)
+
+
 class TestCompoundPR2:
     def test_split_then_spinoff_compose(self):
         # 2-for-1 split on 2024-06-01, then 80%-retention spinoff

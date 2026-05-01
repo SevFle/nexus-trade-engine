@@ -48,6 +48,7 @@ As-of window for every action type:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import date  # noqa: TC003 - runtime use as dataclass field type
 from typing import Literal
@@ -66,6 +67,14 @@ _VALID_ACTION_TYPES: frozenset[str] = frozenset(
 
 class CorporateActionError(Exception):
     """Raised on malformed corporate-action input."""
+
+
+def _require_finite(value: float, label: str) -> None:
+    """Reject NaN / inf early. NaN comparisons all return False, which
+    would silently bypass the ``ratio > 0`` / ``ratio <= 1`` guards and
+    produce a NaN-contaminated price downstream."""
+    if not math.isfinite(value):
+        raise CorporateActionError(f"{label} must be finite, got {value!r}")
 
 
 @dataclass(frozen=True)
@@ -94,6 +103,7 @@ class CorporateAction:
             if self.ratio is None:
                 msg = "split requires a ratio"
                 raise CorporateActionError(msg)
+            _require_finite(self.ratio, "split ratio")
             if self.ratio <= 0:
                 msg = f"split ratio must be positive; got {self.ratio}"
                 raise CorporateActionError(msg)
@@ -102,6 +112,7 @@ class CorporateAction:
             if self.cash_amount is None:
                 msg = "cash_dividend requires a cash_amount"
                 raise CorporateActionError(msg)
+            _require_finite(self.cash_amount, "cash_dividend cash_amount")
             if self.cash_amount < 0:
                 msg = (
                     "cash_dividend cash_amount must be non-negative; "
@@ -116,6 +127,7 @@ class CorporateAction:
                     "of pre-spinoff value, in (0, 1])"
                 )
                 raise CorporateActionError(msg)
+            _require_finite(self.ratio, "spinoff ratio")
             if not (0.0 < self.ratio <= 1.0):
                 msg = f"spinoff ratio must be in (0, 1]; got {self.ratio}"
                 raise CorporateActionError(msg)
@@ -140,7 +152,8 @@ class CorporateAction:
                 )
                 raise CorporateActionError(msg)
             if stock:
-                assert self.ratio is not None
+                assert self.ratio is not None  # narrowed by `stock`
+                _require_finite(self.ratio, "merger ratio")
                 if self.ratio <= 0:
                     msg = f"merger ratio must be positive; got {self.ratio}"
                     raise CorporateActionError(msg)
@@ -148,7 +161,8 @@ class CorporateAction:
                     msg = "stock merger requires new_symbol (surviving ticker)"
                     raise CorporateActionError(msg)
             if cash:
-                assert self.cash_amount is not None
+                assert self.cash_amount is not None  # narrowed by `cash`
+                _require_finite(self.cash_amount, "merger cash_amount")
                 if self.cash_amount < 0:
                     msg = (
                         "merger cash_amount must be non-negative; "
@@ -203,16 +217,22 @@ def adjust_price(
     to compute the dividend back-adjustment factor. When omitted, cash
     dividends are skipped (only structural adjustments are applied).
     """
+    # Explicit `is None` guards rather than `assert` — `python -O` strips
+    # asserts, so guarding production loops with them is a latent crash.
+    # Construction-time validation already enforces presence of these
+    # fields, but defense in depth is cheap here.
     actions = _applicable(log.actions_for(symbol), bar_date, as_of)
     factor = 1.0
     for a in actions:
         if a.action_type == "split":
-            assert a.ratio is not None
+            if a.ratio is None:
+                continue
             factor /= a.ratio
         elif a.action_type == "cash_dividend":
             if ex_date_close is None or ex_date_close <= 0:
                 continue
-            assert a.cash_amount is not None
+            if a.cash_amount is None:
+                continue
             div_factor = (ex_date_close - a.cash_amount) / ex_date_close
             if div_factor <= 0:
                 continue
@@ -221,7 +241,8 @@ def adjust_price(
             # Parent retained `ratio` fraction of pre-spinoff value; pre-
             # spinoff prices must be scaled DOWN by that fraction to
             # match the post-spinoff parent series.
-            assert a.ratio is not None
+            if a.ratio is None:
+                continue
             factor *= a.ratio
         elif a.action_type == "merger":
             # Stock merger is structurally identical to a split for
@@ -255,7 +276,8 @@ def adjust_volume(
     multiplier = 1.0
     for a in actions:
         if a.action_type == "split":
-            assert a.ratio is not None
+            if a.ratio is None:
+                continue
             multiplier *= a.ratio
         elif a.action_type == "merger":
             if a.ratio is not None:
