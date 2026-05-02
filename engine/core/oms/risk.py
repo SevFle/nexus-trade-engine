@@ -41,6 +41,8 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import structlog
 
+from engine.observability.metrics import MetricsBackend, get_metrics
+
 if TYPE_CHECKING:
     from engine.core.live.kill_switch import KillSwitch
     from engine.core.oms.order import Order
@@ -169,8 +171,20 @@ class MaxOrderNotional:
 class RiskGate:
     """Runs an ordered list of checks. First Reject wins."""
 
-    def __init__(self, checks: list[RiskCheck]) -> None:
+    def __init__(
+        self,
+        checks: list[RiskCheck],
+        *,
+        metrics: MetricsBackend | None = None,
+    ) -> None:
         self._checks = list(checks)
+        self._metrics = metrics
+
+    @property
+    def metrics(self) -> MetricsBackend:
+        """Resolve the metrics backend lazily so tests can swap the
+        process singleton via :func:`set_metrics` after construction."""
+        return self._metrics if self._metrics is not None else get_metrics()
 
     def evaluate(
         self,
@@ -178,16 +192,42 @@ class RiskGate:
         *,
         reference_price: Decimal | None = None,
     ) -> CheckResult:
+        metrics = self.metrics
         for check in self._checks:
+            check_name = type(check).__name__
             result = check(order, reference_price=reference_price)
             if isinstance(result, Reject):
+                metrics.counter(
+                    "oms.risk.check",
+                    tags={
+                        "check": check_name,
+                        "symbol": order.symbol,
+                        "outcome": "reject",
+                    },
+                )
+                metrics.counter(
+                    "oms.risk.rejected",
+                    tags={"check": check_name, "symbol": order.symbol},
+                )
                 logger.warning(
                     "oms.risk_rejected",
-                    check=type(check).__name__,
+                    check=check_name,
                     order_id=str(order.id),
                     symbol=order.symbol,
                     quantity=str(order.quantity),
                     reason=result.reason,
                 )
                 return result
+            metrics.counter(
+                "oms.risk.check",
+                tags={
+                    "check": check_name,
+                    "symbol": order.symbol,
+                    "outcome": "approve",
+                },
+            )
+        metrics.counter(
+            "oms.risk.approved",
+            tags={"symbol": order.symbol},
+        )
         return Approve()
