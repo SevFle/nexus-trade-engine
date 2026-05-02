@@ -1,0 +1,80 @@
+name: Feature request
+description: Propose a new capability or a meaningful improvement.
+title: "feat: <short description>"
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing an improvement. Filling this out fully helps
+        us decide quickly whether the change belongs in core, in a plugin,
+        or in a downstream fork.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user / operator problem are you trying to solve?
+      placeholder: |
+        As a <user role>, I want to <do something> so that <outcome>.
+        Right now this is hard / impossible because <reason>.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: |
+        What should we build? API shape, UX sketch, or rough design notes
+        are all welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: |
+        Other approaches you ruled out, plugins / forks that already do
+        something similar, etc.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: Where should this live?
+      options:
+        - Core (engine, API, frontend)
+        - Plugin / extension
+        - Documentation only
+        - Tooling / CI
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: |
+        Bulleted list of "this is done when..." statements. The clearer
+        these are, the easier it is to scope the work.
+      placeholder: |
+        - [ ] Operator can do X via the UI
+        - [ ] API returns shape Y
+        - [ ] Documented in docs/...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: pre-checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues / discussions and this is not a duplicate.
+          required: true
+        - label: This is in scope for the project (not a personal fork-only need).
+          required: true
