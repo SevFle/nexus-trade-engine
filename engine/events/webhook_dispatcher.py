@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from engine.db.models import WebhookConfig, WebhookDelivery
 from engine.events.bus import EventBus, EventType
+from engine.observability.metrics import MetricsBackend, get_metrics
 
 logger = structlog.get_logger()
 
@@ -112,6 +113,7 @@ class WebhookDispatcher:
         http_client: httpx.AsyncClient | None = None,
         timeout: float = _DEFAULT_TIMEOUT,
         sleep_fn: Callable[[float], Awaitable[None]] | None = None,
+        metrics: MetricsBackend | None = None,
     ) -> None:
         self._bus = bus
         self._session_factory = session_factory
@@ -119,6 +121,13 @@ class WebhookDispatcher:
         self._owns_http = http_client is None
         self._sleep = sleep_fn or asyncio.sleep
         self._subscribed: list[EventType] = []
+        self._metrics = metrics
+
+    @property
+    def metrics(self) -> MetricsBackend:
+        """Resolve the metrics backend lazily so tests can swap the
+        process-singleton via :func:`set_metrics` after construction."""
+        return self._metrics if self._metrics is not None else get_metrics()
 
     def subscribe_to(self, event_types: list[EventType]) -> None:
         for et in event_types:
@@ -173,20 +182,30 @@ class WebhookDispatcher:
         session.add(delivery)
         await session.flush()
 
+        metrics = self.metrics
+        base_tags = {"event_type": event_type, "template": cfg.template}
+
         max_attempts = max(1, cfg.max_retries)
         for attempt in range(1, max_attempts + 1):
             delivery.attempts = attempt
+            metrics.counter("webhook.attempts", tags=base_tags)
             t0 = time.monotonic()
             try:
                 resp = await self._http.post(cfg.url, content=body, headers=headers)
                 elapsed_ms = int((time.monotonic() - t0) * 1000)
                 delivery.response_status = resp.status_code
                 delivery.response_ms = elapsed_ms
+                metrics.histogram(
+                    "webhook.duration_ms",
+                    float(elapsed_ms),
+                    tags={**base_tags, "status": str(resp.status_code)},
+                )
                 if 200 <= resp.status_code < 300:
                     delivery.status = "delivered"
                     delivery.delivered_at = datetime.now(UTC)
                     delivery.error = None
                     await session.flush()
+                    metrics.counter("webhook.delivered", tags=base_tags)
                     logger.info(
                         "webhook.delivered",
                         webhook_id=str(cfg.id),
@@ -198,6 +217,10 @@ class WebhookDispatcher:
                     delivery.status = "failed"
                     delivery.error = f"HTTP {resp.status_code} (non-retryable)"
                     await session.flush()
+                    metrics.counter(
+                        "webhook.failed",
+                        tags={**base_tags, "reason": "non_retryable"},
+                    )
                     logger.warning(
                         "webhook.failed_non_retryable",
                         webhook_id=str(cfg.id),
@@ -208,13 +231,23 @@ class WebhookDispatcher:
             except httpx.HTTPError as exc:
                 delivery.error = f"{type(exc).__name__}: {exc}"
                 delivery.response_status = None
-                delivery.response_ms = int((time.monotonic() - t0) * 1000)
+                elapsed_ms = int((time.monotonic() - t0) * 1000)
+                delivery.response_ms = elapsed_ms
+                metrics.histogram(
+                    "webhook.duration_ms",
+                    float(elapsed_ms),
+                    tags={**base_tags, "status": "network_error"},
+                )
 
             if attempt < max_attempts:
                 await self._sleep(_backoff_delay(attempt))
 
         delivery.status = "failed"
         await session.flush()
+        metrics.counter(
+            "webhook.failed",
+            tags={**base_tags, "reason": "exhausted"},
+        )
         logger.warning(
             "webhook.exhausted",
             webhook_id=str(cfg.id),
