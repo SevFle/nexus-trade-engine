@@ -1,0 +1,81 @@
+name: Load test
+
+# Triggers:
+#   - workflow_dispatch — manual run from the Actions tab.
+#   - schedule         — weekly at 03:00 UTC on Mondays.
+#
+# Required secrets (configured at the repo / org level):
+#   NEXUS_BASE_URL    URL of the staging environment to test against
+#   NEXUS_LOAD_USER   load-test user email (MFA disabled)
+#   NEXUS_LOAD_PASS   load-test user password
+#
+# Reference: docs/operations/load-testing.md
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Which k6 script to run"
+        required: true
+        type: choice
+        default: smoke
+        options:
+          - smoke
+          - baseline
+      base_url:
+        description: "Override NEXUS_BASE_URL for this run (optional)"
+        required: false
+        type: string
+  schedule:
+    # Weekly baseline regression — Monday 03:00 UTC.
+    - cron: "0 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: k6 ${{ github.event.inputs.scenario || 'baseline' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          set -euo pipefail
+          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+          k6 version
+
+      - name: Run k6
+        env:
+          NEXUS_BASE_URL: ${{ github.event.inputs.base_url || secrets.NEXUS_BASE_URL }}
+          NEXUS_LOAD_USER: ${{ secrets.NEXUS_LOAD_USER }}
+          NEXUS_LOAD_PASS: ${{ secrets.NEXUS_LOAD_PASS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NEXUS_BASE_URL:-}" ]; then
+            echo "::error::NEXUS_BASE_URL is not set; configure the secret or pass base_url" >&2
+            exit 1
+          fi
+          scenario="${{ github.event.inputs.scenario || 'baseline' }}"
+          case "$scenario" in
+            smoke)    script=tests/load/api-smoke.js ;;
+            baseline) script=tests/load/api-baseline.js ;;
+            *) echo "::error::unknown scenario: $scenario" >&2; exit 2 ;;
+          esac
+          k6 run \
+            --summary-export=load-test-summary.json \
+            "$script"
+
+      - name: Upload summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-summary-${{ github.event.inputs.scenario || 'baseline' }}
+          path: load-test-summary.json
+          if-no-files-found: warn
+          retention-days: 30
