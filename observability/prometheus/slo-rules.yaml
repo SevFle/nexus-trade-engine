@@ -73,7 +73,7 @@ groups:
         labels: { severity: page, slo: api_availability, burn_rate: "14.4" }
         annotations:
           summary: API availability burning error budget fast (≈ 2 days to exhaustion)
-          runbook: docs/operations/slos.md#critical-user-journeys
+          runbook: docs/operations/runbooks/README.md
       - alert: APIAvailabilityMediumBurn
         expr: |
           (nexus:slo:api_availability:error_ratio:rate6h   > (6 * 0.005))
@@ -83,7 +83,7 @@ groups:
         labels: { severity: page, slo: api_availability, burn_rate: "6" }
         annotations:
           summary: API availability burning error budget at 6× rate
-          runbook: docs/operations/slos.md#critical-user-journeys
+          runbook: docs/operations/runbooks/README.md
       - alert: APIAvailabilitySlowBurn
         expr: |
           (nexus:slo:api_availability:error_ratio:rate24h  > (3 * 0.005))
@@ -93,7 +93,7 @@ groups:
         labels: { severity: ticket, slo: api_availability, burn_rate: "3" }
         annotations:
           summary: API availability slowly eroding error budget
-          runbook: docs/operations/slos.md#critical-user-journeys
+          runbook: docs/operations/runbooks/README.md
       - alert: APIAvailabilityBudgetExhaustion
         expr: |
           (nexus:slo:api_availability:error_ratio:rate72h  > (1 * 0.005))
@@ -164,7 +164,7 @@ groups:
         labels: { severity: page, slo: api_latency, burn_rate: "14.4" }
         annotations:
           summary: API latency violating 1.0s SLO fast (≈ 2 days to budget exhaustion)
-          runbook: docs/operations/slos.md#critical-user-journeys
+          runbook: docs/operations/runbooks/README.md
       - alert: APILatencyMediumBurn
         expr: |
           (nexus:slo:api_latency:slow_ratio:rate6h   > (6 * 0.01))
@@ -174,7 +174,7 @@ groups:
         labels: { severity: page, slo: api_latency, burn_rate: "6" }
         annotations:
           summary: API latency burning latency budget at 6× rate
-          runbook: docs/operations/slos.md#critical-user-journeys
+          runbook: docs/operations/runbooks/README.md
       - alert: APILatencySlowBurn
         expr: |
           (nexus:slo:api_latency:slow_ratio:rate24h  > (3 * 0.01))
@@ -184,7 +184,7 @@ groups:
         labels: { severity: ticket, slo: api_latency, burn_rate: "3" }
         annotations:
           summary: API latency slowly eroding 1.0s SLO budget
-          runbook: docs/operations/slos.md#critical-user-journeys
+          runbook: docs/operations/runbooks/README.md
       - alert: APILatencyBudgetExhaustion
         expr: |
           (nexus:slo:api_latency:slow_ratio:rate72h  > (1 * 0.01))
@@ -248,7 +248,7 @@ groups:
         labels: { severity: page, slo: auth_mfa, burn_rate: "14.4" }
         annotations:
           summary: Auth/MFA failure rate exhausting budget fast — investigate immediately
-          runbook: docs/operations/slos.md#critical-user-journeys
+          runbook: docs/operations/runbooks/README.md
       - alert: AuthMFAMediumBurn
         expr: |
           (nexus:slo:auth_mfa:error_ratio:rate6h   > (6 * 0.001))
@@ -258,7 +258,7 @@ groups:
         labels: { severity: page, slo: auth_mfa, burn_rate: "6" }
         annotations:
           summary: Auth/MFA failures burning budget at 6× — likely outage
-          runbook: docs/operations/slos.md#critical-user-journeys
+          runbook: docs/operations/runbooks/README.md
       - alert: AuthMFASlowBurn
         expr: |
           (nexus:slo:auth_mfa:error_ratio:rate24h  > (3 * 0.001))
@@ -268,7 +268,7 @@ groups:
         labels: { severity: ticket, slo: auth_mfa, burn_rate: "3" }
         annotations:
           summary: Auth/MFA failure rate elevated — investigate within the day
-          runbook: docs/operations/slos.md#critical-user-journeys
+          runbook: docs/operations/runbooks/README.md
       - alert: AuthMFABudgetExhaustion
         expr: |
           (nexus:slo:auth_mfa:error_ratio:rate72h  > (1 * 0.001))
@@ -327,7 +327,7 @@ groups:
         labels: { severity: ticket, slo: backtest_submit, burn_rate: "3" }
         annotations:
           summary: Backtest submission failure rate elevated
-          runbook: docs/operations/slos.md#critical-user-journeys
+          runbook: docs/operations/runbooks/README.md
       - alert: BacktestSubmitBudgetExhaustion
         expr: |
           (nexus:slo:backtest_submit:error_ratio:rate72h  > (1 * 0.01))
@@ -386,7 +386,7 @@ groups:
         labels: { severity: ticket, slo: webhook_delivery, burn_rate: "3" }
         annotations:
           summary: Webhook delivery failure rate elevated
-          runbook: docs/operations/slos.md#critical-user-journeys
+          runbook: docs/operations/runbooks/README.md
       - alert: WebhookDeliveryBudgetExhaustion
         expr: |
           (nexus:slo:webhook_delivery:error_ratio:rate72h  > (1 * 0.01))
@@ -445,7 +445,7 @@ groups:
         labels: { severity: ticket, slo: task_pipeline, burn_rate: "3" }
         annotations:
           summary: TaskIQ failure rate elevated — workers may be stuck
-          runbook: docs/operations/slos.md#critical-user-journeys
+          runbook: docs/operations/runbooks/README.md
       - alert: TaskPipelineBudgetExhaustion
         expr: |
           (nexus:slo:task_pipeline:error_ratio:rate72h  > (1 * 0.005))

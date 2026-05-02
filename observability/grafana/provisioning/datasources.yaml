@@ -1,0 +1,18 @@
+apiVersion: 1
+
+# Example Prometheus datasource. Operators should override `url`, `name`, and
+# (if using auth) `basicAuth*` / `secureJsonData` to match their stack.
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      manageAlerts: false
+      prometheusType: Prometheus
+      prometheusVersion: 2.50.0
+      timeInterval: 30s
