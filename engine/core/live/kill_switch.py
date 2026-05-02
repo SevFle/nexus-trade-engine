@@ -41,6 +41,8 @@ from enum import Enum
 
 import structlog
 
+from engine.observability.metrics import MetricsBackend, get_metrics
+
 logger = structlog.get_logger()
 
 
@@ -74,13 +76,20 @@ class KillSwitchError(Exception):
 class KillSwitch:
     """Process-wide on/off switch for live order submission."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, metrics: MetricsBackend | None = None) -> None:
         self._state = KillSwitchState.DISENGAGED
         self._engaged_at: datetime | None = None
         self._reason: str | None = None
         self._actor: str | None = None
         self._lock = threading.Lock()
         self._observers: list[Observer] = []
+        self._metrics = metrics
+
+    @property
+    def metrics(self) -> MetricsBackend:
+        """Resolve the metrics backend lazily so tests can swap the
+        process-wide singleton via :func:`set_metrics` after construction."""
+        return self._metrics if self._metrics is not None else get_metrics()
 
     # ------------------------------------------------------------------
     # State
@@ -122,6 +131,9 @@ class KillSwitch:
                     new_reason=reason,
                     actor=actor,
                 )
+                self.metrics.counter(
+                    "kill_switch.engage_noop", tags={"actor": actor}
+                )
                 return False
             self._state = KillSwitchState.ENGAGED
             self._engaged_at = datetime.now(tz=UTC)
@@ -139,6 +151,9 @@ class KillSwitch:
             actor=actor,
             engaged_at=snap.engaged_at.isoformat() if snap.engaged_at else None,
         )
+        metrics = self.metrics
+        metrics.counter("kill_switch.engaged", tags={"actor": actor})
+        metrics.gauge("kill_switch.state", 1.0)
         self._notify(snap)
         return True
 
@@ -173,6 +188,9 @@ class KillSwitch:
             actor=actor,
             prior_reason=prior_reason,
         )
+        metrics = self.metrics
+        metrics.counter("kill_switch.disengaged", tags={"actor": actor})
+        metrics.gauge("kill_switch.state", 0.0)
         self._notify(snap)
         return True
 
