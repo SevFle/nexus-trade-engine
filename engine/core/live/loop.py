@@ -57,6 +57,7 @@ from engine.core.brokers.base import (
 from engine.core.live.kill_switch import KillSwitch, get_kill_switch
 from engine.core.oms.events import RejectEvent, SubmitEvent
 from engine.core.oms.risk import Reject, RiskGate
+from engine.observability.metrics import MetricsBackend, get_metrics
 
 if TYPE_CHECKING:
     from engine.core.brokers.base import BrokerAdapter
@@ -99,15 +100,23 @@ class LiveLoop:
         risk: RiskGate,
         persister: Persister | None = None,
         kill_switch: KillSwitch | None = None,
+        metrics: MetricsBackend | None = None,
     ) -> None:
         self._broker = broker
         self._risk = risk
         self._persister = persister
         self._kill_switch = kill_switch or get_kill_switch()
+        self._metrics = metrics
         # OMS id -> Order
         self._by_oms_id: dict[uuid.UUID, Order] = {}
         # Broker id -> OMS id (for event correlation)
         self._broker_to_oms: dict[str, uuid.UUID] = {}
+
+    @property
+    def metrics(self) -> MetricsBackend:
+        """Resolve the metrics backend lazily so tests can swap the
+        process-wide singleton via :func:`set_metrics` after construction."""
+        return self._metrics if self._metrics is not None else get_metrics()
 
     # ------------------------------------------------------------------
     # Submit path
@@ -125,17 +134,29 @@ class LiveLoop:
         :class:`BrokerAuthError` / :class:`BrokerConnectionError` for
         the caller to handle.
         """
+        metrics = self.metrics
+        base_tags = {"symbol": order.symbol, "side": order.side.value}
+        metrics.counter("oms.submit.attempted", tags=base_tags)
+
         gate_result = self._risk.evaluate(order, reference_price=reference_price)
         if isinstance(gate_result, Reject):
             updated = order.apply_event(
                 RejectEvent(occurred_at=_utcnow(), reason=gate_result.reason)
             )
             self._track(updated)
+            metrics.counter(
+                "oms.submit.outcome",
+                tags={**base_tags, "outcome": "risk_rejected"},
+            )
             return updated
 
         try:
             submitted = await self._broker.submit(order)
         except BrokerAuthError:
+            metrics.counter(
+                "oms.submit.outcome",
+                tags={**base_tags, "outcome": "broker_auth_error"},
+            )
             self._kill_switch.engage(
                 reason="broker_auth_error", actor="live_loop"
             )
@@ -148,8 +169,16 @@ class LiveLoop:
                 )
             )
             self._track(updated)
+            metrics.counter(
+                "oms.submit.outcome",
+                tags={**base_tags, "outcome": "broker_rejected"},
+            )
             return updated
         except BrokerConnectionError:
+            metrics.counter(
+                "oms.submit.outcome",
+                tags={**base_tags, "outcome": "broker_connection_error"},
+            )
             logger.warning(
                 "live_loop.broker_connection_error",
                 order_id=str(order.id),
@@ -165,6 +194,10 @@ class LiveLoop:
         )
         self._track(updated)
         self._broker_to_oms[submitted.broker_order_id] = updated.id
+        metrics.counter(
+            "oms.submit.outcome",
+            tags={**base_tags, "outcome": "submitted"},
+        )
         return updated
 
     # ------------------------------------------------------------------
@@ -190,6 +223,14 @@ class LiveLoop:
         order = self._by_oms_id[oms_id]
         updated = order.apply_event(event)
         self._track(updated)
+        self.metrics.counter(
+            "oms.event.applied",
+            tags={
+                "event_type": type(event).__name__,
+                "status": updated.status.value,
+                "symbol": updated.symbol,
+            },
+        )
         return updated
 
     # ------------------------------------------------------------------
@@ -211,6 +252,10 @@ class LiveLoop:
 
     def _track(self, order: Order) -> None:
         self._by_oms_id[order.id] = order
+        self.metrics.gauge(
+            "oms.open_orders",
+            float(sum(1 for o in self._by_oms_id.values() if not o.is_terminal)),
+        )
         if self._persister is not None:
             try:
                 self._persister(order)
