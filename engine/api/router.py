@@ -12,6 +12,7 @@ from engine.api.routes.market_data import router as market_data_router
 from engine.api.routes.marketplace import router as marketplace_router
 from engine.api.routes.mfa import router as mfa_router
 from engine.api.routes.portfolio import router as portfolio_router
+from engine.api.routes.privacy import router as privacy_router
 from engine.api.routes.reference import router as reference_router
 from engine.api.routes.scoring import router as scoring_router
 from engine.api.routes.strategies import router as strategies_router
@@ -25,6 +26,7 @@ api_router.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 api_router.include_router(mfa_router, prefix="/api/v1/auth/mfa", tags=["auth"])
 api_router.include_router(api_keys_router, prefix="/api/v1", tags=["auth"])
 api_router.include_router(system_router, prefix="/api/v1", tags=["system"])
+api_router.include_router(privacy_router, prefix="/api/v1", tags=["privacy"])
 api_router.include_router(
     backtest_router,
     prefix="/api/v1/backtest",
