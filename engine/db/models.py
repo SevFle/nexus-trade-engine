@@ -317,6 +317,34 @@ class ScoringSnapshot(Base):
     __table_args__ = (Index("ix_scoring_snapshot_strategy_time", "strategy_id", "created_at"),)
 
 
+class DSRequest(Base):
+    """GDPR / CCPA data-subject request audit row (gh#157).
+
+    One row per export / delete / rectify / restrict / object request.
+    Tracks lifecycle and the SLA timer (1 month under GDPR Art. 12).
+    """
+
+    __tablename__ = "dsr_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(32))  # export | delete | rectify | restrict | object
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    note: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    details: Mapped[dict] = mapped_column(JSONB, default=dict)  # type: ignore[assignment]
+    sla_due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    __table_args__ = (Index("ix_dsr_requests_user_kind_status", "user_id", "kind", "status"),)
+
+
 class ApiKey(Base):
     """Long-lived API key for headless / automation access (gh#94).
 
