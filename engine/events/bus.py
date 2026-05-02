@@ -8,12 +8,15 @@ with an in-process fallback for single-instance deployments.
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
 import structlog
+
+from engine.observability.metrics import MetricsBackend, get_metrics
 
 logger = structlog.get_logger()
 
@@ -91,12 +94,25 @@ class EventBus:
     Events are also persisted to Redis for cross-process consumers (e.g. frontend WebSocket).
     """
 
-    def __init__(self, redis_url: str = "redis://localhost:6379/0", max_log_size: int = 10_000):
+    def __init__(
+        self,
+        redis_url: str = "redis://localhost:6379/0",
+        max_log_size: int = 10_000,
+        *,
+        metrics: MetricsBackend | None = None,
+    ):
         self.redis_url = redis_url
         self._handlers: dict[EventType, list[EventHandler]] = {}
         self._redis = None
         self._event_log: list[dict] = []
         self._max_log_size = max_log_size
+        self._metrics = metrics
+
+    @property
+    def metrics(self) -> MetricsBackend:
+        """Resolve the metrics backend lazily so tests can swap the
+        process-wide singleton via :func:`set_metrics` after construction."""
+        return self._metrics if self._metrics is not None else get_metrics()
 
     async def connect(self):
         """Initialize Redis connection for cross-process pub/sub."""
@@ -128,12 +144,28 @@ class EventBus:
 
     async def publish(self, event: Event):
         """Publish an event to all subscribers and Redis."""
+        metrics = self.metrics
+        event_tags = {"event_type": event.event_type.value}
+        metrics.counter("event_bus.published", tags=event_tags)
+
         # In-process handlers
         handlers = self._handlers.get(event.event_type, [])
         for handler in handlers:
+            t0 = time.monotonic()
             try:
                 await handler(event.to_dict())
+                metrics.histogram(
+                    "event_bus.handler_duration_ms",
+                    (time.monotonic() - t0) * 1000.0,
+                    tags=event_tags,
+                )
             except Exception as e:
+                metrics.histogram(
+                    "event_bus.handler_duration_ms",
+                    (time.monotonic() - t0) * 1000.0,
+                    tags=event_tags,
+                )
+                metrics.counter("event_bus.handler_error", tags=event_tags)
                 logger.error("event_bus.handler_error", event=event.event_type.value, error=str(e))
 
         # Redis pub/sub for cross-process consumers
@@ -141,7 +173,7 @@ class EventBus:
             try:
                 await self._redis.publish(f"nexus:{event.event_type.value}", event.to_json())
             except Exception:
-                pass  # Non-critical — log but don't crash
+                metrics.counter("event_bus.redis_publish_error", tags=event_tags)
 
         # Local event log (ring buffer)
         self._event_log.append(event.to_dict())
