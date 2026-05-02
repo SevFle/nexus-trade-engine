@@ -119,6 +119,51 @@ class InstalledStrategy(Base):
     installed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class WebhookConfig(Base):
+    __tablename__ = "webhook_configs"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    portfolio_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("portfolios.id", ondelete="CASCADE"), index=True, nullable=True
+    )
+    url: Mapped[str] = mapped_column(String(2048))
+    event_types: Mapped[list] = mapped_column(JSONB, default=list)  # type: ignore[assignment]
+    signing_secret: Mapped[str] = mapped_column(String(128))
+    custom_headers: Mapped[dict] = mapped_column(JSONB, default=dict)  # type: ignore[assignment]
+    template: Mapped[str] = mapped_column(String(20), default="generic")
+    max_retries: Mapped[int] = mapped_column(default=3, server_default="3")
+    is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+class WebhookDelivery(Base):
+    __tablename__ = "webhook_deliveries"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    webhook_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("webhook_configs.id", ondelete="CASCADE"), index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    payload: Mapped[dict] = mapped_column(JSONB, default=dict)  # type: ignore[assignment]
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    response_status: Mapped[int | None] = mapped_column(nullable=True)
+    response_ms: Mapped[int | None] = mapped_column(nullable=True)
+    attempts: Mapped[int] = mapped_column(default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, index=True
+    )
+    delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class BacktestResult(Base):
     __tablename__ = "backtest_results"
 
