@@ -1,0 +1,102 @@
+name: Bug report
+description: Report something that doesn't work as expected.
+title: "bug: <short description>"
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. The more
+        context you can give us, the faster we can fix it.
+
+        **Security issue?** Please don't file it here — see
+        [SECURITY.md](https://github.com/SevFle/nexus-trade-engine/blob/main/SECURITY.md)
+        for the private channels.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: When I do X, Y happens instead of Z.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps a maintainer can follow.
+      placeholder: |
+        1. Run `nexus-trade-engine ...`
+        2. Send request `...`
+        3. Observe `...`
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Tag, release, or commit SHA you reproduced this on.
+      placeholder: "v0.4.2 / commit a0db600"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      description: How are you running Nexus Trade Engine?
+      options:
+        - Local dev (docker compose)
+        - Local dev (bare metal / venv)
+        - Self-hosted (containers)
+        - Self-hosted (Kubernetes)
+        - Other (please describe in "What happened?")
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment details
+      description: |
+        OS, Python version, database, broker, anything else that might matter.
+      placeholder: |
+        - OS: macOS 14.5 / Ubuntu 24.04
+        - Python: 3.14.0
+        - DB: Postgres 16
+        - Broker: paper / Alpaca / IBKR
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / error output
+      description: |
+        Paste a short log excerpt. Please scrub any secrets or PII first.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: pre-checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and didn't find a duplicate.
+          required: true
+        - label: I'm running a supported version (latest tag from the last 90 days, or `main`).
+          required: false
+        - label: I scrubbed any secrets / PII from the logs above.
+          required: true
