@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
+from engine.api.routes.api_keys import router as api_keys_router
 from engine.api.routes.auth import router as auth_router
 from engine.api.routes.backtest import router as backtest_router
 from engine.api.routes.client_errors import router as client_errors_router
@@ -14,6 +15,7 @@ from engine.api.routes.portfolio import router as portfolio_router
 from engine.api.routes.reference import router as reference_router
 from engine.api.routes.scoring import router as scoring_router
 from engine.api.routes.strategies import router as strategies_router
+from engine.api.routes.system import router as system_router
 from engine.api.routes.webhooks import router as webhooks_router
 from engine.legal.dependencies import require_legal_acceptance
 
@@ -21,6 +23,8 @@ api_router = APIRouter()
 api_router.include_router(health_router, tags=["health"])
 api_router.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 api_router.include_router(mfa_router, prefix="/api/v1/auth/mfa", tags=["auth"])
+api_router.include_router(api_keys_router, prefix="/api/v1", tags=["auth"])
+api_router.include_router(system_router, prefix="/api/v1", tags=["system"])
 api_router.include_router(
     backtest_router,
     prefix="/api/v1/backtest",

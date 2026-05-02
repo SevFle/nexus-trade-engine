@@ -315,3 +315,33 @@ class ScoringSnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     __table_args__ = (Index("ix_scoring_snapshot_strategy_time", "strategy_id", "created_at"),)
+
+
+class ApiKey(Base):
+    """Long-lived API key for headless / automation access (gh#94).
+
+    The full token (``prefix + secret``) is shown to the operator exactly
+    once on creation. The secret portion is stored as a bcrypt hash; the
+    prefix is stored in plaintext so it can be displayed in the UI for
+    identification and used as the database lookup key.
+    """
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255))
+    prefix: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    key_hash: Mapped[str] = mapped_column(String(255))
+    scopes: Mapped[list[str]] = mapped_column(JSONB, default=list)  # type: ignore[assignment]
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    __table_args__ = (Index("ix_api_keys_user_active", "user_id", "revoked_at"),)
