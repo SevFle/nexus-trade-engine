@@ -136,7 +136,11 @@ class EventBus:
         if event_type not in self._handlers:
             self._handlers[event_type] = []
         self._handlers[event_type].append(handler)
-        logger.debug("event_bus.subscribed", event=event_type.value, handler=handler.__name__)
+        logger.debug(
+            "event_bus.subscribed",
+            event_type=event_type.value,
+            handler=handler.__name__,
+        )
 
     def unsubscribe(self, event_type: EventType, handler: EventHandler):
         if event_type in self._handlers:
@@ -166,7 +170,11 @@ class EventBus:
                     tags=event_tags,
                 )
                 metrics.counter("event_bus.handler_error", tags=event_tags)
-                logger.error("event_bus.handler_error", event=event.event_type.value, error=str(e))
+                logger.error(
+                    "event_bus.handler_error",
+                    event_type=event.event_type.value,
+                    error=str(e),
+                )
 
         # Redis pub/sub for cross-process consumers
         if self._redis:
