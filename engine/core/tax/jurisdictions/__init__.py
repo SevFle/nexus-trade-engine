@@ -29,10 +29,12 @@ from engine.core.tax.jurisdictions.registry import (
     list_jurisdictions,
     register_jurisdiction,
 )
+from engine.core.tax.jurisdictions.de import Germany
 from engine.core.tax.jurisdictions.gb import UnitedKingdom
 from engine.core.tax.jurisdictions.us import UnitedStates
 
 __all__ = [
+    "Germany",
     "LotMethod",
     "TaxJurisdiction",
     "UnitedKingdom",
