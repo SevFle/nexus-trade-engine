@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy import desc, select
 
-from engine.api.auth.dependency import get_current_user
+from engine.api.auth.dependency import get_current_user, require_api_scope
 from engine.db.models import User, WebhookConfig, WebhookDelivery
 from engine.deps import get_db
 from engine.events.bus import EventBus
@@ -95,7 +95,7 @@ def _validate_template(template: str) -> None:
 @router.post("", response_model=WebhookResponse, status_code=status.HTTP_201_CREATED)
 async def create_webhook(
     body: WebhookCreateRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_api_scope("trade")),
     db: AsyncSession = Depends(get_db),
 ) -> WebhookResponse:
     _validate_template(body.template)

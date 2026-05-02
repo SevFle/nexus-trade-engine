@@ -101,7 +101,10 @@ async def get_current_user(
         raise _UNAUTHORIZED_MISSING
 
     if is_engine_token(token):
-        user, _ = await _user_from_api_key(token, db)
+        user, api_key = await _user_from_api_key(token, db)
+        # Stash the active API key on request.state so scope-aware dependencies
+        # downstream can read it without re-authenticating.
+        request.state.api_key = api_key
         return user
 
     return await _user_from_jwt(token, db)
@@ -116,6 +119,61 @@ def require_role(minimum_role: str):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Requires {minimum_role} role or higher",
+            )
+        return user
+
+    return _check
+
+
+# ---------------------------------------------------------------------------
+# API-key scope enforcement (gh#86 / gh#94)
+# ---------------------------------------------------------------------------
+#
+# When the request was authenticated via an engine API key, we enforce the
+# scope vocabulary declared on that key (e.g. ``["read"]``). When the request
+# was authenticated via JWT (i.e. an interactive operator session) we treat
+# the principal as full-scope and skip the check — JWT auth is gated by the
+# role check instead.
+#
+# Scope semantics:
+#   ``read``   — GET / HEAD only.
+#   ``trade``  — POST / PUT / PATCH for backtest, portfolio, webhooks, etc.
+#   ``admin``  — equivalent to the ``admin`` role; supersedes both above.
+
+
+_SCOPE_HIERARCHY: dict[str, int] = {"read": 0, "trade": 1, "admin": 2}
+
+
+def _scope_satisfied(granted: list[str] | None, required: str) -> bool:
+    required_level = _SCOPE_HIERARCHY.get(required, 0)
+    for s in granted or []:
+        if _SCOPE_HIERARCHY.get(s, -1) >= required_level:
+            return True
+    return False
+
+
+def require_api_scope(required_scope: str):
+    """FastAPI dependency factory that enforces an API-key scope.
+
+    JWT-authenticated requests bypass this check (they are gated by
+    :func:`require_role`). API-key requests must declare a scope at least
+    as privileged as ``required_scope`` per :data:`_SCOPE_HIERARCHY`.
+    """
+    if required_scope not in _SCOPE_HIERARCHY:
+        raise ValueError(f"unknown scope: {required_scope!r}")
+
+    async def _check(
+        request: Request,
+        user: User = Depends(get_current_user),
+    ) -> User:
+        api_key: ApiKey | None = getattr(request.state, "api_key", None)
+        if api_key is None:
+            # JWT auth — full-scope.
+            return user
+        if not _scope_satisfied(list(api_key.scopes or []), required_scope):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"API key missing required scope: {required_scope}",
             )
         return user
 
