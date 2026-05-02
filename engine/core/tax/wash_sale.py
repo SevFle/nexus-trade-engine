@@ -111,6 +111,7 @@ def detect_wash_sales(
     trades: list[Trade],
     *,
     cost_basis_for: dict[str, Decimal] | None = None,
+    window_days: int = WASH_SALE_WINDOW_DAYS,
 ) -> list[WashSaleAdjustment]:
     """Return wash-sale adjustments implied by ``trades``.
 
@@ -119,9 +120,20 @@ def detect_wash_sales(
     detector falls back to using FIFO matching against earlier buys
     in ``trades`` to compute the basis.
 
+    ``window_days`` overrides the default US Section 1091 30-day
+    window. Pass the active jurisdiction's ``wash_sale_window_days``
+    for non-US tax regimes. ``window_days == 0`` short-circuits the
+    detector and returns ``[]`` — useful for jurisdictions that have
+    no wash-sale rule (DE, FR).
+
     The output is sorted by ``(sale_trade_id, replacement_trade_id)``
     so callers can diff against previous runs.
     """
+    if window_days < 0:
+        raise ValueError("window_days must be non-negative")
+    if window_days == 0:
+        return []
+
     sales = [t for t in trades if t.side == TradeSide.SELL]
 
     # FIFO state shared between basis computation and wash-sale matching.
@@ -172,7 +184,7 @@ def detect_wash_sales(
     )
 
     adjustments: list[WashSaleAdjustment] = []
-    window = timedelta(days=WASH_SALE_WINDOW_DAYS)
+    window = timedelta(days=window_days)
 
     for sale in sale_states:
         for buy in buy_states:
@@ -217,6 +229,24 @@ def detect_wash_sales(
         key=lambda a: (a.sale_trade_id, a.replacement_trade_id)
     )
     return adjustments
+
+
+def detect_wash_sales_for_jurisdiction(
+    trades: list[Trade],
+    jurisdiction,  # noqa: ANN001 - duck-typed against TaxJurisdiction Protocol
+    *,
+    cost_basis_for: dict[str, Decimal] | None = None,
+) -> list[WashSaleAdjustment]:
+    """Run :func:`detect_wash_sales` using the jurisdiction's window.
+
+    Jurisdictions with ``wash_sale_window_days == 0`` (DE, FR, etc.)
+    short-circuit to ``[]`` without scanning the trades.
+    """
+    return detect_wash_sales(
+        trades,
+        cost_basis_for=cost_basis_for,
+        window_days=jurisdiction.wash_sale_window_days,
+    )
 
 
 def _consume_fifo(lots: list[_BuyState], qty: Decimal) -> Decimal:
