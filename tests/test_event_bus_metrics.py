@@ -15,22 +15,12 @@ The bus emits the following metrics through the active
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from engine.events.bus import Event, EventBus, EventType
 from engine.observability.metrics import RecordingBackend
-
-
-@pytest.fixture(autouse=True)
-def _patch_bus_logger():
-    """Bypass an unrelated structlog kwarg clash in ``bus.subscribe``'s
-    ``logger.debug(..., event=...)`` call. The metric assertions are the
-    point of this file; logging behaviour is covered by
-    ``tests/test_event_bus.py`` (which uses the same workaround)."""
-    with patch("engine.events.bus.logger", MagicMock()):
-        yield
 
 
 def _counter_total(backend: RecordingBackend, name: str) -> float:

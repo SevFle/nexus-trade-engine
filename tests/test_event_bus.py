@@ -2,17 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 from engine.events.bus import Event, EventBus, EventType
-
-
-@pytest.fixture(autouse=True)
-def _patch_bus_logger():
-    with patch("engine.events.bus.logger", MagicMock()):
-        yield
 
 
 def _make_handler(results: list):
@@ -130,6 +120,30 @@ class TestEmit:
         assert len(results) == 1
         assert results[0]["data"]["msg"] == "hello"
         assert results[0]["source"] == "test"
+
+
+class TestStructlogKwargRegression:
+    """Regression: structlog reserves the ``event`` kwarg for the
+    positional event-name argument. Earlier the bus passed
+    ``event=event_type.value`` to the logger and that raised TypeError
+    whenever the configured wrapper actually processed the call (e.g.
+    debug at NOTSET filtering). The field is now ``event_type=`` so
+    subscribe / publish cannot raise from this clash."""
+
+    async def test_subscribe_does_not_raise_with_default_structlog(self):
+        bus = EventBus()
+        bus.subscribe(EventType.ORDER_CREATED, _make_handler([]))
+
+    async def test_publish_does_not_raise_when_handler_errors(self):
+        bus = EventBus()
+
+        async def boom(_):
+            raise RuntimeError("nope")
+
+        bus.subscribe(EventType.STRATEGY_ERROR, boom)
+        # Must NOT raise — handler errors are logged via event_type=,
+        # never propagated.
+        await bus.publish(Event(EventType.STRATEGY_ERROR))
 
 
 class TestEventSerialization:
