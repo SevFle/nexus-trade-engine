@@ -1,0 +1,46 @@
+# Development image: full source bind-mounted, dev deps installed, hot-reload
+# enabled. NEVER ship this to production.
+#
+# Used by docker-compose.dev.yml. The runtime container does:
+#   - Bind-mount the repo root over /app so edits reload immediately.
+#   - Run uvicorn --reload on the engine, watching the bind mount.
+#   - Run taskiq worker in --reload mode for the worker container.
+#
+# Reference: docs/development.md
+
+FROM ghcr.io/astral-sh/uv:0.6-python3.12-bookworm-slim
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_HTTP_TIMEOUT=300 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# libpq for asyncpg, build tools for any wheel that needs to compile.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libpq5 \
+        build-essential \
+        curl \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install dev deps from a stable layer. Source is bind-mounted at runtime, so
+# we only need pyproject + uv.lock here.
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --extra dev --no-install-project
+
+ENV PATH="/app/.venv/bin:${PATH}"
+
+EXPOSE 8000
+
+# Default to the API server. Override the entrypoint to run the worker.
+CMD ["uvicorn", "engine.app:create_app", \
+     "--factory", \
+     "--reload", \
+     "--reload-dir", "/app/engine", \
+     "--host", "0.0.0.0", \
+     "--port", "8000"]

@@ -1,0 +1,102 @@
+# Development stack with hot-reload (gh#22).
+#
+# Usage:
+#   make docker-dev          # docker compose -f docker-compose.dev.yml up
+#   make docker-dev-down
+#   make docker-dev-logs
+#
+# Differences vs. docker-compose.yml (production):
+#   - app + worker are built from Dockerfile.dev (uv + dev deps).
+#   - Source is bind-mounted into /app so uvicorn --reload picks up edits.
+#   - frontend service runs Vite dev server with HMR on port 5173.
+#   - .venv is mounted as an anonymous volume so it doesn't get clobbered by
+#     the source bind-mount.
+#   - Anonymous volume on frontend/node_modules so npm install survives the
+#     source bind-mount.
+
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: nexus
+      POSTGRES_DB: nexus
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/home/postgres/pgdata/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8000:8000"
+    env_file: .env.example
+    environment:
+      NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:nexus@db:5432/nexus
+      NEXUS_VALKEY_URL: valkey://valkey:6379/0
+      NEXUS_DEBUG: "1"
+      PYTHONUNBUFFERED: "1"
+      WATCHFILES_FORCE_POLLING: "true"   # bind-mounts on macOS/Windows need polling
+    volumes:
+      - .:/app:cached
+      - app-venv:/app/.venv
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: ["uv", "run", "taskiq", "worker", "engine.tasks.worker:broker", "--reload"]
+    env_file: .env.example
+    environment:
+      NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:nexus@db:5432/nexus
+      NEXUS_VALKEY_URL: valkey://valkey:6379/0
+      NEXUS_DEBUG: "1"
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      - .:/app:cached
+      - app-venv:/app/.venv
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    command: ["sh", "-c", "npm install && npm run dev -- --host 0.0.0.0"]
+    ports:
+      - "5173:5173"
+    environment:
+      CHOKIDAR_USEPOLLING: "true"        # bind-mounts on macOS/Windows need polling
+      VITE_API_BASE_URL: http://localhost:8000
+    volumes:
+      - ./frontend:/app:cached
+      - frontend-node-modules:/app/node_modules
+
+volumes:
+  pgdata:
+  app-venv:
+  frontend-node-modules:
