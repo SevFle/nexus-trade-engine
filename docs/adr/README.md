@@ -15,6 +15,7 @@ We follow the [MADR](https://adr.github.io/madr/) format. See
 |-------:|----------|----------------------------------------------|
 | 0001   | Accepted | [Scaffold technology choices](0001-scaffold-tech-choices.md) |
 | 0002   | Accepted | [Auth & RBAC model](0002-auth-rbac.md)        |
+| 0003   | Accepted | [Mobile experience strategy — PWA on top of the React frontend](0003-mobile-app-strategy.md) |
 
 When you accept a new ADR, add a row to this table in the same PR.
 
