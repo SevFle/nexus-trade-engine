@@ -1,0 +1,458 @@
+# Prometheus recording + alerting rules for the SLOs defined in
+# docs/operations/slos.md
+#
+# Metric naming
+# -------------
+# The engine's internal MetricsBackend uses dotted names
+# (e.g. nexus.http.requests_total). Prometheus exporters translate dots
+# into underscores, so this file references the underscore form
+# (nexus_http_requests_total). If your exporter uses a different
+# convention, search-and-replace the metric names here in one pass — the
+# alert math does not change.
+#
+# Convention for recording-rule names:
+#   nexus:slo:<journey>:<numerator|denominator|error_ratio>:rate<window>
+#
+# Each journey produces error_ratio rates at multiple windows so alerts
+# can pair a long and a short window per Google SRE MWMBR pattern.
+#
+# Severity contract:
+#   severity: page    — wakes the on-call (paging-grade receiver)
+#   severity: ticket  — opens a backlog ticket within business hours
+
+groups:
+  # =========================================================================
+  # 1. API availability — 99.5%
+  # =========================================================================
+  - name: nexus.slo.api_availability
+    interval: 30s
+    rules:
+      - record: nexus:slo:api_availability:error_ratio:rate5m
+        expr: |
+          sum(rate(nexus_http_requests_total{status_code=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(nexus_http_requests_total[5m])), 1)
+      - record: nexus:slo:api_availability:error_ratio:rate30m
+        expr: |
+          sum(rate(nexus_http_requests_total{status_code=~"5.."}[30m]))
+          /
+          clamp_min(sum(rate(nexus_http_requests_total[30m])), 1)
+      - record: nexus:slo:api_availability:error_ratio:rate1h
+        expr: |
+          sum(rate(nexus_http_requests_total{status_code=~"5.."}[1h]))
+          /
+          clamp_min(sum(rate(nexus_http_requests_total[1h])), 1)
+      - record: nexus:slo:api_availability:error_ratio:rate6h
+        expr: |
+          sum(rate(nexus_http_requests_total{status_code=~"5.."}[6h]))
+          /
+          clamp_min(sum(rate(nexus_http_requests_total[6h])), 1)
+      - record: nexus:slo:api_availability:error_ratio:rate2h
+        expr: |
+          sum(rate(nexus_http_requests_total{status_code=~"5.."}[2h]))
+          /
+          clamp_min(sum(rate(nexus_http_requests_total[2h])), 1)
+      - record: nexus:slo:api_availability:error_ratio:rate24h
+        expr: |
+          sum(rate(nexus_http_requests_total{status_code=~"5.."}[24h]))
+          /
+          clamp_min(sum(rate(nexus_http_requests_total[24h])), 1)
+      - record: nexus:slo:api_availability:error_ratio:rate72h
+        expr: |
+          sum(rate(nexus_http_requests_total{status_code=~"5.."}[72h]))
+          /
+          clamp_min(sum(rate(nexus_http_requests_total[72h])), 1)
+
+      # SLO = 99.5%, error_budget = 0.005, burn-rate threshold = burn × budget.
+      - alert: APIAvailabilityFastBurn
+        expr: |
+          (nexus:slo:api_availability:error_ratio:rate1h  > (14.4 * 0.005))
+          and
+          (nexus:slo:api_availability:error_ratio:rate5m  > (14.4 * 0.005))
+        for: 2m
+        labels: { severity: page, slo: api_availability, burn_rate: "14.4" }
+        annotations:
+          summary: API availability burning error budget fast (≈ 2 days to exhaustion)
+          runbook: docs/operations/slos.md#critical-user-journeys
+      - alert: APIAvailabilityMediumBurn
+        expr: |
+          (nexus:slo:api_availability:error_ratio:rate6h   > (6 * 0.005))
+          and
+          (nexus:slo:api_availability:error_ratio:rate30m  > (6 * 0.005))
+        for: 15m
+        labels: { severity: page, slo: api_availability, burn_rate: "6" }
+        annotations:
+          summary: API availability burning error budget at 6× rate
+          runbook: docs/operations/slos.md#critical-user-journeys
+      - alert: APIAvailabilitySlowBurn
+        expr: |
+          (nexus:slo:api_availability:error_ratio:rate24h  > (3 * 0.005))
+          and
+          (nexus:slo:api_availability:error_ratio:rate2h   > (3 * 0.005))
+        for: 1h
+        labels: { severity: ticket, slo: api_availability, burn_rate: "3" }
+        annotations:
+          summary: API availability slowly eroding error budget
+          runbook: docs/operations/slos.md#critical-user-journeys
+      - alert: APIAvailabilityBudgetExhaustion
+        expr: |
+          (nexus:slo:api_availability:error_ratio:rate72h  > (1 * 0.005))
+          and
+          (nexus:slo:api_availability:error_ratio:rate6h   > (1 * 0.005))
+        for: 3h
+        labels: { severity: ticket, slo: api_availability, burn_rate: "1" }
+        annotations:
+          summary: API availability error budget will exhaust within the 28d window
+          runbook: docs/operations/slos.md#error-budget
+
+  # =========================================================================
+  # 2. API latency — 99% of requests < 1.0s
+  # =========================================================================
+  - name: nexus.slo.api_latency
+    interval: 30s
+    rules:
+      - record: nexus:slo:api_latency:slow_ratio:rate5m
+        expr: |
+          (sum(rate(nexus_http_request_duration_seconds_count[5m]))
+           - sum(rate(nexus_http_request_duration_seconds_bucket{le="1"}[5m])))
+          /
+          clamp_min(sum(rate(nexus_http_request_duration_seconds_count[5m])), 1)
+      - record: nexus:slo:api_latency:slow_ratio:rate30m
+        expr: |
+          (sum(rate(nexus_http_request_duration_seconds_count[30m]))
+           - sum(rate(nexus_http_request_duration_seconds_bucket{le="1"}[30m])))
+          /
+          clamp_min(sum(rate(nexus_http_request_duration_seconds_count[30m])), 1)
+      - record: nexus:slo:api_latency:slow_ratio:rate1h
+        expr: |
+          (sum(rate(nexus_http_request_duration_seconds_count[1h]))
+           - sum(rate(nexus_http_request_duration_seconds_bucket{le="1"}[1h])))
+          /
+          clamp_min(sum(rate(nexus_http_request_duration_seconds_count[1h])), 1)
+      - record: nexus:slo:api_latency:slow_ratio:rate6h
+        expr: |
+          (sum(rate(nexus_http_request_duration_seconds_count[6h]))
+           - sum(rate(nexus_http_request_duration_seconds_bucket{le="1"}[6h])))
+          /
+          clamp_min(sum(rate(nexus_http_request_duration_seconds_count[6h])), 1)
+      - record: nexus:slo:api_latency:slow_ratio:rate2h
+        expr: |
+          (sum(rate(nexus_http_request_duration_seconds_count[2h]))
+           - sum(rate(nexus_http_request_duration_seconds_bucket{le="1"}[2h])))
+          /
+          clamp_min(sum(rate(nexus_http_request_duration_seconds_count[2h])), 1)
+      - record: nexus:slo:api_latency:slow_ratio:rate24h
+        expr: |
+          (sum(rate(nexus_http_request_duration_seconds_count[24h]))
+           - sum(rate(nexus_http_request_duration_seconds_bucket{le="1"}[24h])))
+          /
+          clamp_min(sum(rate(nexus_http_request_duration_seconds_count[24h])), 1)
+      - record: nexus:slo:api_latency:slow_ratio:rate72h
+        expr: |
+          (sum(rate(nexus_http_request_duration_seconds_count[72h]))
+           - sum(rate(nexus_http_request_duration_seconds_bucket{le="1"}[72h])))
+          /
+          clamp_min(sum(rate(nexus_http_request_duration_seconds_count[72h])), 1)
+
+      # SLO = 99.0%, error_budget = 0.01.
+      - alert: APILatencyFastBurn
+        expr: |
+          (nexus:slo:api_latency:slow_ratio:rate1h   > (14.4 * 0.01))
+          and
+          (nexus:slo:api_latency:slow_ratio:rate5m   > (14.4 * 0.01))
+        for: 2m
+        labels: { severity: page, slo: api_latency, burn_rate: "14.4" }
+        annotations:
+          summary: API latency violating 1.0s SLO fast (≈ 2 days to budget exhaustion)
+          runbook: docs/operations/slos.md#critical-user-journeys
+      - alert: APILatencyMediumBurn
+        expr: |
+          (nexus:slo:api_latency:slow_ratio:rate6h   > (6 * 0.01))
+          and
+          (nexus:slo:api_latency:slow_ratio:rate30m  > (6 * 0.01))
+        for: 15m
+        labels: { severity: page, slo: api_latency, burn_rate: "6" }
+        annotations:
+          summary: API latency burning latency budget at 6× rate
+          runbook: docs/operations/slos.md#critical-user-journeys
+      - alert: APILatencySlowBurn
+        expr: |
+          (nexus:slo:api_latency:slow_ratio:rate24h  > (3 * 0.01))
+          and
+          (nexus:slo:api_latency:slow_ratio:rate2h   > (3 * 0.01))
+        for: 1h
+        labels: { severity: ticket, slo: api_latency, burn_rate: "3" }
+        annotations:
+          summary: API latency slowly eroding 1.0s SLO budget
+          runbook: docs/operations/slos.md#critical-user-journeys
+      - alert: APILatencyBudgetExhaustion
+        expr: |
+          (nexus:slo:api_latency:slow_ratio:rate72h  > (1 * 0.01))
+          and
+          (nexus:slo:api_latency:slow_ratio:rate6h   > (1 * 0.01))
+        for: 3h
+        labels: { severity: ticket, slo: api_latency, burn_rate: "1" }
+        annotations:
+          summary: API latency budget will exhaust within the 28d window
+          runbook: docs/operations/slos.md#error-budget
+
+  # =========================================================================
+  # 3. Auth & MFA — 99.9%
+  # =========================================================================
+  - name: nexus.slo.auth_mfa
+    interval: 30s
+    rules:
+      - record: nexus:slo:auth_mfa:error_ratio:rate5m
+        expr: |
+          sum(rate(nexus_auth_attempts_total{outcome="failure"}[5m]))
+          /
+          clamp_min(sum(rate(nexus_auth_attempts_total[5m])), 1)
+      - record: nexus:slo:auth_mfa:error_ratio:rate30m
+        expr: |
+          sum(rate(nexus_auth_attempts_total{outcome="failure"}[30m]))
+          /
+          clamp_min(sum(rate(nexus_auth_attempts_total[30m])), 1)
+      - record: nexus:slo:auth_mfa:error_ratio:rate1h
+        expr: |
+          sum(rate(nexus_auth_attempts_total{outcome="failure"}[1h]))
+          /
+          clamp_min(sum(rate(nexus_auth_attempts_total[1h])), 1)
+      - record: nexus:slo:auth_mfa:error_ratio:rate6h
+        expr: |
+          sum(rate(nexus_auth_attempts_total{outcome="failure"}[6h]))
+          /
+          clamp_min(sum(rate(nexus_auth_attempts_total[6h])), 1)
+      - record: nexus:slo:auth_mfa:error_ratio:rate2h
+        expr: |
+          sum(rate(nexus_auth_attempts_total{outcome="failure"}[2h]))
+          /
+          clamp_min(sum(rate(nexus_auth_attempts_total[2h])), 1)
+      - record: nexus:slo:auth_mfa:error_ratio:rate24h
+        expr: |
+          sum(rate(nexus_auth_attempts_total{outcome="failure"}[24h]))
+          /
+          clamp_min(sum(rate(nexus_auth_attempts_total[24h])), 1)
+      - record: nexus:slo:auth_mfa:error_ratio:rate72h
+        expr: |
+          sum(rate(nexus_auth_attempts_total{outcome="failure"}[72h]))
+          /
+          clamp_min(sum(rate(nexus_auth_attempts_total[72h])), 1)
+
+      # SLO = 99.9%, error_budget = 0.001.
+      - alert: AuthMFAFastBurn
+        expr: |
+          (nexus:slo:auth_mfa:error_ratio:rate1h  > (14.4 * 0.001))
+          and
+          (nexus:slo:auth_mfa:error_ratio:rate5m  > (14.4 * 0.001))
+        for: 2m
+        labels: { severity: page, slo: auth_mfa, burn_rate: "14.4" }
+        annotations:
+          summary: Auth/MFA failure rate exhausting budget fast — investigate immediately
+          runbook: docs/operations/slos.md#critical-user-journeys
+      - alert: AuthMFAMediumBurn
+        expr: |
+          (nexus:slo:auth_mfa:error_ratio:rate6h   > (6 * 0.001))
+          and
+          (nexus:slo:auth_mfa:error_ratio:rate30m  > (6 * 0.001))
+        for: 15m
+        labels: { severity: page, slo: auth_mfa, burn_rate: "6" }
+        annotations:
+          summary: Auth/MFA failures burning budget at 6× — likely outage
+          runbook: docs/operations/slos.md#critical-user-journeys
+      - alert: AuthMFASlowBurn
+        expr: |
+          (nexus:slo:auth_mfa:error_ratio:rate24h  > (3 * 0.001))
+          and
+          (nexus:slo:auth_mfa:error_ratio:rate2h   > (3 * 0.001))
+        for: 1h
+        labels: { severity: ticket, slo: auth_mfa, burn_rate: "3" }
+        annotations:
+          summary: Auth/MFA failure rate elevated — investigate within the day
+          runbook: docs/operations/slos.md#critical-user-journeys
+      - alert: AuthMFABudgetExhaustion
+        expr: |
+          (nexus:slo:auth_mfa:error_ratio:rate72h  > (1 * 0.001))
+          and
+          (nexus:slo:auth_mfa:error_ratio:rate6h   > (1 * 0.001))
+        for: 3h
+        labels: { severity: ticket, slo: auth_mfa, burn_rate: "1" }
+        annotations:
+          summary: Auth/MFA error budget will exhaust within the 28d window
+          runbook: docs/operations/slos.md#error-budget
+
+  # =========================================================================
+  # 4. Backtest submission — 99%
+  # =========================================================================
+  - name: nexus.slo.backtest_submit
+    interval: 30s
+    rules:
+      - record: nexus:slo:backtest_submit:error_ratio:rate5m
+        expr: |
+          sum(rate(nexus_backtest_submissions_total{outcome=~"rejected|error"}[5m]))
+          /
+          clamp_min(sum(rate(nexus_backtest_submissions_total[5m])), 1)
+      - record: nexus:slo:backtest_submit:error_ratio:rate30m
+        expr: |
+          sum(rate(nexus_backtest_submissions_total{outcome=~"rejected|error"}[30m]))
+          /
+          clamp_min(sum(rate(nexus_backtest_submissions_total[30m])), 1)
+      - record: nexus:slo:backtest_submit:error_ratio:rate2h
+        expr: |
+          sum(rate(nexus_backtest_submissions_total{outcome=~"rejected|error"}[2h]))
+          /
+          clamp_min(sum(rate(nexus_backtest_submissions_total[2h])), 1)
+      - record: nexus:slo:backtest_submit:error_ratio:rate6h
+        expr: |
+          sum(rate(nexus_backtest_submissions_total{outcome=~"rejected|error"}[6h]))
+          /
+          clamp_min(sum(rate(nexus_backtest_submissions_total[6h])), 1)
+      - record: nexus:slo:backtest_submit:error_ratio:rate24h
+        expr: |
+          sum(rate(nexus_backtest_submissions_total{outcome=~"rejected|error"}[24h]))
+          /
+          clamp_min(sum(rate(nexus_backtest_submissions_total[24h])), 1)
+      - record: nexus:slo:backtest_submit:error_ratio:rate72h
+        expr: |
+          sum(rate(nexus_backtest_submissions_total{outcome=~"rejected|error"}[72h]))
+          /
+          clamp_min(sum(rate(nexus_backtest_submissions_total[72h])), 1)
+
+      # SLO = 99.0%, ticket-only severity (write-path; not page).
+      - alert: BacktestSubmitSlowBurn
+        expr: |
+          (nexus:slo:backtest_submit:error_ratio:rate24h  > (3 * 0.01))
+          and
+          (nexus:slo:backtest_submit:error_ratio:rate2h   > (3 * 0.01))
+        for: 1h
+        labels: { severity: ticket, slo: backtest_submit, burn_rate: "3" }
+        annotations:
+          summary: Backtest submission failure rate elevated
+          runbook: docs/operations/slos.md#critical-user-journeys
+      - alert: BacktestSubmitBudgetExhaustion
+        expr: |
+          (nexus:slo:backtest_submit:error_ratio:rate72h  > (1 * 0.01))
+          and
+          (nexus:slo:backtest_submit:error_ratio:rate6h   > (1 * 0.01))
+        for: 3h
+        labels: { severity: ticket, slo: backtest_submit, burn_rate: "1" }
+        annotations:
+          summary: Backtest submission budget will exhaust within the 28d window
+          runbook: docs/operations/slos.md#error-budget
+
+  # =========================================================================
+  # 5. Webhook delivery — 99%
+  # =========================================================================
+  - name: nexus.slo.webhook_delivery
+    interval: 30s
+    rules:
+      - record: nexus:slo:webhook_delivery:error_ratio:rate5m
+        expr: |
+          sum(rate(nexus_webhook_deliveries_terminal_total{outcome="failed"}[5m]))
+          /
+          clamp_min(sum(rate(nexus_webhook_deliveries_terminal_total[5m])), 1)
+      - record: nexus:slo:webhook_delivery:error_ratio:rate30m
+        expr: |
+          sum(rate(nexus_webhook_deliveries_terminal_total{outcome="failed"}[30m]))
+          /
+          clamp_min(sum(rate(nexus_webhook_deliveries_terminal_total[30m])), 1)
+      - record: nexus:slo:webhook_delivery:error_ratio:rate2h
+        expr: |
+          sum(rate(nexus_webhook_deliveries_terminal_total{outcome="failed"}[2h]))
+          /
+          clamp_min(sum(rate(nexus_webhook_deliveries_terminal_total[2h])), 1)
+      - record: nexus:slo:webhook_delivery:error_ratio:rate6h
+        expr: |
+          sum(rate(nexus_webhook_deliveries_terminal_total{outcome="failed"}[6h]))
+          /
+          clamp_min(sum(rate(nexus_webhook_deliveries_terminal_total[6h])), 1)
+      - record: nexus:slo:webhook_delivery:error_ratio:rate24h
+        expr: |
+          sum(rate(nexus_webhook_deliveries_terminal_total{outcome="failed"}[24h]))
+          /
+          clamp_min(sum(rate(nexus_webhook_deliveries_terminal_total[24h])), 1)
+      - record: nexus:slo:webhook_delivery:error_ratio:rate72h
+        expr: |
+          sum(rate(nexus_webhook_deliveries_terminal_total{outcome="failed"}[72h]))
+          /
+          clamp_min(sum(rate(nexus_webhook_deliveries_terminal_total[72h])), 1)
+
+      # SLO = 99.0%, ticket-only severity.
+      - alert: WebhookDeliverySlowBurn
+        expr: |
+          (nexus:slo:webhook_delivery:error_ratio:rate24h  > (3 * 0.01))
+          and
+          (nexus:slo:webhook_delivery:error_ratio:rate2h   > (3 * 0.01))
+        for: 1h
+        labels: { severity: ticket, slo: webhook_delivery, burn_rate: "3" }
+        annotations:
+          summary: Webhook delivery failure rate elevated
+          runbook: docs/operations/slos.md#critical-user-journeys
+      - alert: WebhookDeliveryBudgetExhaustion
+        expr: |
+          (nexus:slo:webhook_delivery:error_ratio:rate72h  > (1 * 0.01))
+          and
+          (nexus:slo:webhook_delivery:error_ratio:rate6h   > (1 * 0.01))
+        for: 3h
+        labels: { severity: ticket, slo: webhook_delivery, burn_rate: "1" }
+        annotations:
+          summary: Webhook delivery budget will exhaust within the 28d window
+          runbook: docs/operations/slos.md#error-budget
+
+  # =========================================================================
+  # 6. Task pipeline — 99.5%
+  # =========================================================================
+  - name: nexus.slo.task_pipeline
+    interval: 30s
+    rules:
+      - record: nexus:slo:task_pipeline:error_ratio:rate5m
+        expr: |
+          sum(rate(nexus_task_runs_total{outcome=~"failed|dead"}[5m]))
+          /
+          clamp_min(sum(rate(nexus_task_runs_total[5m])), 1)
+      - record: nexus:slo:task_pipeline:error_ratio:rate30m
+        expr: |
+          sum(rate(nexus_task_runs_total{outcome=~"failed|dead"}[30m]))
+          /
+          clamp_min(sum(rate(nexus_task_runs_total[30m])), 1)
+      - record: nexus:slo:task_pipeline:error_ratio:rate2h
+        expr: |
+          sum(rate(nexus_task_runs_total{outcome=~"failed|dead"}[2h]))
+          /
+          clamp_min(sum(rate(nexus_task_runs_total[2h])), 1)
+      - record: nexus:slo:task_pipeline:error_ratio:rate6h
+        expr: |
+          sum(rate(nexus_task_runs_total{outcome=~"failed|dead"}[6h]))
+          /
+          clamp_min(sum(rate(nexus_task_runs_total[6h])), 1)
+      - record: nexus:slo:task_pipeline:error_ratio:rate24h
+        expr: |
+          sum(rate(nexus_task_runs_total{outcome=~"failed|dead"}[24h]))
+          /
+          clamp_min(sum(rate(nexus_task_runs_total[24h])), 1)
+      - record: nexus:slo:task_pipeline:error_ratio:rate72h
+        expr: |
+          sum(rate(nexus_task_runs_total{outcome=~"failed|dead"}[72h]))
+          /
+          clamp_min(sum(rate(nexus_task_runs_total[72h])), 1)
+
+      # SLO = 99.5%.
+      - alert: TaskPipelineSlowBurn
+        expr: |
+          (nexus:slo:task_pipeline:error_ratio:rate24h  > (3 * 0.005))
+          and
+          (nexus:slo:task_pipeline:error_ratio:rate2h   > (3 * 0.005))
+        for: 1h
+        labels: { severity: ticket, slo: task_pipeline, burn_rate: "3" }
+        annotations:
+          summary: TaskIQ failure rate elevated — workers may be stuck
+          runbook: docs/operations/slos.md#critical-user-journeys
+      - alert: TaskPipelineBudgetExhaustion
+        expr: |
+          (nexus:slo:task_pipeline:error_ratio:rate72h  > (1 * 0.005))
+          and
+          (nexus:slo:task_pipeline:error_ratio:rate6h   > (1 * 0.005))
+        for: 3h
+        labels: { severity: ticket, slo: task_pipeline, burn_rate: "1" }
+        annotations:
+          summary: TaskIQ budget will exhaust within the 28d window
+          runbook: docs/operations/slos.md#error-budget
