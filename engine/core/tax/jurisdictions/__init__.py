@@ -30,10 +30,12 @@ from engine.core.tax.jurisdictions.registry import (
     register_jurisdiction,
 )
 from engine.core.tax.jurisdictions.de import Germany
+from engine.core.tax.jurisdictions.fr import France
 from engine.core.tax.jurisdictions.gb import UnitedKingdom
 from engine.core.tax.jurisdictions.us import UnitedStates
 
 __all__ = [
+    "France",
     "Germany",
     "LotMethod",
     "TaxJurisdiction",
