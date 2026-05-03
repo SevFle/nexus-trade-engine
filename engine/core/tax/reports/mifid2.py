@@ -25,8 +25,16 @@ Implemented (ESMA RTS 22 Annex Field number in parentheses):
 - 5  Submitting entity LEI
 - 6  Buyer identification type
 - 7  Buyer LEI / national ID
+- 8  Buyer decision-maker code (NATL when natural person, LEI for entity)
+- 9  Buyer decision-maker identifier (LEI / national ID / "NORE")
 - 15 Seller identification type
 - 16 Seller LEI / national ID
+- 17 Seller decision-maker code
+- 18 Seller decision-maker identifier
+- 24 Investment-decision-within-firm algorithmic ID
+- 25 Country of branch supervising the investment decision
+- 26 Execution-within-firm algorithmic ID
+- 27 Country of branch supervising execution
 - 28 Trading date and time (UTC)
 - 29 Trading capacity
 - 30 Quantity
@@ -39,15 +47,13 @@ Implemented (ESMA RTS 22 Annex Field number in parentheses):
 - 41 Instrument identification code (ISIN)
 - 43 CFI code
 
-Deferred (~45 fields) — explicit follow-ups:
+Deferred (~37 fields) — explicit follow-ups:
 
-- Counterparty fields beyond the buyer/seller pair
-  (intermediary IDs, transmission codes).
-- Decision-maker fields 8–14 and 17–24 (algorithmic ID, decision-
-  maker LEI, executor ID, etc.).
-- Commodity-derivative indicators (fields 53–55).
-- Securities-financing-transaction flags (fields 56–62).
-- Waivers and short-sale indicator (fields 63–65).
+- Intermediary fields (10-14 buyer transmission, 19-23 seller
+  transmission, plus party-A / party-B routing).
+- Commodity-derivative indicators (fields 53-55).
+- Securities-financing-transaction flags (fields 56-62).
+- Waivers and short-sale indicator (fields 63-65).
 - Schema validation against the official ESMA XSD.
 
 What's NOT here
@@ -115,6 +121,22 @@ class MiFID2Transaction:
     cfi_code: str
     side: Side
     branch_country: str = ""
+    # Decision-maker fields. Defaults preserve backward compatibility
+    # with callers that don't yet populate them; ESMA accepts the
+    # ARM's standard sentinels (e.g. "NORE" for "no decision maker
+    # other than the investment firm itself").
+    # Field 8 / 17 — decision-maker code: "NATL" (natural person),
+    # "LEI" (entity), or "NORE" (none beyond the firm).
+    buyer_decision_maker_code: str = ""
+    buyer_decision_maker_id: str = ""  # field 9
+    seller_decision_maker_code: str = ""  # field 17
+    seller_decision_maker_id: str = ""  # field 18
+    # Algorithmic-decision identifiers. Empty string when the trade
+    # was operator-initiated (no algo).
+    investment_decision_algo_id: str = ""  # field 24
+    investment_decision_branch_country: str = ""  # field 25
+    execution_algo_id: str = ""  # field 26
+    execution_branch_country: str = ""  # field 27
 
     def __post_init__(self) -> None:
         if not self.transaction_reference_number:
@@ -145,8 +167,16 @@ RTS_22_COLUMNS: tuple[str, ...] = (
     "submitting_entity_lei",  # 5
     "buyer_id_type",  # 6
     "buyer_id",  # 7
+    "buyer_decision_maker_code",  # 8
+    "buyer_decision_maker_id",  # 9
     "seller_id_type",  # 15
     "seller_id",  # 16
+    "seller_decision_maker_code",  # 17
+    "seller_decision_maker_id",  # 18
+    "investment_decision_algo_id",  # 24
+    "investment_decision_branch_country",  # 25
+    "execution_algo_id",  # 26
+    "execution_branch_country",  # 27
     "trading_datetime",  # 28
     "trading_capacity",  # 29
     "quantity",  # 30
@@ -181,8 +211,16 @@ def transactions_to_csv(transactions: list[MiFID2Transaction]) -> str:
                 t.submitting_entity_lei,
                 t.buyer_id_type.value,
                 t.buyer_id,
+                t.buyer_decision_maker_code,
+                t.buyer_decision_maker_id,
                 t.seller_id_type.value,
                 t.seller_id,
+                t.seller_decision_maker_code,
+                t.seller_decision_maker_id,
+                t.investment_decision_algo_id,
+                t.investment_decision_branch_country,
+                t.execution_algo_id,
+                t.execution_branch_country,
                 _fmt_dt(t.trading_datetime),
                 t.trading_capacity.value,
                 _fmt_money(t.quantity),
