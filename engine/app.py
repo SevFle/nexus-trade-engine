@@ -28,7 +28,9 @@ from engine.data.providers import (
 from engine.db.session import dispose_engine, get_session_factory
 from engine.legal.sync import sync_legal_documents
 from engine.observability.logging import setup_logging
+from engine.observability.metrics import set_metrics
 from engine.observability.middleware import CorrelationIdMiddleware
+from engine.observability.prometheus import PrometheusBackend
 from engine.observability.tracing import setup_tracing
 
 if TYPE_CHECKING:
@@ -109,6 +111,11 @@ def _build_auth_registry() -> AuthProviderRegistry:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
     setup_tracing()
+    # Switch the process-wide metrics singleton to a recording backend so
+    # the /metrics route exposes real counters/gauges/histograms. Operators
+    # who want a different exporter (OTel, StatsD, etc.) call set_metrics()
+    # again after create_app() returns.
+    set_metrics(PrometheusBackend())
 
     if not settings.is_test and not settings.secret_key:
         msg = "NEXUS_SECRET_KEY must be set outside the test environment"

@@ -10,6 +10,7 @@ from engine.api.routes.health import router as health_router
 from engine.api.routes.legal import router as legal_router
 from engine.api.routes.market_data import router as market_data_router
 from engine.api.routes.marketplace import router as marketplace_router
+from engine.api.routes.metrics import router as metrics_router
 from engine.api.routes.mfa import router as mfa_router
 from engine.api.routes.portfolio import router as portfolio_router
 from engine.api.routes.privacy import router as privacy_router
@@ -23,6 +24,7 @@ from engine.legal.dependencies import require_legal_acceptance
 
 api_router = APIRouter()
 api_router.include_router(health_router, tags=["health"])
+api_router.include_router(metrics_router, tags=["observability"])
 api_router.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 api_router.include_router(mfa_router, prefix="/api/v1/auth/mfa", tags=["auth"])
 api_router.include_router(api_keys_router, prefix="/api/v1", tags=["auth"])
