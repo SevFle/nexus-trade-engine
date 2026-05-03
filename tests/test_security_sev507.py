@@ -28,6 +28,10 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
+def _is_sqlite(db_session: AsyncSession) -> bool:
+    return db_session.bind.dialect.name == "sqlite" if db_session.bind else False
+
+
 class TestC2ConsentWiring:
     async def test_require_legal_acceptance_wired_on_backtest_routes(
         self, db_session: AsyncSession
@@ -87,6 +91,8 @@ class TestC2ConsentWiring:
 
 class TestH3DbImmutability:
     async def test_update_legal_acceptance_raises(self, db_session: AsyncSession):
+        if _is_sqlite(db_session):
+            pytest.skip("Requires PostgreSQL trigger support (plpgsql)")
         await db_session.execute(
             text(
                 "CREATE OR REPLACE FUNCTION prevent_acceptance_modification() "
@@ -146,6 +152,8 @@ class TestH3DbImmutability:
             )
 
     async def test_delete_legal_acceptance_raises(self, db_session: AsyncSession):
+        if _is_sqlite(db_session):
+            pytest.skip("Requires PostgreSQL trigger support (plpgsql)")
         await db_session.execute(
             text(
                 "CREATE OR REPLACE FUNCTION prevent_acceptance_modification() "

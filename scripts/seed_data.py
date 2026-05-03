@@ -25,19 +25,19 @@ DEFAULT_PERIOD = "5y"
 DEFAULT_INTERVAL = "1d"
 
 
-async def seed_ohlcv(symbols: list[str] = None, period: str = DEFAULT_PERIOD):
+async def seed_ohlcv(symbols: list[str] | None = None, period: str = DEFAULT_PERIOD):
     """Download and store OHLCV data."""
     symbols = symbols or DEFAULT_SYMBOLS
-    print(f"Seeding OHLCV data for {len(symbols)} symbols, period={period}")
+    print(f"Seeding OHLCV data for {len(symbols)} symbols, period={period}")  # noqa: T201
 
     for symbol in symbols:
         try:
-            print(f"  Downloading {symbol}...", end=" ")
+            print(f"  Downloading {symbol}...", end=" ")  # noqa: T201
             ticker = yf.Ticker(symbol)
             df = ticker.history(period=period, interval=DEFAULT_INTERVAL)
 
             if df.empty:
-                print("NO DATA")
+                print("NO DATA")  # noqa: T201
                 continue
 
             # Insert into database
@@ -45,8 +45,11 @@ async def seed_ohlcv(symbols: list[str] = None, period: str = DEFAULT_PERIOD):
                 for idx, row in df.iterrows():
                     await conn.execute(
                         text("""
-                            INSERT INTO ohlcv_bars (symbol, timestamp, interval, open, high, low, close, volume)
-                            VALUES (:symbol, :ts, :interval, :open, :high, :low, :close, :volume)
+                            INSERT INTO ohlcv_bars
+                                (symbol, timestamp, interval,
+                                 open, high, low, close, volume)
+                            VALUES (:symbol, :ts, :interval,
+                                    :open, :high, :low, :close, :volume)
                             ON CONFLICT DO NOTHING
                         """),
                         {
@@ -61,11 +64,11 @@ async def seed_ohlcv(symbols: list[str] = None, period: str = DEFAULT_PERIOD):
                         },
                     )
 
-            print(f"{len(df)} bars")
+            print(f"{len(df)} bars")  # noqa: T201
         except Exception as e:
-            print(f"ERROR: {e}")
+            print(f"ERROR: {e}")  # noqa: T201
 
-    print("Done!")
+    print("Done!")  # noqa: T201
 
 
 if __name__ == "__main__":

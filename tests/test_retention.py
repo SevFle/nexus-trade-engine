@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -16,7 +16,6 @@ from engine.data.retention import (
     partition_by_action,
 )
 
-UTC = timezone.utc
 NOW = datetime(2026, 5, 3, 12, 0, tzinfo=UTC)
 
 
@@ -146,7 +145,7 @@ class TestIsExpired:
 
     def test_naive_record_ts_rejected(self):
         p = RetentionPolicy("foo", retain_days=30)
-        naive = datetime(2026, 1, 1)
+        naive = datetime(2026, 1, 1)  # noqa: DTZ001
         with pytest.raises(ValueError, match="timezone-aware"):
             is_expired(naive, p, now=NOW)
 

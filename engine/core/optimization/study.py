@@ -16,6 +16,7 @@ batches.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -47,9 +48,7 @@ class Study:
         max_trials: int | None = None,
     ) -> None:
         if direction not in ("maximize", "minimize"):
-            raise ValueError(
-                f"direction must be 'maximize' or 'minimize', got {direction!r}"
-            )
+            raise ValueError(f"direction must be 'maximize' or 'minimize', got {direction!r}")
         if max_trials is not None and max_trials <= 0:
             raise ValueError("max_trials must be positive when set")
         self.specs = specs
@@ -70,9 +69,7 @@ class Study:
         if n_trials <= 0:
             raise ValueError("n_trials must be positive")
         capped = n_trials if self.max_trials is None else min(n_trials, self.max_trials)
-        return self._run(
-            random_search(self.specs, capped, seed=seed), sampler="random"
-        )
+        return self._run(random_search(self.specs, capped, seed=seed), sampler="random")
 
     # ------------------------------------------------------------------
     # Internals
@@ -85,7 +82,7 @@ class Study:
                 break
             try:
                 score = float(self.objective(params))
-            except Exception as exc:  # noqa: BLE001 - the operator's objective is untrusted
+            except Exception as exc:
                 logger.warning(
                     "optimization.trial_failed",
                     sampler=sampler,
@@ -96,16 +93,14 @@ class Study:
                 )
                 trials.append(Trial(index=index, params=params, error=str(exc)[:200]))
                 continue
-            if score != score:  # NaN check
+            if math.isnan(score):
                 logger.warning(
                     "optimization.trial_nan",
                     sampler=sampler,
                     index=index,
                     params=params,
                 )
-                trials.append(
-                    Trial(index=index, params=params, error="objective returned NaN")
-                )
+                trials.append(Trial(index=index, params=params, error="objective returned NaN"))
                 continue
             trials.append(Trial(index=index, params=params, score=score))
 

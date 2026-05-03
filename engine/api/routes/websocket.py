@@ -93,7 +93,7 @@ async def ws_endpoint(ws: WebSocket) -> None:
 
     except WebSocketDisconnect:
         pass
-    except Exception as exc:  # noqa: BLE001 - last-line defence
+    except Exception as exc:
         logger.warning(
             "ws.unexpected_error",
             error_type=type(exc).__name__,
@@ -110,10 +110,8 @@ async def ws_endpoint(ws: WebSocket) -> None:
 
 async def _authenticate(ws: WebSocket) -> User | None:
     try:
-        msg = await asyncio.wait_for(
-            ws.receive_json(), timeout=AUTH_TIMEOUT_SECONDS
-        )
-    except asyncio.TimeoutError:
+        msg = await asyncio.wait_for(ws.receive_json(), timeout=AUTH_TIMEOUT_SECONDS)
+    except TimeoutError:
         await _close(ws, code=4401, reason="auth_timeout")
         return None
     except WebSocketDisconnect:

@@ -33,7 +33,10 @@ Out of scope:
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def _mean(xs: Sequence[float]) -> float:
@@ -51,23 +54,22 @@ def beta(
     ``0.0``; an inverse-correlated portfolio returns negative.
     """
     if len(portfolio_returns) != len(benchmark_returns):
-        raise ValueError(
-            f"length mismatch: {len(portfolio_returns)} "
-            f"vs {len(benchmark_returns)}"
-        )
+        raise ValueError(f"length mismatch: {len(portfolio_returns)} vs {len(benchmark_returns)}")
     n = len(portfolio_returns)
-    if n < 2:
+    if n < 2:  # noqa: PLR2004
         return 0.0
     mp = _mean(portfolio_returns)
     mb = _mean(benchmark_returns)
     cov = (
-        sum((p - mp) * (b - mb) for p, b in zip(portfolio_returns, benchmark_returns))
+        sum(
+            (p - mp) * (b - mb) for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
+        )
         / n
     )
     var_b = sum((b - mb) ** 2 for b in benchmark_returns) / n
     # Guard against float-precision residuals from constant-input series
     # (e.g. mean-subtracted [0.05, 0.05, 0.05] leaves ~1e-17 bits).
-    if var_b < 1e-20:
+    if var_b < 1e-20:  # noqa: PLR2004
         return 0.0
     return cov / var_b
 
@@ -81,19 +83,16 @@ def jensen_alpha(
 ) -> float:
     """Annualised Jensen's alpha.
 
-    ``α = (E[Rp] - Rf) - β · (E[Rb] - Rf)`` in per-period units, then
+    ``a = (E[Rp] - Rf) - b * (E[Rb] - Rf)`` in per-period units, then
     multiplied by ``annualisation_factor``. Returns ``0.0`` for empty /
     too-short inputs.
     """
     if annualisation_factor <= 0:
         raise ValueError("annualisation_factor must be > 0")
     if len(portfolio_returns) != len(benchmark_returns):
-        raise ValueError(
-            f"length mismatch: {len(portfolio_returns)} "
-            f"vs {len(benchmark_returns)}"
-        )
+        raise ValueError(f"length mismatch: {len(portfolio_returns)} vs {len(benchmark_returns)}")
     n = len(portfolio_returns)
-    if n < 2:
+    if n < 2:  # noqa: PLR2004
         return 0.0
     rf_period = risk_free_rate / annualisation_factor
     b = beta(portfolio_returns, benchmark_returns)
@@ -122,15 +121,8 @@ def up_capture_ratio(
     of the up move.
     """
     if len(portfolio_returns) != len(benchmark_returns):
-        raise ValueError(
-            f"length mismatch: {len(portfolio_returns)} "
-            f"vs {len(benchmark_returns)}"
-        )
-    pairs = [
-        (p, b)
-        for p, b in zip(portfolio_returns, benchmark_returns)
-        if b > 0
-    ]
+        raise ValueError(f"length mismatch: {len(portfolio_returns)} vs {len(benchmark_returns)}")
+    pairs = [(p, b) for p, b in zip(portfolio_returns, benchmark_returns, strict=False) if b > 0]
     if not pairs:
         return 0.0
     p_compound = _compounded_return([p for p, _ in pairs])
@@ -151,15 +143,8 @@ def down_capture_ratio(
     defensive signal); ``> 1`` means it amplified the loss.
     """
     if len(portfolio_returns) != len(benchmark_returns):
-        raise ValueError(
-            f"length mismatch: {len(portfolio_returns)} "
-            f"vs {len(benchmark_returns)}"
-        )
-    pairs = [
-        (p, b)
-        for p, b in zip(portfolio_returns, benchmark_returns)
-        if b < 0
-    ]
+        raise ValueError(f"length mismatch: {len(portfolio_returns)} vs {len(benchmark_returns)}")
+    pairs = [(p, b) for p, b in zip(portfolio_returns, benchmark_returns, strict=False) if b < 0]
     if not pairs:
         return 0.0
     p_compound = _compounded_return([p for p, _ in pairs])
@@ -197,18 +182,14 @@ def correlation(
     length-mismatch / zero-variance inputs.
     """
     if len(portfolio_returns) != len(benchmark_returns):
-        raise ValueError(
-            f"length mismatch: {len(portfolio_returns)} "
-            f"vs {len(benchmark_returns)}"
-        )
+        raise ValueError(f"length mismatch: {len(portfolio_returns)} vs {len(benchmark_returns)}")
     n = len(portfolio_returns)
-    if n < 2:
+    if n < 2:  # noqa: PLR2004
         return 0.0
     mp = _mean(portfolio_returns)
     mb = _mean(benchmark_returns)
     num = sum(
-        (p - mp) * (b - mb)
-        for p, b in zip(portfolio_returns, benchmark_returns)
+        (p - mp) * (b - mb) for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
     )
     dp = math.sqrt(sum((p - mp) ** 2 for p in portfolio_returns))
     db = math.sqrt(sum((b - mb) ** 2 for b in benchmark_returns))

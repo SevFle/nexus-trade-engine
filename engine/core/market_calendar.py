@@ -61,8 +61,7 @@ class VenueCalendar:
             raise MarketCalendarError(msg)
         if self.regular_open >= self.regular_close:
             msg = (
-                f"regular_open {self.regular_open} must precede "
-                f"regular_close {self.regular_close}"
+                f"regular_open {self.regular_open} must precede regular_close {self.regular_close}"
             )
             raise MarketCalendarError(msg)
         try:
@@ -111,9 +110,7 @@ def is_open(cal: VenueCalendar, dt: datetime) -> bool:
     return cal.regular_open <= local.time() < close
 
 
-def session_bounds(
-    cal: VenueCalendar, day: date
-) -> SessionBounds | None:
+def session_bounds(cal: VenueCalendar, day: date) -> SessionBounds | None:
     """Return open/close datetimes for ``day``, or ``None`` if closed."""
     if not _is_trading_day(cal, day):
         return None
@@ -141,9 +138,7 @@ def next_open(cal: VenueCalendar, dt: datetime) -> datetime:
             if cursor_time < local_open:
                 return bounds.open_dt
             if cursor_time < local_close:
-                return datetime.combine(
-                    cursor_date, cursor_time, tzinfo=cal.zone
-                )
+                return datetime.combine(cursor_date, cursor_time, tzinfo=cal.zone)
         cursor_date += timedelta(days=1)
         cursor_time = time(0, 0)
     msg = (
@@ -204,9 +199,7 @@ def builtin_calendar(mic: str) -> VenueCalendar:
 class MarketCalendar:
     """Stable facade over the built-in catalog with override hook."""
 
-    def __init__(
-        self, *, overrides: dict[str, VenueCalendar] | None = None
-    ) -> None:
+    def __init__(self, *, overrides: dict[str, VenueCalendar] | None = None) -> None:
         self._overrides = dict(overrides or {})
 
     def for_venue(self, mic: str) -> VenueCalendar:

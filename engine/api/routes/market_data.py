@@ -207,9 +207,7 @@ async def get_bars(
         try:
             df = await adapter.get_ohlcv(symbol, period=period, interval=interval)
         except FatalProviderError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-            ) from None
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
         except (TransientProviderError, TimeoutError) as exc:
             logger.warning(
                 "market_data.provider_transient",
@@ -244,9 +242,7 @@ async def get_bars(
                 symbol=symbol,
                 error=type(exc).__name__,
             )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-            ) from None
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
 
     return BarsResponse(
         symbol=symbol,
@@ -275,9 +271,7 @@ async def get_quote(
         try:
             price = await adapter.get_latest_price(symbol)
         except FatalProviderError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-            ) from None
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
         except (TransientProviderError, TimeoutError) as exc:
             logger.warning(
                 "market_data.provider_transient",
@@ -296,9 +290,7 @@ async def get_quote(
                 symbol=symbol,
                 error=type(exc).__name__,
             )
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
-            ) from None
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from None
         served_provider = provider
     else:
         try:
@@ -317,9 +309,7 @@ async def get_quote(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
             ) from None
         except FatalProviderError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-            ) from None
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
 
     if price is None:
         raise HTTPException(

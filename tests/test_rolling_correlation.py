@@ -12,7 +12,6 @@ from engine.core.rolling_correlation import (
     rolling_correlation_matrix,
 )
 
-
 # ---------------------------------------------------------------------------
 # rolling_correlation
 # ---------------------------------------------------------------------------
@@ -72,7 +71,7 @@ class TestRollingCorrelation:
         out = rolling_correlation(a, b, 4)
         # First full-window correlation is +1.
         assert out[3] == pytest.approx(1.0)
-        # Last window's correlation is −1 (anti-correlated final 4 bars).
+        # Last window's correlation is -1 (anti-correlated final 4 bars).
         assert out[-1] == pytest.approx(-1.0)
 
 

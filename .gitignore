@@ -64,3 +64,4 @@ celerybeat.pid
 # Local agent / tooling artifacts
 graphify-out/
 .playwright-mcp/
+.evolve-prompt.md

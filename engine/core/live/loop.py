@@ -41,10 +41,8 @@ What's NOT here (explicit follow-ups):
 
 from __future__ import annotations
 
-import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import structlog
@@ -60,6 +58,9 @@ from engine.core.oms.risk import Reject, RiskGate
 from engine.observability.metrics import MetricsBackend, get_metrics
 
 if TYPE_CHECKING:
+    import uuid
+    from decimal import Decimal
+
     from engine.core.brokers.base import BrokerAdapter
     from engine.core.oms.events import OrderEvent
     from engine.core.oms.order import Order
@@ -157,9 +158,7 @@ class LiveLoop:
                 "oms.submit.outcome",
                 tags={**base_tags, "outcome": "broker_auth_error"},
             )
-            self._kill_switch.engage(
-                reason="broker_auth_error", actor="live_loop"
-            )
+            self._kill_switch.engage(reason="broker_auth_error", actor="live_loop")
             raise
         except BrokerRejectError as exc:
             updated = order.apply_event(
@@ -217,9 +216,7 @@ class LiveLoop:
         """
         oms_id = self._broker_to_oms.get(broker_order_id)
         if oms_id is None:
-            raise UnknownOrderError(
-                f"no order tracked for broker id {broker_order_id!r}"
-            )
+            raise UnknownOrderError(f"no order tracked for broker id {broker_order_id!r}")
         order = self._by_oms_id[oms_id]
         updated = order.apply_event(event)
         self._track(updated)
@@ -259,7 +256,7 @@ class LiveLoop:
         if self._persister is not None:
             try:
                 self._persister(order)
-            except Exception as exc:  # noqa: BLE001 - persister failures must not break the loop
+            except Exception as exc:
                 logger.warning(
                     "live_loop.persister_failed",
                     order_id=str(order.id),

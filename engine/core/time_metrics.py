@@ -31,8 +31,11 @@ Out of scope (explicit follow-ups):
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from datetime import date
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from datetime import date
 
 
 def compute_best_period(returns: Sequence[float]) -> float:

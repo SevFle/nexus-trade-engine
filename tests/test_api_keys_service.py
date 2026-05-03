@@ -7,8 +7,8 @@ import re
 import pytest
 
 from engine.api.auth.api_keys import (
-    ApiKeyError,
     VALID_SCOPES,
+    ApiKeyError,
     generate_token,
     hash_token,
     is_engine_token,
@@ -101,4 +101,4 @@ class TestIsEngineToken:
 
 class TestValidScopesContract:
     def test_documented_scopes_only(self):
-        assert VALID_SCOPES == frozenset({"read", "trade", "admin"})
+        assert frozenset({"read", "trade", "admin"}) == VALID_SCOPES

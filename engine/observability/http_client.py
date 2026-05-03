@@ -47,9 +47,7 @@ def correlated_async_client(
     that may call external services. Pass ``None`` (default) to inject on
     every request.
     """
-    frozen: frozenset[str] | None = (
-        frozenset(trusted_hosts) if trusted_hosts is not None else None
-    )
+    frozen: frozenset[str] | None = frozenset(trusted_hosts) if trusted_hosts is not None else None
 
     async def _hook(request: httpx.Request) -> None:
         correlation_id_request_hook(request, trusted_hosts=frozen)

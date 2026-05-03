@@ -79,10 +79,7 @@ def mean_variance_optimization(
     else:
         mu = np.asarray(expected_returns, dtype=np.float64)
         if mu.shape != (n,):
-            msg = (
-                f"expected_returns shape {mu.shape} does not match cov "
-                f"shape ({n},{n})"
-            )
+            msg = f"expected_returns shape {mu.shape} does not match cov shape ({n},{n})"
             raise OptimizerError(msg)
         if not np.isfinite(mu).all():
             msg = "expected_returns contains non-finite entries (NaN / Inf)"
@@ -134,10 +131,7 @@ def risk_parity(
         if np.linalg.norm(new_w - w, ord=np.inf) < tol:
             return new_w
         w = new_w
-    msg = (
-        f"risk parity did not converge in {max_iter} iterations "
-        f"(tol={tol})"
-    )
+    msg = f"risk parity did not converge in {max_iter} iterations (tol={tol})"
     raise OptimizerError(msg)
 
 
@@ -170,9 +164,7 @@ def _quasi_diag_order(cov: FloatArray) -> list[int]:
         best = (np.inf, -1, -1)
         for i in range(len(clusters)):
             for j in range(i + 1, len(clusters)):
-                d_ij = min(
-                    dist[a, b] for a in clusters[i] for b in clusters[j]
-                )
+                d_ij = min(dist[a, b] for a in clusters[i] for b in clusters[j])
                 if d_ij < best[0]:
                     best = (d_ij, i, j)
         _, i, j = best
@@ -272,10 +264,7 @@ def black_litterman(
     cov = _validate_cov(prior_cov)
     pi = np.asarray(prior_returns, dtype=np.float64)
     if pi.shape != (cov.shape[0],):
-        msg = (
-            f"prior_returns shape {pi.shape} does not match prior_cov "
-            f"({cov.shape[0]},)"
-        )
+        msg = f"prior_returns shape {pi.shape} does not match prior_cov ({cov.shape[0]},)"
         raise OptimizerError(msg)
     p = np.asarray(views_p, dtype=np.float64).reshape(-1, cov.shape[0])
     q = np.asarray(views_q, dtype=np.float64).reshape(-1)
@@ -290,9 +279,7 @@ def black_litterman(
     inv_omega = _safe_inv(omega)
     posterior_precision = inv_tau_cov + p.T @ inv_omega @ p
     posterior_cov_overlay = _safe_inv(posterior_precision)
-    posterior_mu = posterior_cov_overlay @ (
-        inv_tau_cov @ pi + p.T @ inv_omega @ q
-    )
+    posterior_mu = posterior_cov_overlay @ (inv_tau_cov @ pi + p.T @ inv_omega @ q)
     posterior_cov_full = cov + posterior_cov_overlay
     return posterior_mu, posterior_cov_full
 

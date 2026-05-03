@@ -60,9 +60,7 @@ class StraddleLeg:
         if self.recognized_loss < 0:
             raise ValueError("recognized_loss must be non-negative")
         if self.unrecognized_offsetting_gain < 0:
-            raise ValueError(
-                "unrecognized_offsetting_gain must be non-negative"
-            )
+            raise ValueError("unrecognized_offsetting_gain must be non-negative")
 
     @property
     def allowed_loss(self) -> Decimal:

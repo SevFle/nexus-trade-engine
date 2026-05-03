@@ -18,9 +18,7 @@ class AmbiguousSymbolError(ReferenceError):
     def __init__(self, query: object, candidates: list[RefInstrument]) -> None:
         self.query = query
         self.candidates = candidates
-        super().__init__(
-            f"ambiguous symbol {query!r}: {len(candidates)} candidates"
-        )
+        super().__init__(f"ambiguous symbol {query!r}: {len(candidates)} candidates")
 
 
 __all__ = ["AmbiguousSymbolError", "ReferenceError"]

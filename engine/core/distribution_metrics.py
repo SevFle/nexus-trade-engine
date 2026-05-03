@@ -32,7 +32,10 @@ Out of scope:
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def _mean(xs: Sequence[float]) -> float:
@@ -55,12 +58,12 @@ def skewness(returns: Sequence[float]) -> float:
     zero-variance series.
     """
     n = len(returns)
-    if n < 3:
+    if n < 3:  # noqa: PLR2004
         return 0.0
     m = _mean(returns)
-    s = _stdev(returns)
-    if s == 0.0:
+    if max(returns) - min(returns) == 0.0:
         return 0.0
+    s = _stdev(returns)
     raw = sum((r - m) ** 3 for r in returns) / n
     biased = raw / (s**3)
     correction = math.sqrt(n * (n - 1)) / (n - 2)
@@ -68,14 +71,14 @@ def skewness(returns: Sequence[float]) -> float:
 
 
 def kurtosis(returns: Sequence[float]) -> float:
-    """Excess kurtosis (kurtosis − 3, the Fisher convention).
+    """Excess kurtosis (kurtosis - 3, the Fisher convention).
 
     Bias-corrected per Joanes & Gill (1998). Normal distribution → 0;
     fat tails → > 0; thin tails → < 0. Returns ``0.0`` for empty input,
     fewer than 4 data points, or a zero-variance series.
     """
     n = len(returns)
-    if n < 4:
+    if n < 4:  # noqa: PLR2004
         return 0.0
     m = _mean(returns)
     s = _stdev(returns)
@@ -89,14 +92,10 @@ def kurtosis(returns: Sequence[float]) -> float:
 
 def _validate_confidence(confidence: float) -> None:
     if not 0.0 < confidence < 1.0:
-        raise ValueError(
-            f"confidence must be in (0, 1); got {confidence}"
-        )
+        raise ValueError(f"confidence must be in (0, 1); got {confidence}")
 
 
-def value_at_risk_historical(
-    returns: Sequence[float], *, confidence: float = 0.95
-) -> float:
+def value_at_risk_historical(returns: Sequence[float], *, confidence: float = 0.95) -> float:
     """Historical-simulation VaR at the given confidence level.
 
     Returns the *magnitude* of the loss at the ``(1 - confidence)``
@@ -116,19 +115,17 @@ def value_at_risk_historical(
     return max(-threshold, 0.0)
 
 
-def value_at_risk_parametric(
-    returns: Sequence[float], *, confidence: float = 0.95
-) -> float:
+def value_at_risk_parametric(returns: Sequence[float], *, confidence: float = 0.95) -> float:
     """Parametric VaR assuming Gaussian returns.
 
-    Uses ``VaR = -(μ + z · σ)`` where z is the standard-normal quantile
+    Uses ``VaR = -(μ + z · sigma)`` where z is the standard-normal quantile
     at ``1 - confidence``. Approximates z via inverse-CDF rational
     approximation (Beasley-Springer-Moro), so no scipy dependency.
     Returns ``0.0`` for empty input, fewer than 2 points, or zero
     variance.
     """
     n = len(returns)
-    if n < 2:
+    if n < 2:  # noqa: PLR2004
         return 0.0
     _validate_confidence(confidence)
     m = _mean(returns)
@@ -179,24 +176,22 @@ def _inverse_normal_cdf(p: float) -> float:
     p_high = 1 - p_low
     if p < p_low:
         q = math.sqrt(-2 * math.log(p))
-        return (
-            ((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]
-        ) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+        return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / (
+            (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1
+        )
     if p <= p_high:
         q = p - 0.5
         r = q * q
-        return (
-            (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q
-        ) / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1)
+        return ((((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q) / (
+            ((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1
+        )
     q = math.sqrt(-2 * math.log(1 - p))
-    return -(
-        ((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]
-    ) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / (
+        (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1
+    )
 
 
-def conditional_value_at_risk(
-    returns: Sequence[float], *, confidence: float = 0.95
-) -> float:
+def conditional_value_at_risk(returns: Sequence[float], *, confidence: float = 0.95) -> float:
     """Conditional VaR / Expected Shortfall (historical).
 
     Mean of returns at or below the ``(1 - confidence)`` quantile, as a
@@ -216,9 +211,7 @@ def conditional_value_at_risk(
     return max(-avg_loss, 0.0)
 
 
-def tail_ratio(
-    returns: Sequence[float], *, percentile: float = 0.95
-) -> float:
+def tail_ratio(returns: Sequence[float], *, percentile: float = 0.95) -> float:
     """Right-tail / left-tail magnitude ratio.
 
     ``ratio = |percentile-th return| / |(1-percentile)-th return|``.
@@ -229,10 +222,8 @@ def tail_ratio(
     """
     if not returns:
         return 0.0
-    if not 0.5 < percentile < 1.0:
-        raise ValueError(
-            f"percentile must be in (0.5, 1.0); got {percentile}"
-        )
+    if not 0.5 < percentile < 1.0:  # noqa: PLR2004
+        raise ValueError(f"percentile must be in (0.5, 1.0); got {percentile}")
     sorted_r = sorted(returns)
     n = len(sorted_r)
     upper_idx = min(int(percentile * n), n - 1)

@@ -404,7 +404,7 @@ class TestDataValidator:
             max_pe_ratio=_CUSTOM_CONFIG_PE, stale_consecutive_days=_CUSTOM_STALE_DAYS
         )
         validator = DataValidator(config=config)
-        assert validator._config.max_pe_ratio == _CUSTOM_CONFIG_PE  # noqa: SLF001
+        assert validator._config.max_pe_ratio == _CUSTOM_CONFIG_PE
 
     def test_report_contains_all_corrections(self):
         df = _make_ohlcv_df(60)

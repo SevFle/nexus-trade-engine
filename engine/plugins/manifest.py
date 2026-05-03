@@ -62,7 +62,9 @@ class StrategyManifest(BaseModel):
         description="Required data feeds: ohlcv, news, sentiment, order_book, macro",
     )
     min_history_bars: int = 50
-    watchlist: list[str] = Field(default_factory=list, description="Default symbols. Empty = user chooses.")
+    watchlist: list[str] = Field(
+        default_factory=list, description="Default symbols. Empty = user chooses."
+    )
 
     def requires_network(self) -> bool:
         return len(self.network.allowed_endpoints) > 0

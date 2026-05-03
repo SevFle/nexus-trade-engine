@@ -12,7 +12,6 @@ from engine.core.portfolio_concentration import (
     variance_decomposition,
 )
 
-
 # ---------------------------------------------------------------------------
 # HHI
 # ---------------------------------------------------------------------------
@@ -169,7 +168,7 @@ class TestVarianceDecomposition:
         assert all(v == 0.0 for v in out.values())
 
     def test_perfect_correlation_yields_full_systematic(self):
-        # Portfolio = 1 × benchmark → β = 1, var = systematic, idio = 0.
+        # Portfolio = 1 * benchmark → β = 1, var = systematic, idio = 0.
         bench = [0.01, -0.02, 0.03, -0.01, 0.02]
         port = list(bench)
         out = variance_decomposition(port, bench)
@@ -179,7 +178,7 @@ class TestVarianceDecomposition:
         assert out["r_squared"] == pytest.approx(1.0)
 
     def test_amplified_beta(self):
-        # Portfolio = 2 × benchmark → β = 2.
+        # Portfolio = 2 * benchmark → β = 2.
         bench = [0.01, -0.02, 0.03, -0.01, 0.02]
         port = [2 * b for b in bench]
         out = variance_decomposition(port, bench)

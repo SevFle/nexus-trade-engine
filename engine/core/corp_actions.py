@@ -88,7 +88,7 @@ class CorporateAction:
     cash_amount: float | None = None
     new_symbol: str | None = None
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:  # noqa: PLR0912, PLR0915
         if self.action_type not in _VALID_ACTION_TYPES:
             msg = (
                 f"unknown action_type {self.action_type!r}; "
@@ -114,10 +114,7 @@ class CorporateAction:
                 raise CorporateActionError(msg)
             _require_finite(self.cash_amount, "cash_dividend cash_amount")
             if self.cash_amount < 0:
-                msg = (
-                    "cash_dividend cash_amount must be non-negative; "
-                    f"got {self.cash_amount}"
-                )
+                msg = f"cash_dividend cash_amount must be non-negative; got {self.cash_amount}"
                 raise CorporateActionError(msg)
 
         elif self.action_type == "spinoff":
@@ -141,8 +138,7 @@ class CorporateAction:
             cash = self.cash_amount is not None
             if not stock and not cash:
                 msg = (
-                    "merger requires either a ratio (stock merger) "
-                    "or a cash_amount (cash merger)"
+                    "merger requires either a ratio (stock merger) or a cash_amount (cash merger)"
                 )
                 raise CorporateActionError(msg)
             if stock and cash:
@@ -164,10 +160,7 @@ class CorporateAction:
                 assert self.cash_amount is not None  # narrowed by `cash`
                 _require_finite(self.cash_amount, "merger cash_amount")
                 if self.cash_amount < 0:
-                    msg = (
-                        "merger cash_amount must be non-negative; "
-                        f"got {self.cash_amount}"
-                    )
+                    msg = f"merger cash_amount must be non-negative; got {self.cash_amount}"
                     raise CorporateActionError(msg)
 
         elif self.action_type == "symbol_change":

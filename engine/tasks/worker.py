@@ -33,8 +33,8 @@ async def run_backtest_task(
     initial_capital: float = 100_000.0,
 ) -> dict:
     """Run a full backtest as an async task with proper error propagation."""
-    from engine.core.backtest_runner import BacktestConfig, BacktestRunner
-    from engine.data.feeds import get_data_provider
+    from engine.core.backtest_runner import BacktestConfig, BacktestRunner  # noqa: PLC0415
+    from engine.data.feeds import get_data_provider  # noqa: PLC0415
 
     logger.info(
         "backtest_task.start",
@@ -54,12 +54,12 @@ async def run_backtest_task(
             initial_capital=initial_capital,
         )
 
-        from engine.plugins.registry import PluginRegistry
+        from engine.plugins.registry import PluginRegistry  # noqa: PLC0415
 
         registry = PluginRegistry()
         strategy = registry.load_strategy(strategy_name)
         if strategy is None:
-            raise ValueError(f"Strategy not found: {strategy_name}")
+            raise ValueError(f"Strategy not found: {strategy_name}")  # noqa: TRY301
 
         runner = BacktestRunner(config=config, strategy=strategy, provider=provider)
         result = await runner.run()

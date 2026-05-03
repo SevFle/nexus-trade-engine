@@ -33,7 +33,10 @@ Out of scope:
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 DEFAULT_ANNUALISATION = 252
 
@@ -43,9 +46,7 @@ def _validate_window(window: int) -> None:
         raise ValueError("window must be >= 2")
 
 
-def rolling_mean(
-    returns: Sequence[float], window: int
-) -> list[float | None]:
+def rolling_mean(returns: Sequence[float], window: int) -> list[float | None]:
     """Mean of each ``window``-sized slice ending at index ``i``.
 
     ``None`` for the first ``window - 1`` indices.
@@ -162,9 +163,7 @@ def rolling_sortino(
     return out
 
 
-def rolling_return(
-    returns: Sequence[float], window: int
-) -> list[float | None]:
+def rolling_return(returns: Sequence[float], window: int) -> list[float | None]:
     """Compounded return over each ``window``-sized trailing slice.
 
     ``(1 + r_total) = ∏(1 + r_i)``; returns ``r_total``. ``None`` for

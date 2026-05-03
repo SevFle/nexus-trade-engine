@@ -21,7 +21,6 @@ import pytest
 from engine.core.live.kill_switch import KillSwitch
 from engine.observability.metrics import RecordingBackend
 
-
 _DISENGAGE_TOKEN = "I_UNDERSTAND_THE_RISK"
 
 

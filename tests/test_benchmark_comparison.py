@@ -13,7 +13,6 @@ from engine.core.benchmark_comparison import (
     up_capture_ratio,
 )
 
-
 # ---------------------------------------------------------------------------
 # beta
 # ---------------------------------------------------------------------------
@@ -67,7 +66,7 @@ class TestJensenAlpha:
         assert jensen_alpha([0.01], [0.01]) == 0.0
 
     def test_perfect_replicator_zero_alpha(self):
-        # Portfolio = benchmark with rf=0 → α = 0.
+        # Portfolio = benchmark with rf=0 → alpha = 0.
         bench = [0.01, -0.02, 0.03, -0.01, 0.02]
         port = list(bench)
         assert jensen_alpha(port, bench) == pytest.approx(0.0, abs=1e-12)

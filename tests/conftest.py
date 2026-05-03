@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+from sqlalchemy import JSON, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from engine.api.auth.dependency import get_current_user
@@ -61,7 +62,7 @@ def _bypass_auth(request, monkeypatch):
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
     app = create_app()
-    app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+    app.dependency_overrides[get_current_user] = _fake_authenticated_user
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -69,22 +70,29 @@ async def client() -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture(scope="session")
 async def test_engine():
-    if not settings.database_url or "test" not in settings.database_url.lower():
-        raise RuntimeError(
-            f"Test database not configured. Set NEXUS_DATABASE_URL to a test database. "
-            f"Current: {settings.database_url}"
-        )
-    engine = create_async_engine(settings.database_url, echo=False)
-    # CI runs `alembic upgrade head` before pytest, so the schema already
-    # exists with triggers/functions. create_all is idempotent and fills
-    # in any ORM-only tables.
+    if settings.database_url and "test" in settings.database_url.lower():
+        db_url = settings.database_url
+        _is_sqlite = False
+    else:
+        db_url = "sqlite+aiosqlite://"
+        _is_sqlite = True
+
+    if _is_sqlite:
+        for table in Base.metadata.tables.values():
+            for col in table.columns:
+                if isinstance(col.type, JSONB):
+                    col.type = JSON()
+
+    engine = create_async_engine(db_url, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine
-    # Tear down with CASCADE so FK constraints don't block drop ordering.
     async with engine.begin() as conn:
-        await conn.execute(text("DROP SCHEMA public CASCADE"))
-        await conn.execute(text("CREATE SCHEMA public"))
+        if _is_sqlite:
+            await conn.run_sync(Base.metadata.drop_all)
+        else:
+            await conn.execute(text("DROP SCHEMA public CASCADE"))
+            await conn.execute(text("CREATE SCHEMA public"))
     await engine.dispose()
 
 
@@ -104,7 +112,7 @@ async def db_client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+    app.dependency_overrides[get_current_user] = _fake_authenticated_user
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

@@ -34,8 +34,11 @@ What's NOT here (explicit follow-ups)
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
 from decimal import Decimal
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from datetime import date
 
 _TWOPLACES = Decimal("0.01")
 _ZERO = Decimal("0.00")
@@ -63,9 +66,7 @@ class PfuDisposal:
 
     def __post_init__(self) -> None:
         if self.acquired > self.disposed:
-            raise ValueError(
-                f"acquired {self.acquired} is after disposed {self.disposed}"
-            )
+            raise ValueError(f"acquired {self.acquired} is after disposed {self.disposed}")
         if self.proceeds < 0:
             raise ValueError("proceeds must be non-negative")
         if self.cost < 0:

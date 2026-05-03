@@ -153,9 +153,7 @@ class BinanceDataProvider(HTTPProviderBase, IDataProvider):
                 out[sym] = float(price)
         return out
 
-    async def get_options_chain(
-        self, symbol: str, expiry: str | None = None
-    ) -> pd.DataFrame:
+    async def get_options_chain(self, symbol: str, expiry: str | None = None) -> pd.DataFrame:
         raise FatalProviderError("binance options chain lives on a separate API")
 
     async def get_orderbook(self, symbol: str, depth: int = 20) -> pd.DataFrame:
@@ -181,9 +179,7 @@ class BinanceDataProvider(HTTPProviderBase, IDataProvider):
         if not self._api_secret:
             raise FatalProviderError("binance signing requires api_secret")
         query = urlencode(params)
-        return hmac.new(
-            self._api_secret.encode(), query.encode(), hashlib.sha256
-        ).hexdigest()
+        return hmac.new(self._api_secret.encode(), query.encode(), hashlib.sha256).hexdigest()
 
     def _ts(self) -> int:  # pragma: no cover - trivial
         return int(time.time() * 1000)

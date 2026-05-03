@@ -15,7 +15,6 @@ from engine.core.excursion_stats import (
     trade_efficiency,
 )
 
-
 # ---------------------------------------------------------------------------
 # TradeExcursion DTO
 # ---------------------------------------------------------------------------
@@ -44,7 +43,7 @@ class TestTradeExcursion:
 
     def test_frozen(self):
         t = TradeExcursion(pnl=10.0, mfe=15.0, mae=3.0)
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):
             t.pnl = 99.0  # type: ignore[misc]
 
 
@@ -163,7 +162,7 @@ class TestTradeEfficiency:
         assert trade_efficiency(trades) == pytest.approx(1.0)
 
     def test_half_efficiency(self):
-        # pnl == 0.5 × mfe — gave back half.
+        # pnl == 0.5 * mfe -- gave back half.
         trades = [
             TradeExcursion(pnl=5.0, mfe=10.0, mae=2.0),
             TradeExcursion(pnl=10.0, mfe=20.0, mae=3.0),

@@ -11,15 +11,15 @@ the price drift caused by the trade itself, decomposed into:
 
 Core formula (one-way trade, single instrument)::
 
-    impact = η * σ * sqrt(Q / (V * T))
+    impact = η * sigma * sqrt(Q / (V * T))
 
 Where:
 
 - ``η`` (eta) — the dimensionless impact coefficient. Empirical
-  literature places it in the range 0.1–0.5 for liquid US equities.
+  literature places it in the range 0.1-0.5 for liquid US equities.
   We default to 0.314 (Almgren et al., 2005, "Direct Estimation of
   Equity Market Impact", Risk Magazine).
-- ``σ`` (sigma) — the asset's *daily* volatility, expressed as a
+- ``sigma`` (sigma) — the asset's *daily* volatility, expressed as a
   fraction (e.g. 0.02 for a 2 % daily move).
 - ``Q`` — the absolute trade quantity (shares).
 - ``V`` — the asset's average daily volume (shares).
@@ -49,7 +49,7 @@ import math
 DEFAULT_ETA: float = 0.314
 
 # Permanent impact as a fraction of temporary impact. Empirical range
-# 0.1–0.3; we pin 0.2 as the midpoint for the default.
+# 0.1-0.3; we pin 0.2 as the midpoint for the default.
 DEFAULT_PERMANENT_FRACTION: float = 0.2
 
 
@@ -91,7 +91,7 @@ def compute_permanent_impact(
     """Permanent component as a fixed fraction of temporary impact.
 
     The Almgren-Chriss decomposition treats permanent impact as a
-    constant fraction of the total — typically 10–30 %. Operators
+    constant fraction of the total — typically 10-30 %. Operators
     calibrate per asset class.
     """
     _check_non_negative("temporary_impact", temporary_impact)
@@ -121,9 +121,7 @@ def compute_total_market_impact(
         eta=eta,
         horizon_days=horizon_days,
     )
-    perm = compute_permanent_impact(
-        temp, permanent_fraction=permanent_fraction
-    )
+    perm = compute_permanent_impact(temp, permanent_fraction=permanent_fraction)
     return temp, perm, temp + perm
 
 

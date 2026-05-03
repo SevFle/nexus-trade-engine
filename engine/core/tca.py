@@ -100,9 +100,7 @@ def _signed_cost(side: Side, fill_price: float, ref_price: float) -> float:
 def fill_metrics(fill: Fill) -> FillMetrics:
     notional = fill.quantity * fill.fill_price
     is_per_share = _signed_cost(fill.side, fill.fill_price, fill.decision_price)
-    slip_per_share = _signed_cost(
-        fill.side, fill.fill_price, fill.arrival_price
-    )
+    slip_per_share = _signed_cost(fill.side, fill.fill_price, fill.arrival_price)
     is_total = is_per_share * fill.quantity + fill.fees
     slip_total = slip_per_share * fill.quantity
     if notional > 0:
@@ -183,12 +181,10 @@ def aggregate_tca(fills: Iterable[Fill]) -> TCAReport:
         by_broker_groups[f.broker].append(f)
         by_symbol_groups[f.symbol].append(f)
     by_broker = {
-        broker: _aggregate_no_rollups(group)
-        for broker, group in by_broker_groups.items()
+        broker: _aggregate_no_rollups(group) for broker, group in by_broker_groups.items()
     }
     by_symbol = {
-        symbol: _aggregate_no_rollups(group)
-        for symbol, group in by_symbol_groups.items()
+        symbol: _aggregate_no_rollups(group) for symbol, group in by_symbol_groups.items()
     }
     return TCAReport(
         total_implementation_shortfall=base.total_implementation_shortfall,

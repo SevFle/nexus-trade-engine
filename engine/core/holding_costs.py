@@ -62,7 +62,7 @@ def dividend_payment(
     shares_held: Decimal,
     dividend_per_share: Decimal,
 ) -> Decimal:
-    """Cash dividend received: ``shares_held × dividend_per_share``.
+    """Cash dividend received: ``shares_held * dividend_per_share``.
 
     Both inputs are non-negative. Returns USD quantised to the cent.
     Operators apply withholding-tax adjustments separately via the
@@ -123,10 +123,7 @@ def reinvestment_residual_cash(
     spent = (shares_purchased * reinvestment_price).quantize(_TWOPLACES)
     residual = (cash_amount - spent).quantize(_TWOPLACES)
     if residual < 0:
-        raise ValueError(
-            "shares_purchased exceeds what cash_amount can buy at "
-            "reinvestment_price"
-        )
+        raise ValueError("shares_purchased exceeds what cash_amount can buy at reinvestment_price")
     return residual
 
 

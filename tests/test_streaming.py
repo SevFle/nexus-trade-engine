@@ -6,7 +6,6 @@ import pytest
 
 from engine.data.streaming import BoundedBuffer, DropPolicy, ReplayLog
 
-
 # ---------------------------------------------------------------------------
 # BoundedBuffer
 # ---------------------------------------------------------------------------

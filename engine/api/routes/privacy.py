@@ -132,9 +132,7 @@ async def request_account_deletion(
     except DeletionError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     await db.commit()
-    return DeletionStatusResponse(
-        pending=True, sla_due_at=req.sla_due_at, request=_serialise(req)
-    )
+    return DeletionStatusResponse(pending=True, sla_due_at=req.sla_due_at, request=_serialise(req))
 
 
 @router.post("/delete/cancel", response_model=DeletionStatusResponse)
@@ -147,9 +145,7 @@ async def cancel_account_deletion(
     except DeletionError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     await db.commit()
-    return DeletionStatusResponse(
-        pending=False, sla_due_at=None, request=_serialise(req)
-    )
+    return DeletionStatusResponse(pending=False, sla_due_at=None, request=_serialise(req))
 
 
 @router.get("/delete/status", response_model=DeletionStatusResponse)

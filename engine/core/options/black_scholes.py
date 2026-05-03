@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 # Maximum iterations + convergence tolerance for the implied-vol solver.
 _IV_MAX_ITER: int = 100
@@ -48,7 +48,7 @@ _VOL_LO: float = 1e-4
 _VOL_HI: float = 5.0  # 500% annualised — enough head room for crisis vol
 
 
-class OptionType(str, Enum):
+class OptionType(StrEnum):
     CALL = "call"
     PUT = "put"
 
@@ -89,9 +89,7 @@ def _validate(S: float, K: float, T: float, sigma: float | None) -> None:
         raise ValueError("sigma must be positive")
 
 
-def _d1_d2(
-    S: float, K: float, T: float, r: float, sigma: float, q: float
-) -> tuple[float, float]:
+def _d1_d2(S: float, K: float, T: float, r: float, sigma: float, q: float) -> tuple[float, float]:
     """Black-Scholes ``d1`` and ``d2``. Caller has validated inputs."""
     sigma_sqrt_t = sigma * math.sqrt(T)
     d1 = (math.log(S / K) + (r - q + 0.5 * sigma * sigma) * T) / sigma_sqrt_t
@@ -118,10 +116,7 @@ def bs_price(
     _validate(S, K, T, sigma)
     if T == 0:
         # At expiration: intrinsic value.
-        intrinsic = (
-            max(S - K, 0.0) if option_type == OptionType.CALL else max(K - S, 0.0)
-        )
-        return intrinsic
+        return max(S - K, 0.0) if option_type == OptionType.CALL else max(K - S, 0.0)
     if S == 0:
         # Underlying worthless: call worth 0; put worth K * exp(-rT).
         if option_type == OptionType.CALL:
@@ -223,9 +218,7 @@ def implied_volatility(
         else max(K * math.exp(-r * T) - S * math.exp(-q * T), 0.0)
     )
     if market_price < intrinsic - tol:
-        raise ValueError(
-            f"market_price {market_price} below intrinsic {intrinsic}"
-        )
+        raise ValueError(f"market_price {market_price} below intrinsic {intrinsic}")
 
     # Newton-Raphson with a bisection backup.
     sigma = max(initial_guess, _VOL_LO)
@@ -237,9 +230,7 @@ def implied_volatility(
         last_diff = diff
         if abs(diff) < tol:
             return sigma
-        greeks = bs_greeks(
-            option_type=option_type, S=S, K=K, T=T, r=r, sigma=sigma, q=q
-        )
+        greeks = bs_greeks(option_type=option_type, S=S, K=K, T=T, r=r, sigma=sigma, q=q)
         if greeks.vega > 1e-10:
             step = diff / greeks.vega
             new_sigma = sigma - step

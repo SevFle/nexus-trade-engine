@@ -25,13 +25,9 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
-DSR_KINDS: frozenset[str] = frozenset(
-    {"export", "delete", "rectify", "restrict", "object"}
-)
+DSR_KINDS: frozenset[str] = frozenset({"export", "delete", "rectify", "restrict", "object"})
 
-DSR_TERMINAL_STATUSES: frozenset[str] = frozenset(
-    {"completed", "failed", "cancelled"}
-)
+DSR_TERMINAL_STATUSES: frozenset[str] = frozenset({"completed", "failed", "cancelled"})
 
 SLA_DEFAULT_DAYS: int = 30
 
@@ -64,13 +60,9 @@ async def record_request(
     return row
 
 
-async def list_user_requests(
-    session: AsyncSession, user_id: uuid.UUID
-) -> list[DSRequest]:
+async def list_user_requests(session: AsyncSession, user_id: uuid.UUID) -> list[DSRequest]:
     result = await session.execute(
-        select(DSRequest)
-        .where(DSRequest.user_id == user_id)
-        .order_by(DSRequest.created_at.desc())
+        select(DSRequest).where(DSRequest.user_id == user_id).order_by(DSRequest.created_at.desc())
     )
     return list(result.scalars().all())
 

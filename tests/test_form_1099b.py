@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
@@ -14,7 +14,6 @@ from engine.core.tax.reports import (
     rows_to_csv,
 )
 from engine.core.tax.reports.form_1099b import to_date
-
 
 # ---------------------------------------------------------------------------
 # LotDisposition validation
@@ -284,7 +283,7 @@ class TestToDate:
         assert to_date(d) is d
 
     def test_datetime_truncates(self):
-        dt = datetime(2026, 5, 3, 12, 34, 56)
+        dt = datetime(2026, 5, 3, 12, 34, 56, tzinfo=UTC)
         assert to_date(dt) == date(2026, 5, 3)
 
     def test_other_raises(self):

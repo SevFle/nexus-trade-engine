@@ -33,8 +33,7 @@ class MarketDataProvider(ABC):
     """
 
     @abstractmethod
-    async def get_latest_price(self, symbol: str) -> float | None:
-        ...
+    async def get_latest_price(self, symbol: str) -> float | None: ...
 
     @abstractmethod
     async def get_ohlcv(
@@ -42,12 +41,10 @@ class MarketDataProvider(ABC):
         symbol: str,
         period: str = "1y",
         interval: str = "1d",
-    ) -> pd.DataFrame:
-        ...
+    ) -> pd.DataFrame: ...
 
     @abstractmethod
-    async def get_multiple_prices(self, symbols: list[str]) -> dict[str, float]:
-        ...
+    async def get_multiple_prices(self, symbols: list[str]) -> dict[str, float]: ...
 
 
 class _LegacyAdapter(MarketDataProvider):

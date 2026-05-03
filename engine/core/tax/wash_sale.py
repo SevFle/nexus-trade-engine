@@ -34,12 +34,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 
 WASH_SALE_WINDOW_DAYS: int = 30
 
 
-class TradeSide(str, Enum):
+class TradeSide(StrEnum):
     BUY = "buy"
     SELL = "sell"
 
@@ -147,9 +147,7 @@ def detect_wash_sales(
                 _BuyState(trade=trade, available_qty=trade.quantity)
             )
         else:
-            consumed_basis = _consume_fifo(
-                fifo_lots.get(trade.symbol, []), trade.quantity
-            )
+            consumed_basis = _consume_fifo(fifo_lots.get(trade.symbol, []), trade.quantity)
             if trade.trade_id not in cost_basis_for:
                 cost_basis_for[trade.trade_id] = consumed_basis
 
@@ -174,12 +172,7 @@ def detect_wash_sales(
     # Wash-sale candidates = lots with surviving ``available_qty``.
     # Order by time so earlier replacements consume the loss first.
     buy_states = sorted(
-        (
-            lot
-            for lots in fifo_lots.values()
-            for lot in lots
-            if lot.available_qty > 0
-        ),
+        (lot for lots in fifo_lots.values() for lot in lots if lot.available_qty > 0),
         key=lambda b: b.trade.when,
     )
 
@@ -205,9 +198,9 @@ def detect_wash_sales(
                 continue
             # Prorate the FULL loss by matched_qty / sale.qty so multiple
             # replacements consume the loss linearly (not exponentially).
-            disallowed = (
-                sale.total_loss * (matched / sale.trade.quantity)
-            ).quantize(Decimal("0.0001"))
+            disallowed = (sale.total_loss * (matched / sale.trade.quantity)).quantize(
+                Decimal("0.0001")
+            )
             adjustments.append(
                 WashSaleAdjustment(
                     sale_trade_id=sale.trade.trade_id,
@@ -225,15 +218,13 @@ def detect_wash_sales(
             if sale.remaining_qty <= 0 or sale.remaining_loss <= 0:
                 break
 
-    adjustments.sort(
-        key=lambda a: (a.sale_trade_id, a.replacement_trade_id)
-    )
+    adjustments.sort(key=lambda a: (a.sale_trade_id, a.replacement_trade_id))
     return adjustments
 
 
 def detect_wash_sales_for_jurisdiction(
     trades: list[Trade],
-    jurisdiction,  # noqa: ANN001 - duck-typed against TaxJurisdiction Protocol
+    jurisdiction,
     *,
     cost_basis_for: dict[str, Decimal] | None = None,
 ) -> list[WashSaleAdjustment]:

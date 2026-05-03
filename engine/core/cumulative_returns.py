@@ -33,7 +33,10 @@ Out of scope:
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def cumulative_returns(returns: Sequence[float]) -> list[float]:
@@ -77,9 +80,7 @@ def log_returns(returns: Sequence[float]) -> list[float]:
     out: list[float] = []
     for r in returns:
         if r <= -1.0:
-            raise ValueError(
-                f"return must be > -1 (equity > 0); got {r}"
-            )
+            raise ValueError(f"return must be > -1 (equity > 0); got {r}")
         out.append(math.log(1.0 + r))
     return out
 
@@ -92,7 +93,7 @@ def returns_from_equity(equity: Sequence[float]) -> list[float]:
     divide-by-zero) so this works on stub data.
     """
     n = len(equity)
-    if n < 2:
+    if n < 2:  # noqa: PLR2004
         return []
     out: list[float] = []
     for i in range(1, n):
@@ -104,19 +105,15 @@ def returns_from_equity(equity: Sequence[float]) -> list[float]:
     return out
 
 
-def active_returns(
-    portfolio: Sequence[float], benchmark: Sequence[float]
-) -> list[float]:
+def active_returns(portfolio: Sequence[float], benchmark: Sequence[float]) -> list[float]:
     """Per-bar excess return over a benchmark.
 
     Both inputs must have identical length; mismatch raises
     ``ValueError``. Empty inputs → ``[]``.
     """
     if len(portfolio) != len(benchmark):
-        raise ValueError(
-            f"length mismatch: {len(portfolio)} vs {len(benchmark)}"
-        )
-    return [p - b for p, b in zip(portfolio, benchmark)]
+        raise ValueError(f"length mismatch: {len(portfolio)} vs {len(benchmark)}")
+    return [p - b for p, b in zip(portfolio, benchmark, strict=False)]
 
 
 def tracking_error(
@@ -127,35 +124,31 @@ def tracking_error(
 ) -> float:
     """Annualised standard deviation of active returns.
 
-    ``TE = stdev(active) × √(annualisation_factor)``. Returns ``0.0``
+    ``TE = stdev(active) * √(annualisation_factor)``. Returns ``0.0``
     for fewer than 2 points. ``annualisation_factor <= 0`` rejected.
     """
     if annualisation_factor <= 0:
         raise ValueError("annualisation_factor must be > 0")
     active = active_returns(portfolio, benchmark)
     n = len(active)
-    if n < 2:
+    if n < 2:  # noqa: PLR2004
         return 0.0
     m = sum(active) / n
     var = sum((x - m) ** 2 for x in active) / (n - 1)
     return math.sqrt(var) * math.sqrt(annualisation_factor)
 
 
-def beating_benchmark_pct(
-    portfolio: Sequence[float], benchmark: Sequence[float]
-) -> float:
+def beating_benchmark_pct(portfolio: Sequence[float], benchmark: Sequence[float]) -> float:
     """Fraction of bars where portfolio strictly beats benchmark.
 
     Empty input → ``0.0``. Length mismatch → ``ValueError``. Ties
     (``p == b``) are *not* counted as beating.
     """
     if len(portfolio) != len(benchmark):
-        raise ValueError(
-            f"length mismatch: {len(portfolio)} vs {len(benchmark)}"
-        )
+        raise ValueError(f"length mismatch: {len(portfolio)} vs {len(benchmark)}")
     if not portfolio:
         return 0.0
-    wins = sum(1 for p, b in zip(portfolio, benchmark) if p > b)
+    wins = sum(1 for p, b in zip(portfolio, benchmark, strict=False) if p > b)
     return wins / len(portfolio)
 
 

@@ -46,13 +46,16 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from collections.abc import Callable, Iterable
-from enum import Enum
+from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from engine.core.signal import Side, Signal, SignalBatch
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
 
-class AggregationMethod(str, Enum):
+
+class AggregationMethod(StrEnum):
     UNANIMOUS = "unanimous"
     MAJORITY = "majority"
     WEIGHTED = "weighted"
@@ -87,20 +90,14 @@ class SignalAggregator:
         weights = dict(strategy_weights or {})
         for sid, w in weights.items():
             if not math.isfinite(w):
-                raise SignalAggregatorError(
-                    f"strategy_weights[{sid!r}] must be finite, got {w!r}"
-                )
+                raise SignalAggregatorError(f"strategy_weights[{sid!r}] must be finite, got {w!r}")
             if w < 0:
                 raise SignalAggregatorError(
                     f"strategy_weights[{sid!r}] must be non-negative, got {w!r}"
                 )
         # All-zero weights silently degenerate to HOLD on every symbol;
         # treat that as a misconfiguration rather than allow it through.
-        if (
-            self.method is AggregationMethod.WEIGHTED
-            and weights
-            and sum(weights.values()) == 0
-        ):
+        if self.method is AggregationMethod.WEIGHTED and weights and sum(weights.values()) == 0:
             raise SignalAggregatorError(
                 "WEIGHTED requires at least one positive strategy weight; "
                 "all configured weights sum to zero"
@@ -122,7 +119,7 @@ class SignalAggregator:
                 per_symbol[sig.symbol][batch.strategy_id] = sig
 
         out: list[Signal] = []
-        for _symbol, by_strategy in per_symbol.items():
+        for by_strategy in per_symbol.values():
             decision = self._decide(by_strategy)
             if decision is None:
                 continue
@@ -145,9 +142,7 @@ class SignalAggregator:
             f"unhandled aggregation method {self.method!r}"
         )
 
-    def _decide_unanimous(
-        self, by_strategy: dict[str, Signal]
-    ) -> Signal | None:
+    def _decide_unanimous(self, by_strategy: dict[str, Signal]) -> Signal | None:
         active = [s for s in by_strategy.values() if s.side != Side.HOLD]
         if not active:
             template = next(iter(by_strategy.values()))
@@ -158,16 +153,10 @@ class SignalAggregator:
             return _aggregated(template, template.side)
         return _hold_like(active[0])
 
-    def _decide_majority(
-        self, by_strategy: dict[str, Signal]
-    ) -> Signal | None:
-        return self._decide_weighted_with(
-            by_strategy, weight_for=lambda _sid: 1.0
-        )
+    def _decide_majority(self, by_strategy: dict[str, Signal]) -> Signal | None:
+        return self._decide_weighted_with(by_strategy, weight_for=lambda _sid: 1.0)
 
-    def _decide_weighted(
-        self, by_strategy: dict[str, Signal]
-    ) -> Signal | None:
+    def _decide_weighted(self, by_strategy: dict[str, Signal]) -> Signal | None:
         return self._decide_weighted_with(
             by_strategy, weight_for=lambda sid: self.weights.get(sid, 1.0)
         )
@@ -190,15 +179,11 @@ class SignalAggregator:
         ranked = sorted(totals.items(), key=lambda kv: kv[1], reverse=True)
         if len(ranked) == 1 or ranked[0][1] > ranked[1][1]:
             winning_side = ranked[0][0]
-            template = next(
-                s for s in by_strategy.values() if s.side == winning_side
-            )
+            template = next(s for s in by_strategy.values() if s.side == winning_side)
             return _aggregated(template, winning_side)
         return _hold_like(next(iter(by_strategy.values())))
 
-    def _decide_priority(
-        self, by_strategy: dict[str, Signal]
-    ) -> Signal | None:
+    def _decide_priority(self, by_strategy: dict[str, Signal]) -> Signal | None:
         # Highest priority wins. Strategies absent from `weights` are
         # treated as priority 0, so a configured strategy always beats
         # an unconfigured one. Two strategies tied for the highest

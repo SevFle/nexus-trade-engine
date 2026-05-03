@@ -83,16 +83,14 @@ class Order:
     def __post_init__(self) -> None:
         if self.quantity <= 0:
             raise ValueError("quantity must be positive")
-        if self.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT):
-            if self.limit_price is None or self.limit_price <= 0:
-                raise ValueError(
-                    f"{self.order_type.value} order requires positive limit_price"
-                )
-        if self.order_type in (OrderType.STOP, OrderType.STOP_LIMIT):
-            if self.stop_price is None or self.stop_price <= 0:
-                raise ValueError(
-                    f"{self.order_type.value} order requires positive stop_price"
-                )
+        if self.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT) and (
+            self.limit_price is None or self.limit_price <= 0
+        ):
+            raise ValueError(f"{self.order_type.value} order requires positive limit_price")
+        if self.order_type in (OrderType.STOP, OrderType.STOP_LIMIT) and (
+            self.stop_price is None or self.stop_price <= 0
+        ):
+            raise ValueError(f"{self.order_type.value} order requires positive stop_price")
 
     # ------------------------------------------------------------------
     # Properties
@@ -110,7 +108,7 @@ class Order:
     # State-machine application
     # ------------------------------------------------------------------
 
-    def apply_event(self, event: OrderEvent) -> Order:
+    def apply_event(self, event: OrderEvent) -> Order:  # noqa: PLR0911
         """Return a new Order reflecting ``event``.
 
         Raises :class:`IllegalTransitionError` if ``event`` is not
@@ -133,9 +131,7 @@ class Order:
             new_filled = self.filled_quantity + event.fill_quantity
             self._guard_fill(new_filled)
             new_status = (
-                OrderStatus.FILLED
-                if new_filled == self.quantity
-                else OrderStatus.PARTIALLY_FILLED
+                OrderStatus.FILLED if new_filled == self.quantity else OrderStatus.PARTIALLY_FILLED
             )
             return self._with_status(
                 new_status,
@@ -158,14 +154,10 @@ class Order:
                 average_fill_price=self._next_avg(event.fill_quantity, event.fill_price),
             )
         if isinstance(event, CancelEvent):
-            target = (
-                OrderStatus.CANCEL_REQUESTED if event.requested else OrderStatus.CANCELLED
-            )
+            target = OrderStatus.CANCEL_REQUESTED if event.requested else OrderStatus.CANCELLED
             return self._with_status(target, event)
         if isinstance(event, RejectEvent):
-            return self._with_status(
-                OrderStatus.REJECTED, event, reject_reason=event.reason
-            )
+            return self._with_status(OrderStatus.REJECTED, event, reject_reason=event.reason)
         if isinstance(event, ExpireEvent):
             return self._with_status(OrderStatus.EXPIRED, event)
         raise TypeError(f"unknown event type: {type(event).__name__}")

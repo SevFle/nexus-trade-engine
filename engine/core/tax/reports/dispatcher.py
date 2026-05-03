@@ -36,15 +36,13 @@ from dataclasses import dataclass, fields, is_dataclass
 from datetime import date
 from decimal import Decimal
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from engine.core.tax.reports.carryover import (
-    CapitalLossApplication,
     CapitalLossCarryover,
     apply_carryover,
 )
 from engine.core.tax.reports.cgt_carryover import (
-    CgtApplication,
     CgtCarryover,
     apply_cgt_carryover,
 )
@@ -60,26 +58,16 @@ from engine.core.tax.reports.kest import (
     summarize_kest,
 )
 from engine.core.tax.reports.kest_carryover import (
-    KestApplication,
     KestCarryover,
     apply_kest_carryover,
 )
 from engine.core.tax.reports.pfu_carryover import (
-    PfuApplication,
     PfuCarryover,
     apply_pfu_carryover,
 )
 from engine.core.tax.reports.schedule_d import summarize_schedule_d
 
-if TYPE_CHECKING:
-    from engine.core.tax.reports.france_pfu import PfuSummary
-    from engine.core.tax.reports.hmrc_cgt import CgtSummary
-    from engine.core.tax.reports.kest import KestSummary
-    from engine.core.tax.reports.schedule_d import ScheduleDSummary
-
-JurisdictionSummary = (
-    "ScheduleDSummary | CgtSummary | KestSummary | PfuSummary"
-)
+JurisdictionSummary = "ScheduleDSummary | CgtSummary | KestSummary | PfuSummary"
 
 _TWOPLACES = Decimal("0.01")
 
@@ -102,9 +90,7 @@ class TaxableDisposal:
 
     def __post_init__(self) -> None:
         if self.acquired > self.disposed:
-            raise ValueError(
-                f"acquired {self.acquired} is after disposed {self.disposed}"
-            )
+            raise ValueError(f"acquired {self.acquired} is after disposed {self.disposed}")
         if self.proceeds < 0:
             raise ValueError("proceeds must be non-negative")
         if self.cost < 0:
@@ -139,9 +125,7 @@ def report_for_jurisdiction(
         return summarize_kest([_to_de(d) for d in disposals])
     if norm == "FR":
         return summarize_pfu([_to_fr(d) for d in disposals])
-    raise UnsupportedJurisdictionError(
-        f"unknown jurisdiction {code!r}; supported: US, GB, DE, FR"
-    )
+    raise UnsupportedJurisdictionError(f"unknown jurisdiction {code!r}; supported: US, GB, DE, FR")
 
 
 # ---------------------------------------------------------------------------
@@ -249,12 +233,8 @@ def _render_scalar(value: Any) -> str:
     return "" if value is None else str(value)
 
 
-JurisdictionCarryover = (
-    "CapitalLossCarryover | CgtCarryover | KestCarryover | PfuCarryover"
-)
-CarryoverApplication = (
-    "CapitalLossApplication | CgtApplication | KestApplication | PfuApplication"
-)
+JurisdictionCarryover = "CapitalLossCarryover | CgtCarryover | KestCarryover | PfuCarryover"
+CarryoverApplication = "CapitalLossApplication | CgtApplication | KestApplication | PfuApplication"
 
 
 def carryover_for_jurisdiction(
@@ -296,20 +276,15 @@ def carryover_for_jurisdiction(
         return apply_carryover(summary, prior, **kwargs)
     if norm == "GB":
         _ensure_prior(prior, CgtCarryover)
-        return apply_cgt_carryover(
-            [_to_gb(d) for d in disposals], prior, **kwargs
-        )
+        return apply_cgt_carryover([_to_gb(d) for d in disposals], prior, **kwargs)
     if norm == "DE":
         _ensure_prior(prior, KestCarryover)
-        return apply_kest_carryover(
-            [_to_de(d) for d in disposals], prior, **kwargs
-        )
+        return apply_kest_carryover([_to_de(d) for d in disposals], prior, **kwargs)
     if norm == "FR":
         _ensure_prior(prior, PfuCarryover)
         if current_year is None:
             raise ValueError(
-                "FR carryover requires current_year (used for vintage "
-                "tagging + 10-year expiry)"
+                "FR carryover requires current_year (used for vintage tagging + 10-year expiry)"
             )
         return apply_pfu_carryover(
             [_to_fr(d) for d in disposals],
@@ -317,9 +292,7 @@ def carryover_for_jurisdiction(
             current_year=current_year,
             **kwargs,
         )
-    raise UnsupportedJurisdictionError(
-        f"unknown jurisdiction {code!r}; supported: US, GB, DE, FR"
-    )
+    raise UnsupportedJurisdictionError(f"unknown jurisdiction {code!r}; supported: US, GB, DE, FR")
 
 
 def _ensure_prior(prior: Any, expected: type) -> None:
@@ -329,10 +302,7 @@ def _ensure_prior(prior: Any, expected: type) -> None:
     if prior is None:
         return
     if not isinstance(prior, expected):
-        raise TypeError(
-            f"prior must be {expected.__name__} or None, "
-            f"got {type(prior).__name__}"
-        )
+        raise TypeError(f"prior must be {expected.__name__} or None, got {type(prior).__name__}")
 
 
 __all__ = [

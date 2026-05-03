@@ -12,5 +12,9 @@ edit this file by hand — it is regenerated as part of every release PR.
 
 ## [Unreleased]
 
+### Internal
+- (subagent) SEV-264 — Achieve 80%+ test coverage on the core engine (Phase 1 gate blocker [1.2])
+
+
 The initial public 0.1.0 release line. Entries below this point are appended
 automatically once release-please starts cutting tagged releases.

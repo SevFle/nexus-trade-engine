@@ -6,12 +6,13 @@ from contextlib import asynccontextmanager
 
 import structlog
 from api.routes import backtest, marketplace, portfolio, strategies
-from config import get_settings
 from db.session import close_db, init_db
 from events.bus import EventBus
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from plugins.registry import PluginRegistry
+
+from config import get_settings
 
 logger = structlog.get_logger()
 settings = get_settings()

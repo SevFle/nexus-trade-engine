@@ -28,7 +28,7 @@ def _fake_user(role: str = "developer") -> User:
 async def marketplace_client():
     app = FastAPI()
     app.include_router(marketplace_router, prefix="/api/v1/marketplace")
-    app.dependency_overrides[get_current_user] = lambda: _fake_user()
+    app.dependency_overrides[get_current_user] = _fake_user
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

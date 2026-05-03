@@ -14,7 +14,6 @@ from engine.core.drawdown_analytics import (
     underwater_curve,
 )
 
-
 # ---------------------------------------------------------------------------
 # underwater_curve
 # ---------------------------------------------------------------------------
@@ -229,7 +228,7 @@ class TestCurrentDrawdownPct:
 class TestDrawdownEpisodeInvariants:
     def test_frozen_dataclass(self):
         e = DrawdownEpisode(0, 1, 2, 0.1)
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):
             e.peak_idx = 99  # type: ignore[misc]
 
     def test_is_open_when_no_recovery(self):
