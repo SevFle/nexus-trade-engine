@@ -20,6 +20,14 @@ from engine.core.tax.reports.hmrc_cgt import (
     disposals_to_csv,
     summarize_cgt,
 )
+from engine.core.tax.reports.france_pfu import (
+    PFU_INCOME_TAX_RATE,
+    PFU_SOCIAL_CHARGES_RATE,
+    PFU_TOTAL_RATE,
+    PfuDisposal,
+    PfuSummary,
+    summarize_pfu,
+)
 from engine.core.tax.reports.kest import (
     CHURCH_TAX_RATE_BAYERN_BW,
     CHURCH_TAX_RATE_OTHER,
@@ -55,6 +63,11 @@ __all__ = [
     "DEDUCTIBLE_CAP_DEFAULT",
     "DEDUCTIBLE_CAP_MFS",
     "KEST_RATE",
+    "PFU_INCOME_TAX_RATE",
+    "PFU_SOCIAL_CHARGES_RATE",
+    "PFU_TOTAL_RATE",
+    "PfuDisposal",
+    "PfuSummary",
     "SOLZ_RATE",
     "SPARER_PAUSCHBETRAG_2023",
     "SPARER_PAUSCHBETRAG_2024",
@@ -78,6 +91,7 @@ __all__ = [
     "rows_to_csv",
     "summarize_cgt",
     "summarize_kest",
+    "summarize_pfu",
     "summarize_schedule_d",
     "summary_to_csv",
 ]
