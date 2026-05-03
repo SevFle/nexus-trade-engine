@@ -32,6 +32,14 @@ from engine.core.tax.reports.dispatcher import (
     flatten_summary_to_csv,
     report_for_jurisdiction,
 )
+from engine.core.tax.reports.mifid2 import (
+    RTS_22_COLUMNS,
+    IdType,
+    MiFID2Transaction,
+    Side,
+    TradingCapacity,
+    transactions_to_csv,
+)
 from engine.core.tax.reports.france_pfu import (
     PFU_INCOME_TAX_RATE,
     PFU_SOCIAL_CHARGES_RATE,
@@ -95,10 +103,15 @@ __all__ = [
     "DEDUCTIBLE_CAP_MFS",
     "Form6781Summary",
     "KEST_RATE",
+    "IdType",
     "LONG_TERM_PCT",
+    "MiFID2Transaction",
     "PFU_INCOME_TAX_RATE",
+    "RTS_22_COLUMNS",
     "SHORT_TERM_PCT",
     "Section1256Contract",
+    "Side",
+    "TradingCapacity",
     "PFU_SOCIAL_CHARGES_RATE",
     "PFU_TOTAL_RATE",
     "PfuApplication",
@@ -146,4 +159,5 @@ __all__ = [
     "summarize_pfu",
     "summarize_schedule_d",
     "summary_to_csv",
+    "transactions_to_csv",
 ]
