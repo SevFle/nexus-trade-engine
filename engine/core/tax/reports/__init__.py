@@ -23,6 +23,7 @@ from engine.core.tax.reports.hmrc_cgt import (
 from engine.core.tax.reports.dispatcher import (
     TaxableDisposal,
     UnsupportedJurisdictionError,
+    flatten_summary_to_csv,
     report_for_jurisdiction,
 )
 from engine.core.tax.reports.france_pfu import (
@@ -94,6 +95,7 @@ __all__ = [
     "UnsupportedJurisdictionError",
     "apply_carryover",
     "disposals_to_csv",
+    "flatten_summary_to_csv",
     "generate_1099b_rows",
     "report_for_jurisdiction",
     "rows_to_csv",
