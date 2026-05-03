@@ -127,8 +127,7 @@ def _gate_backtest_to_paper(evidence: LifecycleEvidence) -> None:
         raise InvalidTransitionError(msg)
     if evidence.sharpe is None or evidence.sharpe < _MIN_SHARPE_FOR_PAPER:
         msg = (
-            f"BACKTEST -> PAPER requires sharpe >= {_MIN_SHARPE_FOR_PAPER} "
-            f"(got {evidence.sharpe})"
+            f"BACKTEST -> PAPER requires sharpe >= {_MIN_SHARPE_FOR_PAPER} (got {evidence.sharpe})"
         )
         raise InvalidTransitionError(msg)
     if evidence.sharpe > _MAX_PLAUSIBLE_SHARPE:
@@ -150,10 +149,7 @@ def _gate_backtest_to_paper(evidence: LifecycleEvidence) -> None:
 
 def _gate_paper_to_live(evidence: LifecycleEvidence) -> None:
     if evidence.paper_days is None or evidence.paper_days < _MIN_PAPER_DAYS:
-        msg = (
-            f"PAPER -> LIVE requires paper_days >= {_MIN_PAPER_DAYS} "
-            f"(got {evidence.paper_days})"
-        )
+        msg = f"PAPER -> LIVE requires paper_days >= {_MIN_PAPER_DAYS} (got {evidence.paper_days})"
         raise InvalidTransitionError(msg)
     if evidence.paper_days > _MAX_PLAUSIBLE_PAPER_DAYS:
         msg = (
@@ -166,9 +162,7 @@ def _gate_paper_to_live(evidence: LifecycleEvidence) -> None:
     # claimed paper_days actually elapsed in wall clock. Defends
     # against pure self-reporting.
     if evidence.paper_window_start_epoch is not None:
-        elapsed_days = (
-            time.time() - evidence.paper_window_start_epoch
-        ) / 86_400.0
+        elapsed_days = (time.time() - evidence.paper_window_start_epoch) / 86_400.0
         if elapsed_days < evidence.paper_days:
             msg = (
                 f"paper_window_start_epoch indicates only "
@@ -176,10 +170,7 @@ def _gate_paper_to_live(evidence: LifecycleEvidence) -> None:
                 f"{evidence.paper_days}"
             )
             raise InvalidTransitionError(msg)
-    if (
-        evidence.paper_sharpe is None
-        or evidence.paper_sharpe < _MIN_PAPER_SHARPE
-    ):
+    if evidence.paper_sharpe is None or evidence.paper_sharpe < _MIN_PAPER_SHARPE:
         msg = (
             f"PAPER -> LIVE requires paper_sharpe >= {_MIN_PAPER_SHARPE} "
             f"(got {evidence.paper_sharpe})"
@@ -213,9 +204,7 @@ class StrategyLifecycleService:
     def _lock(self, strategy_id: str) -> asyncio.Lock:
         return self._locks[strategy_id]
 
-    async def set_stage(
-        self, strategy_id: str, stage: LifecycleStage
-    ) -> LifecycleTransition:
+    async def set_stage(self, strategy_id: str, stage: LifecycleStage) -> LifecycleTransition:
         """Bootstrap a strategy's stage WITHOUT running gates.
 
         DANGER: this method bypasses the entire promotion state machine
@@ -272,14 +261,10 @@ class StrategyLifecycleService:
             self._history[strategy_id].append(t)
             return t
 
-    async def current_stage(
-        self, strategy_id: str
-    ) -> LifecycleStage | None:
+    async def current_stage(self, strategy_id: str) -> LifecycleStage | None:
         return self._stage.get(strategy_id)
 
-    async def history(
-        self, strategy_id: str
-    ) -> list[LifecycleTransition]:
+    async def history(self, strategy_id: str) -> list[LifecycleTransition]:
         return list(self._history.get(strategy_id, ()))
 
 

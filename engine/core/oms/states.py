@@ -15,22 +15,22 @@ events without re-reading the implementation.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class OrderSide(str, Enum):
+class OrderSide(StrEnum):
     BUY = "buy"
     SELL = "sell"
 
 
-class OrderType(str, Enum):
+class OrderType(StrEnum):
     MARKET = "market"
     LIMIT = "limit"
     STOP = "stop"
     STOP_LIMIT = "stop_limit"
 
 
-class OrderStatus(str, Enum):
+class OrderStatus(StrEnum):
     NEW = "new"  # minted in the engine; not yet sent to broker
     SUBMITTED = "submitted"  # sent to broker, waiting for ack
     ACKNOWLEDGED = "acknowledged"  # broker accepted; resting on the book
@@ -92,8 +92,8 @@ VALID_TRANSITIONS: dict[OrderStatus, frozenset[OrderStatus]] = {
         {
             OrderStatus.CANCELLED,
             OrderStatus.PARTIALLY_FILLED,  # broker filled before cancel landed
-            OrderStatus.FILLED,            # broker fully filled before cancel landed
-            OrderStatus.REJECTED,          # cancel itself rejected; back in flight
+            OrderStatus.FILLED,  # broker fully filled before cancel landed
+            OrderStatus.REJECTED,  # cancel itself rejected; back in flight
         }
     ),
     OrderStatus.FILLED: frozenset(),

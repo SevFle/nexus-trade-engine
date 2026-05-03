@@ -25,7 +25,10 @@ Out of scope:
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
 
 
 def _normalise(weights: Mapping[str, float]) -> dict[str, float]:
@@ -129,7 +132,9 @@ def variance_decomposition(
     mp = sum(portfolio_returns) / n
     mb = sum(benchmark_returns) / n
     cov = (
-        sum((p - mp) * (b - mb) for p, b in zip(portfolio_returns, benchmark_returns))
+        sum(
+            (p - mp) * (b - mb) for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
+        )
         / n
     )
     var_b = sum((b - mb) ** 2 for b in benchmark_returns) / n

@@ -172,3 +172,106 @@ class TestRiskCheckResultDefaults:
         order = _make_order("AAPL", Side.BUY, 1)
         result = engine.check_order(order, zero_portfolio, market_price=100.0)
         assert result.approved
+
+
+class TestSellSideChecks:
+    def test_sell_order_approved(self, portfolio):
+        engine = RiskEngine()
+        portfolio.open_position("AAPL", 10, 100.0)
+        order = _make_order("AAPL", Side.SELL, 5)
+        result = engine.check_order(order, portfolio, market_price=100.0)
+        assert result.approved
+
+    def test_sell_not_subject_to_position_concentration(self, portfolio):
+        engine = RiskEngine(max_position_pct=0.01)
+        portfolio.open_position("AAPL", 100, 100.0)
+        portfolio.update_prices({"AAPL": 100.0})
+        order = _make_order("AAPL", Side.SELL, 10)
+        result = engine.check_order(order, portfolio, market_price=100.0)
+        assert result.approved
+
+    def test_sell_not_subject_to_max_open_positions(self, portfolio):
+        engine = RiskEngine(max_open_positions=1)
+        portfolio.open_position("AAPL", 10, 100.0)
+        portfolio.open_position("MSFT", 10, 100.0)
+        order = _make_order("AAPL", Side.SELL, 5)
+        result = engine.check_order(order, portfolio, market_price=100.0)
+        assert result.approved
+
+
+class TestDrawdownCalculation:
+    def test_no_drawdown_at_initial(self, portfolio):
+        engine = RiskEngine()
+        dd = engine._calculate_drawdown(portfolio)
+        assert dd == 0.0
+
+    def test_drawdown_when_below_initial(self, portfolio):
+        engine = RiskEngine()
+        portfolio.open_position("AAPL", 100, 500.0)
+        portfolio.update_prices({"AAPL": 1.0})
+        dd = engine._calculate_drawdown(portfolio)
+        assert dd > 0
+
+    def test_no_drawdown_when_above_initial(self, portfolio):
+        engine = RiskEngine()
+        portfolio.open_position("AAPL", 10, 100.0)
+        portfolio.update_prices({"AAPL": 200.0})
+        dd = engine._calculate_drawdown(portfolio)
+        assert dd == 0.0
+
+
+class TestOrderValueEdgeCases:
+    def test_order_at_exact_cap_approved(self, portfolio):
+        engine = RiskEngine(max_single_order_value=1000.0)
+        order = _make_order("AAPL", Side.BUY, 10)
+        result = engine.check_order(order, portfolio, market_price=100.0)
+        assert result.approved
+
+    def test_order_just_over_cap_rejected(self, portfolio):
+        engine = RiskEngine(max_single_order_value=999.0)
+        order = _make_order("AAPL", Side.BUY, 10)
+        result = engine.check_order(order, portfolio, market_price=100.0)
+        assert not result.approved
+
+
+class TestDailyTradeCountIncrement:
+    def test_count_increments_on_approval(self, portfolio):
+        engine = RiskEngine(max_daily_trades=5)
+        assert engine.daily_trade_count == 0
+        order = _make_order("AAPL", Side.BUY, 1)
+        engine.check_order(order, portfolio, market_price=100.0)
+        assert engine.daily_trade_count == 1
+        engine.check_order(order, portfolio, market_price=100.0)
+        assert engine.daily_trade_count == 2
+
+    def test_count_does_not_increment_on_rejection(self, portfolio):
+        engine = RiskEngine(max_daily_trades=1, max_single_order_value=50_000)
+        order = _make_order("AAPL", Side.BUY, 1)
+        engine.check_order(order, portfolio, market_price=100.0)
+        assert engine.daily_trade_count == 1
+        engine.check_order(order, portfolio, market_price=100.0)
+        assert engine.daily_trade_count == 1
+
+
+class TestRiskEngineDefaults:
+    def test_default_parameters(self):
+        engine = RiskEngine()
+        assert engine.max_position_pct == 0.20
+        assert engine.max_open_positions == 50
+        assert engine.circuit_breaker_drawdown_pct == 0.10
+        assert engine.max_daily_trades == 100
+        assert engine.max_single_order_value == 50_000.0
+        assert engine.circuit_breaker_active is False
+        assert engine.daily_trade_count == 0
+
+
+class TestMultipleRiskChecks:
+    def test_portfolio_with_multiple_positions(self, portfolio):
+        engine = RiskEngine(max_open_positions=2)
+        portfolio.open_position("AAPL", 10, 100.0)
+        portfolio.open_position("MSFT", 10, 100.0)
+
+        order = _make_order("GOOGL", Side.BUY, 10)
+        result = engine.check_order(order, portfolio, market_price=100.0)
+        assert not result.approved
+        assert "Max open positions" in result.reason

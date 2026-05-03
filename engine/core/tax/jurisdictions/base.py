@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
 
-class LotMethod(str, Enum):
+class LotMethod(StrEnum):
     """Lot-selection method (which lot does a sale consume?).
 
     - FIFO: oldest lot first. US default.

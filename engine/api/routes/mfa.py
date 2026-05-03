@@ -65,9 +65,7 @@ async def enroll(
     user: User = Depends(get_current_user),
 ) -> EnrollResponse:
     if user.mfa_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="MFA already enabled"
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="MFA already enabled")
     try:
         artifact = begin_enrollment(account=user.email)
     except MFAServiceError as exc:
@@ -84,15 +82,11 @@ async def confirm(
     db: AsyncSession = Depends(get_db),
 ) -> ConfirmResponse:
     if user.mfa_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="MFA already enabled"
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="MFA already enabled")
     try:
         confirmed = confirm_enrollment(secret_b32=body.secret, code=body.code)
     except MFAServiceError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     user.mfa_enabled = True
     user.mfa_secret_encrypted = confirmed.encrypted_secret
     user.mfa_backup_codes = confirmed.backup_codes_storage
@@ -111,9 +105,7 @@ async def verify(
     try:
         user_id = verify_challenge(body.challenge_token)
     except MFAServiceError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 
     user = await db.get(User, user_id)
     if user is None or not user.is_active:
@@ -138,9 +130,7 @@ async def verify(
 
     if not ok:
         logger.warning("auth.mfa_verify_failed", user_id=str(user.id))
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid MFA code"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid MFA code")
 
     if new_codes is not None:
         user.mfa_backup_codes = new_codes
@@ -160,18 +150,14 @@ async def disable(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     if not user.mfa_enabled or not user.mfa_secret_encrypted:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="MFA not enabled"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="MFA not enabled")
     if not user.hashed_password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot verify password for non-local user",
         )
     if not _verify_password(body.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
     try:
         ok, _ = verify_login_code(
             encrypted_secret=user.mfa_secret_encrypted,
@@ -183,9 +169,7 @@ async def disable(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
         ) from exc
     if not ok:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid MFA code"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid MFA code")
     user.mfa_enabled = False
     user.mfa_secret_encrypted = None
     user.mfa_backup_codes = None
@@ -202,9 +186,7 @@ async def regen_backup_codes(
     db: AsyncSession = Depends(get_db),
 ) -> ConfirmResponse:
     if not user.mfa_enabled or not user.mfa_secret_encrypted:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="MFA not enabled"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="MFA not enabled")
     try:
         ok, _ = verify_login_code(
             encrypted_secret=user.mfa_secret_encrypted,
@@ -216,9 +198,7 @@ async def regen_backup_codes(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
         ) from exc
     if not ok:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid MFA code"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid MFA code")
     plaintext = generate_backup_codes()
     user.mfa_backup_codes = hash_backup_codes(plaintext)
     db.add(user)

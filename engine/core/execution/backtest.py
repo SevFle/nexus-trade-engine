@@ -11,6 +11,7 @@ import random
 from typing import TYPE_CHECKING
 
 import structlog
+
 from engine.core.execution.base import ExecutionBackend, FillResult
 
 if TYPE_CHECKING:
@@ -36,7 +37,7 @@ class BacktestBackend(ExecutionBackend):
     ):
         self.fill_probability = fill_probability
         self.partial_fill_enabled = partial_fill_enabled
-        self._rng = random.Random(random_seed)
+        self._rng = random.Random(random_seed)  # noqa: S311
 
     async def connect(self) -> None:
         logger.info("backtest.backend.ready")
@@ -59,7 +60,7 @@ class BacktestBackend(ExecutionBackend):
 
         # Simulate partial fills
         fill_quantity = order.quantity
-        if self.partial_fill_enabled and order.quantity > 1000:
+        if self.partial_fill_enabled and order.quantity > 1000:  # noqa: PLR2004
             fill_ratio = self._rng.uniform(0.85, 1.0)
             fill_quantity = max(1, int(order.quantity * fill_ratio))
 

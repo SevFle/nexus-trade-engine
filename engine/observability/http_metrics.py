@@ -33,18 +33,18 @@ if TYPE_CHECKING:
     from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 
-def _status_class(status: int | None) -> str:
+def _status_class(status: int | None) -> str:  # noqa: PLR0911
     if status is None:
         return "unknown"
-    if 100 <= status < 200:
+    if 100 <= status < 200:  # noqa: PLR2004
         return "1xx"
-    if 200 <= status < 300:
+    if 200 <= status < 300:  # noqa: PLR2004
         return "2xx"
-    if 300 <= status < 400:
+    if 300 <= status < 400:  # noqa: PLR2004
         return "3xx"
-    if 400 <= status < 500:
+    if 400 <= status < 500:  # noqa: PLR2004
         return "4xx"
-    if 500 <= status < 600:
+    if 500 <= status < 600:  # noqa: PLR2004
         return "5xx"
     return "unknown"
 
@@ -82,10 +82,7 @@ class HttpMetricsMiddleware:
         status_holder: dict[str, int] = {}
 
         async def send_wrapper(message: Message) -> None:
-            if (
-                message["type"] == "http.response.start"
-                and "status" not in status_holder
-            ):
+            if message["type"] == "http.response.start" and "status" not in status_holder:
                 status_holder["status"] = int(message.get("status", 0))
             await send(message)
 

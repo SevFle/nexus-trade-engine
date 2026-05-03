@@ -26,7 +26,10 @@ Out of scope:
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
 
 
 def _validate_window(window: int) -> None:
@@ -41,7 +44,7 @@ def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float:
         return 0.0
     mx = sum(xs) / n
     my = sum(ys) / n
-    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=False))
     dx = math.sqrt(sum((x - mx) ** 2 for x in xs))
     dy = math.sqrt(sum((y - my) ** 2 for y in ys))
     if dx == 0.0 or dy == 0.0:
@@ -49,9 +52,7 @@ def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float:
     return num / (dx * dy)
 
 
-def rolling_correlation(
-    a: Sequence[float], b: Sequence[float], window: int
-) -> list[float | None]:
+def rolling_correlation(a: Sequence[float], b: Sequence[float], window: int) -> list[float | None]:
     """Pearson correlation of ``a`` and ``b`` over each trailing window.
 
     ``None`` for the first ``window - 1`` indices. Both inputs must be
@@ -60,17 +61,13 @@ def rolling_correlation(
     """
     _validate_window(window)
     if len(a) != len(b):
-        raise ValueError(
-            f"series length mismatch: {len(a)} vs {len(b)}"
-        )
+        raise ValueError(f"series length mismatch: {len(a)} vs {len(b)}")
     n = len(a)
     out: list[float | None] = [None] * n
     if n < window:
         return out
     for i in range(window - 1, n):
-        out[i] = _pearson(
-            a[i - window + 1 : i + 1], b[i - window + 1 : i + 1]
-        )
+        out[i] = _pearson(a[i - window + 1 : i + 1], b[i - window + 1 : i + 1])
     return out
 
 
@@ -91,9 +88,7 @@ def rolling_correlation_matrix(
         return {}
     lengths = {len(s) for s in return_series.values()}
     if len(lengths) > 1:
-        raise ValueError(
-            f"all return series must have equal length; got {sorted(lengths)}"
-        )
+        raise ValueError(f"all return series must have equal length; got {sorted(lengths)}")
     n = next(iter(lengths))
     out: dict[str, dict[str, list[float | None]]] = {k: {} for k in keys}
     for i, a in enumerate(keys):
@@ -108,9 +103,7 @@ def rolling_correlation_matrix(
             elif j < i:
                 out[a][b] = list(out[b][a])
             else:
-                out[a][b] = rolling_correlation(
-                    return_series[a], return_series[b], window
-                )
+                out[a][b] = rolling_correlation(return_series[a], return_series[b], window)
     return out
 
 
@@ -129,20 +122,15 @@ def mean_pairwise_correlation(
         return []
     lengths = {len(s) for s in return_series.values()}
     if len(lengths) > 1:
-        raise ValueError(
-            f"all return series must have equal length; got {sorted(lengths)}"
-        )
+        raise ValueError(f"all return series must have equal length; got {sorted(lengths)}")
     n = next(iter(lengths))
     if n < window:
         return [None] * n
-    pair_series: list[list[float | None]] = []
-    for i in range(len(keys)):
-        for j in range(i + 1, len(keys)):
-            pair_series.append(
-                rolling_correlation(
-                    return_series[keys[i]], return_series[keys[j]], window
-                )
-            )
+    pair_series: list[list[float | None]] = [
+        rolling_correlation(return_series[keys[i]], return_series[keys[j]], window)
+        for i in range(len(keys))
+        for j in range(i + 1, len(keys))
+    ]
     if not pair_series:
         return [None] * n
     out: list[float | None] = [None] * n

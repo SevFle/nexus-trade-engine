@@ -58,7 +58,9 @@ class RiskEngine:
         self.circuit_breaker_active = False
         self.daily_trade_count = 0
 
-    def check_order(self, order: Order, portfolio: Portfolio, market_price: float) -> RiskCheckResult:
+    def check_order(
+        self, order: Order, portfolio: Portfolio, market_price: float
+    ) -> RiskCheckResult:
         """
         Run all pre-trade risk checks.
         Returns approved=False with reason if any check fails.
@@ -69,7 +71,10 @@ class RiskEngine:
         if self.circuit_breaker_active:
             return RiskCheckResult(
                 approved=False,
-                reason=f"Circuit breaker active: portfolio drawdown exceeded {self.circuit_breaker_drawdown_pct:.0%}",
+                reason=(
+                    f"Circuit breaker active: portfolio drawdown exceeded"
+                    f" {self.circuit_breaker_drawdown_pct:.0%}"
+                ),
             )
 
         # Check portfolio drawdown
@@ -79,16 +84,22 @@ class RiskEngine:
             logger.critical("risk.circuit_breaker_triggered", drawdown=drawdown)
             return RiskCheckResult(
                 approved=False,
-                reason=f"Circuit breaker triggered: drawdown {drawdown:.2%} >= {self.circuit_breaker_drawdown_pct:.2%}",
+                reason=(
+                    f"Circuit breaker triggered: drawdown {drawdown:.2%}"
+                    f" >= {self.circuit_breaker_drawdown_pct:.2%}"
+                ),
             )
 
         # Max open positions
-        if order.side.value == "buy" and order.symbol not in portfolio.positions:
-            if len(portfolio.positions) >= self.max_open_positions:
-                return RiskCheckResult(
-                    approved=False,
-                    reason=f"Max open positions reached: {self.max_open_positions}",
-                )
+        if (
+            order.side.value == "buy"
+            and order.symbol not in portfolio.positions
+            and len(portfolio.positions) >= self.max_open_positions
+        ):
+            return RiskCheckResult(
+                approved=False,
+                reason=f"Max open positions reached: {self.max_open_positions}",
+            )
 
         # Single position concentration
         order_value = order.quantity * market_price
@@ -100,14 +111,20 @@ class RiskEngine:
             if order.side.value == "buy" and new_weight > self.max_position_pct:
                 return RiskCheckResult(
                     approved=False,
-                    reason=f"Position {order.symbol} would be {new_weight:.1%} of portfolio (max {self.max_position_pct:.0%})",
+                    reason=(
+                        f"Position {order.symbol} would be {new_weight:.1%}"
+                        f" of portfolio (max {self.max_position_pct:.0%})"
+                    ),
                 )
 
         # Single order value cap
         if order_value > self.max_single_order_value:
             return RiskCheckResult(
                 approved=False,
-                reason=f"Order value ${order_value:,.0f} exceeds max ${self.max_single_order_value:,.0f}",
+                reason=(
+                    f"Order value ${order_value:,.0f} exceeds"
+                    f" max ${self.max_single_order_value:,.0f}"
+                ),
             )
 
         # Daily trade limit

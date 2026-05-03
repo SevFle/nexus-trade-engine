@@ -16,9 +16,7 @@ from engine.core.cumulative_returns import (
     tracking_error,
 )
 
-
 # ---------------------------------------------------------------------------
-# cumulative_returns
 # ---------------------------------------------------------------------------
 
 
@@ -46,7 +44,6 @@ class TestCumulativeReturns:
 
 
 # ---------------------------------------------------------------------------
-# equity_curve_from_returns
 # ---------------------------------------------------------------------------
 
 
@@ -79,7 +76,6 @@ class TestEquityCurveFromReturns:
 
 
 # ---------------------------------------------------------------------------
-# log_returns
 # ---------------------------------------------------------------------------
 
 
@@ -116,7 +112,6 @@ class TestLogReturns:
 
 
 # ---------------------------------------------------------------------------
-# returns_from_equity
 # ---------------------------------------------------------------------------
 
 
@@ -152,12 +147,11 @@ class TestReturnsFromEquity:
         original = [0.01, -0.02, 0.03, -0.01]
         equity = equity_curve_from_returns(original, initial_value=100.0)
         recovered = returns_from_equity(equity)
-        for o, r in zip(original, recovered):
+        for o, r in zip(original, recovered, strict=True):
             assert r == pytest.approx(o, rel=1e-12)
 
 
 # ---------------------------------------------------------------------------
-# active_returns
 # ---------------------------------------------------------------------------
 
 

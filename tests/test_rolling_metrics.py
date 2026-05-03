@@ -15,7 +15,6 @@ from engine.core.rolling_metrics import (
     rolling_volatility,
 )
 
-
 # ---------------------------------------------------------------------------
 # rolling_mean
 # ---------------------------------------------------------------------------
@@ -177,7 +176,6 @@ class TestRollingSortino:
 
 
 # ---------------------------------------------------------------------------
-# rolling_return
 # ---------------------------------------------------------------------------
 
 
@@ -196,7 +194,7 @@ class TestRollingReturn:
         assert out[-1] == pytest.approx(0.030301, rel=1e-9)
 
     def test_loss_then_recovery_compounds(self):
-        # -10% then +10% → (0.9 × 1.1) - 1 = -0.01.
+        # -10% then +10% → (0.9 * 1.1) - 1 = -0.01.
         out = rolling_return([-0.10, 0.10], 2)
         assert out[-1] == pytest.approx(-0.01, rel=1e-9)
 

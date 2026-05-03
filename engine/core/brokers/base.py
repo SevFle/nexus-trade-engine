@@ -28,12 +28,13 @@ Concrete adapters live under their own subpackages
 
 from __future__ import annotations
 
-import uuid
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    import uuid
+    from collections.abc import AsyncIterator
+
     from engine.core.oms.events import OrderEvent
     from engine.core.oms.order import Order
 
@@ -80,8 +81,8 @@ class SubmittedOrder:
     events back to the originating in-process order.
     """
 
-    order_id: uuid.UUID            # OMS-side order id (the input)
-    broker_order_id: str           # broker's id for the same order
+    order_id: uuid.UUID  # OMS-side order id (the input)
+    broker_order_id: str  # broker's id for the same order
 
 
 # ---------------------------------------------------------------------------

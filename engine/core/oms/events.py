@@ -9,8 +9,11 @@ wiring.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 
 @dataclass(frozen=True)
@@ -74,13 +77,7 @@ class ExpireEvent(_BaseEvent):
 
 # Algebraic-data-type alias — every concrete event in the system.
 OrderEvent = (
-    SubmitEvent
-    | AckEvent
-    | PartialFillEvent
-    | FillEvent
-    | CancelEvent
-    | RejectEvent
-    | ExpireEvent
+    SubmitEvent | AckEvent | PartialFillEvent | FillEvent | CancelEvent | RejectEvent | ExpireEvent
 )
 
 

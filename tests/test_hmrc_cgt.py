@@ -171,7 +171,7 @@ class TestCustomAea:
 
 class TestConstants:
     def test_2024_25_aea_is_three_thousand(self):
-        assert ANNUAL_EXEMPT_AMOUNT_2024_25 == Decimal("3000.00")
+        assert Decimal("3000.00") == ANNUAL_EXEMPT_AMOUNT_2024_25
 
 
 # ---------------------------------------------------------------------------

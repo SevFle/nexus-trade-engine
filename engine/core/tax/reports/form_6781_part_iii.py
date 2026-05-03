@@ -34,8 +34,11 @@ from __future__ import annotations
 import csv
 import io
 from dataclasses import dataclass
-from datetime import date
 from decimal import Decimal
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from datetime import date
 
 _TWOPLACES = Decimal("0.01")
 _ZERO = Decimal("0.00")
@@ -59,9 +62,7 @@ class YearEndPosition:
 
     def __post_init__(self) -> None:
         if self.acquired > self.year_end:
-            raise ValueError(
-                f"acquired {self.acquired} is after year_end {self.year_end}"
-            )
+            raise ValueError(f"acquired {self.acquired} is after year_end {self.year_end}")
         if self.basis < 0:
             raise ValueError("basis must be non-negative")
         if self.year_end_fmv < 0:

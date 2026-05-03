@@ -93,8 +93,7 @@ def apply_section_1256_carryback(
     """
     if net_loss < 0:
         raise ValueError(
-            "net_loss must be a non-negative absolute amount; "
-            "pass abs(loss) not the signed value"
+            "net_loss must be a non-negative absolute amount; pass abs(loss) not the signed value"
         )
     if net_loss == 0:
         return Section1256Carryback(
@@ -114,9 +113,7 @@ def apply_section_1256_carryback(
             break
         take = min(remaining, prior.net_gain).quantize(_TWOPLACES)
         if take > 0:
-            absorptions.append(
-                CarrybackAbsorption(year=prior.year, amount=take)
-            )
+            absorptions.append(CarrybackAbsorption(year=prior.year, amount=take))
             remaining = (remaining - take).quantize(_TWOPLACES)
 
     forward = remaining.quantize(_TWOPLACES) if remaining > 0 else _ZERO

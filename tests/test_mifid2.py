@@ -76,7 +76,7 @@ class TestValidation:
     def test_naive_datetime_rejected(self):
         # RTS 22 requires UTC. Naive datetimes are ambiguous.
         with pytest.raises(ValueError):
-            _txn(trading_datetime=datetime(2024, 6, 1, 14, 30, 15))
+            _txn(trading_datetime=datetime(2024, 6, 1, 14, 30, 15))  # noqa: DTZ001
 
 
 # ---------------------------------------------------------------------------

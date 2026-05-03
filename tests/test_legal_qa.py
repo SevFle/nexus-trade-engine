@@ -95,7 +95,7 @@ class TestAcceptanceRecordImmutability:
         )
         result = await db_session.execute(all_records_stmt)
         all_records = result.scalars().all()
-        assert len(all_records) == 2  # noqa: PLR2004
+        assert len(all_records) == 2
 
         assert all_records[0].document_version == "1.0.0"
         assert all_records[0].accepted_at == original_accepted_at
@@ -172,7 +172,7 @@ class TestConsentEnforcementIntegration:
 
         with pytest.raises(HTTPException) as exc_info:
             await require_legal_acceptance(db_session)
-        assert exc_info.value.status_code == 451  # noqa: PLR2004
+        assert exc_info.value.status_code == 451
         detail = exc_info.value.detail
         assert detail["code"] == "legal_re_acceptance_required"
         assert "documents" in detail
@@ -229,7 +229,7 @@ class TestConsentEnforcementIntegration:
 
         with pytest.raises(HTTPException) as exc_info:
             await require_legal_acceptance(db_session)
-        assert exc_info.value.status_code == 451  # noqa: PLR2004
+        assert exc_info.value.status_code == 451
         pending_slugs = exc_info.value.detail["documents"]
         for slug in slugs:
             assert slug in pending_slugs
@@ -266,7 +266,7 @@ class TestBatchAcceptance:
         )
         await db_session.flush()
 
-        assert len(accepted) == 3  # noqa: PLR2004
+        assert len(accepted) == 3
         for doc in docs:
             count_stmt = (
                 select(func.count())
@@ -298,7 +298,7 @@ class TestBatchAcceptance:
             .where(LegalAcceptance.user_id == user.id)
         )
         result = await db_session.execute(count_stmt)
-        assert result.scalar() == 2  # noqa: PLR2004
+        assert result.scalar() == 2
 
     async def test_batch_accept_rejects_invalid_doc_among_valid(self, db_session: AsyncSession):
         docs = await self._seed_docs(db_session, 2)
@@ -440,7 +440,7 @@ class TestReAcceptanceOnVersionBump:
         await db_session.flush()
 
         records = await legal_service.list_user_acceptances(db_session, user.id, doc.slug)
-        assert len(records) == 2  # noqa: PLR2004
+        assert len(records) == 2
         versions = {r.document_version for r in records}
         assert versions == {"1.0.0", "2.0.0"}
 

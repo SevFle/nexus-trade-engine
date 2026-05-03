@@ -38,7 +38,6 @@ from io import StringIO
 
 from engine.observability.metrics import RecordingBackend
 
-
 _LABEL_ESCAPES = str.maketrans(
     {
         "\\": "\\\\",
@@ -97,9 +96,7 @@ def render_prometheus(backend: RecordingBackend) -> str:
     out = StringIO()
 
     # Counters
-    counter_groups: dict[
-        str, list[tuple[tuple[tuple[str, str], ...], float]]
-    ] = {}
+    counter_groups: dict[str, list[tuple[tuple[tuple[str, str], ...], float]]] = {}
     for (name, tags), value in backend.counters.items():
         counter_groups.setdefault(name, []).append((tags, value))
     for name in sorted(counter_groups):
@@ -107,14 +104,10 @@ def render_prometheus(backend: RecordingBackend) -> str:
         out.write(f"# HELP {prom_name} engine counter (gh#34)\n")
         out.write(f"# TYPE {prom_name} counter\n")
         for tags, value in sorted(counter_groups[name], key=lambda x: x[0]):
-            out.write(
-                f"{prom_name}{_format_labels(tags)} {_format_value(value)}\n"
-            )
+            out.write(f"{prom_name}{_format_labels(tags)} {_format_value(value)}\n")
 
     # Gauges
-    gauge_groups: dict[
-        str, list[tuple[tuple[tuple[str, str], ...], float]]
-    ] = {}
+    gauge_groups: dict[str, list[tuple[tuple[tuple[str, str], ...], float]]] = {}
     for (name, tags), value in backend.gauges.items():
         gauge_groups.setdefault(name, []).append((tags, value))
     for name in sorted(gauge_groups):
@@ -122,33 +115,20 @@ def render_prometheus(backend: RecordingBackend) -> str:
         out.write(f"# HELP {prom_name} engine gauge (gh#34)\n")
         out.write(f"# TYPE {prom_name} gauge\n")
         for tags, value in sorted(gauge_groups[name], key=lambda x: x[0]):
-            out.write(
-                f"{prom_name}{_format_labels(tags)} {_format_value(value)}\n"
-            )
+            out.write(f"{prom_name}{_format_labels(tags)} {_format_value(value)}\n")
 
     # Histograms — emit *_count and *_sum series only. No buckets.
-    histogram_groups: dict[
-        str, list[tuple[tuple[tuple[str, str], ...], list[float]]]
-    ] = {}
+    histogram_groups: dict[str, list[tuple[tuple[tuple[str, str], ...], list[float]]]] = {}
     for (name, tags), values in backend.histograms.items():
         histogram_groups.setdefault(name, []).append((tags, values))
     for name in sorted(histogram_groups):
         prom_name = _safe_metric_name(name)
-        out.write(
-            f"# HELP {prom_name} engine histogram (count + sum only) (gh#34)\n"
-        )
+        out.write(f"# HELP {prom_name} engine histogram (count + sum only) (gh#34)\n")
         out.write(f"# TYPE {prom_name} summary\n")
-        for tags, observations in sorted(
-            histogram_groups[name], key=lambda x: x[0]
-        ):
+        for tags, observations in sorted(histogram_groups[name], key=lambda x: x[0]):
             label_text = _format_labels(tags)
-            out.write(
-                f"{prom_name}_count{label_text} {len(observations)}\n"
-            )
-            out.write(
-                f"{prom_name}_sum{label_text} "
-                f"{_format_value(sum(observations))}\n"
-            )
+            out.write(f"{prom_name}_count{label_text} {len(observations)}\n")
+            out.write(f"{prom_name}_sum{label_text} {_format_value(sum(observations))}\n")
 
     return out.getvalue()
 

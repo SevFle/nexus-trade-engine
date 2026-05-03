@@ -32,8 +32,11 @@ import math
 import threading
 import time
 import types
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
 
 class RiskLimitsError(ValueError):
@@ -70,13 +73,10 @@ class OrderIntent:
     def __post_init__(self) -> None:
         _require_finite(self.notional, "OrderIntent.notional")
         if self.notional < 0:
-            raise RiskLimitsError(
-                f"OrderIntent.notional must be >= 0, got {self.notional}"
-            )
+            raise RiskLimitsError(f"OrderIntent.notional must be >= 0, got {self.notional}")
         if self.side not in _VALID_SIDES:
             raise RiskLimitsError(
-                f"OrderIntent.side must be one of {sorted(_VALID_SIDES)}, "
-                f"got {self.side!r}"
+                f"OrderIntent.side must be one of {sorted(_VALID_SIDES)}, got {self.side!r}"
             )
 
 
@@ -94,14 +94,10 @@ class AccountState:
         _require_finite(self.total_value, "AccountState.total_value")
         _require_finite(self.daily_pnl, "AccountState.daily_pnl")
         if self.total_value < 0:
-            raise RiskLimitsError(
-                f"AccountState.total_value must be >= 0, got {self.total_value}"
-            )
+            raise RiskLimitsError(f"AccountState.total_value must be >= 0, got {self.total_value}")
         # Deep-copy + freeze the exposure dicts so post-construction mutation
         # of the caller's source dict cannot change what the gate sees.
-        object.__setattr__(
-            self, "exposures", _freeze_mapping("exposures", self.exposures)
-        )
+        object.__setattr__(self, "exposures", _freeze_mapping("exposures", self.exposures))
         object.__setattr__(
             self,
             "sector_exposures",
@@ -119,18 +115,14 @@ class RiskLimits:
     max_single_order_notional: float | None = None
     max_position_notional: Mapping[str, float] = field(default_factory=dict)
     max_sector_concentration_pct: Mapping[str, float] = field(default_factory=dict)
-    max_asset_class_concentration_pct: Mapping[str, float] = field(
-        default_factory=dict
-    )
+    max_asset_class_concentration_pct: Mapping[str, float] = field(default_factory=dict)
     max_orders_per_window: int | None = None
     velocity_window_seconds: float = 60.0
     max_daily_loss: float | None = None
 
     def __post_init__(self) -> None:
         if self.max_single_order_notional is not None:
-            _require_finite(
-                self.max_single_order_notional, "max_single_order_notional"
-            )
+            _require_finite(self.max_single_order_notional, "max_single_order_notional")
         if self.max_daily_loss is not None:
             _require_finite(self.max_daily_loss, "max_daily_loss")
         _require_finite(self.velocity_window_seconds, "velocity_window_seconds")
@@ -144,9 +136,7 @@ class RiskLimits:
         object.__setattr__(
             self,
             "max_sector_concentration_pct",
-            _freeze_mapping(
-                "max_sector_concentration_pct", self.max_sector_concentration_pct
-            ),
+            _freeze_mapping("max_sector_concentration_pct", self.max_sector_concentration_pct),
         )
         object.__setattr__(
             self,
@@ -192,9 +182,7 @@ class RiskGate:
         with self._lock:
             return self._check_locked(intent, state)
 
-    def _check_locked(
-        self, intent: OrderIntent, state: AccountState
-    ) -> RiskDecision:
+    def _check_locked(self, intent: OrderIntent, state: AccountState) -> RiskDecision:
         breaches: list[str] = []
 
         if self._circuit_breaker_tripped:
@@ -222,24 +210,17 @@ class RiskGate:
         if state.total_value > 0:
             sector_cap = self.limits.max_sector_concentration_pct.get(intent.sector)
             if sector_cap is not None:
-                projected = (
-                    state.sector_exposures.get(intent.sector, 0.0) + intent.notional
-                )
+                projected = state.sector_exposures.get(intent.sector, 0.0) + intent.notional
                 if projected / state.total_value > sector_cap:
                     breaches.append(f"sector_concentration[{intent.sector}]")
 
-            ac_cap = self.limits.max_asset_class_concentration_pct.get(
-                intent.asset_class
-            )
+            ac_cap = self.limits.max_asset_class_concentration_pct.get(intent.asset_class)
             if ac_cap is not None:
                 projected = (
-                    state.asset_class_exposures.get(intent.asset_class, 0.0)
-                    + intent.notional
+                    state.asset_class_exposures.get(intent.asset_class, 0.0) + intent.notional
                 )
                 if projected / state.total_value > ac_cap:
-                    breaches.append(
-                        f"asset_class_concentration[{intent.asset_class}]"
-                    )
+                    breaches.append(f"asset_class_concentration[{intent.asset_class}]")
 
         # Cache `now` once so the window-start filter and the appended
         # timestamp for an approved order share the same instant — avoids
@@ -247,9 +228,7 @@ class RiskGate:
         if self.limits.max_orders_per_window is not None:
             now = self._clock()
             window_start = now - self.limits.velocity_window_seconds
-            self._order_timestamps = [
-                t for t in self._order_timestamps if t >= window_start
-            ]
+            self._order_timestamps = [t for t in self._order_timestamps if t >= window_start]
             if len(self._order_timestamps) >= self.limits.max_orders_per_window:
                 breaches.append("velocity")
 

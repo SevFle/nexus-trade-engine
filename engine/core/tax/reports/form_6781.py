@@ -38,8 +38,11 @@ from __future__ import annotations
 import csv
 import io
 from dataclasses import dataclass
-from datetime import date
 from decimal import Decimal
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from datetime import date
 
 _TWOPLACES = Decimal("0.01")
 _ZERO = Decimal("0.00")
@@ -69,8 +72,7 @@ class Section1256Contract:
     def __post_init__(self) -> None:
         if self.acquired > self.closed_or_year_end:
             raise ValueError(
-                f"acquired {self.acquired} is after "
-                f"closed_or_year_end {self.closed_or_year_end}"
+                f"acquired {self.acquired} is after closed_or_year_end {self.closed_or_year_end}"
             )
         if self.proceeds_or_fmv < 0:
             raise ValueError("proceeds_or_fmv must be non-negative")

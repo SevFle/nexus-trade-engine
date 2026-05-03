@@ -192,8 +192,8 @@ class TestMfsCap:
         assert result.next_year_carryover.short_term == Decimal("8500.00")
 
     def test_default_cap_is_three_thousand(self):
-        assert DEDUCTIBLE_CAP_DEFAULT == Decimal("3000.00")
-        assert DEDUCTIBLE_CAP_MFS == Decimal("1500.00")
+        assert Decimal("3000.00") == DEDUCTIBLE_CAP_DEFAULT
+        assert Decimal("1500.00") == DEDUCTIBLE_CAP_MFS
 
 
 # ---------------------------------------------------------------------------

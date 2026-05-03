@@ -9,21 +9,22 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
 
 from engine.core.instruments import Instrument
 
 
-class Side(str, Enum):
+class Side(StrEnum):
     BUY = "buy"
     SELL = "sell"
     HOLD = "hold"
 
 
-class SignalStrength(str, Enum):
+class SignalStrength(StrEnum):
     """How confident the strategy is in this signal."""
+
     STRONG = "strong"
     MODERATE = "moderate"
     WEAK = "weak"

@@ -36,7 +36,6 @@ What's NOT here (explicit follow-ups):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import structlog
@@ -44,6 +43,8 @@ import structlog
 from engine.observability.metrics import MetricsBackend, get_metrics
 
 if TYPE_CHECKING:
+    from decimal import Decimal
+
     from engine.core.live.kill_switch import KillSwitch
     from engine.core.oms.order import Order
 
@@ -76,9 +77,7 @@ CheckResult = Approve | Reject
 class RiskCheck(Protocol):
     """Anything callable with ``(Order, *, reference_price)`` is a check."""
 
-    def __call__(
-        self, order: Order, *, reference_price: Decimal | None = None
-    ) -> CheckResult: ...
+    def __call__(self, order: Order, *, reference_price: Decimal | None = None) -> CheckResult: ...
 
 
 # ---------------------------------------------------------------------------
@@ -93,19 +92,15 @@ class KillSwitchCheck:
         # Late import to avoid a hard dependency for tests that pass
         # their own switch in.
         if switch is None:
-            from engine.core.live import get_kill_switch
+            from engine.core.live import get_kill_switch  # noqa: PLC0415
 
             switch = get_kill_switch()
         self._switch = switch
 
-    def __call__(
-        self, order: Order, *, reference_price: Decimal | None = None
-    ) -> CheckResult:
+    def __call__(self, order: Order, *, reference_price: Decimal | None = None) -> CheckResult:  # noqa: ARG002
         if self._switch.is_engaged():
             snap = self._switch.snapshot()
-            return Reject(
-                reason=f"kill-switch engaged: {snap.reason or 'no reason recorded'}"
-            )
+            return Reject(reason=f"kill-switch engaged: {snap.reason or 'no reason recorded'}")
         return Approve()
 
 
@@ -119,14 +114,11 @@ class MaxOrderQuantity:
         if self.limit <= 0:
             raise ValueError("MaxOrderQuantity.limit must be positive")
 
-    def __call__(
-        self, order: Order, *, reference_price: Decimal | None = None
-    ) -> CheckResult:
+    def __call__(self, order: Order, *, reference_price: Decimal | None = None) -> CheckResult:  # noqa: ARG002
         if order.quantity > self.limit:
             return Reject(
                 reason=(
-                    f"order quantity {order.quantity} exceeds max {self.limit} "
-                    f"for {order.symbol}"
+                    f"order quantity {order.quantity} exceeds max {self.limit} for {order.symbol}"
                 )
             )
         return Approve()
@@ -147,9 +139,7 @@ class MaxOrderNotional:
         if self.limit <= 0:
             raise ValueError("MaxOrderNotional.limit must be positive")
 
-    def __call__(
-        self, order: Order, *, reference_price: Decimal | None = None
-    ) -> CheckResult:
+    def __call__(self, order: Order, *, reference_price: Decimal | None = None) -> CheckResult:
         if reference_price is None or reference_price <= 0:
             return Approve()
         notional = order.quantity * reference_price

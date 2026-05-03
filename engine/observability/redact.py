@@ -115,9 +115,7 @@ def _scrub_dict(d: dict[Any, Any]) -> dict[Any, Any]:
     return out
 
 
-def redact_processor(
-    _logger: WrappedLogger, _name: str, event_dict: EventDict
-) -> EventDict:
+def redact_processor(_logger: WrappedLogger, _name: str, event_dict: EventDict) -> EventDict:
     """structlog processor entry point. Returns a new dict; input is not mutated."""
     return _scrub_dict(dict(event_dict))
 

@@ -33,8 +33,8 @@ from engine.api.auth.mfa import (
 )
 from engine.config import settings
 
-
 _BACKUP_CODE_BYTES = 5  # 10 hex chars per code
+_TOTP_DIGITS = 6
 
 
 class MFAServiceError(Exception):
@@ -87,9 +87,7 @@ def hash_backup_codes(codes: list[str]) -> dict:
         "version": 1,
         "codes": [
             {
-                "hash": bcrypt.hashpw(c.encode("ascii"), bcrypt.gensalt()).decode(
-                    "ascii"
-                ),
+                "hash": bcrypt.hashpw(c.encode("ascii"), bcrypt.gensalt()).decode("ascii"),
                 "used_at": None,
             }
             for c in codes
@@ -172,7 +170,7 @@ def verify_login_code(
         return (False, None)
     cleaned = code.strip().replace(" ", "").replace("-", "")
     secret_b32 = decrypt_secret(encrypted_secret)
-    if cleaned.isdigit() and len(cleaned) == 6:
+    if cleaned.isdigit() and len(cleaned) == _TOTP_DIGITS:
         try:
             if verify_totp(secret_b32, cleaned):
                 return (True, None)
@@ -209,9 +207,7 @@ def verify_challenge(token: str) -> str:
         body_b64, sig_b64 = token.split(".", 1)
     except ValueError as exc:
         raise MFAServiceError("malformed challenge token") from exc
-    expected_sig = hmac.new(
-        _challenge_key(), body_b64.encode("ascii"), hashlib.sha256
-    ).digest()
+    expected_sig = hmac.new(_challenge_key(), body_b64.encode("ascii"), hashlib.sha256).digest()
     try:
         provided_sig = base64.urlsafe_b64decode(sig_b64)
     except (ValueError, TypeError) as exc:

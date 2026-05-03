@@ -127,9 +127,7 @@ class PaperBroker:
                     broker_code="NO_PRICE",
                 )
             now = _utcnow()
-            await self._events.put(
-                AckEvent(occurred_at=now, broker_order_id=broker_id)
-            )
+            await self._events.put(AckEvent(occurred_at=now, broker_order_id=broker_id))
             await self._events.put(
                 FillEvent(
                     occurred_at=now,
@@ -158,9 +156,7 @@ class PaperBroker:
                 quantity=order.quantity,
                 order_type=order.order_type,
             )
-            await self._events.put(
-                AckEvent(occurred_at=_utcnow(), broker_order_id=broker_id)
-            )
+            await self._events.put(AckEvent(occurred_at=_utcnow(), broker_order_id=broker_id))
             metrics.counter(
                 "paper_broker.submit",
                 tags={**base_tags, "outcome": "resting"},
@@ -226,9 +222,7 @@ class PaperBroker:
                 "paper_broker.simulate_fill",
                 tags={"broker": self._name, "outcome": "unknown"},
             )
-            raise BrokerError(
-                f"simulate_fill: no pending order {broker_order_id!r}"
-            )
+            raise BrokerError(f"simulate_fill: no pending order {broker_order_id!r}")
         price = fill_price if fill_price is not None else self._price_for(pending.symbol)
         if price is None or price <= 0:
             metrics.counter(
@@ -269,7 +263,7 @@ class PaperBroker:
 class _Pending:
     """Internal record for a resting paper order."""
 
-    __slots__ = ("oms_order_id", "symbol", "quantity", "order_type")
+    __slots__ = ("oms_order_id", "order_type", "quantity", "symbol")
 
     def __init__(
         self,

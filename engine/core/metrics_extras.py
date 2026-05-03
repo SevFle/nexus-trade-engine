@@ -40,7 +40,10 @@ Out of scope (explicit follow-ups for the remaining ~72 of 86):
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def compute_omega_ratio(
@@ -88,7 +91,7 @@ def compute_information_ratio(
     outperformance is.
     """
     n = len(returns)
-    if n != len(benchmark_returns) or n < 2:
+    if n != len(benchmark_returns) or n < 2:  # noqa: PLR2004
         return 0.0
     active = [r - b for r, b in zip(returns, benchmark_returns, strict=True)]
     mean = sum(active) / n
@@ -324,7 +327,7 @@ def compute_k_ratio(equity_curve: Sequence[float]) -> float:
     has zero variance in time (degenerate).
     """
     n = len(equity_curve)
-    if n < 2:
+    if n < 2:  # noqa: PLR2004
         return 0.0
     if any(v <= 0 for v in equity_curve):
         return 0.0
@@ -347,7 +350,7 @@ def compute_k_ratio(equity_curve: Sequence[float]) -> float:
     # Residual sum of squares; standard error of the slope.
     residuals = [y - (intercept + slope * x) for x, y in zip(xs, ys, strict=True)]
     sse = sum(r * r for r in residuals)
-    if n <= 2:
+    if n <= 2:  # noqa: PLR2004
         return 0.0
     se = math.sqrt(sse / (n - 2)) / math.sqrt(sxx)
     if se == 0:

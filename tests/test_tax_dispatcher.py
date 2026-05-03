@@ -120,8 +120,6 @@ class TestGbRouting:
 
 class TestDeRouting:
     def test_de_returns_kest_summary_routed_to_equity_bucket(self):
-        # +5,000 EUR equity → 1,000 EUR allowance, 4,000 EUR taxable.
-        # KESt = 1,000; SolZ = 55; total = 1,055.
         result = report_for_jurisdiction(
             "DE", [_disp(proceeds="6000", cost="1000")]
         )

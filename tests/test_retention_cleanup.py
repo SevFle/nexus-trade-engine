@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -18,7 +18,6 @@ from engine.data.retention_cleanup import (
     partition_boundaries,
 )
 
-UTC = timezone.utc
 NOW = datetime(2026, 5, 3, 12, 0, tzinfo=UTC)
 
 
@@ -71,7 +70,7 @@ class TestComputeCleanupWindow:
     def test_naive_now_rejected(self):
         p = RetentionPolicy("foo", retain_days=30)
         with pytest.raises(ValueError, match="timezone-aware"):
-            compute_cleanup_window(p, now=datetime(2026, 1, 1))
+            compute_cleanup_window(p, now=datetime(2026, 1, 1))  # noqa: DTZ001
 
     def test_default_now_uses_utc(self):
         p = RetentionPolicy("foo", retain_days=30)

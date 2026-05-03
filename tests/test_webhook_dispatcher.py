@@ -66,7 +66,7 @@ class _FakeConfig:
         self,
         *,
         url: str = "https://example.com/hook",
-        secret: str = "topsecret",
+        secret: str = "topsecret",  # noqa: S107
         template: str = "generic",
         max_retries: int = 3,
         custom_headers: dict | None = None,

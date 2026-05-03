@@ -85,9 +85,7 @@ class StrategyRegistry(Protocol):
 
     async def get(self, version_id: str) -> StrategyVersion | None: ...
     async def save(self, version: StrategyVersion) -> None: ...
-    async def list_for_strategy(
-        self, strategy_id: str
-    ) -> list[StrategyVersion]: ...
+    async def list_for_strategy(self, strategy_id: str) -> list[StrategyVersion]: ...
     async def find_by_hashes(
         self, strategy_id: str, code_hash: str, config_hash: str
     ) -> StrategyVersion | None: ...
@@ -108,9 +106,7 @@ class InMemoryStrategyRegistry:
             self._by_strategy[version.strategy_id].append(version.id)
         self._by_id[version.id] = version
 
-    async def list_for_strategy(
-        self, strategy_id: str
-    ) -> list[StrategyVersion]:
+    async def list_for_strategy(self, strategy_id: str) -> list[StrategyVersion]:
         ids = self._by_strategy.get(strategy_id, ())
         return [self._by_id[i] for i in ids if i in self._by_id]
 
@@ -172,10 +168,7 @@ class StrategyVersionService:
             msg = "code blob must not be empty"
             raise ValueError(msg)
         if len(code) > _MAX_CODE_SIZE_BYTES:
-            msg = (
-                f"code blob exceeds {_MAX_CODE_SIZE_BYTES} bytes "
-                f"(got {len(code)})"
-            )
+            msg = f"code blob exceeds {_MAX_CODE_SIZE_BYTES} bytes (got {len(code)})"
             raise ValueError(msg)
         code_hash = _sha256(code)
         config_hash = _canonical_config_hash(config)
@@ -185,15 +178,11 @@ class StrategyVersionService:
         # sequence to allocate `version_number`, otherwise two pods can
         # independently compute the same number and double-write.
         async with self._lock(strategy_id):
-            existing = await self.registry.find_by_hashes(
-                strategy_id, code_hash, config_hash
-            )
+            existing = await self.registry.find_by_hashes(strategy_id, code_hash, config_hash)
             if existing is not None:
                 return existing
             siblings = await self.registry.list_for_strategy(strategy_id)
-            version_number = (
-                max((v.version_number for v in siblings), default=0) + 1
-            )
+            version_number = max((v.version_number for v in siblings), default=0) + 1
             v = StrategyVersion(
                 id=str(uuid.uuid4()),
                 strategy_id=strategy_id,
@@ -221,21 +210,11 @@ class StrategyVersionService:
             if current is None:
                 raise VersionNotFoundError(version_id)
             if current.status == VersionStatus.RETIRED:
-                msg = (
-                    f"version {version_id} is retired and cannot be "
-                    "activated"
-                )
+                msg = f"version {version_id} is retired and cannot be activated"
                 raise ValueError(msg)
-            for sibling in await self.registry.list_for_strategy(
-                current.strategy_id
-            ):
-                if (
-                    sibling.id != current.id
-                    and sibling.status == VersionStatus.ACTIVE
-                ):
-                    await self.registry.save(
-                        replace(sibling, status=VersionStatus.RETIRED)
-                    )
+            for sibling in await self.registry.list_for_strategy(current.strategy_id):
+                if sibling.id != current.id and sibling.status == VersionStatus.ACTIVE:
+                    await self.registry.save(replace(sibling, status=VersionStatus.RETIRED))
             updated = replace(
                 current,
                 status=VersionStatus.ACTIVE,
@@ -267,17 +246,13 @@ class StrategyVersionService:
                 and (current_active is None or v.id != current_active.id)
             ]
             if not previously_active:
-                raise VersionNotFoundError(
-                    f"no rollback candidate for strategy {strategy_id}"
-                )
+                raise VersionNotFoundError(f"no rollback candidate for strategy {strategy_id}")
             previous = max(
                 previously_active,
                 key=lambda v: v.last_activated_at_epoch or 0.0,
             )
             if current_active is not None:
-                await self.registry.save(
-                    replace(current_active, status=VersionStatus.RETIRED)
-                )
+                await self.registry.save(replace(current_active, status=VersionStatus.RETIRED))
             promoted = replace(
                 previous,
                 status=VersionStatus.ACTIVE,
@@ -306,10 +281,7 @@ class StrategyVersionService:
             current = await self.registry.get(version_id)
             if current is None:
                 raise VersionNotFoundError(version_id)
-            if (
-                current.status == VersionStatus.ACTIVE
-                and not allow_retire_active
-            ):
+            if current.status == VersionStatus.ACTIVE and not allow_retire_active:
                 msg = (
                     f"version {version_id} is the active deployment; "
                     "pass allow_retire_active=True to take the strategy "
@@ -332,9 +304,7 @@ class StrategyVersionService:
             out = [v for v in out if v.status == status]
         return out
 
-    async def get_active(
-        self, strategy_id: str
-    ) -> StrategyVersion | None:
+    async def get_active(self, strategy_id: str) -> StrategyVersion | None:
         for v in await self.registry.list_for_strategy(strategy_id):
             if v.status == VersionStatus.ACTIVE:
                 return v

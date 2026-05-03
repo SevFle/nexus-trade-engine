@@ -63,4 +63,8 @@ class PortfolioSnapshot(BaseModel):
         return pos.get("market_value", 0) / self.total_value
 
     def summary(self) -> str:
-        return f"NAV: ${self.total_value:,.2f} | Cash: ${self.cash:,.2f} | Positions: {len(self.positions)}"
+        return (
+            f"NAV: ${self.total_value:,.2f} | "
+            f"Cash: ${self.cash:,.2f} | "
+            f"Positions: {len(self.positions)}"
+        )

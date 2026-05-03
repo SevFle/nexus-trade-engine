@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING
 
 import pytest
 
 from engine.core.cost_model import DefaultCostModel
 from engine.core.execution.base import FillResult
-from engine.core.order_manager import OrderManager, OrderStatus
+from engine.core.order_manager import Order, OrderManager, OrderStatus, OrderType
 from engine.core.portfolio import Portfolio
 from engine.core.risk_engine import RiskEngine
 from engine.core.signal import Side, Signal
 
 if TYPE_CHECKING:
     from engine.core.cost_model import CostBreakdown
-    from engine.core.order_manager import Order
 
 
 class FakeExecutionBackend:
@@ -224,3 +224,130 @@ class TestCompletedOrders:
         await om.process_signal(signal, market_price=150.0)
 
         assert len(om.completed_orders) == 0
+
+
+class TestOrderModel:
+    def test_order_default_status_pending(self):
+        order = Order(
+            signal_id="sig-1",
+            strategy_id="strat-1",
+            symbol="AAPL",
+            side=Side.BUY,
+            quantity=10,
+        )
+        assert order.status == OrderStatus.PENDING
+        assert order.order_type == OrderType.MARKET
+
+    def test_order_transition_records_history(self):
+        order = Order(
+            signal_id="sig-1",
+            strategy_id="strat-1",
+            symbol="AAPL",
+            side=Side.BUY,
+            quantity=10,
+        )
+        order.transition(OrderStatus.VALIDATED, "passed checks")
+        assert len(order.status_history) == 1
+        assert order.status_history[0]["from"] == OrderStatus.PENDING
+        assert order.status_history[0]["to"] == OrderStatus.VALIDATED
+        assert order.status_history[0]["reason"] == "passed checks"
+        assert order.status == OrderStatus.VALIDATED
+
+    def test_order_multiple_transitions(self):
+        order = Order(
+            signal_id="sig-1",
+            strategy_id="strat-1",
+            symbol="AAPL",
+            side=Side.BUY,
+            quantity=10,
+        )
+        order.transition(OrderStatus.VALIDATED)
+        order.transition(OrderStatus.COSTED)
+        order.transition(OrderStatus.RISK_APPROVED)
+        order.transition(OrderStatus.SUBMITTED)
+        order.transition(OrderStatus.FILLED)
+        assert len(order.status_history) == 5
+        assert order.status == OrderStatus.FILLED
+
+    def test_order_has_uuid_id(self):
+        order = Order(
+            signal_id="sig-1",
+            strategy_id="strat-1",
+            symbol="AAPL",
+            side=Side.BUY,
+            quantity=10,
+        )
+        uuid.UUID(order.id)
+
+    def test_order_type_limit(self):
+        order = Order(
+            signal_id="sig-1",
+            strategy_id="strat-1",
+            symbol="AAPL",
+            side=Side.BUY,
+            quantity=10,
+            order_type=OrderType.LIMIT,
+            limit_price=155.0,
+        )
+        assert order.order_type == OrderType.LIMIT
+        assert order.limit_price == 155.0
+
+
+class TestOrderManagerEdgeCases:
+    async def test_process_signal_with_avg_volume(self, cost_model, risk_engine, portfolio):
+        om = OrderManager(cost_model=cost_model, risk_engine=risk_engine, portfolio=portfolio)
+        om.set_execution_backend(FakeExecutionBackend(success=True, price=100.0, quantity=10))
+
+        signal = Signal.buy(symbol="AAPL", strategy_id="test", quantity=10)
+        order = await om.process_signal(signal, market_price=100.0, avg_volume=1_000_000)
+        assert order.status == OrderStatus.FILLED
+        assert order.cost_breakdown is not None
+
+    async def test_hold_signal_side(self):
+        signal = Signal.hold(symbol="AAPL", strategy_id="test")
+        assert signal.side == Side.HOLD
+
+    async def test_sell_signal_deducts_from_portfolio(self, cost_model, risk_engine, portfolio):
+        portfolio.open_position("AAPL", 20, 100.0)
+        om = OrderManager(cost_model=cost_model, risk_engine=risk_engine, portfolio=portfolio)
+        om.set_execution_backend(FakeExecutionBackend(success=True, price=150.0, quantity=10))
+
+        signal = Signal.sell(symbol="AAPL", strategy_id="test", quantity=10)
+        order = await om.process_signal(signal, market_price=150.0)
+        assert order.status == OrderStatus.FILLED
+        assert portfolio.positions["AAPL"].quantity == 10
+
+    async def test_pending_orders_tracking(self, order_manager):
+        signal = Signal.buy(symbol="AAPL", strategy_id="test", quantity=10)
+        order = await order_manager.process_signal(signal, market_price=150.0)
+        assert order.id not in order_manager.pending_orders
+
+    async def test_set_execution_backend(self, cost_model, risk_engine, portfolio):
+        om = OrderManager(cost_model=cost_model, risk_engine=risk_engine, portfolio=portfolio)
+        backend = FakeExecutionBackend()
+        om.set_execution_backend(backend)
+        assert om.execution_backend is backend
+
+
+class TestOrderStatusEnum:
+    def test_all_statuses_are_strings(self):
+        for status in OrderStatus:
+            assert isinstance(status.value, str)
+
+    def test_status_values(self):
+        assert OrderStatus.PENDING == "pending"
+        assert OrderStatus.FILLED == "filled"
+        assert OrderStatus.RISK_REJECTED == "risk_rejected"
+        assert OrderStatus.FAILED == "failed"
+
+
+class TestOrderTypeEnum:
+    def test_all_types_are_strings(self):
+        for ot in OrderType:
+            assert isinstance(ot.value, str)
+
+    def test_type_values(self):
+        assert OrderType.MARKET == "market"
+        assert OrderType.LIMIT == "limit"
+        assert OrderType.STOP == "stop"
+        assert OrderType.STOP_LIMIT == "stop_limit"

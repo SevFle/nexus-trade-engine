@@ -35,18 +35,21 @@ marketplace ranking.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
+from typing import TYPE_CHECKING
 
-from engine.core.metrics import MetricsReport
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from engine.core.metrics import MetricsReport
 
 
 class StrategyEvaluatorError(ValueError):
     """Bad evaluator configuration or invalid metrics input."""
 
 
-class EvaluationDimension(str, Enum):
+class EvaluationDimension(StrEnum):
     RISK_ADJUSTED_RETURN = "risk_adjusted_return"
     DRAWDOWN_CONTROL = "drawdown_control"
     CONSISTENCY = "consistency"
@@ -102,9 +105,7 @@ def _risk_adjusted_score(sharpe: float) -> float:
 def _drawdown_score(max_dd_pct: float) -> float:
     """Spec: 0->100, 5->90, 10->70, 20->40, 30->20, >30 falls toward 0."""
     if max_dd_pct < 0:
-        raise StrategyEvaluatorError(
-            f"max_drawdown_pct must be >= 0, got {max_dd_pct}"
-        )
+        raise StrategyEvaluatorError(f"max_drawdown_pct must be >= 0, got {max_dd_pct}")
     return _piecewise_linear(
         max_dd_pct,
         [
@@ -122,23 +123,17 @@ def _cost_efficiency_score(cost_drag_pct: float) -> float:
     """Exponential decay on cost_drag_pct, half-life 4%. 0% -> 100,
     4% -> 50, 20% -> ~3."""
     if cost_drag_pct < 0:
-        raise StrategyEvaluatorError(
-            f"cost_drag_pct must be >= 0, got {cost_drag_pct}"
-        )
+        raise StrategyEvaluatorError(f"cost_drag_pct must be >= 0, got {cost_drag_pct}")
     return 100.0 * math.pow(0.5, cost_drag_pct / 4.0)
 
 
-def _win_rate_quality_score(
-    win_rate: float, avg_winner: float, avg_loser: float
-) -> float:
+def _win_rate_quality_score(win_rate: float, avg_winner: float, avg_loser: float) -> float:
     """``quality = win_rate * (avg_winner / abs(avg_loser))``,
     normalised to [0, 100]. ``win_rate`` is treated as a fraction in
     [0, 1] if <= 1.0, else as a percentage in [0, 100]."""
     wr = win_rate / 100.0 if win_rate > 1.0 else win_rate
     if wr < 0 or wr > 1:
-        raise StrategyEvaluatorError(
-            f"win_rate must be in [0, 1] or [0, 100], got {win_rate}"
-        )
+        raise StrategyEvaluatorError(f"win_rate must be in [0, 1] or [0, 100], got {win_rate}")
     if avg_loser == 0:
         return 50.0 if wr == 0 else 100.0
     quality = wr * (avg_winner / abs(avg_loser))
@@ -179,14 +174,10 @@ class EvaluationWeights:
         for label, value in self.as_mapping().items():
             _require_finite(value, f"weight {label}")
             if value < 0:
-                raise StrategyEvaluatorError(
-                    f"weight {label} must be >= 0, got {value}"
-                )
+                raise StrategyEvaluatorError(f"weight {label} must be >= 0, got {value}")
         total = sum(self.as_mapping().values())
         if not math.isclose(total, 1.0, abs_tol=1e-9):
-            raise StrategyEvaluatorError(
-                f"EvaluationWeights must sum to 1.0, got {total}"
-            )
+            raise StrategyEvaluatorError(f"EvaluationWeights must sum to 1.0, got {total}")
 
     def as_mapping(self) -> dict[str, float]:
         return {
@@ -244,9 +235,7 @@ def _build_warnings(report: MetricsReport) -> list[str]:
     if report.volatility_annual_pct >= 30.0:
         warnings.append(_WARN_HIGH_VOLATILITY)
     if report.avg_loser != 0 and report.total_trades > 0:
-        wr = (
-            report.win_rate / 100.0 if report.win_rate > 1.0 else report.win_rate
-        )
+        wr = report.win_rate / 100.0 if report.win_rate > 1.0 else report.win_rate
         quality = wr * (report.avg_winner / abs(report.avg_loser))
         if quality < 0.5:
             warnings.append(_WARN_POOR_WIN_QUALITY)
@@ -269,22 +258,14 @@ class StrategyEvaluator:
         _require_finite(report.avg_loser, "avg_loser")
 
         dims: dict[EvaluationDimension, float] = {
-            EvaluationDimension.RISK_ADJUSTED_RETURN: _risk_adjusted_score(
-                report.sharpe_ratio
-            ),
-            EvaluationDimension.DRAWDOWN_CONTROL: _drawdown_score(
-                report.max_drawdown_pct
-            ),
+            EvaluationDimension.RISK_ADJUSTED_RETURN: _risk_adjusted_score(report.sharpe_ratio),
+            EvaluationDimension.DRAWDOWN_CONTROL: _drawdown_score(report.max_drawdown_pct),
             EvaluationDimension.CONSISTENCY: self._consistency(report),
-            EvaluationDimension.COST_EFFICIENCY: _cost_efficiency_score(
-                report.cost_drag_pct
-            ),
+            EvaluationDimension.COST_EFFICIENCY: _cost_efficiency_score(report.cost_drag_pct),
             EvaluationDimension.WIN_RATE_QUALITY: _win_rate_quality_score(
                 report.win_rate, report.avg_winner, report.avg_loser
             ),
-            EvaluationDimension.STABILITY: _stability_score(
-                report.volatility_annual_pct
-            ),
+            EvaluationDimension.STABILITY: _stability_score(report.volatility_annual_pct),
         }
 
         weight_map = {
@@ -307,11 +288,7 @@ class StrategyEvaluator:
         )
 
     def _consistency(self, report: MetricsReport) -> float:
-        sharpes = [
-            r.sharpe_ratio
-            for r in report.rolling_metrics
-            if math.isfinite(r.sharpe_ratio)
-        ]
+        sharpes = [r.sharpe_ratio for r in report.rolling_metrics if math.isfinite(r.sharpe_ratio)]
         if len(sharpes) < 2:
             return 50.0
         mean = sum(sharpes) / len(sharpes)

@@ -13,7 +13,6 @@ from engine.core.crypto_costs import (
     perpetual_funding_payment,
 )
 
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -98,7 +97,7 @@ class TestPerpetualFunding:
 
 class TestFxConversion:
     def test_known_value_default_fee(self):
-        # $1000 USD × 0.92 EUR/USD × (1 - 10/10000) = 920 - 0.92 = 919.08
+        # $1000 USD * 0.92 EUR/USD * (1 - 10/10000) = 920 - 0.92 = 919.08
         net, fee = fx_conversion(Decimal("1000"), Decimal("0.92"))
         assert net == Decimal("919.08")
         assert fee == Decimal("0.92")

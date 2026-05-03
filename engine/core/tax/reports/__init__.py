@@ -18,13 +18,6 @@ from engine.core.tax.reports.cgt_carryover import (
     CgtCarryover,
     apply_cgt_carryover,
 )
-from engine.core.tax.reports.hmrc_cgt import (
-    ANNUAL_EXEMPT_AMOUNT_2024_25,
-    CgtDisposal,
-    CgtSummary,
-    disposals_to_csv,
-    summarize_cgt,
-)
 from engine.core.tax.reports.dispatcher import (
     TaxableDisposal,
     UnsupportedJurisdictionError,
@@ -32,47 +25,12 @@ from engine.core.tax.reports.dispatcher import (
     flatten_summary_to_csv,
     report_for_jurisdiction,
 )
-from engine.core.tax.reports.mifid2 import (
-    RTS_22_COLUMNS,
-    IdType,
-    MiFID2Transaction,
-    ShortSaleIndicator,
-    Side,
-    TradingCapacity,
-    transactions_to_csv,
-)
-from engine.core.tax.reports.france_pfu import (
-    PFU_INCOME_TAX_RATE,
-    PFU_SOCIAL_CHARGES_RATE,
-    PFU_TOTAL_RATE,
-    PfuDisposal,
-    PfuSummary,
-    summarize_pfu,
-)
-from engine.core.tax.reports.pfu_carryover import (
-    PfuApplication,
-    PfuCarryover,
-    PfuLossVintage,
-    apply_pfu_carryover,
-)
-from engine.core.tax.reports.kest import (
-    CHURCH_TAX_RATE_BAYERN_BW,
-    CHURCH_TAX_RATE_OTHER,
-    KEST_RATE,
-    SOLZ_RATE,
-    SPARER_PAUSCHBETRAG_2023,
-    SPARER_PAUSCHBETRAG_2024,
-    SPARER_PAUSCHBETRAG_JOINT_2023,
-    SPARER_PAUSCHBETRAG_JOINT_2024,
-    AssetClass,
-    KestDisposal,
-    KestSummary,
-    summarize_kest,
-)
-from engine.core.tax.reports.kest_carryover import (
-    KestApplication,
-    KestCarryover,
-    apply_kest_carryover,
+from engine.core.tax.reports.form_1099b import (
+    HoldingTerm,
+    LotDisposition,
+    Schedule1099BRow,
+    generate_1099b_rows,
+    rows_to_csv,
 )
 from engine.core.tax.reports.form_6781 import (
     LONG_TERM_PCT,
@@ -94,19 +52,54 @@ from engine.core.tax.reports.form_6781_part_iii import (
     positions_to_csv,
     summarize_form6781_part_iii,
 )
-from engine.core.tax.reports.section_1256_carryback import (
-    CARRYBACK_YEARS,
-    CarrybackAbsorption,
-    PriorYearNetGain,
-    Section1256Carryback,
-    apply_section_1256_carryback,
+from engine.core.tax.reports.france_pfu import (
+    PFU_INCOME_TAX_RATE,
+    PFU_SOCIAL_CHARGES_RATE,
+    PFU_TOTAL_RATE,
+    PfuDisposal,
+    PfuSummary,
+    summarize_pfu,
 )
-from engine.core.tax.reports.form_1099b import (
-    HoldingTerm,
-    LotDisposition,
-    Schedule1099BRow,
-    generate_1099b_rows,
-    rows_to_csv,
+from engine.core.tax.reports.hmrc_cgt import (
+    ANNUAL_EXEMPT_AMOUNT_2024_25,
+    CgtDisposal,
+    CgtSummary,
+    disposals_to_csv,
+    summarize_cgt,
+)
+from engine.core.tax.reports.kest import (
+    CHURCH_TAX_RATE_BAYERN_BW,
+    CHURCH_TAX_RATE_OTHER,
+    KEST_RATE,
+    SOLZ_RATE,
+    SPARER_PAUSCHBETRAG_2023,
+    SPARER_PAUSCHBETRAG_2024,
+    SPARER_PAUSCHBETRAG_JOINT_2023,
+    SPARER_PAUSCHBETRAG_JOINT_2024,
+    AssetClass,
+    KestDisposal,
+    KestSummary,
+    summarize_kest,
+)
+from engine.core.tax.reports.kest_carryover import (
+    KestApplication,
+    KestCarryover,
+    apply_kest_carryover,
+)
+from engine.core.tax.reports.mifid2 import (
+    RTS_22_COLUMNS,
+    IdType,
+    MiFID2Transaction,
+    ShortSaleIndicator,
+    Side,
+    TradingCapacity,
+    transactions_to_csv,
+)
+from engine.core.tax.reports.pfu_carryover import (
+    PfuApplication,
+    PfuCarryover,
+    PfuLossVintage,
+    apply_pfu_carryover,
 )
 from engine.core.tax.reports.schedule_d import (
     ScheduleDPartTotal,
@@ -114,40 +107,55 @@ from engine.core.tax.reports.schedule_d import (
     summarize_schedule_d,
     summary_to_csv,
 )
+from engine.core.tax.reports.section_1256_carryback import (
+    CARRYBACK_YEARS,
+    CarrybackAbsorption,
+    PriorYearNetGain,
+    Section1256Carryback,
+    apply_section_1256_carryback,
+)
+
+_SUBMODULES = (
+    "carryover",
+    "cgt_carryover",
+    "dispatcher",
+    "form_1099b",
+    "form_6781",
+    "form_6781_part_ii",
+    "form_6781_part_iii",
+    "france_pfu",
+    "hmrc_cgt",
+    "kest",
+    "kest_carryover",
+    "mifid2",
+    "pfu_carryover",
+    "schedule_d",
+    "section_1256_carryback",
+)
+for _sm in _SUBMODULES:
+    globals().pop(_sm, None)
+del _sm, _SUBMODULES
 
 __all__ = [
     "ANNUAL_EXEMPT_AMOUNT_2024_25",
+    "CARRYBACK_YEARS",
     "CHURCH_TAX_RATE_BAYERN_BW",
     "CHURCH_TAX_RATE_OTHER",
     "DEDUCTIBLE_CAP_DEFAULT",
     "DEDUCTIBLE_CAP_MFS",
-    "Form6781PartIISummary",
-    "Form6781PartIIISummary",
-    "Form6781Summary",
     "KEST_RATE",
-    "IdType",
     "LONG_TERM_PCT",
-    "MiFID2Transaction",
     "PFU_INCOME_TAX_RATE",
-    "RTS_22_COLUMNS",
-    "SHORT_TERM_PCT",
-    "Section1256Contract",
-    "Side",
-    "TradingCapacity",
     "PFU_SOCIAL_CHARGES_RATE",
     "PFU_TOTAL_RATE",
-    "PfuApplication",
-    "PfuCarryover",
-    "PfuDisposal",
-    "PfuLossVintage",
-    "PfuSummary",
+    "RTS_22_COLUMNS",
+    "SHORT_TERM_PCT",
     "SOLZ_RATE",
     "SPARER_PAUSCHBETRAG_2023",
     "SPARER_PAUSCHBETRAG_2024",
     "SPARER_PAUSCHBETRAG_JOINT_2023",
     "SPARER_PAUSCHBETRAG_JOINT_2024",
     "AssetClass",
-    "CARRYBACK_YEARS",
     "CapitalLossApplication",
     "CapitalLossCarryover",
     "CarrybackAbsorption",
@@ -155,20 +163,33 @@ __all__ = [
     "CgtCarryover",
     "CgtDisposal",
     "CgtSummary",
+    "Form6781PartIIISummary",
+    "Form6781PartIISummary",
+    "Form6781Summary",
     "HoldingTerm",
+    "IdType",
     "KestApplication",
     "KestCarryover",
     "KestDisposal",
     "KestSummary",
     "LotDisposition",
+    "MiFID2Transaction",
+    "PfuApplication",
+    "PfuCarryover",
+    "PfuDisposal",
+    "PfuLossVintage",
+    "PfuSummary",
     "PriorYearNetGain",
     "Schedule1099BRow",
     "ScheduleDPartTotal",
     "ScheduleDSummary",
     "Section1256Carryback",
-    "StraddleLeg",
+    "Section1256Contract",
     "ShortSaleIndicator",
+    "Side",
+    "StraddleLeg",
     "TaxableDisposal",
+    "TradingCapacity",
     "UnsupportedJurisdictionError",
     "YearEndPosition",
     "apply_carryover",

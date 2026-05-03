@@ -25,7 +25,6 @@ from engine.core.oms.events import ExpireEvent
 from engine.core.oms.order import IllegalTransitionError, OverFillError
 from engine.core.oms.states import can_transition
 
-
 _T0 = datetime(2026, 5, 3, 12, 0, 0, tzinfo=UTC)
 
 
@@ -157,7 +156,6 @@ class TestHappyPath:
         )
         assert o.status == OrderStatus.FILLED
         assert o.filled_quantity == Decimal("10")
-        # VWAP: (4*100 + 6*101) / 10 = 100.6
         assert o.average_fill_price == Decimal("100.6")
 
     def test_partial_fill_at_full_quantity_marks_filled(self):
@@ -304,5 +302,5 @@ class TestImmutability:
 
     def test_order_is_frozen(self):
         o = _market_buy()
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):
             o.status = OrderStatus.SUBMITTED  # type: ignore[misc]

@@ -79,9 +79,7 @@ class PfuCarryover:
 
     @property
     def total(self) -> Decimal:
-        return sum(
-            (v.amount for v in self.vintages), _ZERO
-        ).quantize(_TWOPLACES)
+        return sum((v.amount for v in self.vintages), _ZERO).quantize(_TWOPLACES)
 
 
 def normalised(carryover: PfuCarryover) -> PfuCarryover:
@@ -161,18 +159,12 @@ def apply_pfu_carryover(
             loss_used += take
             remaining_after = (v.amount - take).quantize(_TWOPLACES)
             if remaining_after > 0:
-                new_surviving.append(
-                    PfuLossVintage(year=v.year, amount=remaining_after)
-                )
+                new_surviving.append(PfuLossVintage(year=v.year, amount=remaining_after))
             remaining_gain = (remaining_gain - take).quantize(_TWOPLACES)
         surviving = new_surviving
     elif summary.net_loss > 0:
         # Tag the year's loss as a new vintage.
-        surviving.append(
-            PfuLossVintage(
-                year=current_year, amount=summary.net_loss
-            )
-        )
+        surviving.append(PfuLossVintage(year=current_year, amount=summary.net_loss))
 
     taxable_after = (summary.net_gain - loss_used).quantize(_TWOPLACES)
     income_tax = (taxable_after * PFU_INCOME_TAX_RATE).quantize(_TWOPLACES)
@@ -186,9 +178,7 @@ def apply_pfu_carryover(
         income_tax_after_carryover=income_tax,
         social_charges_after_carryover=social,
         total_tax_after_carryover=total,
-        next_year_carryover=normalised(
-            PfuCarryover(vintages=tuple(surviving))
-        ),
+        next_year_carryover=normalised(PfuCarryover(vintages=tuple(surviving))),
         expired=tuple(expired_vintages),
     )
 

@@ -449,7 +449,7 @@ class TestLegalServiceAcceptance:
         await db_session.flush()
 
         records = await legal_service.list_user_acceptances(db_session, user.id, "re-ctx-doc")
-        assert len(records) == 2  # noqa: PLR2004
+        assert len(records) == 2
         v2_record = next(r for r in records if r.document_version == "2.0.0")
         assert v2_record.context == "re-acceptance"
 

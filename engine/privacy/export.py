@@ -62,32 +62,38 @@ async def collect_user_data(
 
     Raises ``LookupError`` if the user does not exist.
     """
-    user = (
-        await session.execute(select(User).where(User.id == user_id))
-    ).scalar_one_or_none()
+    user = (await session.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if user is None:
         raise LookupError(f"user not found: {user_id}")
 
     portfolios = (
-        await session.execute(select(Portfolio).where(Portfolio.user_id == user_id))
-    ).scalars().all()
+        (await session.execute(select(Portfolio).where(Portfolio.user_id == user_id)))
+        .scalars()
+        .all()
+    )
     backtests = (
-        await session.execute(select(BacktestResult).where(BacktestResult.user_id == user_id))
-    ).scalars().all()
+        (await session.execute(select(BacktestResult).where(BacktestResult.user_id == user_id)))
+        .scalars()
+        .all()
+    )
     webhooks = (
-        await session.execute(select(WebhookConfig).where(WebhookConfig.user_id == user_id))
-    ).scalars().all()
+        (await session.execute(select(WebhookConfig).where(WebhookConfig.user_id == user_id)))
+        .scalars()
+        .all()
+    )
     api_keys = (
-        await session.execute(select(ApiKey).where(ApiKey.user_id == user_id))
-    ).scalars().all()
+        (await session.execute(select(ApiKey).where(ApiKey.user_id == user_id))).scalars().all()
+    )
     dsr_rows = (
-        await session.execute(select(DSRequest).where(DSRequest.user_id == user_id))
-    ).scalars().all()
+        (await session.execute(select(DSRequest).where(DSRequest.user_id == user_id)))
+        .scalars()
+        .all()
+    )
     legal_rows = (
-        await session.execute(
-            select(LegalAcceptance).where(LegalAcceptance.user_id == user_id)
-        )
-    ).scalars().all()
+        (await session.execute(select(LegalAcceptance).where(LegalAcceptance.user_id == user_id)))
+        .scalars()
+        .all()
+    )
 
     return {
         "schema_version": 1,

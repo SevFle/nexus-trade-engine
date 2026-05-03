@@ -42,9 +42,7 @@ def _get(field: str) -> str | None:
     return _VARS[field].get()
 
 
-def bind_request_scope(
-    *, correlation_id: str, request_id: str, span_id: str
-) -> list[Any]:
+def bind_request_scope(*, correlation_id: str, request_id: str, span_id: str) -> list[Any]:
     """Bind the per-request triple and return tokens for later
     :func:`reset_tokens`. Use this when you must restore the prior context
     (e.g., from raw ASGI middleware running inside an inlined caller)."""

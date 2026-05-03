@@ -112,7 +112,9 @@ class PolygonDataProvider(HTTPProviderBase, IDataProvider):
             f"{start.isoformat()}/{end.isoformat()}"
         )
         data = await self._request_json(
-            "GET", path, params={"adjusted": "true", "sort": "asc", "limit": 50000},
+            "GET",
+            path,
+            params={"adjusted": "true", "sort": "asc", "limit": 50000},
         )
         df = self._parse_aggs(data)
         df = normalise_ohlcv(df)
@@ -137,9 +139,7 @@ class PolygonDataProvider(HTTPProviderBase, IDataProvider):
                 out[sym] = price
         return out
 
-    async def get_options_chain(
-        self, symbol: str, expiry: str | None = None
-    ) -> pd.DataFrame:
+    async def get_options_chain(self, symbol: str, expiry: str | None = None) -> pd.DataFrame:
         params: dict[str, str | int] = {"underlying_ticker": symbol, "limit": 250}
         if expiry:
             params["expiration_date"] = expiry

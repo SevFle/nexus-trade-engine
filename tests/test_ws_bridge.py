@@ -13,7 +13,6 @@ from engine.api.websocket.bridge import (
 )
 from engine.api.websocket.manager import ConnectionManager, Topic
 
-
 # ---------------------------------------------------------------------------
 # topic_for_event_type
 # ---------------------------------------------------------------------------
@@ -120,7 +119,7 @@ async def setup():
 
 class TestBridge:
     async def test_delivers_to_subscribed_user(self, setup):
-        bus, manager, bridge = setup
+        bus, manager, _bridge = setup
         user_id = uuid.uuid4()
         ws = _FakeWS()
         await manager.attach(user_id, ws)
@@ -138,7 +137,7 @@ class TestBridge:
         assert ws.sent[0]["data"]["event_type"] == "order.filled"
 
     async def test_drops_event_without_user_id(self, setup):
-        bus, manager, bridge = setup
+        bus, manager, _bridge = setup
         user_id = uuid.uuid4()
         ws = _FakeWS()
         await manager.attach(user_id, ws)
@@ -151,7 +150,7 @@ class TestBridge:
         assert ws.sent == []
 
     async def test_drops_unrouted_event(self, setup):
-        bus, manager, bridge = setup
+        bus, manager, _bridge = setup
         user_id = uuid.uuid4()
         ws = _FakeWS()
         await manager.attach(user_id, ws)
@@ -166,7 +165,7 @@ class TestBridge:
         assert ws.sent == []
 
     async def test_only_subscribed_topic_receives(self, setup):
-        bus, manager, bridge = setup
+        bus, manager, _bridge = setup
         user_id = uuid.uuid4()
         ws = _FakeWS()
         await manager.attach(user_id, ws)
@@ -180,13 +179,13 @@ class TestBridge:
         assert ws.sent == []
 
     async def test_detach_unsubscribes(self, setup):
-        bus, manager, bridge = setup
+        bus, manager, _bridge = setup
         user_id = uuid.uuid4()
         ws = _FakeWS()
         await manager.attach(user_id, ws)
         await manager.subscribe(user_id, ws, ["order"])
 
-        bridge.detach()
+        _bridge.detach()
         await bus.deliver(
             "order.filled",
             {"event_type": "order.filled", "data": {"user_id": str(user_id)}},

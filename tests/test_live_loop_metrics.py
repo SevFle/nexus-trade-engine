@@ -64,7 +64,7 @@ class _RejectBroker:
     def name(self) -> str:
         return "reject"
 
-    async def submit(self, order: Order) -> SubmittedOrder:  # noqa: ARG002
+    async def submit(self, order: Order) -> SubmittedOrder:
         raise BrokerRejectError("insufficient buying power", broker_code="MARGIN")
 
     async def cancel(self, *, order_id: uuid.UUID, broker_order_id: str) -> None:
@@ -80,7 +80,7 @@ class _AuthFailBroker:
     def name(self) -> str:
         return "auth-fail"
 
-    async def submit(self, order: Order) -> SubmittedOrder:  # noqa: ARG002
+    async def submit(self, order: Order) -> SubmittedOrder:
         raise BrokerAuthError("invalid api key")
 
     async def cancel(self, *, order_id: uuid.UUID, broker_order_id: str) -> None:
@@ -96,7 +96,7 @@ class _ConnectionBroker:
     def name(self) -> str:
         return "no-conn"
 
-    async def submit(self, order: Order) -> SubmittedOrder:  # noqa: ARG002
+    async def submit(self, order: Order) -> SubmittedOrder:
         raise BrokerConnectionError("dns failed")
 
     async def cancel(self, *, order_id: uuid.UUID, broker_order_id: str) -> None:

@@ -25,7 +25,7 @@ Out of scope:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from engine.core.drawdown_analytics import underwater_curve
 from engine.core.trade_stats import (
@@ -34,15 +34,16 @@ from engine.core.trade_stats import (
     win_loss_ratio,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 
 def _validate_window(window: int) -> None:
     if window < 2:
         raise ValueError("window must be >= 2")
 
 
-def rolling_hit_ratio(
-    trade_pnls: Sequence[float], window: int
-) -> list[float | None]:
+def rolling_hit_ratio(trade_pnls: Sequence[float], window: int) -> list[float | None]:
     """Hit ratio over each ``window``-sized trailing slice of trades.
 
     ``None`` for the first ``window - 1`` indices.
@@ -57,9 +58,7 @@ def rolling_hit_ratio(
     return out
 
 
-def rolling_profit_factor(
-    trade_pnls: Sequence[float], window: int
-) -> list[float | None]:
+def rolling_profit_factor(trade_pnls: Sequence[float], window: int) -> list[float | None]:
     """Profit factor over each trailing window.
 
     Mirrors ``engine.core.trade_stats.profit_factor`` semantics:
@@ -77,9 +76,7 @@ def rolling_profit_factor(
     return out
 
 
-def rolling_win_loss_ratio(
-    trade_pnls: Sequence[float], window: int
-) -> list[float | None]:
+def rolling_win_loss_ratio(trade_pnls: Sequence[float], window: int) -> list[float | None]:
     """Win/loss ratio over each trailing window."""
     _validate_window(window)
     n = len(trade_pnls)

@@ -23,8 +23,10 @@ app or by raising the cap at the proxy layer.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 
 class BodySizeLimitExceededError(Exception):
@@ -37,9 +39,7 @@ class BodySizeLimitMiddleware:
 
     def __init__(self, app: Any, *, max_bytes: int) -> None:
         if max_bytes <= 0:
-            raise ValueError(
-                f"BodySizeLimitMiddleware.max_bytes must be > 0, got {max_bytes}"
-            )
+            raise ValueError(f"BodySizeLimitMiddleware.max_bytes must be > 0, got {max_bytes}")
         self.app = app
         self.max_bytes = max_bytes
 

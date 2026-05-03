@@ -14,7 +14,6 @@ from engine.core.options import (
     implied_volatility,
 )
 
-
 # ---------------------------------------------------------------------------
 # Pricing — golden values
 # ---------------------------------------------------------------------------
@@ -48,9 +47,9 @@ class TestPriceGoldens:
 
     def test_atm_call_no_drift_equals_n(self):
         # ATM, r = q = 0, sigma=0.2, T=1 → call = S * (2N(sigma/2) - 1).
-        S = 100.0
+        S = 100.0  # noqa: N806
         sigma = 0.20
-        T = 1.0
+        T = 1.0  # noqa: N806
         expected = S * (
             2 * (0.5 * (1 + math.erf((sigma / 2) / math.sqrt(2)))) - 1
         )
@@ -68,7 +67,7 @@ class TestPriceGoldens:
 class TestPutCallParity:
     def test_parity_holds(self):
         # C - P = S * exp(-qT) - K * exp(-rT)
-        S, K, T, r, q, sigma = 100.0, 95.0, 0.75, 0.04, 0.01, 0.30
+        S, K, T, r, q, sigma = 100.0, 95.0, 0.75, 0.04, 0.01, 0.30  # noqa: N806
         c = bs_price(option_type=OptionType.CALL, S=S, K=K, T=T, r=r, sigma=sigma, q=q)
         p = bs_price(option_type=OptionType.PUT, S=S, K=K, T=T, r=r, sigma=sigma, q=q)
         rhs = S * math.exp(-q * T) - K * math.exp(-r * T)
@@ -95,7 +94,7 @@ class TestEdgeCases:
         ) == 0.0
 
     def test_zero_underlying_put_discounted_strike(self):
-        K, T, r = 100.0, 1.0, 0.05
+        K, T, r = 100.0, 1.0, 0.05  # noqa: N806
         expected = K * math.exp(-r * T)
         assert bs_price(
             option_type=OptionType.PUT, S=0, K=K, T=T, r=r, sigma=0.2
@@ -134,7 +133,7 @@ class TestGreeks:
 
     def test_call_minus_put_delta_equals_disc_q(self):
         # delta_call - delta_put = exp(-qT)
-        S, K, T, r, q, sigma = 100, 100, 0.5, 0.05, 0.02, 0.20
+        S, K, T, r, q, sigma = 100, 100, 0.5, 0.05, 0.02, 0.20  # noqa: N806
         gc = bs_greeks(
             option_type=OptionType.CALL, S=S, K=K, T=T, r=r, sigma=sigma, q=q
         )
@@ -145,7 +144,7 @@ class TestGreeks:
 
     def test_call_put_gamma_equal(self):
         # Gamma is the same for calls and puts.
-        kw = dict(S=100, K=100, T=0.5, r=0.05, sigma=0.20)
+        kw = {"S": 100, "K": 100, "T": 0.5, "r": 0.05, "sigma": 0.20}
         gc = bs_greeks(option_type=OptionType.CALL, **kw)
         gp = bs_greeks(option_type=OptionType.PUT, **kw)
         assert gc.gamma == pytest.approx(gp.gamma, abs=1e-12)
@@ -158,7 +157,7 @@ class TestGreeks:
         assert g.vega > 0
 
     def test_call_rho_positive_put_rho_negative(self):
-        kw = dict(S=100, K=100, T=0.5, r=0.05, sigma=0.20)
+        kw = {"S": 100, "K": 100, "T": 0.5, "r": 0.05, "sigma": 0.20}
         gc = bs_greeks(option_type=OptionType.CALL, **kw)
         gp = bs_greeks(option_type=OptionType.PUT, **kw)
         assert gc.rho > 0
@@ -166,8 +165,8 @@ class TestGreeks:
 
     def test_finite_difference_delta(self):
         # delta ~= (P(S+h) - P(S-h)) / (2h)
-        kw = dict(K=100, T=0.5, r=0.05, sigma=0.20)
-        S = 100.0
+        kw = {"K": 100, "T": 0.5, "r": 0.05, "sigma": 0.20}
+        S = 100.0  # noqa: N806
         h = 1e-3
         analytic = bs_greeks(option_type=OptionType.CALL, S=S, **kw).delta
         fd = (
@@ -178,7 +177,7 @@ class TestGreeks:
 
     def test_finite_difference_vega(self):
         # vega ~= (P(sigma+h) - P(sigma-h)) / (2h)
-        kw = dict(S=100, K=100, T=0.5, r=0.05)
+        kw = {"S": 100, "K": 100, "T": 0.5, "r": 0.05}
         sigma = 0.20
         h = 1e-4
         analytic = bs_greeks(option_type=OptionType.CALL, sigma=sigma, **kw).vega
@@ -208,7 +207,7 @@ class TestGreeks:
 
 class TestImpliedVol:
     def test_round_trip_call(self):
-        kw = dict(S=100, K=100, T=0.5, r=0.05, q=0.0)
+        kw = {"S": 100, "K": 100, "T": 0.5, "r": 0.05, "q": 0.0}
         true_sigma = 0.234
         market = bs_price(option_type=OptionType.CALL, sigma=true_sigma, **kw)
         iv = implied_volatility(
@@ -217,7 +216,7 @@ class TestImpliedVol:
         assert iv == pytest.approx(true_sigma, abs=1e-6)
 
     def test_round_trip_put(self):
-        kw = dict(S=100, K=110, T=0.25, r=0.03, q=0.01)
+        kw = {"S": 100, "K": 110, "T": 0.25, "r": 0.03, "q": 0.01}
         true_sigma = 0.45
         market = bs_price(option_type=OptionType.PUT, sigma=true_sigma, **kw)
         iv = implied_volatility(

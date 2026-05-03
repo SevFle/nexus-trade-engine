@@ -25,8 +25,7 @@ def register_broker(adapter: BrokerAdapter) -> None:
     """
     if not isinstance(adapter, BrokerAdapter):
         raise TypeError(
-            "argument must implement BrokerAdapter Protocol "
-            f"(got {type(adapter).__name__})"
+            f"argument must implement BrokerAdapter Protocol (got {type(adapter).__name__})"
         )
     name = adapter.name
     if not name or not name.strip():
@@ -44,8 +43,7 @@ def get_broker(name: str) -> BrokerAdapter:
             return _REGISTRY[name]
         except KeyError as exc:
             raise KeyError(
-                f"unknown broker: {name!r}. "
-                f"registered: {sorted(_REGISTRY.keys())}"
+                f"unknown broker: {name!r}. registered: {sorted(_REGISTRY.keys())}"
             ) from exc
 
 

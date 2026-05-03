@@ -31,8 +31,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
-from engine.core.tax.reports.schedule_d import ScheduleDSummary
+if TYPE_CHECKING:
+    from engine.core.tax.reports.schedule_d import ScheduleDSummary
 
 _TWOPLACES = Decimal("0.01")
 _ZERO = Decimal("0.00")
@@ -103,9 +105,7 @@ def apply_carryover(
 
     prior = prior or CapitalLossCarryover.zero()
     if prior.short_term < 0 or prior.long_term < 0:
-        raise ValueError(
-            "prior carryover legs must be non-negative loss amounts"
-        )
+        raise ValueError("prior carryover legs must be non-negative loss amounts")
 
     # Apply prior-year losses to this year's per-leg result.
     short_net = summary.short_term.gain_loss - prior.short_term
@@ -133,12 +133,8 @@ def apply_carryover(
         # to the short-term leg first, then the long-term leg.
         next_short = max(_ZERO, short_loss - deduction).quantize(_TWOPLACES)
         absorbed_by_short = short_loss - next_short
-        deduction_after_short = (deduction - absorbed_by_short).quantize(
-            _TWOPLACES
-        )
-        next_long = max(_ZERO, long_loss - deduction_after_short).quantize(
-            _TWOPLACES
-        )
+        deduction_after_short = (deduction - absorbed_by_short).quantize(_TWOPLACES)
+        next_long = max(_ZERO, long_loss - deduction_after_short).quantize(_TWOPLACES)
     else:
         # One leg is a gain that already absorbed part of the other
         # leg's loss. ``remaining`` lives entirely on whichever leg is
@@ -156,9 +152,9 @@ def apply_carryover(
 
 
 __all__ = [
-    "CapitalLossApplication",
-    "CapitalLossCarryover",
     "DEDUCTIBLE_CAP_DEFAULT",
     "DEDUCTIBLE_CAP_MFS",
+    "CapitalLossApplication",
+    "CapitalLossCarryover",
     "apply_carryover",
 ]

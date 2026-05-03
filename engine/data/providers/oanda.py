@@ -141,9 +141,7 @@ class OandaDataProvider(HTTPProviderBase, IDataProvider):
                 out[sym] = price
         return out
 
-    async def get_options_chain(
-        self, symbol: str, expiry: str | None = None
-    ) -> pd.DataFrame:
+    async def get_options_chain(self, symbol: str, expiry: str | None = None) -> pd.DataFrame:
         raise FatalProviderError("oanda does not offer options chain")
 
     async def get_orderbook(self, symbol: str, depth: int = 20) -> pd.DataFrame:

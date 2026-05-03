@@ -28,8 +28,11 @@ Out of scope:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 @dataclass(frozen=True)
@@ -76,8 +79,7 @@ def underwater_curve(equity: Sequence[float]) -> list[float]:
     out: list[float] = []
     peak = equity[0]
     for v in equity:
-        if v > peak:
-            peak = v
+        peak = max(peak, v)
         if peak <= 0:
             out.append(0.0)
         else:
@@ -93,7 +95,7 @@ def drawdown_episodes(equity: Sequence[float]) -> list[DrawdownEpisode]:
     (``recovery_idx is None``) when the curve has not recovered by
     the last input.
     """
-    if len(equity) < 2:
+    if len(equity) < 2:  # noqa: PLR2004
         return []
     episodes: list[DrawdownEpisode] = []
     peak_value = equity[0]
@@ -116,11 +118,7 @@ def drawdown_episodes(equity: Sequence[float]) -> list[DrawdownEpisode]:
                 trough_value = v
                 trough_idx = i
             if v >= peak_value:
-                depth = (
-                    (peak_value - trough_value) / peak_value
-                    if peak_value > 0
-                    else 0.0
-                )
+                depth = (peak_value - trough_value) / peak_value if peak_value > 0 else 0.0
                 episodes.append(
                     DrawdownEpisode(
                         peak_idx=peak_idx,
@@ -133,9 +131,7 @@ def drawdown_episodes(equity: Sequence[float]) -> list[DrawdownEpisode]:
                 peak_value = v
                 peak_idx = i
     if in_drawdown:
-        depth = (
-            (peak_value - trough_value) / peak_value if peak_value > 0 else 0.0
-        )
+        depth = (peak_value - trough_value) / peak_value if peak_value > 0 else 0.0
         episodes.append(
             DrawdownEpisode(
                 peak_idx=peak_idx,

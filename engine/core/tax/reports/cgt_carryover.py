@@ -96,9 +96,7 @@ def apply_cgt_carryover(
     if prior.loss < 0:
         raise ValueError("prior carryover loss must be non-negative")
 
-    summary = summarize_cgt(
-        disposals, annual_exempt_amount=annual_exempt_amount
-    )
+    summary = summarize_cgt(disposals, annual_exempt_amount=annual_exempt_amount)
 
     # Step 3: prior loss applied AFTER the AEA. ``taxable_gain`` is
     # already post-AEA per summarize_cgt.

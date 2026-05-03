@@ -21,19 +21,23 @@ import hmac
 import json
 import time
 import uuid
-from collections.abc import Awaitable, Callable
-from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import structlog
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from engine.db.models import WebhookConfig, WebhookDelivery
-from engine.events.bus import EventBus, EventType
 from engine.observability.metrics import MetricsBackend, get_metrics
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+    from contextlib import AbstractAsyncContextManager
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from engine.events.bus import EventBus, EventType
 
 logger = structlog.get_logger()
 
@@ -87,10 +91,7 @@ def render_template(template: str, payload: dict[str, Any]) -> dict[str, Any]:
         }
     if template == "telegram":
         return {
-            "text": (
-                f"*{payload['event']}*\n"
-                f"```\n{json.dumps(payload['data'], indent=2)}\n```"
-            ),
+            "text": (f"*{payload['event']}*\n```\n{json.dumps(payload['data'], indent=2)}\n```"),
             "parse_mode": "Markdown",
         }
     return payload
@@ -200,7 +201,7 @@ class WebhookDispatcher:
                     float(elapsed_ms),
                     tags={**base_tags, "status": str(resp.status_code)},
                 )
-                if 200 <= resp.status_code < 300:
+                if 200 <= resp.status_code < 300:  # noqa: PLR2004
                     delivery.status = "delivered"
                     delivery.delivered_at = datetime.now(UTC)
                     delivery.error = None

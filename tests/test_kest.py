@@ -218,11 +218,11 @@ class TestValidation:
 
 class TestConstants:
     def test_kest_rate_25_percent(self):
-        assert KEST_RATE == Decimal("0.25")
+        assert Decimal("0.25") == KEST_RATE
 
     def test_solz_rate_5_5_percent(self):
-        assert SOLZ_RATE == Decimal("0.055")
+        assert Decimal("0.055") == SOLZ_RATE
 
     def test_2024_pauschbetrag_thousand_and_two_thousand(self):
-        assert SPARER_PAUSCHBETRAG_2024 == Decimal("1000.00")
-        assert SPARER_PAUSCHBETRAG_JOINT_2024 == Decimal("2000.00")
+        assert Decimal("1000.00") == SPARER_PAUSCHBETRAG_2024
+        assert Decimal("2000.00") == SPARER_PAUSCHBETRAG_JOINT_2024

@@ -146,10 +146,7 @@ _SCOPE_HIERARCHY: dict[str, int] = {"read": 0, "trade": 1, "admin": 2}
 
 def _scope_satisfied(granted: list[str] | None, required: str) -> bool:
     required_level = _SCOPE_HIERARCHY.get(required, 0)
-    for s in granted or []:
-        if _SCOPE_HIERARCHY.get(s, -1) >= required_level:
-            return True
-    return False
+    return any(_SCOPE_HIERARCHY.get(s, -1) >= required_level for s in granted or [])
 
 
 def require_api_scope(required_scope: str):

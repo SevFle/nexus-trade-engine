@@ -8,11 +8,12 @@ It mirrors the engine's plugins.sdk but without engine dependencies.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
-from nexus_sdk.signals import Signal
+if TYPE_CHECKING:
+    from nexus_sdk.signals import Signal
 
 
 class StrategyConfig(BaseModel):
@@ -56,7 +57,7 @@ class MarketState(BaseModel):
         variance = sum((c - mean) ** 2 for c in closes) / period
         return variance ** 0.5
 
-    def get_news(self, hours: int = 24) -> list[dict]:
+    def get_news(self, _hours: int = 24) -> list[dict]:
         return self.news
 
     def get_macro_indicators(self) -> dict[str, Any]:
@@ -96,13 +97,13 @@ class IStrategy(ABC):
     async def evaluate(self, portfolio, market: MarketState, costs) -> list[Signal]: ...
 
     async def on_order_fill(self, fill: dict) -> None:
-        pass
+        raise NotImplementedError
 
     async def on_market_open(self) -> None:
-        pass
+        raise NotImplementedError
 
     async def on_market_close(self) -> None:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def get_config_schema(self) -> dict: ...

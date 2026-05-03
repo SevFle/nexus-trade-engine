@@ -10,14 +10,14 @@ from engine.privacy.dsr import DSR_KINDS, DSR_TERMINAL_STATUSES, SLA_DEFAULT_DAY
 
 class TestRegistryConstants:
     def test_documented_kinds(self):
-        assert DSR_KINDS == frozenset(
+        assert frozenset(
             {"export", "delete", "rectify", "restrict", "object"}
-        )
+        ) == DSR_KINDS
 
     def test_terminal_statuses(self):
-        assert DSR_TERMINAL_STATUSES == frozenset(
+        assert frozenset(
             {"completed", "failed", "cancelled"}
-        )
+        ) == DSR_TERMINAL_STATUSES
 
     def test_gdpr_one_month_default(self):
         # GDPR Art. 12 obliges responding within one month. Default must

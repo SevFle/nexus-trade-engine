@@ -14,7 +14,6 @@ from engine.core.holding_costs import (
     reinvestment_residual_cash,
 )
 
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -32,7 +31,7 @@ class TestConstants:
 
 class TestHardToBorrow:
     def test_one_day_at_15_pct(self):
-        # $100k short × 15 % / 365 ≈ $41.10 / day.
+        # $100k short * 15 % / 365 ≈ $41.10 / day.
         assert hard_to_borrow_cost(
             Decimal("100000"), Decimal("0.15")
         ) == Decimal("41.10")
@@ -45,7 +44,7 @@ class TestHardToBorrow:
 
     def test_extreme_htb_rate(self):
         # Severely-restricted name, 200 % APR, $50k short, one day.
-        # 50k × 2.0 / 365 ≈ $273.97 / day.
+        # 50k * 2.0 / 365 ≈ $273.97 / day.
         out = hard_to_borrow_cost(
             Decimal("50000"), Decimal("2.0"), days=1
         )
@@ -89,13 +88,13 @@ class TestHardToBorrow:
 
 class TestDividendPayment:
     def test_known_value(self):
-        # 250 shares × $0.42 = $105.00
+        # 250 shares * $0.42 = $105.00
         assert dividend_payment(
             Decimal("250"), Decimal("0.42")
         ) == Decimal("105.00")
 
     def test_fractional_shares(self):
-        # 100.5 shares × $1.00 = $100.50
+        # 100.5 shares * $1.00 = $100.50
         assert dividend_payment(
             Decimal("100.5"), Decimal("1.00")
         ) == Decimal("100.50")
@@ -163,19 +162,19 @@ class TestReinvestedShares:
 
 class TestReinvestmentResidualCash:
     def test_integer_truncation_residual(self):
-        # $105 cash, 2 shares × $50 = $100 spent → $5 residual.
+        # $105 cash, 2 shares * $50 = $100 spent → $5 residual.
         assert reinvestment_residual_cash(
             Decimal("105"), Decimal("50"), Decimal("2")
         ) == Decimal("5.00")
 
     def test_full_fractional_purchase_zero_residual(self):
-        # $105 cash, 2.1 shares × $50 = $105 spent → 0 residual.
+        # $105 cash, 2.1 shares * $50 = $105 spent → 0 residual.
         assert reinvestment_residual_cash(
             Decimal("105"), Decimal("50"), Decimal("2.1")
         ) == Decimal("0.00")
 
     def test_overspend_rejected(self):
-        # 3 × $50 = $150 > $100 cash → residual would be negative.
+        # 3 * $50 = $150 > $100 cash → residual would be negative.
         with pytest.raises(ValueError):
             reinvestment_residual_cash(
                 Decimal("100"), Decimal("50"), Decimal("3")

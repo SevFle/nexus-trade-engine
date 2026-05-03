@@ -25,8 +25,7 @@ def register_jurisdiction(jurisdiction: TaxJurisdiction) -> None:
     """
     if not isinstance(jurisdiction, TaxJurisdiction):
         raise TypeError(
-            "argument must implement TaxJurisdiction Protocol "
-            f"(got {type(jurisdiction).__name__})"
+            f"argument must implement TaxJurisdiction Protocol (got {type(jurisdiction).__name__})"
         )
     code = jurisdiction.code
     if not code or not code.strip():
@@ -42,8 +41,7 @@ def get_jurisdiction(code: str) -> TaxJurisdiction:
             return _REGISTRY[code]
         except KeyError as exc:
             raise KeyError(
-                f"unknown tax jurisdiction: {code!r}. "
-                f"registered: {sorted(_REGISTRY.keys())}"
+                f"unknown tax jurisdiction: {code!r}. registered: {sorted(_REGISTRY.keys())}"
             ) from exc
 
 

@@ -115,7 +115,7 @@ class EventToWebSocketBridge:
         for et in self._registered:
             try:
                 self._bus.unsubscribe(et, self._handler)
-            except Exception as exc:  # noqa: BLE001 - bus may not own state
+            except Exception as exc:
                 logger.warning(
                     "ws_bridge.unsubscribe_failed",
                     event_type=getattr(et, "value", str(et)),

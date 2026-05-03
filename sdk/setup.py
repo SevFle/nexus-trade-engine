@@ -1,10 +1,15 @@
 from setuptools import find_packages, setup
 
+_long_description = ""
+if __import__("os").path.exists("../README.md"):
+    with open("../README.md") as _f:
+        _long_description = _f.read()
+
 setup(
     name="nexus-trade-sdk",
     version="0.1.0",
     description="SDK for building Nexus Trade Engine strategy plugins",
-    long_description=open("../README.md").read() if __import__("os").path.exists("../README.md") else "",
+    long_description=_long_description,
     long_description_content_type="text/markdown",
     author="Nexus Trade Engine",
     license="MIT",

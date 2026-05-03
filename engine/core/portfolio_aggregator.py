@@ -25,8 +25,11 @@ Out of scope:
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping, Sequence
 
 
 @dataclass(frozen=True)
@@ -62,9 +65,7 @@ def combined_equity_curve(
         return []
     lengths = {len(c) for c in curves}
     if len(lengths) > 1:
-        raise ValueError(
-            f"all equity curves must have equal length; got {sorted(lengths)}"
-        )
+        raise ValueError(f"all equity curves must have equal length; got {sorted(lengths)}")
     n = next(iter(lengths))
     if n == 0:
         return []
@@ -82,7 +83,7 @@ def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float:
     if len(xs) < 2:
         return 0.0
     mx, my = _mean(xs), _mean(ys)
-    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=False))
     dx = math.sqrt(sum((x - mx) ** 2 for x in xs))
     dy = math.sqrt(sum((y - my) ** 2 for y in ys))
     if dx == 0.0 or dy == 0.0:
@@ -104,9 +105,7 @@ def correlation_matrix(
         return {}
     lengths = {len(s) for s in return_series.values()}
     if len(lengths) > 1:
-        raise ValueError(
-            f"all return series must have equal length; got {sorted(lengths)}"
-        )
+        raise ValueError(f"all return series must have equal length; got {sorted(lengths)}")
     out: dict[str, dict[str, float]] = {k: {} for k in keys}
     for i, a in enumerate(keys):
         for j, b in enumerate(keys):

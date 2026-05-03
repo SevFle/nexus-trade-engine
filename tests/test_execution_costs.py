@@ -17,7 +17,6 @@ from engine.core.execution_costs import (
     opportunity_cost,
 )
 
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -25,9 +24,9 @@ from engine.core.execution_costs import (
 
 class TestConstants:
     def test_defaults_pinned(self):
-        assert NSCC_FEE_PER_SIDE_2025 == Decimal("0.0002")
-        assert DEFAULT_TAKER_FEE_PER_SHARE == Decimal("0.0030")
-        assert DEFAULT_MAKER_REBATE_PER_SHARE == Decimal("0.0020")
+        assert Decimal("0.0002") == NSCC_FEE_PER_SIDE_2025
+        assert Decimal("0.0030") == DEFAULT_TAKER_FEE_PER_SHARE
+        assert Decimal("0.0020") == DEFAULT_MAKER_REBATE_PER_SHARE
 
 
 # ---------------------------------------------------------------------------
@@ -37,12 +36,12 @@ class TestConstants:
 
 class TestHalfSpread:
     def test_known_value(self):
-        # 1-cent spread × 1000 shares × 0.5 = $5.00
+        # 1-cent spread * 1000 shares * 0.5 = $5.00
         assert half_spread_cost(Decimal("0.01"), 1000) == Decimal("5.00")
 
     def test_wide_illiquid_spread(self):
         # 50 bps spread on $100 stock → $0.50 spread, half = $0.25
-        # × 200 shares = $50.00
+        # * 200 shares = $50.00
         assert half_spread_cost(Decimal("0.50"), 200) == Decimal("50.00")
 
     def test_zero_quantity_zero_cost(self):
@@ -67,7 +66,7 @@ class TestHalfSpread:
 
 class TestNsccFee:
     def test_known_value(self):
-        # 100,000 shares × $0.0002 = $20.00
+        # 100,000 shares * $0.0002 = $20.00
         assert nscc_clearing_fee(100_000) == Decimal("20.00")
 
     def test_zero_quantity_zero_fee(self):
@@ -92,7 +91,7 @@ class TestNsccFee:
 
 class TestTakerFee:
     def test_known_value(self):
-        # 1000 shares × $0.0030 = $3.00
+        # 1000 shares * $0.0030 = $3.00
         assert exchange_taker_fee(1000) == Decimal("3.00")
 
     def test_custom_rate(self):
@@ -117,7 +116,7 @@ class TestTakerFee:
 
 class TestMakerRebate:
     def test_known_value(self):
-        # 1000 shares × $0.0020 = $2.00 paid TO the trader.
+        # 1000 shares * $0.0020 = $2.00 paid TO the trader.
         assert exchange_maker_rebate(1000) == Decimal("2.00")
 
     def test_custom_rate(self):
@@ -158,5 +157,5 @@ class TestOpportunityCost:
             opportunity_cost(-1, Decimal("0.01"))
 
     def test_quantises_to_cent(self):
-        # Awkward fractional drift: 100 shares × 0.123 = 12.30.
+        # Awkward fractional drift: 100 shares * 0.123 = 12.30.
         assert opportunity_cost(100, Decimal("0.123")) == Decimal("12.30")

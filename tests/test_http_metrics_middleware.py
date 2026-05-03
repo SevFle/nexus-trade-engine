@@ -26,7 +26,6 @@ from engine.observability.http_metrics import (
 )
 from engine.observability.metrics import RecordingBackend
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -211,7 +210,7 @@ class TestNonHttpScopePassthrough:
     async def test_lifespan_scope_is_passed_through_unchanged(self, metrics):
         # Build a tiny app that responds to a lifespan scope. The
         # middleware must not record metrics for it.
-        async def lifespan_only_app(scope, receive, send):  # noqa: ARG001
+        async def lifespan_only_app(scope, receive, send):
             assert scope["type"] == "lifespan"
             msg = await receive()
             assert msg["type"] == "lifespan.startup"

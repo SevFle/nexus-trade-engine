@@ -144,9 +144,7 @@ class AlpacaDataProvider(HTTPProviderBase, IDataProvider):
                 out[sym] = float(price)
         return out
 
-    async def get_options_chain(
-        self, symbol: str, expiry: str | None = None
-    ) -> pd.DataFrame:
+    async def get_options_chain(self, symbol: str, expiry: str | None = None) -> pd.DataFrame:
         raise FatalProviderError("alpaca options chain not implemented")
 
     async def get_orderbook(self, symbol: str, depth: int = 20) -> pd.DataFrame:

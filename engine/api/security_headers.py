@@ -187,9 +187,7 @@ class SecurityHeadersMiddleware:
 
         await self.app(scope, receive, send_wrapper)
 
-    def _inject(
-        self, headers: list[tuple[bytes, bytes]], *, is_https: bool
-    ) -> None:
+    def _inject(self, headers: list[tuple[bytes, bytes]], *, is_https: bool) -> None:
         existing = {name.lower() for name, _ in headers}
 
         def add(name: bytes, value: str) -> None:

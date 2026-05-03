@@ -13,6 +13,7 @@ from engine.api.auth.registry import AuthProviderRegistry
 from engine.api.body_size_limit import BodySizeLimitMiddleware
 from engine.api.rate_limit import RateLimitConfig, RateLimitMiddleware
 from engine.api.router import api_router
+from engine.api.routes.reference import get_search_index
 from engine.api.security_headers import (
     SecurityHeadersConfig,
     SecurityHeadersMiddleware,
@@ -25,16 +26,15 @@ from engine.data.providers import (
     configure_from_file,
     get_registry,
 )
-from engine.api.routes.reference import get_search_index
 from engine.db.session import dispose_engine, get_session_factory
 from engine.legal.sync import sync_legal_documents
-from engine.reference.seed import seed_index
 from engine.observability.http_metrics import HttpMetricsMiddleware
 from engine.observability.logging import setup_logging
 from engine.observability.metrics import set_metrics
 from engine.observability.middleware import CorrelationIdMiddleware
 from engine.observability.prometheus import PrometheusBackend
 from engine.observability.tracing import setup_tracing
+from engine.reference.seed import seed_index
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -58,9 +58,7 @@ def _configure_data_providers() -> None:
         try:
             configure_from_file(settings.data_providers_config, registry)
         except Exception:
-            logger.exception(
-                "data_provider.bootstrap.failed", path=settings.data_providers_config
-            )
+            logger.exception("data_provider.bootstrap.failed", path=settings.data_providers_config)
         else:
             logger.info(
                 "data_provider.bootstrap.from_file",
@@ -112,7 +110,7 @@ def _build_auth_registry() -> AuthProviderRegistry:
 
 def _seed_reference_index() -> None:
     index = get_search_index()
-    if index._records:
+    if index._records:  # noqa: SLF001
         return
     count = seed_index(index)
     logger.info("reference.seed.complete", instruments=count)

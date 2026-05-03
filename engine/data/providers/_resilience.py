@@ -24,8 +24,6 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
-T = TypeVar("T")
-
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_BASE_DELAY_S = 0.25
 DEFAULT_MAX_DELAY_S = 8.0
@@ -66,7 +64,10 @@ class TokenBucket:
                 await asyncio.sleep(wait)
 
 
-async def call_with_retry[T](
+T = TypeVar("T")
+
+
+async def call_with_retry(
     func: Callable[[], Awaitable[T]],
     *,
     provider: str,

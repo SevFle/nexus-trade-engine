@@ -19,7 +19,10 @@ class MockCostModel:
         self.spread_bps = spread_bps
         self.slippage_bps = slippage_bps
 
-    def estimate_total(self, symbol: str, quantity: int, price: float, side: str, avg_volume: int = 0):
+    def estimate_total(
+        self, _symbol: str, quantity: int,
+        price: float, _side: str, _avg_volume: int = 0,
+    ):
         spread = price * (self.spread_bps / 10_000)
         slippage = price * (self.slippage_bps / 10_000) * quantity
         return CostBreakdown(
@@ -27,7 +30,7 @@ class MockCostModel:
             slippage=Money(slippage),
         )
 
-    def estimate_pct(self, symbol: str, price: float, side: str = "buy") -> float:
+    def estimate_pct(self, _symbol: str, _price: float, _side: str = "buy") -> float:
         return (self.spread_bps + self.slippage_bps) * 2 / 10_000
 
 
@@ -51,7 +54,7 @@ class StrategyTestHarness:
         )
         self.signals_history: list[list[Signal]] = []
 
-    async def setup(self, params: dict = None, secrets: dict = None):
+    async def setup(self, params: dict | None = None, secrets: dict | None = None):
         config = StrategyConfig(
             strategy_id=self.strategy.id,
             params=params or {},
@@ -61,9 +64,9 @@ class StrategyTestHarness:
 
     async def tick(
         self,
-        prices: dict[str, float] = None,
-        ohlcv: dict[str, list[dict]] = None,
-        news: list[dict] = None,
+        prices: dict[str, float] | None = None,
+        ohlcv: dict[str, list[dict]] | None = None,
+        news: list[dict] | None = None,
     ) -> list[Signal]:
         market = MarketState(
             prices=prices or {},
