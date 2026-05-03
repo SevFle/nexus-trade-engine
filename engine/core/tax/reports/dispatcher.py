@@ -30,10 +30,13 @@ Out of scope (explicit follow-ups)
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import csv
+import io
+from dataclasses import dataclass, fields, is_dataclass
 from datetime import date
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from enum import Enum
+from typing import TYPE_CHECKING, Any
 
 from engine.core.tax.reports.form_1099b import (
     LotDisposition,
@@ -167,8 +170,68 @@ def _to_fr(d: TaxableDisposal) -> PfuDisposal:
     )
 
 
+def flatten_summary_to_csv(summary: Any) -> str:
+    """Render any frozen-dataclass tax summary as a 2-row CSV.
+
+    Walks every field of ``summary``; nested dataclasses become
+    dotted column names (``short_term.gain_loss``); ``Decimal`` /
+    ``date`` / ``Enum`` values are stringified. The result is a
+    deterministic header row + one values row, suitable for a CPA
+    paste-in or a spreadsheet import.
+
+    Lists and tuples are joined with ``;`` so a single CSV cell can
+    carry them — none of the current summaries use them, but the
+    helper is forward-compatible with whatever the next jurisdiction
+    needs.
+    """
+    columns: list[str] = []
+    values: list[str] = []
+    _walk(summary, prefix="", columns=columns, values=values)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(columns)
+    writer.writerow(values)
+    return buf.getvalue()
+
+
+def _walk(
+    obj: Any,
+    *,
+    prefix: str,
+    columns: list[str],
+    values: list[str],
+) -> None:
+    if is_dataclass(obj) and not isinstance(obj, type):
+        for f in fields(obj):
+            child = getattr(obj, f.name)
+            child_prefix = f"{prefix}{f.name}" if not prefix else f"{prefix}.{f.name}"
+            _walk(
+                child,
+                prefix=child_prefix,
+                columns=columns,
+                values=values,
+            )
+        return
+    columns.append(prefix or "value")
+    values.append(_render_scalar(obj))
+
+
+def _render_scalar(value: Any) -> str:
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, list | tuple):
+        return ";".join(_render_scalar(x) for x in value)
+    return "" if value is None else str(value)
+
+
 __all__ = [
     "TaxableDisposal",
     "UnsupportedJurisdictionError",
+    "flatten_summary_to_csv",
     "report_for_jurisdiction",
 ]

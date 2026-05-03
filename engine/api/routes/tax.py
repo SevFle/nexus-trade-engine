@@ -38,12 +38,14 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
 
 from engine.api.auth.dependency import get_current_user
 from engine.core.tax.reports import (
     TaxableDisposal,
     UnsupportedJurisdictionError,
+    flatten_summary_to_csv,
     report_for_jurisdiction,
 )
 from engine.db.models import User
@@ -110,6 +112,34 @@ async def tax_report(
         "jurisdiction": code.upper(),
         "summary": _to_json(summary),
     }
+
+
+@router.post("/report/{code}/csv")
+async def tax_report_csv(
+    code: str,
+    req: TaxReportRequest,
+    user: User = Depends(get_current_user),  # noqa: ARG001 - auth gate
+) -> Response:
+    """Same dispatch as :func:`tax_report` but returns the summary as
+    a 2-row CSV (header + values). Useful for spreadsheet round-trips
+    and CPA workflows."""
+    try:
+        disposals = [d.to_taxable() for d in req.disposals]
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        summary = report_for_jurisdiction(code, disposals)
+    except UnsupportedJurisdictionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    body = flatten_summary_to_csv(summary)
+    filename = f"tax-report-{code.upper()}.csv"
+    return Response(
+        content=body,
+        media_type="text/csv; charset=utf-8",
+        headers={"content-disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _to_json(obj: Any) -> Any:
