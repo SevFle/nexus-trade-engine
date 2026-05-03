@@ -23,10 +23,18 @@ Trade-level (PnL-list-driven):
 - 44  Payoff ratio                — avg_winner / abs(avg_loser)
 - 45  Kelly criterion             — fraction of capital to risk per trade
 
-Out of scope (explicit follow-ups for the remaining ~76 of 86):
-- Treynor / MAR / Sterling / K-Ratio (need beta + benchmark series).
+Benchmark / regression (return + equity curve):
+
+- 20  Treynor ratio               — excess return / beta
+- 21  MAR ratio                   — CAGR / max drawdown (full period)
+- 22  Sterling ratio              — CAGR / (avg drawdown - 10 %)
+- 23  K-Ratio                     — regression slope of log equity / std error
+
+Out of scope (explicit follow-ups for the remaining ~72 of 86):
 - Time-based heatmaps + monthly/weekly distributions.
 - Cost / execution / exposure analytics.
+- Beta estimation against a benchmark return series (caller supplies
+  beta to ``compute_treynor_ratio``).
 """
 
 from __future__ import annotations
@@ -239,15 +247,127 @@ def compute_kelly_criterion(trade_pnls: Sequence[float]) -> float:
     return win_rate - loss_rate / payoff
 
 
+def compute_treynor_ratio(
+    portfolio_return: float,
+    risk_free_rate: float,
+    beta: float,
+) -> float:
+    """Treynor ratio — excess return per unit of *systematic* risk.
+
+    ``(R_p - R_f) / beta``. Where Sharpe normalises by total risk
+    (volatility), Treynor only penalises systematic (market-correlated)
+    risk; idiosyncratic risk diversifies away in a CAPM world.
+
+    Returns ``0.0`` when ``beta`` is zero (the portfolio carries no
+    systematic risk by construction).
+
+    All three inputs are floats expressed as fractions (e.g. 0.12 for
+    12 % annual return). Caller is responsible for estimating beta
+    upstream — the helper is portfolio-statistics-only.
+    """
+    if beta == 0:
+        return 0.0
+    return (portfolio_return - risk_free_rate) / beta
+
+
+def compute_mar_ratio(
+    cagr_pct: float,
+    max_drawdown_pct: float,
+) -> float:
+    """MAR ratio — ``CAGR / max_drawdown`` over the full track record.
+
+    Equivalent to Calmar at the full-period horizon (Calmar is
+    typically the trailing 36-month version). Higher is better.
+    Returns ``0.0`` when ``max_drawdown_pct`` is zero or negative.
+
+    Both inputs are percentages (e.g. ``25.0`` for 25 %).
+    """
+    if max_drawdown_pct <= 0:
+        return 0.0
+    return cagr_pct / max_drawdown_pct
+
+
+def compute_sterling_ratio(
+    cagr_pct: float,
+    avg_drawdown_pct: float,
+    *,
+    drawdown_floor_pct: float = 10.0,
+) -> float:
+    """Sterling ratio — ``CAGR / (avg_drawdown - floor)``.
+
+    The ``drawdown_floor_pct`` (default 10 %) is the assumed baseline
+    drawdown a strategy *should* tolerate; the ratio compounds the
+    penalty when the strategy's average drawdown exceeds it. Operators
+    override the floor for less-volatile asset classes.
+
+    Returns ``0.0`` when the denominator is zero or negative.
+    """
+    denom = avg_drawdown_pct - drawdown_floor_pct
+    if denom <= 0:
+        return 0.0
+    return cagr_pct / denom
+
+
+def compute_k_ratio(equity_curve: Sequence[float]) -> float:
+    """K-Ratio — regression-based smoothness measure.
+
+    Defined as the slope of the OLS regression line of the *log* equity
+    curve against time, divided by its standard error and scaled by
+    ``sqrt(n)`` where ``n`` is the number of observations.
+
+    Higher is better — a smooth log-equity curve produces a high
+    slope/error ratio. The metric is sensitive to compounding rate
+    *and* path consistency.
+
+    Returns ``0.0`` for fewer than 2 observations, when any equity
+    value is non-positive (log undefined), or when the regression
+    has zero variance in time (degenerate).
+    """
+    n = len(equity_curve)
+    if n < 2:
+        return 0.0
+    if any(v <= 0 for v in equity_curve):
+        return 0.0
+
+    xs = list(range(n))
+    ys = [math.log(v) for v in equity_curve]
+
+    x_mean = sum(xs) / n
+    y_mean = sum(ys) / n
+
+    sxy = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys, strict=True))
+    sxx = sum((x - x_mean) ** 2 for x in xs)
+
+    if sxx == 0:
+        return 0.0
+
+    slope = sxy / sxx
+    intercept = y_mean - slope * x_mean
+
+    # Residual sum of squares; standard error of the slope.
+    residuals = [y - (intercept + slope * x) for x, y in zip(xs, ys, strict=True)]
+    sse = sum(r * r for r in residuals)
+    if n <= 2:
+        return 0.0
+    se = math.sqrt(sse / (n - 2)) / math.sqrt(sxx)
+    if se == 0:
+        return 0.0
+    return slope / se * math.sqrt(n)
+
+
 __all__ = [
     "compute_expectancy_dollars",
     "compute_expectancy_r_multiple",
     "compute_gain_to_pain_ratio",
     "compute_information_ratio",
+    "compute_k_ratio",
     "compute_kelly_criterion",
+    "compute_mar_ratio",
     "compute_omega_ratio",
     "compute_pain_index",
     "compute_payoff_ratio",
     "compute_recovery_factor",
+    "compute_sterling_ratio",
+    "compute_treynor_ratio",
     "compute_ulcer_index",
 ]
