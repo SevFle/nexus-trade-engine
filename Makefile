@@ -11,10 +11,10 @@ dev: ## Start dev server with hot reload
 	uv run uvicorn engine.app:create_app --factory --reload --host 0.0.0.0 --port 8000
 
 test: ## Run test suite
-	uv run pytest
+	uv run pytest --cov-fail-under=70
 
 test-cov: ## Run tests with coverage report
-	uv run pytest --cov=engine --cov-report=html
+	uv run pytest --cov=engine --cov-report=html --cov-fail-under=70
 
 lint: ## Run linter checks
 	uv run ruff check .
