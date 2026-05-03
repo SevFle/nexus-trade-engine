@@ -20,6 +20,11 @@ from engine.core.tax.reports.hmrc_cgt import (
     disposals_to_csv,
     summarize_cgt,
 )
+from engine.core.tax.reports.dispatcher import (
+    TaxableDisposal,
+    UnsupportedJurisdictionError,
+    report_for_jurisdiction,
+)
 from engine.core.tax.reports.france_pfu import (
     PFU_INCOME_TAX_RATE,
     PFU_SOCIAL_CHARGES_RATE,
@@ -85,9 +90,12 @@ __all__ = [
     "Schedule1099BRow",
     "ScheduleDPartTotal",
     "ScheduleDSummary",
+    "TaxableDisposal",
+    "UnsupportedJurisdictionError",
     "apply_carryover",
     "disposals_to_csv",
     "generate_1099b_rows",
+    "report_for_jurisdiction",
     "rows_to_csv",
     "summarize_cgt",
     "summarize_kest",
