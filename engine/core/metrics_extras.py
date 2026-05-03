@@ -5,18 +5,26 @@ pure helper over a returns / equity-curve / drawdown-curve list so
 callers can mix-and-match without instantiating the full
 :class:`engine.core.metrics.PerformanceMetrics` aggregator.
 
-Six metrics covered in this slice (KPI numbers from gh#97):
+Metrics covered (KPI numbers from gh#97):
+
+Risk-adjusted (sequence-level):
 
 - 18  Omega ratio                 — full-distribution gain/loss ratio
 - 19  Information ratio           — return-vs-benchmark per tracking-error unit
 - 24  Gain-to-pain ratio          — sum(returns) / abs(sum(negative returns))
+- 29  Recovery factor             — total return / max drawdown
 - 30  Ulcer index                 — RMS of the drawdown curve
 - 32  Pain index                  — mean of |drawdown|
-- 29  Recovery factor             — total return / max drawdown
 
-Out of scope (explicit follow-ups for the remaining 80 of 86):
+Trade-level (PnL-list-driven):
+
+- 39  Expectancy ($)              — win_rate * avg_win - loss_rate * avg_loss
+- 40  Expectancy (R-multiple)     — expectancy / avg risk per trade
+- 44  Payoff ratio                — avg_winner / abs(avg_loser)
+- 45  Kelly criterion             — fraction of capital to risk per trade
+
+Out of scope (explicit follow-ups for the remaining ~76 of 86):
 - Treynor / MAR / Sterling / K-Ratio (need beta + benchmark series).
-- Trade-level breakdowns (Expectancy R-multiple, Kelly, payoff ratio).
 - Time-based heatmaps + monthly/weekly distributions.
 - Cost / execution / exposure analytics.
 """
@@ -145,11 +153,101 @@ def compute_recovery_factor(
     return total_return_pct / max_drawdown_pct
 
 
+def compute_payoff_ratio(trade_pnls: Sequence[float]) -> float:
+    """Payoff ratio = avg(winners) / abs(avg(losers)).
+
+    Returns ``0.0`` for empty input or when there are no losers and no
+    winners. ``inf`` when there are winners but no losers.
+    """
+    if not trade_pnls:
+        return 0.0
+    winners = [p for p in trade_pnls if p > 0]
+    losers = [p for p in trade_pnls if p < 0]
+    if not winners:
+        return 0.0
+    if not losers:
+        return math.inf
+    avg_win = sum(winners) / len(winners)
+    avg_loss = abs(sum(losers) / len(losers))
+    if avg_loss == 0:
+        return math.inf
+    return avg_win / avg_loss
+
+
+def compute_expectancy_dollars(trade_pnls: Sequence[float]) -> float:
+    """Per-trade dollar expectancy.
+
+    Defined as ``win_rate * avg_win - loss_rate * avg_loss`` where
+    ``avg_loss`` is the *positive* magnitude of the average loser. A
+    profitable system has expectancy > 0. Equivalent to the simple
+    arithmetic mean of all trade PnLs (the formula is just an
+    expanded form of that mean).
+
+    Returns ``0.0`` on empty input.
+    """
+    if not trade_pnls:
+        return 0.0
+    return sum(trade_pnls) / len(trade_pnls)
+
+
+def compute_expectancy_r_multiple(
+    trade_pnls: Sequence[float],
+    avg_risk_per_trade: float,
+) -> float:
+    """Expectancy expressed in R-multiples.
+
+    R is the per-trade *risk capital*. Dividing the dollar expectancy
+    by R normalises it: an expectancy of 0.5 R means a typical trade
+    earns half the amount the trader risked. Returns ``0.0`` on empty
+    input or non-positive ``avg_risk_per_trade``.
+    """
+    if not trade_pnls or avg_risk_per_trade <= 0:
+        return 0.0
+    return compute_expectancy_dollars(trade_pnls) / avg_risk_per_trade
+
+
+def compute_kelly_criterion(trade_pnls: Sequence[float]) -> float:
+    """Kelly criterion — optimal fraction of capital to risk per trade.
+
+    ``f* = win_rate - loss_rate / payoff_ratio``. Result is the
+    *theoretical* optimum that maximises long-run geometric growth;
+    operators typically apply a half-Kelly or quarter-Kelly haircut
+    to absorb estimation error.
+
+    Returns ``0.0`` on empty input, when there are no losers (Kelly is
+    not defined for never-losing systems and ``inf`` capital is not a
+    useful answer), or when the payoff ratio cannot be formed.
+    Negative results are *not* clamped — a negative Kelly means the
+    caller should not take the trade.
+    """
+    if not trade_pnls:
+        return 0.0
+    winners = [p for p in trade_pnls if p > 0]
+    losers = [p for p in trade_pnls if p < 0]
+    if not winners or not losers:
+        return 0.0
+    n = len(trade_pnls)
+    win_rate = len(winners) / n
+    loss_rate = len(losers) / n
+    avg_win = sum(winners) / len(winners)
+    avg_loss = abs(sum(losers) / len(losers))
+    if avg_loss == 0:
+        return 0.0
+    payoff = avg_win / avg_loss
+    if payoff == 0:
+        return 0.0
+    return win_rate - loss_rate / payoff
+
+
 __all__ = [
+    "compute_expectancy_dollars",
+    "compute_expectancy_r_multiple",
     "compute_gain_to_pain_ratio",
     "compute_information_ratio",
+    "compute_kelly_criterion",
     "compute_omega_ratio",
     "compute_pain_index",
+    "compute_payoff_ratio",
     "compute_recovery_factor",
     "compute_ulcer_index",
 ]
