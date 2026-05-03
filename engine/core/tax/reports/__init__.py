@@ -88,6 +88,12 @@ from engine.core.tax.reports.form_6781_part_ii import (
     legs_to_csv,
     summarize_form6781_part_ii,
 )
+from engine.core.tax.reports.form_6781_part_iii import (
+    Form6781PartIIISummary,
+    YearEndPosition,
+    positions_to_csv,
+    summarize_form6781_part_iii,
+)
 from engine.core.tax.reports.section_1256_carryback import (
     CARRYBACK_YEARS,
     CarrybackAbsorption,
@@ -116,6 +122,7 @@ __all__ = [
     "DEDUCTIBLE_CAP_DEFAULT",
     "DEDUCTIBLE_CAP_MFS",
     "Form6781PartIISummary",
+    "Form6781PartIIISummary",
     "Form6781Summary",
     "KEST_RATE",
     "IdType",
@@ -163,6 +170,7 @@ __all__ = [
     "ShortSaleIndicator",
     "TaxableDisposal",
     "UnsupportedJurisdictionError",
+    "YearEndPosition",
     "apply_carryover",
     "apply_cgt_carryover",
     "apply_kest_carryover",
@@ -174,11 +182,13 @@ __all__ = [
     "flatten_summary_to_csv",
     "generate_1099b_rows",
     "legs_to_csv",
+    "positions_to_csv",
     "report_for_jurisdiction",
     "rows_to_csv",
     "summarize_cgt",
     "summarize_form6781",
     "summarize_form6781_part_ii",
+    "summarize_form6781_part_iii",
     "summarize_kest",
     "summarize_pfu",
     "summarize_schedule_d",
