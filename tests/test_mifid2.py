@@ -13,6 +13,7 @@ from engine.core.tax.reports import (
     RTS_22_COLUMNS,
     IdType,
     MiFID2Transaction,
+    ShortSaleIndicator,
     Side,
     TradingCapacity,
     transactions_to_csv,
@@ -100,16 +101,20 @@ class TestEnums:
 
 class TestColumnOrder:
     def test_columns_match_rts22_field_order(self):
-        # First three are reference + venue id + executing LEI;
-        # quantity comes after the buyer/seller block; CFI is last.
+        # First three are reference + venue id + executing LEI; the
+        # tail of the column tuple is the indicator block (62-65).
         assert RTS_22_COLUMNS[0] == "transaction_reference_number"
         assert RTS_22_COLUMNS[1] == "venue_transaction_id"
         assert RTS_22_COLUMNS[2] == "executing_entity_lei"
-        assert RTS_22_COLUMNS[-1] == "cfi_code"
         # No duplicates.
         assert len(set(RTS_22_COLUMNS)) == len(RTS_22_COLUMNS)
-        # 28 fields after the decision-maker expansion (gh#155 follow-up).
-        assert len(RTS_22_COLUMNS) == 28
+        # 32 fields after adding the indicator block 62-65 (gh#155 follow-up).
+        assert len(RTS_22_COLUMNS) == 32
+        # Indicator columns at the tail.
+        assert RTS_22_COLUMNS[-4] == "waiver_indicator"
+        assert RTS_22_COLUMNS[-3] == "short_sale_indicator"
+        assert RTS_22_COLUMNS[-2] == "otc_post_trade_indicator"
+        assert RTS_22_COLUMNS[-1] == "commodity_derivative_indicator"
         # Decision-maker columns are present.
         assert "buyer_decision_maker_code" in RTS_22_COLUMNS
         assert "buyer_decision_maker_id" in RTS_22_COLUMNS
@@ -249,6 +254,56 @@ class TestCsv:
         assert idx["buyer_decision_maker_code"] < idx["trading_datetime"]
         assert idx["seller_decision_maker_id"] < idx["trading_datetime"]
         assert idx["execution_branch_country"] < idx["trading_datetime"]
+
+
+class TestIndicators62To65:
+    def test_indicator_defaults_render_false_or_blank(self):
+        out = transactions_to_csv([_txn()])
+        header, body = _parse(out)
+        idx = {col: i for i, col in enumerate(header)}
+        assert body[0][idx["waiver_indicator"]] == "false"
+        assert body[0][idx["short_sale_indicator"]] == ""
+        assert body[0][idx["otc_post_trade_indicator"]] == "false"
+        assert body[0][idx["commodity_derivative_indicator"]] == "false"
+
+    def test_populated_indicators_round_trip(self):
+        out = transactions_to_csv(
+            [
+                _txn(
+                    waiver_indicator=True,
+                    short_sale_indicator=ShortSaleIndicator.SESH.value,
+                    otc_post_trade_indicator=True,
+                    commodity_derivative_indicator=True,
+                )
+            ]
+        )
+        header, body = _parse(out)
+        idx = {col: i for i, col in enumerate(header)}
+        assert body[0][idx["waiver_indicator"]] == "true"
+        assert body[0][idx["short_sale_indicator"]] == "SESH"
+        assert body[0][idx["otc_post_trade_indicator"]] == "true"
+        assert body[0][idx["commodity_derivative_indicator"]] == "true"
+
+    def test_invalid_short_sale_code_rejected(self):
+        with pytest.raises(ValueError):
+            _txn(short_sale_indicator="ZZZZ")
+
+    def test_short_sale_enum_values_match_esma(self):
+        assert ShortSaleIndicator.SESH.value == "SESH"
+        assert ShortSaleIndicator.SSEX.value == "SSEX"
+        assert ShortSaleIndicator.SELL.value == "SELL"
+        assert ShortSaleIndicator.UNDI.value == "UNDI"
+
+    def test_indicator_block_at_csv_tail(self):
+        out = transactions_to_csv([_txn()])
+        header, _ = _parse(out)
+        # Last four columns are the indicator block in 62-65 order.
+        assert header[-4:] == [
+            "waiver_indicator",
+            "short_sale_indicator",
+            "otc_post_trade_indicator",
+            "commodity_derivative_indicator",
+        ]
 
 
 class TestEmpty:

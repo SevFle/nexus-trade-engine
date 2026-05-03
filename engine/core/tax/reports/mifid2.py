@@ -46,14 +46,18 @@ Implemented (ESMA RTS 22 Annex Field number in parentheses):
 - 36 Trading venue (MIC code)
 - 41 Instrument identification code (ISIN)
 - 43 CFI code
+- 62 Waiver indicator
+- 63 Short-sale indicator (SESH / SSEX / SELL / UNDI per ESMA)
+- 64 OTC post-trade indicator
+- 65 Commodity-derivative indicator
 
-Deferred (~37 fields) — explicit follow-ups:
+Deferred (~33 fields) — explicit follow-ups:
 
 - Intermediary fields (10-14 buyer transmission, 19-23 seller
   transmission, plus party-A / party-B routing).
-- Commodity-derivative indicators (fields 53-55).
-- Securities-financing-transaction flags (fields 56-62).
-- Waivers and short-sale indicator (fields 63-65).
+- Commodity-derivative metadata block (fields 53-55: notional schedule,
+  delivery type, contract type details).
+- Securities-financing-transaction flags (fields 56-61).
 - Schema validation against the official ESMA XSD.
 
 What's NOT here
@@ -97,6 +101,23 @@ class IdType(str, Enum):
     NIDN = "NIDN"
 
 
+class ShortSaleIndicator(str, Enum):
+    """ESMA RTS 22 field 63 short-sale codes."""
+
+    SESH = "SESH"  # short sale with no exemption
+    SSEX = "SSEX"  # short sale with exemption
+    SELL = "SELL"  # any other (i.e. not a short sale)
+    UNDI = "UNDI"  # information not available
+
+    @classmethod
+    def empty(cls) -> str:
+        """Sentinel returned when the operator has not classified the
+        trade. ARMs treat the missing field as ``UNDI`` but we keep
+        empty strings out of the enum so the dataclass default stays
+        opt-in."""
+        return ""
+
+
 @dataclass(frozen=True)
 class MiFID2Transaction:
     """Minimum-viable RTS 22 transaction record."""
@@ -137,6 +158,14 @@ class MiFID2Transaction:
     investment_decision_branch_country: str = ""  # field 25
     execution_algo_id: str = ""  # field 26
     execution_branch_country: str = ""  # field 27
+    # Indicator fields 62-65. Booleans render as "true" / "false" to
+    # match the existing investment_firm_covered convention; the
+    # short-sale field is a discrete ESMA code (or empty when not
+    # classified — see :class:`ShortSaleIndicator`).
+    waiver_indicator: bool = False  # field 62
+    short_sale_indicator: str = ""  # field 63 (ShortSaleIndicator code)
+    otc_post_trade_indicator: bool = False  # field 64
+    commodity_derivative_indicator: bool = False  # field 65
 
     def __post_init__(self) -> None:
         if not self.transaction_reference_number:
@@ -155,6 +184,17 @@ class MiFID2Transaction:
         ):
             raise ValueError(
                 "trading_datetime must be timezone-aware (UTC required by RTS 22)"
+            )
+        if self.short_sale_indicator and self.short_sale_indicator not in {
+            ShortSaleIndicator.SESH.value,
+            ShortSaleIndicator.SSEX.value,
+            ShortSaleIndicator.SELL.value,
+            ShortSaleIndicator.UNDI.value,
+        }:
+            raise ValueError(
+                f"short_sale_indicator must be one of "
+                f"{{SESH, SSEX, SELL, UNDI}} or empty, got "
+                f"{self.short_sale_indicator!r}"
             )
 
 
@@ -188,6 +228,10 @@ RTS_22_COLUMNS: tuple[str, ...] = (
     "trading_venue",  # 36
     "instrument_isin",  # 41
     "cfi_code",  # 43
+    "waiver_indicator",  # 62
+    "short_sale_indicator",  # 63
+    "otc_post_trade_indicator",  # 64
+    "commodity_derivative_indicator",  # 65
 )
 
 
@@ -232,6 +276,10 @@ def transactions_to_csv(transactions: list[MiFID2Transaction]) -> str:
                 t.trading_venue,
                 t.instrument_isin,
                 t.cfi_code,
+                "true" if t.waiver_indicator else "false",
+                t.short_sale_indicator,
+                "true" if t.otc_post_trade_indicator else "false",
+                "true" if t.commodity_derivative_indicator else "false",
             ]
         )
     return buf.getvalue()
@@ -255,6 +303,7 @@ __all__ = [
     "RTS_22_COLUMNS",
     "IdType",
     "MiFID2Transaction",
+    "ShortSaleIndicator",
     "Side",
     "TradingCapacity",
     "transactions_to_csv",
