@@ -27,10 +27,15 @@ Implemented (ESMA RTS 22 Annex Field number in parentheses):
 - 7  Buyer LEI / national ID
 - 8  Buyer decision-maker code (NATL when natural person, LEI for entity)
 - 9  Buyer decision-maker identifier (LEI / national ID / "NORE")
+- 10 Buyer transmission-of-order indicator (true when this firm
+     received the order from another transmitting firm)
+- 11 Transmitting firm identification code for the buyer side
 - 15 Seller identification type
 - 16 Seller LEI / national ID
 - 17 Seller decision-maker code
 - 18 Seller decision-maker identifier
+- 19 Seller transmission-of-order indicator
+- 20 Transmitting firm identification code for the seller side
 - 24 Investment-decision-within-firm algorithmic ID
 - 25 Country of branch supervising the investment decision
 - 26 Execution-within-firm algorithmic ID
@@ -51,10 +56,11 @@ Implemented (ESMA RTS 22 Annex Field number in parentheses):
 - 64 OTC post-trade indicator
 - 65 Commodity-derivative indicator
 
-Deferred (~33 fields) — explicit follow-ups:
+Deferred (~29 fields) — explicit follow-ups:
 
-- Intermediary fields (10-14 buyer transmission, 19-23 seller
-  transmission, plus party-A / party-B routing).
+- Remaining intermediary fields (12-14 buyer side; 21-23 seller side
+  — these only apply when the order passed through more than one
+  transmitting firm).
 - Commodity-derivative metadata block (fields 53-55: notional schedule,
   delivery type, contract type details).
 - Securities-financing-transaction flags (fields 56-61).
@@ -152,6 +158,14 @@ class MiFID2Transaction:
     buyer_decision_maker_id: str = ""  # field 9
     seller_decision_maker_code: str = ""  # field 17
     seller_decision_maker_id: str = ""  # field 18
+    # Transmission fields. Set ``*_transmission_indicator=True`` when
+    # this firm received the order from an upstream transmitting firm
+    # under MiFIR Article 4 transmission rules; populate the matching
+    # ``*_transmitting_firm_id`` with the upstream firm's LEI.
+    buyer_transmission_indicator: bool = False  # field 10
+    buyer_transmitting_firm_id: str = ""  # field 11
+    seller_transmission_indicator: bool = False  # field 19
+    seller_transmitting_firm_id: str = ""  # field 20
     # Algorithmic-decision identifiers. Empty string when the trade
     # was operator-initiated (no algo).
     investment_decision_algo_id: str = ""  # field 24
@@ -209,10 +223,14 @@ RTS_22_COLUMNS: tuple[str, ...] = (
     "buyer_id",  # 7
     "buyer_decision_maker_code",  # 8
     "buyer_decision_maker_id",  # 9
+    "buyer_transmission_indicator",  # 10
+    "buyer_transmitting_firm_id",  # 11
     "seller_id_type",  # 15
     "seller_id",  # 16
     "seller_decision_maker_code",  # 17
     "seller_decision_maker_id",  # 18
+    "seller_transmission_indicator",  # 19
+    "seller_transmitting_firm_id",  # 20
     "investment_decision_algo_id",  # 24
     "investment_decision_branch_country",  # 25
     "execution_algo_id",  # 26
@@ -257,10 +275,14 @@ def transactions_to_csv(transactions: list[MiFID2Transaction]) -> str:
                 t.buyer_id,
                 t.buyer_decision_maker_code,
                 t.buyer_decision_maker_id,
+                "true" if t.buyer_transmission_indicator else "false",
+                t.buyer_transmitting_firm_id,
                 t.seller_id_type.value,
                 t.seller_id,
                 t.seller_decision_maker_code,
                 t.seller_decision_maker_id,
+                "true" if t.seller_transmission_indicator else "false",
+                t.seller_transmitting_firm_id,
                 t.investment_decision_algo_id,
                 t.investment_decision_branch_country,
                 t.execution_algo_id,
