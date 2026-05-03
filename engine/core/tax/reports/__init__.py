@@ -82,6 +82,12 @@ from engine.core.tax.reports.form_6781 import (
     contracts_to_csv,
     summarize_form6781,
 )
+from engine.core.tax.reports.form_6781_part_ii import (
+    Form6781PartIISummary,
+    StraddleLeg,
+    legs_to_csv,
+    summarize_form6781_part_ii,
+)
 from engine.core.tax.reports.section_1256_carryback import (
     CARRYBACK_YEARS,
     CarrybackAbsorption,
@@ -109,6 +115,7 @@ __all__ = [
     "CHURCH_TAX_RATE_OTHER",
     "DEDUCTIBLE_CAP_DEFAULT",
     "DEDUCTIBLE_CAP_MFS",
+    "Form6781PartIISummary",
     "Form6781Summary",
     "KEST_RATE",
     "IdType",
@@ -152,6 +159,7 @@ __all__ = [
     "ScheduleDPartTotal",
     "ScheduleDSummary",
     "Section1256Carryback",
+    "StraddleLeg",
     "ShortSaleIndicator",
     "TaxableDisposal",
     "UnsupportedJurisdictionError",
@@ -165,10 +173,12 @@ __all__ = [
     "disposals_to_csv",
     "flatten_summary_to_csv",
     "generate_1099b_rows",
+    "legs_to_csv",
     "report_for_jurisdiction",
     "rows_to_csv",
     "summarize_cgt",
     "summarize_form6781",
+    "summarize_form6781_part_ii",
     "summarize_kest",
     "summarize_pfu",
     "summarize_schedule_d",
