@@ -5,7 +5,8 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError as JWTError
 
 from engine.config import settings
 

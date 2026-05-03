@@ -66,7 +66,7 @@ class TokenBucket:
                 await asyncio.sleep(wait)
 
 
-async def call_with_retry[T](
+async def call_with_retry(
     func: Callable[[], Awaitable[T]],
     *,
     provider: str,
