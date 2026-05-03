@@ -5,8 +5,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import event as sa_event
 from sqlalchemy import text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from engine.api.auth.dependency import get_current_user
 from engine.app import create_app
@@ -16,6 +19,8 @@ from engine.deps import get_db
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+    from sqlalchemy.ext.asyncio import AsyncEngine
 
 
 FAKE_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
@@ -67,24 +72,44 @@ async def client() -> AsyncIterator[AsyncClient]:
         yield ac
 
 
+def _build_test_engine() -> tuple[AsyncEngine, bool]:
+    db_url = settings.database_url
+    if db_url and "test" in db_url.lower():
+        return create_async_engine(db_url, echo=False), False
+
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    from sqlalchemy.ext.compiler import compiles
+
+    compiles(JSONB, "sqlite")(lambda type_, compiler, **kw: "TEXT")
+
+    @sa_event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragma(dbapi_conn, _connection_record):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    return engine, True
+
+
 @pytest.fixture(scope="session")
 async def test_engine():
-    if not settings.database_url or "test" not in settings.database_url.lower():
-        raise RuntimeError(
-            f"Test database not configured. Set NEXUS_DATABASE_URL to a test database. "
-            f"Current: {settings.database_url}"
-        )
-    engine = create_async_engine(settings.database_url, echo=False)
-    # CI runs `alembic upgrade head` before pytest, so the schema already
-    # exists with triggers/functions. create_all is idempotent and fills
-    # in any ORM-only tables.
+    engine, is_sqlite = _build_test_engine()
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine
-    # Tear down with CASCADE so FK constraints don't block drop ordering.
     async with engine.begin() as conn:
-        await conn.execute(text("DROP SCHEMA public CASCADE"))
-        await conn.execute(text("CREATE SCHEMA public"))
+        if is_sqlite:
+            await conn.run_sync(Base.metadata.drop_all)
+        else:
+            await conn.execute(text("DROP SCHEMA public CASCADE"))
+            await conn.execute(text("CREATE SCHEMA public"))
     await engine.dispose()
 
 

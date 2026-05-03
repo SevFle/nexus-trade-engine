@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 
-from engine.core.brokers import BrokerAdapter, BrokerRejectError
+from engine.core.brokers import BrokerAdapter, BrokerError, BrokerRejectError
 from engine.core.brokers.paper import PaperBroker
 from engine.core.oms import (
     AckEvent,
@@ -39,7 +39,7 @@ def _limit_buy(symbol: str = "AAPL", qty: str = "10", limit: str = "100") -> Ord
 
 
 def _prices(table: dict[str, Decimal]):
-    return lambda symbol: table.get(symbol)
+    return table.get
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +147,7 @@ class TestLimitFlow:
 
     async def test_simulate_fill_unknown_raises(self):
         broker = PaperBroker(price_for=_prices({}))
-        with pytest.raises(Exception):
+        with pytest.raises(BrokerError):
             await broker.simulate_fill(broker_order_id="PAPER-doesnotexist")
 
 

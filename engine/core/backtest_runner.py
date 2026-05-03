@@ -78,9 +78,12 @@ class BacktestRunner:
         if df.empty:
             raise RuntimeError(f"No OHLCV data returned for {self.config.symbol}")
 
-        mask = (df.index >= pd.Timestamp(self.config.start_date)) & (
-            df.index <= pd.Timestamp(self.config.end_date)
-        )
+        start = pd.Timestamp(self.config.start_date)
+        end = pd.Timestamp(self.config.end_date)
+        if df.index.tz is not None:
+            start = start.tz_localize(df.index.tz)
+            end = end.tz_localize(df.index.tz)
+        mask = (df.index >= start) & (df.index <= end)
         df = df.loc[mask]
         if df.empty:
             raise RuntimeError(
@@ -211,7 +214,7 @@ class BacktestRunner:
         try:
             evaluation = StrategyEvaluator().evaluate(report).to_dict()
             result.metrics["evaluation"] = evaluation
-        except Exception:  # noqa: BLE001 — never let scoring fail the backtest
+        except Exception:
             logger.exception("backtest.evaluation_failed")
 
         total_trades = len(result.trades)

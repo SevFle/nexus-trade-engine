@@ -33,8 +33,10 @@ import contextlib
 import threading
 import time
 from collections import defaultdict
-from collections.abc import Iterator, Mapping
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator, Mapping
 
 
 @runtime_checkable
@@ -66,7 +68,7 @@ class MetricsBackend(Protocol):
         self,
         name: str,
         tags: Mapping[str, str] | None = None,
-    ) -> "contextlib.AbstractContextManager[None]": ...
+    ) -> contextlib.AbstractContextManager[None]: ...
 
 
 def _check_name(name: str) -> None:
@@ -123,13 +125,11 @@ class RecordingBackend:
     write (last-write-wins), and stores every histogram observation."""
 
     def __init__(self) -> None:
-        self.counters: dict[tuple[str, tuple[tuple[str, str], ...]], float] = (
-            defaultdict(float)
-        )
+        self.counters: dict[tuple[str, tuple[tuple[str, str], ...]], float] = defaultdict(float)
         self.gauges: dict[tuple[str, tuple[tuple[str, str], ...]], float] = {}
-        self.histograms: dict[
-            tuple[str, tuple[tuple[str, str], ...]], list[float]
-        ] = defaultdict(list)
+        self.histograms: dict[tuple[str, tuple[tuple[str, str], ...]], list[float]] = defaultdict(
+            list
+        )
         self._lock = threading.Lock()
 
     def counter(

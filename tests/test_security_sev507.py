@@ -14,6 +14,7 @@ from sqlalchemy import text
 from engine.api.routes.backtest import router as bt_router
 from engine.api.routes.legal import _apply_substitutions
 from engine.app import create_app
+from engine.config import settings
 from engine.db.models import LegalDocument
 from engine.deps import get_db
 from engine.legal import service as legal_service
@@ -26,6 +27,17 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def _is_pg_available() -> bool:
+    db_url = settings.database_url
+    return bool(db_url and "test" in db_url.lower())
+
+
+requires_postgresql = pytest.mark.skipif(
+    not _is_pg_available(),
+    reason="Requires PostgreSQL test database (plpgsql triggers not available in SQLite)",
+)
 
 
 class TestC2ConsentWiring:
@@ -85,6 +97,7 @@ class TestC2ConsentWiring:
             assert response.status_code == HTTPStatus.OK
 
 
+@requires_postgresql
 class TestH3DbImmutability:
     async def test_update_legal_acceptance_raises(self, db_session: AsyncSession):
         await db_session.execute(
