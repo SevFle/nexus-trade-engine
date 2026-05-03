@@ -48,6 +48,11 @@ from engine.core.tax.reports.kest import (
     KestSummary,
     summarize_kest,
 )
+from engine.core.tax.reports.kest_carryover import (
+    KestApplication,
+    KestCarryover,
+    apply_kest_carryover,
+)
 from engine.core.tax.reports.form_1099b import (
     HoldingTerm,
     LotDisposition,
@@ -85,6 +90,8 @@ __all__ = [
     "CgtDisposal",
     "CgtSummary",
     "HoldingTerm",
+    "KestApplication",
+    "KestCarryover",
     "KestDisposal",
     "KestSummary",
     "LotDisposition",
@@ -94,6 +101,7 @@ __all__ = [
     "TaxableDisposal",
     "UnsupportedJurisdictionError",
     "apply_carryover",
+    "apply_kest_carryover",
     "disposals_to_csv",
     "flatten_summary_to_csv",
     "generate_1099b_rows",
