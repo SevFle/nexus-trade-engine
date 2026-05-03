@@ -1,9 +1,21 @@
 name: Release Please
 
+# Manual trigger only. The default `push: main` trigger fails under
+# the org-level "Allow GitHub Actions to create and approve pull
+# requests" policy: release-please needs to create the release-PR,
+# which the org currently blocks. Operators run this workflow by
+# hand from the Actions tab once a personal-access-token (or GitHub
+# App token) is wired into the secrets store as RELEASE_PLEASE_TOKEN.
+#
+# To re-enable automatic release PRs:
+# 1. Create a fine-grained PAT or GitHub App with `contents: write`
+#    + `pull_requests: write` on this repo.
+# 2. Add it as the secret `RELEASE_PLEASE_TOKEN`.
+# 3. Pass `token: ${{ secrets.RELEASE_PLEASE_TOKEN }}` to the action
+#    below and restore the `push: main` trigger.
+
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
