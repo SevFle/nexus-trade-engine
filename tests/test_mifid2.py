@@ -108,8 +108,13 @@ class TestColumnOrder:
         assert RTS_22_COLUMNS[2] == "executing_entity_lei"
         # No duplicates.
         assert len(set(RTS_22_COLUMNS)) == len(RTS_22_COLUMNS)
-        # 32 fields after adding the indicator block 62-65 (gh#155 follow-up).
-        assert len(RTS_22_COLUMNS) == 32
+        # 36 fields after adding the transmission block 10-11 + 19-20
+        # (gh#155 follow-up).
+        assert len(RTS_22_COLUMNS) == 36
+        assert "buyer_transmission_indicator" in RTS_22_COLUMNS
+        assert "buyer_transmitting_firm_id" in RTS_22_COLUMNS
+        assert "seller_transmission_indicator" in RTS_22_COLUMNS
+        assert "seller_transmitting_firm_id" in RTS_22_COLUMNS
         # Indicator columns at the tail.
         assert RTS_22_COLUMNS[-4] == "waiver_indicator"
         assert RTS_22_COLUMNS[-3] == "short_sale_indicator"
@@ -304,6 +309,63 @@ class TestIndicators62To65:
             "otc_post_trade_indicator",
             "commodity_derivative_indicator",
         ]
+
+
+class TestTransmissionFields10And19:
+    def test_transmission_defaults_render_false_or_blank(self):
+        out = transactions_to_csv([_txn()])
+        header, body = _parse(out)
+        idx = {col: i for i, col in enumerate(header)}
+        assert body[0][idx["buyer_transmission_indicator"]] == "false"
+        assert body[0][idx["buyer_transmitting_firm_id"]] == ""
+        assert body[0][idx["seller_transmission_indicator"]] == "false"
+        assert body[0][idx["seller_transmitting_firm_id"]] == ""
+
+    def test_populated_transmission_round_trips(self):
+        out = transactions_to_csv(
+            [
+                _txn(
+                    buyer_transmission_indicator=True,
+                    buyer_transmitting_firm_id="529900TXBUY1234567X",
+                    seller_transmission_indicator=True,
+                    seller_transmitting_firm_id="529900TXSEL1234567Y",
+                )
+            ]
+        )
+        header, body = _parse(out)
+        idx = {col: i for i, col in enumerate(header)}
+        assert body[0][idx["buyer_transmission_indicator"]] == "true"
+        assert (
+            body[0][idx["buyer_transmitting_firm_id"]]
+            == "529900TXBUY1234567X"
+        )
+        assert body[0][idx["seller_transmission_indicator"]] == "true"
+        assert (
+            body[0][idx["seller_transmitting_firm_id"]]
+            == "529900TXSEL1234567Y"
+        )
+
+    def test_transmission_block_sits_between_decision_maker_and_capacity(
+        self,
+    ):
+        # ESMA RTS 22 ordering: buyer transmission (10-11) follows the
+        # buyer decision-maker block (8-9) and precedes the seller
+        # identification block (15-16). Same pattern on the seller
+        # side: 19-20 between decision-maker (17-18) and the algo /
+        # branch decision block (24-27).
+        out = transactions_to_csv([_txn()])
+        header, _ = _parse(out)
+        idx = {col: i for i, col in enumerate(header)}
+        assert (
+            idx["buyer_decision_maker_id"]
+            < idx["buyer_transmission_indicator"]
+            < idx["seller_id_type"]
+        )
+        assert (
+            idx["seller_decision_maker_id"]
+            < idx["seller_transmission_indicator"]
+            < idx["investment_decision_algo_id"]
+        )
 
 
 class TestEmpty:
