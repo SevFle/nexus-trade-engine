@@ -13,6 +13,11 @@ from engine.core.tax.reports.carryover import (
     CapitalLossCarryover,
     apply_carryover,
 )
+from engine.core.tax.reports.cgt_carryover import (
+    CgtApplication,
+    CgtCarryover,
+    apply_cgt_carryover,
+)
 from engine.core.tax.reports.hmrc_cgt import (
     ANNUAL_EXEMPT_AMOUNT_2024_25,
     CgtDisposal,
@@ -87,6 +92,8 @@ __all__ = [
     "AssetClass",
     "CapitalLossApplication",
     "CapitalLossCarryover",
+    "CgtApplication",
+    "CgtCarryover",
     "CgtDisposal",
     "CgtSummary",
     "HoldingTerm",
@@ -101,6 +108,7 @@ __all__ = [
     "TaxableDisposal",
     "UnsupportedJurisdictionError",
     "apply_carryover",
+    "apply_cgt_carryover",
     "apply_kest_carryover",
     "disposals_to_csv",
     "flatten_summary_to_csv",
