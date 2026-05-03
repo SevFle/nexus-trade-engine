@@ -13,6 +13,13 @@ from engine.core.tax.reports.carryover import (
     CapitalLossCarryover,
     apply_carryover,
 )
+from engine.core.tax.reports.hmrc_cgt import (
+    ANNUAL_EXEMPT_AMOUNT_2024_25,
+    CgtDisposal,
+    CgtSummary,
+    disposals_to_csv,
+    summarize_cgt,
+)
 from engine.core.tax.reports.form_1099b import (
     HoldingTerm,
     LotDisposition,
@@ -28,18 +35,23 @@ from engine.core.tax.reports.schedule_d import (
 )
 
 __all__ = [
+    "ANNUAL_EXEMPT_AMOUNT_2024_25",
     "DEDUCTIBLE_CAP_DEFAULT",
     "DEDUCTIBLE_CAP_MFS",
     "CapitalLossApplication",
     "CapitalLossCarryover",
+    "CgtDisposal",
+    "CgtSummary",
     "HoldingTerm",
     "LotDisposition",
     "Schedule1099BRow",
     "ScheduleDPartTotal",
     "ScheduleDSummary",
     "apply_carryover",
+    "disposals_to_csv",
     "generate_1099b_rows",
     "rows_to_csv",
+    "summarize_cgt",
     "summarize_schedule_d",
     "summary_to_csv",
 ]
