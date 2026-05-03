@@ -108,8 +108,17 @@ class TestColumnOrder:
         assert RTS_22_COLUMNS[-1] == "cfi_code"
         # No duplicates.
         assert len(set(RTS_22_COLUMNS)) == len(RTS_22_COLUMNS)
-        # Exactly 20 fields in this scaffold.
-        assert len(RTS_22_COLUMNS) == 20
+        # 28 fields after the decision-maker expansion (gh#155 follow-up).
+        assert len(RTS_22_COLUMNS) == 28
+        # Decision-maker columns are present.
+        assert "buyer_decision_maker_code" in RTS_22_COLUMNS
+        assert "buyer_decision_maker_id" in RTS_22_COLUMNS
+        assert "seller_decision_maker_code" in RTS_22_COLUMNS
+        assert "seller_decision_maker_id" in RTS_22_COLUMNS
+        assert "investment_decision_algo_id" in RTS_22_COLUMNS
+        assert "investment_decision_branch_country" in RTS_22_COLUMNS
+        assert "execution_algo_id" in RTS_22_COLUMNS
+        assert "execution_branch_country" in RTS_22_COLUMNS
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +195,60 @@ class TestCsv:
         header, body = _parse(out)
         idx = {col: i for i, col in enumerate(header)}
         assert body[0][idx["investment_firm_covered"]] == "false"
+
+    def test_decision_maker_defaults_render_blank(self):
+        # The 8 decision-maker fields default to empty strings so
+        # callers that don't yet populate them keep producing valid
+        # CSVs.
+        out = transactions_to_csv([_txn()])
+        header, body = _parse(out)
+        idx = {col: i for i, col in enumerate(header)}
+        for col in (
+            "buyer_decision_maker_code",
+            "buyer_decision_maker_id",
+            "seller_decision_maker_code",
+            "seller_decision_maker_id",
+            "investment_decision_algo_id",
+            "investment_decision_branch_country",
+            "execution_algo_id",
+            "execution_branch_country",
+        ):
+            assert body[0][idx[col]] == ""
+
+    def test_decision_maker_populated_round_trips_to_csv(self):
+        out = transactions_to_csv(
+            [
+                _txn(
+                    buyer_decision_maker_code="LEI",
+                    buyer_decision_maker_id="529900BUYR1234567X",
+                    seller_decision_maker_code="NORE",
+                    seller_decision_maker_id="NORE",
+                    investment_decision_algo_id="ALGO-INV-42",
+                    investment_decision_branch_country="DE",
+                    execution_algo_id="ALGO-EXEC-7",
+                    execution_branch_country="FR",
+                )
+            ]
+        )
+        header, body = _parse(out)
+        idx = {col: i for i, col in enumerate(header)}
+        assert body[0][idx["buyer_decision_maker_code"]] == "LEI"
+        assert body[0][idx["buyer_decision_maker_id"]] == "529900BUYR1234567X"
+        assert body[0][idx["seller_decision_maker_code"]] == "NORE"
+        assert body[0][idx["investment_decision_algo_id"]] == "ALGO-INV-42"
+        assert body[0][idx["investment_decision_branch_country"]] == "DE"
+        assert body[0][idx["execution_algo_id"]] == "ALGO-EXEC-7"
+        assert body[0][idx["execution_branch_country"]] == "FR"
+
+    def test_decision_maker_columns_precede_trading_datetime(self):
+        # Field-order constraint: ESMA expects the decision-maker
+        # block (8/9, 17/18, 24-27) before the trading datetime (28).
+        out = transactions_to_csv([_txn()])
+        header, _ = _parse(out)
+        idx = {col: i for i, col in enumerate(header)}
+        assert idx["buyer_decision_maker_code"] < idx["trading_datetime"]
+        assert idx["seller_decision_maker_id"] < idx["trading_datetime"]
+        assert idx["execution_branch_country"] < idx["trading_datetime"]
 
 
 class TestEmpty:
