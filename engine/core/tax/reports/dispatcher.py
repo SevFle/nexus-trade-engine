@@ -38,6 +38,16 @@ from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+from engine.core.tax.reports.carryover import (
+    CapitalLossApplication,
+    CapitalLossCarryover,
+    apply_carryover,
+)
+from engine.core.tax.reports.cgt_carryover import (
+    CgtApplication,
+    CgtCarryover,
+    apply_cgt_carryover,
+)
 from engine.core.tax.reports.form_1099b import (
     LotDisposition,
     generate_1099b_rows,
@@ -48,6 +58,16 @@ from engine.core.tax.reports.kest import (
     AssetClass,
     KestDisposal,
     summarize_kest,
+)
+from engine.core.tax.reports.kest_carryover import (
+    KestApplication,
+    KestCarryover,
+    apply_kest_carryover,
+)
+from engine.core.tax.reports.pfu_carryover import (
+    PfuApplication,
+    PfuCarryover,
+    apply_pfu_carryover,
 )
 from engine.core.tax.reports.schedule_d import summarize_schedule_d
 
@@ -229,9 +249,98 @@ def _render_scalar(value: Any) -> str:
     return "" if value is None else str(value)
 
 
+JurisdictionCarryover = (
+    "CapitalLossCarryover | CgtCarryover | KestCarryover | PfuCarryover"
+)
+CarryoverApplication = (
+    "CapitalLossApplication | CgtApplication | KestApplication | PfuApplication"
+)
+
+
+def carryover_for_jurisdiction(
+    code: str,
+    disposals: list[TaxableDisposal],
+    prior: Any = None,
+    *,
+    current_year: int | None = None,
+    **kwargs: Any,
+):
+    """Run the per-jurisdiction carryover applier for ``code``.
+
+    ``prior`` must match the jurisdiction's carryover record type:
+
+    - US → :class:`CapitalLossCarryover` (or ``None``).
+    - GB → :class:`CgtCarryover` (or ``None``).
+    - DE → :class:`KestCarryover` (or ``None``).
+    - FR → :class:`PfuCarryover` (or ``None``).
+
+    ``current_year`` is required for FR (used to date new vintages and
+    expire ones older than ten years). It is ignored by every other
+    jurisdiction.
+
+    Extra ``kwargs`` are forwarded to the underlying applier:
+
+    - US: ``deductible_cap``.
+    - GB: ``annual_exempt_amount``.
+    - DE: ``allowance``, ``church_tax_rate``.
+    - FR: (none beyond ``current_year``).
+
+    The return type is the union of the four ``Application`` records;
+    callers branch on it via ``isinstance``.
+    """
+    norm = code.upper()
+    if norm == "US":
+        _ensure_prior(prior, CapitalLossCarryover)
+        rows = generate_1099b_rows([_to_us(d) for d in disposals])
+        summary = summarize_schedule_d(rows)
+        return apply_carryover(summary, prior, **kwargs)
+    if norm == "GB":
+        _ensure_prior(prior, CgtCarryover)
+        return apply_cgt_carryover(
+            [_to_gb(d) for d in disposals], prior, **kwargs
+        )
+    if norm == "DE":
+        _ensure_prior(prior, KestCarryover)
+        return apply_kest_carryover(
+            [_to_de(d) for d in disposals], prior, **kwargs
+        )
+    if norm == "FR":
+        _ensure_prior(prior, PfuCarryover)
+        if current_year is None:
+            raise ValueError(
+                "FR carryover requires current_year (used for vintage "
+                "tagging + 10-year expiry)"
+            )
+        return apply_pfu_carryover(
+            [_to_fr(d) for d in disposals],
+            prior,
+            current_year=current_year,
+            **kwargs,
+        )
+    raise UnsupportedJurisdictionError(
+        f"unknown jurisdiction {code!r}; supported: US, GB, DE, FR"
+    )
+
+
+def _ensure_prior(prior: Any, expected: type) -> None:
+    """Raise :class:`TypeError` if ``prior`` is set but not the right
+    carryover record type for the jurisdiction. ``None`` is always
+    accepted (each applier defaults to a zero carryover)."""
+    if prior is None:
+        return
+    if not isinstance(prior, expected):
+        raise TypeError(
+            f"prior must be {expected.__name__} or None, "
+            f"got {type(prior).__name__}"
+        )
+
+
 __all__ = [
+    "CarryoverApplication",
+    "JurisdictionCarryover",
     "TaxableDisposal",
     "UnsupportedJurisdictionError",
+    "carryover_for_jurisdiction",
     "flatten_summary_to_csv",
     "report_for_jurisdiction",
 ]
