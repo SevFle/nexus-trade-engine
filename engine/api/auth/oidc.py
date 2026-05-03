@@ -141,6 +141,7 @@ class OIDCAuthProvider(IAuthProvider):
                 role=mapped_role,
                 auth_provider="oidc",
                 external_id=oidc_id,
+                is_active=True,
             )
             db.add(user)
             await db.flush()
