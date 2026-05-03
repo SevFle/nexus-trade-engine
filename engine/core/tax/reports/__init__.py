@@ -13,11 +13,21 @@ from engine.core.tax.reports.form_1099b import (
     generate_1099b_rows,
     rows_to_csv,
 )
+from engine.core.tax.reports.schedule_d import (
+    ScheduleDPartTotal,
+    ScheduleDSummary,
+    summarize_schedule_d,
+    summary_to_csv,
+)
 
 __all__ = [
     "HoldingTerm",
     "LotDisposition",
     "Schedule1099BRow",
+    "ScheduleDPartTotal",
+    "ScheduleDSummary",
     "generate_1099b_rows",
     "rows_to_csv",
+    "summarize_schedule_d",
+    "summary_to_csv",
 ]
