@@ -27,6 +27,7 @@ from engine.data.providers import (
 )
 from engine.db.session import dispose_engine, get_session_factory
 from engine.legal.sync import sync_legal_documents
+from engine.observability.http_metrics import HttpMetricsMiddleware
 from engine.observability.logging import setup_logging
 from engine.observability.metrics import set_metrics
 from engine.observability.middleware import CorrelationIdMiddleware
@@ -182,6 +183,11 @@ def create_app() -> FastAPI:
     # log-bombing limits the per-route Pydantic models impose.
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=1_048_576)
     app.add_middleware(CorrelationIdMiddleware)
+    # Stack order matters — HttpMetricsMiddleware is added last so it
+    # wraps everything else and times the full request lifecycle. The
+    # /metrics route itself is included so operators can monitor scrape
+    # latency.
+    app.add_middleware(HttpMetricsMiddleware)
 
     app.include_router(api_router)
 
