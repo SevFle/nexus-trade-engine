@@ -39,6 +39,12 @@ from engine.core.tax.reports.france_pfu import (
     PfuSummary,
     summarize_pfu,
 )
+from engine.core.tax.reports.pfu_carryover import (
+    PfuApplication,
+    PfuCarryover,
+    PfuLossVintage,
+    apply_pfu_carryover,
+)
 from engine.core.tax.reports.kest import (
     CHURCH_TAX_RATE_BAYERN_BW,
     CHURCH_TAX_RATE_OTHER,
@@ -82,7 +88,10 @@ __all__ = [
     "PFU_INCOME_TAX_RATE",
     "PFU_SOCIAL_CHARGES_RATE",
     "PFU_TOTAL_RATE",
+    "PfuApplication",
+    "PfuCarryover",
     "PfuDisposal",
+    "PfuLossVintage",
     "PfuSummary",
     "SOLZ_RATE",
     "SPARER_PAUSCHBETRAG_2023",
@@ -110,6 +119,7 @@ __all__ = [
     "apply_carryover",
     "apply_cgt_carryover",
     "apply_kest_carryover",
+    "apply_pfu_carryover",
     "disposals_to_csv",
     "flatten_summary_to_csv",
     "generate_1099b_rows",
