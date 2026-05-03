@@ -44,13 +44,14 @@ _CIK = Annotated[str, StringConstraints(min_length=1, max_length=10, pattern=r"^
 _MIC = Annotated[str, StringConstraints(min_length=4, max_length=4, pattern=r"^[A-Z0-9]{4}$")]
 _CCY = Annotated[str, StringConstraints(min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")]
 # Ticker allowlist — covers all real-world formats (BRK.B, BTC-USD, ES_F,
-# AAPL.L, ALV1, AAPL:US) without admitting path-traversal or injection
-# characters. 1-32 chars. Slash is intentionally excluded so listing
-# tickers cannot smuggle `../../etc/passwd`-shaped strings into the
-# resolver indexes.
+# AAPL.L, ALV1, AAPL:US, EURUSD=X) without admitting path-traversal or
+# injection characters. 1-32 chars. Slash is intentionally excluded so
+# listing tickers cannot smuggle `../../etc/passwd`-shaped strings into
+# the resolver indexes.  ``=`` is allowed for Yahoo-style forex pairs
+# (e.g. ``EURUSD=X``). ``+`` is allowed for telco-style tickers.
 _TICKER = Annotated[
     str,
-    StringConstraints(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9.\-_:]+$"),
+    StringConstraints(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9.\-_:+=]+$"),
 ]
 _CLASSIFICATION_FIELD = Annotated[str, StringConstraints(max_length=128)]
 

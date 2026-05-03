@@ -25,8 +25,10 @@ from engine.data.providers import (
     configure_from_file,
     get_registry,
 )
+from engine.api.routes.reference import get_search_index
 from engine.db.session import dispose_engine, get_session_factory
 from engine.legal.sync import sync_legal_documents
+from engine.reference.seed import seed_index
 from engine.observability.http_metrics import HttpMetricsMiddleware
 from engine.observability.logging import setup_logging
 from engine.observability.metrics import set_metrics
@@ -108,6 +110,14 @@ def _build_auth_registry() -> AuthProviderRegistry:
     return registry
 
 
+def _seed_reference_index() -> None:
+    index = get_search_index()
+    if index._records:
+        return
+    count = seed_index(index)
+    logger.info("reference.seed.complete", instruments=count)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
@@ -126,6 +136,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.auth_registry = _build_auth_registry()
     logger.info("auth.providers_loaded", providers=list(app.state.auth_registry.providers.keys()))
     _configure_data_providers()
+    _seed_reference_index()
     try:
         session_factory = get_session_factory()
         async with session_factory() as db:
