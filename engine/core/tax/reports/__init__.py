@@ -6,6 +6,13 @@ explicit follow-ups — each adds its own row schema and serialiser
 under this package.
 """
 
+from engine.core.tax.reports.carryover import (
+    DEDUCTIBLE_CAP_DEFAULT,
+    DEDUCTIBLE_CAP_MFS,
+    CapitalLossApplication,
+    CapitalLossCarryover,
+    apply_carryover,
+)
 from engine.core.tax.reports.form_1099b import (
     HoldingTerm,
     LotDisposition,
@@ -21,11 +28,16 @@ from engine.core.tax.reports.schedule_d import (
 )
 
 __all__ = [
+    "DEDUCTIBLE_CAP_DEFAULT",
+    "DEDUCTIBLE_CAP_MFS",
+    "CapitalLossApplication",
+    "CapitalLossCarryover",
     "HoldingTerm",
     "LotDisposition",
     "Schedule1099BRow",
     "ScheduleDPartTotal",
     "ScheduleDSummary",
+    "apply_carryover",
     "generate_1099b_rows",
     "rows_to_csv",
     "summarize_schedule_d",
