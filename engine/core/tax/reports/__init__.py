@@ -28,6 +28,7 @@ from engine.core.tax.reports.hmrc_cgt import (
 from engine.core.tax.reports.dispatcher import (
     TaxableDisposal,
     UnsupportedJurisdictionError,
+    carryover_for_jurisdiction,
     flatten_summary_to_csv,
     report_for_jurisdiction,
 )
@@ -120,6 +121,7 @@ __all__ = [
     "apply_cgt_carryover",
     "apply_kest_carryover",
     "apply_pfu_carryover",
+    "carryover_for_jurisdiction",
     "disposals_to_csv",
     "flatten_summary_to_csv",
     "generate_1099b_rows",
