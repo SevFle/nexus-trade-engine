@@ -72,6 +72,11 @@ class TestMoney:
         with pytest.raises(ValueError, match="total must not be zero"):
             m.as_pct_of(-0.0)
 
+    def test_as_pct_near_zero_total_raises(self):
+        m = Money(amount=25.0)
+        with pytest.raises(ValueError, match="total must not be zero"):
+            m.as_pct_of(1e-13)
+
     def test_negative_amount(self):
         m = Money(amount=-100.0)
         assert m.amount == -100.0
@@ -158,8 +163,8 @@ class TestCostBreakdown:
             commission=Money(10.0, currency="USD"),
             spread=Money(5.0, currency="EUR"),
         )
-        total = cb.total
-        assert total.amount == 15.0
+        with pytest.raises(ValueError, match="different currencies"):
+            _ = cb.total
 
     def test_very_small_cost_values(self):
         cb = CostBreakdown(
