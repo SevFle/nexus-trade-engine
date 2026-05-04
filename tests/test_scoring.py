@@ -455,3 +455,247 @@ class TestZScoreNormalizerEdgeCases:
         values = [42.0] * 10
         z_scores = normalizer.winsorize_and_standardize(values)
         assert all(z == 0.0 for z in z_scores)
+
+
+class TestFactorScoreSerialization:
+    def test_to_dict_full(self):
+        fs = FactorScore(factor_name="roe", z_score=1.5, raw_value=0.25)
+        d = fs.to_dict()
+        assert d["factor_name"] == "roe"
+        assert d["z_score"] == 1.5
+        assert d["raw_value"] == 0.25
+
+    def test_to_dict_default_raw_value(self):
+        fs = FactorScore(factor_name="pe", z_score=-0.5)
+        d = fs.to_dict()
+        assert d["raw_value"] is None
+
+    def test_to_dict_zero_z_score(self):
+        fs = FactorScore(factor_name="test", z_score=0.0, raw_value=0.0)
+        d = fs.to_dict()
+        assert d["z_score"] == 0.0
+        assert d["raw_value"] == 0.0
+
+
+class TestSymbolScoreClampAndSerialization:
+    def test_clamp_above_100(self):
+        ss = SymbolScore(symbol="X", composite_score=999.0)
+        assert ss.composite_score == 100.0
+
+    def test_clamp_below_0(self):
+        ss = SymbolScore(symbol="X", composite_score=-100.0)
+        assert ss.composite_score == 0.0
+
+    def test_clamp_exactly_0(self):
+        ss = SymbolScore(symbol="X", composite_score=0.0)
+        assert ss.composite_score == 0.0
+
+    def test_clamp_exactly_100(self):
+        ss = SymbolScore(symbol="X", composite_score=100.0)
+        assert ss.composite_score == 100.0
+
+    def test_to_dict_with_factor_scores(self):
+        fs = FactorScore(factor_name="roe", z_score=2.0, raw_value=0.3)
+        ss = SymbolScore(symbol="AAPL", composite_score=85.0, rank=1, factor_scores={"roe": fs})
+        d = ss.to_dict()
+        assert d["symbol"] == "AAPL"
+        assert d["composite_score"] == 85.0
+        assert d["rank"] == 1
+        assert "roe" in d["factor_scores"]
+        assert d["factor_scores"]["roe"]["z_score"] == 2.0
+
+    def test_to_dict_empty_factor_scores(self):
+        ss = SymbolScore(symbol="MSFT", composite_score=50.0, rank=2, factor_scores={})
+        d = ss.to_dict()
+        assert d["factor_scores"] == {}
+
+    def test_default_rank_is_zero(self):
+        ss = SymbolScore(symbol="X", composite_score=50.0)
+        assert ss.rank == 0
+
+    def test_default_composite_score_is_zero(self):
+        ss = SymbolScore(symbol="X")
+        assert ss.composite_score == 0.0
+
+
+class TestScoringResultEdgeCases:
+    def test_empty_scores_list(self):
+        result = ScoringResult(strategy_id="test", scores=[])
+        assert result.scores == []
+        assert result.excluded_factors == []
+
+    def test_single_score_gets_rank_one(self):
+        ss = SymbolScore(symbol="AAPL", composite_score=90.0)
+        result = ScoringResult(strategy_id="test", scores=[ss])
+        assert result.scores[0].rank == 1
+
+    def test_tie_scores_ordered(self):
+        scores = [
+            SymbolScore(symbol="B", composite_score=50.0),
+            SymbolScore(symbol="A", composite_score=50.0),
+        ]
+        result = ScoringResult(strategy_id="test", scores=scores)
+        assert result.scores[0].rank == 1
+        assert result.scores[1].rank == 2
+
+    def test_to_dict_empty(self):
+        result = ScoringResult(strategy_id="test")
+        d = result.to_dict()
+        assert d["strategy_id"] == "test"
+        assert d["scores"] == []
+        assert d["excluded_factors"] == []
+
+    def test_to_dict_with_multiple_scores(self):
+        scores = [
+            SymbolScore(symbol="A", composite_score=90.0, factor_scores={}),
+            SymbolScore(symbol="B", composite_score=50.0, factor_scores={}),
+        ]
+        result = ScoringResult(strategy_id="test", scores=scores, excluded_factors=["momentum"])
+        d = result.to_dict()
+        assert len(d["scores"]) == 2
+        assert d["scores"][0]["symbol"] == "A"
+        assert d["excluded_factors"] == ["momentum"]
+
+    def test_excluded_factors_default_empty(self):
+        result = ScoringResult(strategy_id="test", scores=[])
+        assert result.excluded_factors == []
+
+    def test_model_post_init_reranks(self):
+        scores = [
+            SymbolScore(symbol="C", composite_score=30.0, rank=99),
+            SymbolScore(symbol="A", composite_score=90.0, rank=99),
+            SymbolScore(symbol="B", composite_score=60.0, rank=99),
+        ]
+        result = ScoringResult(strategy_id="test", scores=scores)
+        assert result.scores[0].symbol == "A"
+        assert result.scores[0].rank == 1
+        assert result.scores[1].symbol == "B"
+        assert result.scores[1].rank == 2
+        assert result.scores[2].symbol == "C"
+        assert result.scores[2].rank == 3
+
+
+class TestZScoreNormalizerWinsorizeEdgeCases:
+    def test_all_none_returns_empty(self):
+        n = ZScoreNormalizer()
+        assert n.winsorize([None, None, None]) == []
+
+    def test_two_values(self):
+        n = ZScoreNormalizer()
+        result = n.winsorize([1.0, 100.0])
+        assert len(result) == 2
+
+    def test_values_already_within_range(self):
+        n = ZScoreNormalizer(winsorize_lower=0, winsorize_upper=100)
+        values = [1.0, 2.0, 3.0, 4.0, 5.0]
+        result = n.winsorize(values)
+        assert result == values
+
+    def test_extreme_outlier_clipped(self):
+        n = ZScoreNormalizer(winsorize_lower=5, winsorize_upper=95)
+        values = [1.0] * 50 + [100000.0]
+        result = n.winsorize(values)
+        assert result[-1] < 100000.0
+
+
+class TestZScoreNormalizerStandardizeEdgeCases:
+    def test_two_values_produces_opposite_zscores(self):
+        n = ZScoreNormalizer()
+        result = n.standardize([0.0, 10.0])
+        assert result[0] == pytest.approx(-1.0)
+        assert result[1] == pytest.approx(1.0)
+
+    def test_positive_skew(self):
+        n = ZScoreNormalizer()
+        values = [1.0, 2.0, 3.0, 4.0, 100.0]
+        result = n.standardize(values)
+        assert result[-1] > result[0]
+
+    def test_returns_correct_length(self):
+        n = ZScoreNormalizer()
+        values = list(range(20))
+        result = n.standardize([float(v) for v in values])
+        assert len(result) == 20
+
+
+class TestZScoreNormalizerScaleToRangeEdgeCases:
+    def test_custom_range(self):
+        n = ZScoreNormalizer()
+        values = [0.0, 5.0, 10.0]
+        result = n.scale_to_range(values, low=-1.0, high=1.0)
+        assert result[0] == pytest.approx(-1.0)
+        assert result[-1] == pytest.approx(1.0)
+        assert result[1] == pytest.approx(0.0)
+
+    def test_empty_returns_empty(self):
+        n = ZScoreNormalizer()
+        assert n.scale_to_range([]) == []
+
+    def test_single_value_custom_range(self):
+        n = ZScoreNormalizer()
+        result = n.scale_to_range([42.0], low=0.0, high=200.0)
+        assert result == [100.0]
+
+    def test_all_same_returns_midpoint(self):
+        n = ZScoreNormalizer()
+        result = n.scale_to_range([5.0, 5.0, 5.0], low=0.0, high=100.0)
+        assert result == [50.0, 50.0, 50.0]
+
+    def test_two_values_map_to_extremes(self):
+        n = ZScoreNormalizer()
+        result = n.scale_to_range([0.0, 100.0], low=0.0, high=1.0)
+        assert result[0] == pytest.approx(0.0)
+        assert result[1] == pytest.approx(1.0)
+
+
+class TestZScoreNormalizerWinsorizeAndStandardizeCustom:
+    def test_custom_winsorize_overrides(self):
+        n = ZScoreNormalizer(winsorize_lower=1.0, winsorize_upper=99.0)
+        values = [1.0] * 50 + [1000.0]
+        z1 = n.winsorize_and_standardize(values)
+        z2 = n.winsorize_and_standardize(values, winsorize_lower=10.0, winsorize_upper=90.0)
+        assert z1 != z2
+
+    def test_respects_none_values(self):
+        n = ZScoreNormalizer()
+        values = [1.0, None, 3.0, None, 5.0]
+        result = n.winsorize_and_standardize(values)
+        assert len(result) == 3
+        assert None not in result
+
+    def test_empty_values_returns_empty(self):
+        n = ZScoreNormalizer()
+        assert n.winsorize_and_standardize([]) == []
+
+    def test_single_value_returns_zero(self):
+        n = ZScoreNormalizer()
+        result = n.winsorize_and_standardize([42.0])
+        assert result == [0.0]
+
+
+class TestScoringFactorEdgeCases:
+    def test_weight_boundary_zero(self):
+        f = ScoringFactor(name="test", weight=0.0)
+        assert f.weight == 0.0
+
+    def test_weight_boundary_one(self):
+        f = ScoringFactor(name="test", weight=1.0)
+        assert f.weight == 1.0
+
+    def test_weight_exceeds_one_rejected(self):
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            ScoringFactor(name="test", weight=1.1)
+
+    def test_weight_negative_rejected(self):
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            ScoringFactor(name="test", weight=-0.1)
+
+    def test_composite_fields_default_empty(self):
+        f = ScoringFactor(name="test", weight=0.5)
+        assert f.composite_fields == []
+
+    def test_composite_fields_custom(self):
+        f = ScoringFactor(name="quality", weight=0.5, composite_fields=["roe", "roa"])
+        assert f.composite_fields == ["roe", "roa"]
