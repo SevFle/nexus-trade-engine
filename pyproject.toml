@@ -96,6 +96,14 @@ reportMissingTypeStubs = false
 reportUnknownMemberType = false
 extraPaths = ["sdk"]
 
+[tool.coverage.run]
+source = ["engine"]
+omit = ["engine/db/migrations/*"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 0
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
