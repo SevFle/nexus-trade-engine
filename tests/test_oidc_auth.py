@@ -13,6 +13,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import uuid
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -208,6 +209,13 @@ def _build_full_mock_client(rsa_keys, id_token_claims):
     return _FakeAsyncClient(get_responses=get_responses, post_responses=post_responses)
 
 
+async def _simulate_db_refresh(obj):
+    if hasattr(obj, "is_active") and obj.is_active is None:
+        obj.is_active = True
+    if hasattr(obj, "id") and obj.id is None:
+        obj.id = uuid.uuid4()
+
+
 class TestOIDCAuthenticate:
     async def test_authenticate_missing_code(self, oidc_provider, mock_settings):
         mock_db = AsyncMock(spec=AsyncSession)
@@ -283,7 +291,7 @@ class TestOIDCAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = AsyncMock(side_effect=_simulate_db_refresh)
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
@@ -460,7 +468,7 @@ class TestOIDCAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = AsyncMock(side_effect=_simulate_db_refresh)
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
@@ -485,7 +493,7 @@ class TestOIDCAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = AsyncMock(side_effect=_simulate_db_refresh)
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
@@ -510,7 +518,7 @@ class TestOIDCAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = AsyncMock(side_effect=_simulate_db_refresh)
 
         created_users = []
         mock_db.add = MagicMock(side_effect=lambda u: created_users.append(u))
@@ -539,7 +547,7 @@ class TestOIDCAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = AsyncMock(side_effect=_simulate_db_refresh)
 
         created_users = []
         mock_db.add = MagicMock(side_effect=lambda u: created_users.append(u))
@@ -569,7 +577,7 @@ class TestOIDCAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = AsyncMock(side_effect=_simulate_db_refresh)
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
@@ -604,7 +612,7 @@ class TestOIDCAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = AsyncMock(side_effect=_simulate_db_refresh)
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             await oidc_provider.authenticate(code="my-auth-code", db=mock_db)
