@@ -87,6 +87,7 @@ class GitHubAuthProvider(IAuthProvider):
                 role="user",
                 auth_provider="github",
                 external_id=github_id,
+                is_active=True,
             )
             db.add(user)
             await db.flush()

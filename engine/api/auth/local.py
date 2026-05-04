@@ -88,6 +88,7 @@ class LocalAuthProvider(IAuthProvider):
             display_name=user_info.display_name or user_info.email.split("@")[0],
             role="user",
             auth_provider="local",
+            is_active=True,
         )
         db.add(user)
         await db.flush()
