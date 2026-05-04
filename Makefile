@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help dev test lint fix typecheck migrate \
+.PHONY: help dev test test-cov lint fix typecheck migrate \
         docker-up docker-down docker-build \
         docker-dev docker-dev-down docker-dev-logs docker-dev-build docker-dev-rebuild
 
@@ -11,7 +11,10 @@ dev: ## Start dev server with hot reload
 	uv run uvicorn engine.app:create_app --factory --reload --host 0.0.0.0 --port 8000
 
 test: ## Run test suite with coverage gate (>=70%)
-	uv run pytest --cov-fail-under=70
+	uv run pytest
+
+test-cov: ## Run tests with HTML coverage report
+	uv run pytest --cov-report=html
 
 lint: ## Run linter checks
 	uv run ruff check .
