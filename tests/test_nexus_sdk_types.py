@@ -158,8 +158,8 @@ class TestCostBreakdown:
             commission=Money(10.0, currency="USD"),
             spread=Money(5.0, currency="EUR"),
         )
-        total = cb.total
-        assert total.amount == 15.0
+        with pytest.raises(ValueError, match="mixed currencies"):
+            _ = cb.total
 
     def test_very_small_cost_values(self):
         cb = CostBreakdown(
@@ -242,7 +242,8 @@ class TestPortfolioSnapshot:
             total_value=0.0,
             positions={"AAPL": {"market_value": 25_000.0}},
         )
-        assert snap.allocation_weight("AAPL") == 0.0
+        with pytest.raises(ValueError, match="total_value must not be zero"):
+            snap.allocation_weight("AAPL")
 
     def test_allocation_weight_position_without_market_value(self):
         snap = PortfolioSnapshot(
