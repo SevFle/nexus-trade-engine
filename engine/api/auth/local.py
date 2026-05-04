@@ -87,6 +87,7 @@ class LocalAuthProvider(IAuthProvider):
             hashed_password=hashed,
             display_name=user_info.display_name or user_info.email.split("@")[0],
             role="user",
+            is_active=True,
             auth_provider="local",
         )
         db.add(user)

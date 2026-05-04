@@ -95,6 +95,7 @@ class LDAPAuthProvider(IAuthProvider):
                 hashed_password=None,
                 display_name=ldap_cn,
                 role=mapped_role,
+                is_active=True,
                 auth_provider="ldap",
                 external_id=ldap_uid,
             )

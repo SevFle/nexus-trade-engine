@@ -139,6 +139,7 @@ class OIDCAuthProvider(IAuthProvider):
                 hashed_password=None,
                 display_name=name,
                 role=mapped_role,
+                is_active=True,
                 auth_provider="oidc",
                 external_id=oidc_id,
             )

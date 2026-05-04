@@ -79,6 +79,7 @@ class GoogleAuthProvider(IAuthProvider):
                 hashed_password=None,
                 display_name=name,
                 role="user",
+                is_active=True,
                 auth_provider="google",
                 external_id=google_id,
             )
