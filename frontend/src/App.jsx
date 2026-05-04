@@ -7,6 +7,7 @@ import { Shell } from "./components/layout/Shell";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LegalProvider } from "./context/LegalContext";
 import { ConsentModal } from "./components/legal/ConsentModal";
+import { OnboardingManager } from "./components/onboarding/OnboardingManager";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import OAuthCallback from "./pages/OAuthCallback";
@@ -36,6 +37,7 @@ function ShellLayout() {
   return (
     <LegalProvider>
       <ConsentModal />
+      <OnboardingManager />
       <Shell>
         {/* Per-route boundary so a failure on one screen doesn't nuke
             the shell, sidebar, or legal context. */}
