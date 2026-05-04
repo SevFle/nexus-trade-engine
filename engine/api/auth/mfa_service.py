@@ -33,8 +33,8 @@ from engine.api.auth.mfa import (
 )
 from engine.config import settings
 
-
-_BACKUP_CODE_BYTES = 5  # 10 hex chars per code
+_TOTP_CODE_LENGTH = 6
+_BACKUP_CODE_BYTES = 5
 
 
 class MFAServiceError(Exception):
@@ -172,7 +172,7 @@ def verify_login_code(
         return (False, None)
     cleaned = code.strip().replace(" ", "").replace("-", "")
     secret_b32 = decrypt_secret(encrypted_secret)
-    if cleaned.isdigit() and len(cleaned) == 6:
+    if cleaned.isdigit() and len(cleaned) == _TOTP_CODE_LENGTH:
         try:
             if verify_totp(secret_b32, cleaned):
                 return (True, None)
