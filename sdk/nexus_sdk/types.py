@@ -16,7 +16,7 @@ class Money:
     currency: str = "USD"
 
     def as_pct_of(self, total: float) -> float:
-        if total == 0:
+        if abs(total) < 1e-12:
             raise ValueError("total must not be zero")
         return (self.amount / total) * 100
 
@@ -31,12 +31,24 @@ class CostBreakdown:
 
     @property
     def total(self) -> Money:
+        currencies = {
+            self.commission.currency,
+            self.spread.currency,
+            self.slippage.currency,
+            self.exchange_fee.currency,
+            self.tax_estimate.currency,
+        }
+        if len(currencies) > 1:
+            raise ValueError(
+                f"Cannot sum Money components with different currencies: {currencies}"
+            )
         return Money(
             amount=(
                 self.commission.amount + self.spread.amount +
                 self.slippage.amount + self.exchange_fee.amount +
                 self.tax_estimate.amount
-            )
+            ),
+            currency=self.commission.currency,
         )
 
 
