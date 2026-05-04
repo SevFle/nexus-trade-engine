@@ -107,3 +107,11 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests requiring external services",
 ]
+
+[tool.coverage.run]
+source = ["engine"]
+omit = ["tests/*", "engine/db/migrations/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
