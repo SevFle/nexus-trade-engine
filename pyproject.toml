@@ -109,7 +109,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["engine", "nexus_sdk"]
+source = ["engine", "sdk/nexus_sdk"]
 omit = ["tests/*", "engine/db/migrations/*"]
 
 [tool.coverage.report]
