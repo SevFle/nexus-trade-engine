@@ -158,8 +158,8 @@ class TestCostBreakdown:
             commission=Money(10.0, currency="USD"),
             spread=Money(5.0, currency="EUR"),
         )
-        total = cb.total
-        assert total.amount == 15.0
+        with pytest.raises(ValueError, match="Cannot sum mixed currencies"):
+            cb.total
 
     def test_very_small_cost_values(self):
         cb = CostBreakdown(
@@ -181,6 +181,27 @@ class TestCostBreakdown:
         cb = CostBreakdown(tax_estimate=Money(42.0))
         assert cb.total.amount == 42.0
         assert cb.commission.amount == 0.0
+
+    def test_total_propagates_non_usd_currency(self):
+        cb = CostBreakdown(
+            commission=Money(10.0, currency="EUR"),
+            spread=Money(5.0, currency="EUR"),
+            slippage=Money(2.0, currency="EUR"),
+            exchange_fee=Money(1.0, currency="EUR"),
+            tax_estimate=Money(0.5, currency="EUR"),
+        )
+        total = cb.total
+        assert total.amount == 18.5
+        assert total.currency == "EUR"
+
+    def test_mixed_currency_three_currencies(self):
+        cb = CostBreakdown(
+            commission=Money(10.0, currency="USD"),
+            spread=Money(5.0, currency="EUR"),
+            slippage=Money(3.0, currency="GBP"),
+        )
+        with pytest.raises(ValueError, match="Cannot sum mixed currencies"):
+            cb.total
 
 
 class TestPortfolioSnapshot:
@@ -242,7 +263,15 @@ class TestPortfolioSnapshot:
             total_value=0.0,
             positions={"AAPL": {"market_value": 25_000.0}},
         )
-        assert snap.allocation_weight("AAPL") == 0.0
+        with pytest.raises(ValueError, match="total_value must not be zero"):
+            snap.allocation_weight("AAPL")
+
+    def test_allocation_weight_zero_total_value_missing_symbol(self):
+        snap = PortfolioSnapshot(
+            total_value=0.0,
+            positions={"AAPL": {"market_value": 25_000.0}},
+        )
+        assert snap.allocation_weight("MSFT") == 0.0
 
     def test_allocation_weight_position_without_market_value(self):
         snap = PortfolioSnapshot(

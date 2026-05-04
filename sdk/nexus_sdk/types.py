@@ -31,12 +31,23 @@ class CostBreakdown:
 
     @property
     def total(self) -> Money:
+        currencies = {
+            self.commission.currency, self.spread.currency,
+            self.slippage.currency, self.exchange_fee.currency,
+            self.tax_estimate.currency,
+        }
+        if len(currencies) > 1:
+            raise ValueError(
+                f"Cannot sum mixed currencies: {', '.join(sorted(currencies))}"
+            )
+        currency = currencies.pop()
         return Money(
             amount=(
                 self.commission.amount + self.spread.amount +
                 self.slippage.amount + self.exchange_fee.amount +
                 self.tax_estimate.amount
-            )
+            ),
+            currency=currency,
         )
 
 
@@ -58,8 +69,10 @@ class PortfolioSnapshot(BaseModel):
 
     def allocation_weight(self, symbol: str) -> float:
         pos = self.positions.get(symbol)
-        if not pos or self.total_value == 0:
+        if not pos:
             return 0.0
+        if self.total_value == 0:
+            raise ValueError("total_value must not be zero")
         return pos.get("market_value", 0) / self.total_value
 
     def summary(self) -> str:
