@@ -84,6 +84,7 @@ class GitHubAuthProvider(IAuthProvider):
                 email=email,
                 hashed_password=None,
                 display_name=name,
+                is_active=True,
                 role="user",
                 auth_provider="github",
                 external_id=github_id,
