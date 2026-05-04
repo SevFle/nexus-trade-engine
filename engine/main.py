@@ -5,41 +5,36 @@ Nexus Trade Engine — Main application entry point.
 from contextlib import asynccontextmanager
 
 import structlog
-from api.routes import backtest, marketplace, portfolio, strategies
-from config import get_settings
-from db.session import close_db, init_db
-from events.bus import EventBus
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from plugins.registry import PluginRegistry
+
+from engine.api.routes import backtest, marketplace, portfolio, strategies
+from engine.config import settings
+from engine.db.session import dispose_engine, init_db
+from engine.events.bus import EventBus
+from engine.plugins.registry import PluginRegistry
 
 logger = structlog.get_logger()
-settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup and shutdown lifecycle."""
-    logger.info("nexus.startup", environment=settings.environment)
+    logger.info("nexus.startup", environment=settings.app_env)
 
-    # Initialize database connection pool
     await init_db()
 
-    # Initialize the event bus
-    app.state.event_bus = EventBus(redis_url=settings.redis_url)
+    app.state.event_bus = EventBus(redis_url=settings.valkey_url)
     await app.state.event_bus.connect()
 
-    # Load installed strategy plugins
-    app.state.plugin_registry = PluginRegistry(plugin_dir=settings.plugin_dir)
-    loaded = await app.state.plugin_registry.discover_and_load()
-    logger.info("nexus.plugins_loaded", count=loaded)
+    app.state.plugin_registry = PluginRegistry()
+    strategies = app.state.plugin_registry.list_strategies()
+    logger.info("nexus.plugins_loaded", count=len(strategies))
 
     yield
 
-    # Shutdown
     logger.info("nexus.shutdown")
     await app.state.event_bus.disconnect()
-    await close_db()
+    await dispose_engine()
 
 
 app = FastAPI(
@@ -71,6 +66,5 @@ async def health_check():
         "status": "healthy",
         "engine": settings.app_name,
         "version": "0.1.0",
-        "environment": settings.environment,
-        "execution_mode": settings.default_execution_mode,
+        "environment": settings.app_env,
     }
