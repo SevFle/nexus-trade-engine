@@ -31,10 +31,13 @@ async def run_backtest_task(
     start_date: str,
     end_date: str,
     initial_capital: float = 100_000.0,
+    symbols: list[str] | None = None,
+    strategy_params: dict | None = None,
+    cost_config: dict | None = None,
+    interval: str = "1d",
 ) -> dict:
     """Run a full backtest as an async task with proper error propagation."""
-    from engine.core.backtest_runner import BacktestConfig, BacktestRunner
-    from engine.data.feeds import get_data_provider
+    from engine.core.backtest_runner import BacktestConfig, run_backtest
 
     logger.info(
         "backtest_task.start",
@@ -45,24 +48,19 @@ async def run_backtest_task(
     )
 
     try:
-        provider = get_data_provider("yahoo")
         config = BacktestConfig(
             strategy_name=strategy_name,
             symbol=symbol,
+            symbols=symbols or [],
             start_date=start_date,
             end_date=end_date,
             initial_capital=initial_capital,
+            strategy_params=strategy_params or {},
+            cost_config=cost_config or {},
+            interval=interval,
         )
 
-        from engine.plugins.registry import PluginRegistry
-
-        registry = PluginRegistry()
-        strategy = registry.load_strategy(strategy_name)
-        if strategy is None:
-            raise ValueError(f"Strategy not found: {strategy_name}")
-
-        runner = BacktestRunner(config=config, strategy=strategy, provider=provider)
-        result = await runner.run()
+        result = await run_backtest(config)
 
         logger.info(
             "backtest_task.complete",

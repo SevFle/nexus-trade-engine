@@ -11,8 +11,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from engine.api.auth.dependency import get_current_user
-from engine.core.backtest_runner import BacktestConfig, BacktestRunner
-from engine.data.feeds import get_data_provider
+from engine.core.backtest_runner import BacktestConfig, BacktestResult
+from engine.core.backtest_runner import run_backtest as execute_backtest
 from engine.db.models import User
 
 logger = structlog.get_logger()
@@ -38,10 +38,14 @@ def _evict_expired_results() -> None:
 class BacktestRequest(BaseModel):
     strategy_name: str
     symbol: str
+    symbols: list[str] | None = None
     start_date: str
     end_date: str
     initial_capital: float = 100_000.0
     config: dict | None = None
+    strategy_params: dict | None = None
+    cost_config: dict | None = None
+    interval: str = "1d"
 
 
 class BacktestResponse(BaseModel):
@@ -143,24 +147,19 @@ async def _run_backtest_background(
     )
 
     try:
-        provider = get_data_provider("yahoo")
         config = BacktestConfig(
             strategy_name=request.strategy_name,
             symbol=request.symbol,
+            symbols=request.symbols or [],
             start_date=request.start_date,
             end_date=request.end_date,
             initial_capital=request.initial_capital,
+            strategy_params=request.strategy_params or {},
+            cost_config=request.cost_config or {},
+            interval=request.interval,
         )
 
-        from engine.plugins.registry import PluginRegistry
-
-        registry = PluginRegistry()
-        strategy = registry.load_strategy(request.strategy_name)
-        if strategy is None:
-            raise ValueError(f"Strategy not found: {request.strategy_name}")
-
-        runner = BacktestRunner(config=config, strategy=strategy, provider=provider)
-        result = await runner.run()
+        result = await execute_backtest(config)
 
         _backtest_results[backtest_id] = (
             time.monotonic(),
