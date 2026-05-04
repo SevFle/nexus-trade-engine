@@ -57,6 +57,18 @@ class CostBreakdown:
 
     @property
     def total(self) -> Money:
+        currencies = {
+            self.commission.currency,
+            self.spread.currency,
+            self.slippage.currency,
+            self.exchange_fee.currency,
+            self.tax_estimate.currency,
+            self.currency_conversion.currency,
+        }
+        if len(currencies) > 1:
+            raise ValueError(
+                f"Cannot sum Money components with different currencies: {currencies}"
+            )
         return Money(
             amount=(
                 self.commission.amount
@@ -65,12 +77,14 @@ class CostBreakdown:
                 + self.exchange_fee.amount
                 + self.tax_estimate.amount
                 + self.currency_conversion.amount
-            )
+            ),
+            currency=self.commission.currency,
         )
 
     @property
     def total_without_tax(self) -> Money:
-        return Money(amount=self.total.amount - self.tax_estimate.amount)
+        t = self.total
+        return Money(amount=t.amount - self.tax_estimate.amount, currency=t.currency)
 
     def as_dict(self) -> dict:
         return {

@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from engine.core.cost_model import DefaultCostModel, TaxLot, TaxMethod
+from engine.core.cost_model import CostBreakdown, DefaultCostModel, Money, TaxLot, TaxMethod
 
 
 @pytest.fixture
@@ -229,3 +229,60 @@ class TestDividendTax:
     def test_ordinary_dividend(self, cost_model):
         tax = cost_model.estimate_dividend_tax(1000.0, is_qualified=False)
         assert tax.amount == 1000.0 * 0.37
+
+
+class TestCostBreakdownCurrencyValidation:
+    def test_total_uses_component_currency(self):
+        cb = CostBreakdown(
+            commission=Money(10.0, currency="EUR"),
+            spread=Money(5.0, currency="EUR"),
+            slippage=Money(0.0, currency="EUR"),
+            exchange_fee=Money(0.0, currency="EUR"),
+            tax_estimate=Money(0.0, currency="EUR"),
+            currency_conversion=Money(0.0, currency="EUR"),
+        )
+        total = cb.total
+        assert total.currency == "EUR"
+        assert total.amount == 15.0
+
+    def test_total_without_tax_preserves_currency(self):
+        cb = CostBreakdown(
+            commission=Money(10.0, currency="GBP"),
+            spread=Money(0.0, currency="GBP"),
+            slippage=Money(0.0, currency="GBP"),
+            exchange_fee=Money(0.0, currency="GBP"),
+            tax_estimate=Money(2.0, currency="GBP"),
+            currency_conversion=Money(0.0, currency="GBP"),
+        )
+        without_tax = cb.total_without_tax
+        assert without_tax.currency == "GBP"
+        assert without_tax.amount == 10.0
+
+    def test_total_rejects_mixed_currencies(self):
+        cb = CostBreakdown(
+            commission=Money(10.0, currency="USD"),
+            spread=Money(5.0, currency="EUR"),
+        )
+        with pytest.raises(ValueError, match="different currencies"):
+            _ = cb.total
+
+    def test_total_without_tax_rejects_mixed_currencies(self):
+        cb = CostBreakdown(
+            commission=Money(10.0, currency="USD"),
+            tax_estimate=Money(2.0, currency="JPY"),
+        )
+        with pytest.raises(ValueError, match="different currencies"):
+            _ = cb.total_without_tax
+
+    def test_total_includes_currency_conversion(self):
+        cb = CostBreakdown(
+            commission=Money(5.0, currency="USD"),
+            currency_conversion=Money(1.5, currency="USD"),
+        )
+        assert cb.total.amount == 6.5
+        assert cb.total.currency == "USD"
+
+    def test_total_default_all_usd(self):
+        cb = CostBreakdown()
+        assert cb.total.currency == "USD"
+        assert cb.total.amount == 0.0

@@ -146,8 +146,19 @@ class TestCostBreakdown:
         )
         assert cb.total.amount == -15.0
 
-    def test_total_preserves_default_currency(self):
-        cb = CostBreakdown(commission=Money(10.0, currency="USD"))
+    def test_total_uses_component_currency(self):
+        cb = CostBreakdown(
+            commission=Money(10.0, currency="EUR"),
+            spread=Money(5.0, currency="EUR"),
+            slippage=Money(0.0, currency="EUR"),
+            exchange_fee=Money(0.0, currency="EUR"),
+            tax_estimate=Money(0.0, currency="EUR"),
+        )
+        assert cb.total.currency == "EUR"
+        assert cb.total.amount == 15.0
+
+    def test_total_default_usd_when_no_explicit_currency(self):
+        cb = CostBreakdown(commission=Money(10.0))
         assert cb.total.currency == "USD"
 
     def test_each_component_is_money_instance(self):
