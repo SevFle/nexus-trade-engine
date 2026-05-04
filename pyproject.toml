@@ -110,6 +110,7 @@ markers = [
 
 [tool.coverage.run]
 source = ["engine"]
+branch = true
 omit = ["tests/*", "engine/db/migrations/*"]
 
 [tool.coverage.report]
