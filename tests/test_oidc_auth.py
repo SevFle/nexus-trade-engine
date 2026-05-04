@@ -13,6 +13,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import uuid
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,7 +21,7 @@ import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.serialization import Encoding
+from cryptography.hazmat.primitives.serialization import Encoding  # noqa: F401
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from engine.api.auth.oidc import OIDCAuthProvider
@@ -157,9 +158,9 @@ class TestOIDCDiscovery:
         )
         fake_client = _FakeAsyncClient(get_responses=[resp])
 
-        with patch("httpx.AsyncClient", return_value=fake_client):
-            with pytest.raises(httpx.HTTPStatusError):
-                await oidc_provider._get_discovery()
+        with patch("httpx.AsyncClient", return_value=fake_client), \
+             pytest.raises(httpx.HTTPStatusError):
+            await oidc_provider._get_discovery()
 
 
 class TestOIDCJWKS:
@@ -245,7 +246,7 @@ class TestOIDCAuthenticate:
         self, oidc_provider, mock_settings, rsa_keys
     ):
         private_key, pub_key = rsa_keys
-        jwk_dict, kid = _make_jwk_kid(pub_key)
+        _, kid = _make_jwk_kid(pub_key)
         id_token = _sign_id_token(
             {"sub": "x", "email": "x@x.com"}, private_key, kid
         )
@@ -513,7 +514,7 @@ class TestOIDCAuthenticate:
         mock_db.refresh = AsyncMock()
 
         created_users = []
-        mock_db.add = MagicMock(side_effect=lambda u: created_users.append(u))
+        mock_db.add = MagicMock(side_effect=created_users.append)
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
@@ -542,7 +543,7 @@ class TestOIDCAuthenticate:
         mock_db.refresh = AsyncMock()
 
         created_users = []
-        mock_db.add = MagicMock(side_effect=lambda u: created_users.append(u))
+        mock_db.add = MagicMock(side_effect=created_users.append)
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
@@ -660,3 +661,411 @@ class TestOIDCRoleMapping:
     def test_map_roles_case_insensitive(self, oidc_provider):
         assert oidc_provider.map_roles(["ADMIN"]) == "admin"
         assert oidc_provider.map_roles(["  Admin  "]) == "admin"
+
+
+class TestOIDCIsActiveOnCreate:
+    async def test_new_user_is_active_set_true(
+        self, oidc_provider, mock_settings, rsa_keys
+    ):
+        fake_client = _build_full_mock_client(
+            rsa_keys,
+            {
+                "sub": "oidc-active-check",
+                "email": "active@example.com",
+                "name": "Active User",
+                "roles": ["user"],
+            },
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+        mock_db.refresh = AsyncMock()
+
+        created_users = []
+        mock_db.add = MagicMock(side_effect=created_users.append)
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+        assert result.success is True
+        assert len(created_users) == 1
+        assert created_users[0].is_active is True
+
+    async def test_new_user_passes_active_check(
+        self, oidc_provider, mock_settings, rsa_keys
+    ):
+        fake_client = _build_full_mock_client(
+            rsa_keys,
+            {
+                "sub": "oidc-active-flow",
+                "email": "flow@example.com",
+                "name": "Flow User",
+                "roles": ["user"],
+            },
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        async def fake_refresh(user):
+            user.id = uuid.uuid4()
+
+        mock_db.refresh = AsyncMock(side_effect=fake_refresh)
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+        assert result.success is True
+        assert result.error is None
+
+
+class TestOIDCJWKSEdgeCases:
+    async def test_get_jwks_http_error_propagates(
+        self, oidc_provider, mock_settings
+    ):
+        disc_resp = _FakeHttpxResponse(json_data=DISCOVERY_DOC)
+        jwks_resp = _FakeHttpxResponse(
+            raise_error=httpx.HTTPStatusError(
+                "JWKS Error",
+                request=MagicMock(),
+                response=MagicMock(status_code=503),
+            )
+        )
+        fake_client = _FakeAsyncClient(get_responses=[disc_resp, jwks_resp])
+
+        with patch("httpx.AsyncClient", return_value=fake_client), \
+             pytest.raises(httpx.HTTPStatusError):
+            await oidc_provider._get_jwks()
+
+    async def test_get_jwks_missing_jwks_uri_in_discovery(
+        self, oidc_provider, mock_settings
+    ):
+        incomplete_discovery = {
+            "authorization_endpoint": "https://id.example.com/authorize",
+            "token_endpoint": "https://id.example.com/token",
+        }
+        disc_resp = _FakeHttpxResponse(json_data=incomplete_discovery)
+        fake_client = _FakeAsyncClient(get_responses=[disc_resp])
+
+        with patch("httpx.AsyncClient", return_value=fake_client), \
+             pytest.raises(KeyError):
+            await oidc_provider._get_jwks()
+
+    async def test_get_jwks_empty_keys_list(
+        self, oidc_provider, mock_settings
+    ):
+        disc_resp = _FakeHttpxResponse(json_data=DISCOVERY_DOC)
+        jwks_resp = _FakeHttpxResponse(json_data={"keys": []})
+        fake_client = _FakeAsyncClient(get_responses=[disc_resp, jwks_resp])
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider._get_jwks()
+
+        assert result == {"keys": []}
+
+
+class TestOIDCAuthenticateEdgeCases:
+    async def test_authenticate_missing_id_token_in_response(
+        self, oidc_provider, mock_settings
+    ):
+        disc_resp = _FakeHttpxResponse(json_data=DISCOVERY_DOC)
+        token_resp = _FakeHttpxResponse(json_data={"access_token": "at-only"})
+        fake_client = _FakeAsyncClient(
+            get_responses=[disc_resp], post_responses=[token_resp]
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+        assert result.success is False
+        assert "OIDC authentication failed" in result.error
+
+    async def test_authenticate_wrong_audience(
+        self, oidc_provider, mock_settings, rsa_keys
+    ):
+        private_key, pub_key = rsa_keys
+        jwk_dict, kid = _make_jwk_kid(pub_key)
+        id_token = _sign_id_token(
+            {"sub": "x", "email": "x@x.com", "aud": "wrong-audience"},
+            private_key,
+            kid,
+        )
+
+        disc_resp = _FakeHttpxResponse(json_data=DISCOVERY_DOC)
+        token_resp = _FakeHttpxResponse(json_data={"id_token": id_token})
+        jwks_resp = _FakeHttpxResponse(json_data={"keys": [jwk_dict]})
+
+        fake_client = _FakeAsyncClient(
+            get_responses=[disc_resp, jwks_resp], post_responses=[token_resp]
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+        assert result.success is False
+        assert "OIDC authentication failed" in result.error
+
+    async def test_authenticate_expired_token(
+        self, oidc_provider, mock_settings, rsa_keys
+    ):
+        import time
+
+        private_key, pub_key = rsa_keys
+        jwk_dict, kid = _make_jwk_kid(pub_key)
+        id_token = _sign_id_token(
+            {
+                "sub": "expired-user",
+                "email": "expired@example.com",
+                "aud": "test-client-id",
+                "exp": int(time.time()) - 3600,
+            },
+            private_key,
+            kid,
+        )
+
+        disc_resp = _FakeHttpxResponse(json_data=DISCOVERY_DOC)
+        token_resp = _FakeHttpxResponse(json_data={"id_token": id_token})
+        jwks_resp = _FakeHttpxResponse(json_data={"keys": [jwk_dict]})
+
+        fake_client = _FakeAsyncClient(
+            get_responses=[disc_resp, jwks_resp], post_responses=[token_resp]
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+        assert result.success is False
+        assert "OIDC authentication failed" in result.error
+
+    async def test_authenticate_db_flush_failure(
+        self, oidc_provider, mock_settings, rsa_keys
+    ):
+        fake_client = _build_full_mock_client(
+            rsa_keys,
+            {
+                "sub": "oidc-flush-fail",
+                "email": "flush@example.com",
+                "name": "Flush Fail",
+                "roles": ["user"],
+            },
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock(side_effect=Exception("DB connection lost"))
+
+        with patch("httpx.AsyncClient", return_value=fake_client), \
+             pytest.raises(Exception, match="DB connection lost"):
+            await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+    async def test_authenticate_discovery_missing_token_endpoint(
+        self, oidc_provider, mock_settings, rsa_keys
+    ):
+        incomplete_discovery = {
+            "authorization_endpoint": "https://id.example.com/authorize",
+            "jwks_uri": "https://id.example.com/jwks",
+        }
+        disc_resp = _FakeHttpxResponse(json_data=incomplete_discovery)
+        fake_client = _FakeAsyncClient(get_responses=[disc_resp])
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+        assert result.success is False
+
+    async def test_authenticate_whitespace_only_email_is_truthy(
+        self, oidc_provider, mock_settings, rsa_keys
+    ):
+        fake_client = _build_full_mock_client(
+            rsa_keys,
+            {
+                "sub": "oidc-ws-email",
+                "email": "   ",
+                "name": "Whitespace Email",
+                "roles": ["user"],
+            },
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+        mock_db.refresh = AsyncMock()
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+        assert result.success is True
+        assert result.user_info.email == "   "
+
+    async def test_authenticate_none_code_truthiness(
+        self, oidc_provider, mock_settings
+    ):
+        mock_db = AsyncMock(spec=AsyncSession)
+        result = await oidc_provider.authenticate(code=None, db=mock_db)
+        assert result.success is False
+        assert "Authorization code" in result.error
+
+    async def test_authenticate_empty_string_code(
+        self, oidc_provider, mock_settings
+    ):
+        mock_db = AsyncMock(spec=AsyncSession)
+        result = await oidc_provider.authenticate(code="", db=mock_db)
+        assert result.success is False
+        assert "Authorization code" in result.error
+
+    async def test_authenticate_new_user_without_roles_claim_defaults_to_user(
+        self, oidc_provider, mock_settings, rsa_keys
+    ):
+        fake_client = _build_full_mock_client(
+            rsa_keys,
+            {
+                "sub": "oidc-no-roles",
+                "email": "noroles@example.com",
+                "name": "No Roles",
+            },
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+        mock_db.refresh = AsyncMock()
+
+        created_users = []
+        mock_db.add = MagicMock(side_effect=created_users.append)
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+        assert result.success is True
+        assert len(created_users) == 1
+        assert created_users[0].role == "user"
+
+    async def test_authenticate_existing_oidc_user_returns_correct_roles(
+        self, oidc_provider, mock_settings, rsa_keys
+    ):
+        from engine.db.models import User
+
+        fake_client = _build_full_mock_client(
+            rsa_keys,
+            {
+                "sub": "oidc-existing-roles",
+                "email": "eroles@example.com",
+                "name": "Existing Roles",
+            },
+        )
+
+        existing_user = User(
+            email="eroles@example.com",
+            display_name="Existing Roles",
+            is_active=True,
+            role="admin",
+            auth_provider="oidc",
+            external_id="oidc-existing-roles",
+        )
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+        assert result.success is True
+        assert result.user_info.roles == ["admin"]
+
+
+class TestOIDCCacheIsolation:
+    async def test_separate_instances_have_independent_caches(
+        self, mock_settings
+    ):
+        provider_a = OIDCAuthProvider()
+        provider_b = OIDCAuthProvider()
+
+        resp = _FakeHttpxResponse(json_data=DISCOVERY_DOC)
+        fake_client = _FakeAsyncClient(get_responses=[resp])
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            await provider_a._get_discovery()
+
+        assert provider_a._discovery_cache is not None
+        assert provider_b._discovery_cache is None
+
+    async def test_cache_reset_on_new_instance(
+        self, mock_settings
+    ):
+        provider = OIDCAuthProvider()
+        resp = _FakeHttpxResponse(json_data=DISCOVERY_DOC)
+        fake_client = _FakeAsyncClient(get_responses=[resp])
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            await provider._get_discovery()
+
+        assert provider._discovery_cache is not None
+
+        provider2 = OIDCAuthProvider()
+        assert provider2._discovery_cache is None
+
+
+class TestOIDCAuthorizeUrlEdgeCases:
+    async def test_get_authorize_url_discovery_failure(
+        self, oidc_provider, mock_settings
+    ):
+        mock_settings.oidc_discovery_url = "http://insecure.example.com/.well-known"
+
+        with pytest.raises(ValueError, match="HTTPS"):
+            await oidc_provider.get_authorize_url()
+
+    async def test_get_authorize_url_includes_scope(
+        self, oidc_provider, mock_settings
+    ):
+        resp = _FakeHttpxResponse(json_data=DISCOVERY_DOC)
+        fake_client = _FakeAsyncClient(get_responses=[resp])
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            url = await oidc_provider.get_authorize_url()
+
+        assert "scope=openid email profile" in url
+
+
+class TestOIDCDiscoveryEdgeCases:
+    async def test_get_discovery_network_timeout(self, oidc_provider, mock_settings):
+        fake_client = _FakeAsyncClient(
+            get_responses=[
+                _FakeHttpxResponse(
+                    raise_error=httpx.ConnectTimeout("Connection timed out")
+                )
+            ]
+        )
+
+        with patch("httpx.AsyncClient", return_value=fake_client), \
+             pytest.raises(httpx.ConnectTimeout):
+            await oidc_provider._get_discovery()
+
+    async def test_get_discovery_returns_expected_fields(
+        self, oidc_provider, mock_settings
+    ):
+        resp = _FakeHttpxResponse(json_data=DISCOVERY_DOC)
+        fake_client = _FakeAsyncClient(get_responses=[resp])
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider._get_discovery()
+
+        assert "authorization_endpoint" in result
+        assert "token_endpoint" in result
+        assert "jwks_uri" in result
