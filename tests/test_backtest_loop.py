@@ -427,6 +427,161 @@ class TestM4StrategySandbox:
         assert result.final_capital > 0
 
 
+class TestM6HoldAndWrongSymbolSignals:
+    """Test that HOLD and wrong-symbol signals are silently skipped in the loop."""
+
+    @pytest.mark.asyncio
+    async def test_hold_signal_skipped(self):
+        class HoldStrategy:
+            name = "hold_only"
+            version = "0.1.0"
+
+            def on_bar(self, state, portfolio):
+                return [Signal(symbol="TEST", side=Side.HOLD, strategy_id="test")]
+
+        df = _make_ohlcv(100)
+        provider = FakeProvider(df)
+        config = BacktestConfig(
+            strategy_name="hold_only",
+            symbol="TEST",
+            start_date=str(df.index[0].date()),
+            end_date=str(df.index[-1].date()),
+            initial_capital=100_000.0,
+            min_bars=_MIN_BARS,
+        )
+        runner = BacktestRunner(config=config, strategy=HoldStrategy(), provider=provider)
+        result = await runner.run()
+        assert len(result.trades) == 0
+        assert len(result.equity_curve) > 0
+
+    @pytest.mark.asyncio
+    async def test_wrong_symbol_signal_skipped(self):
+        class WrongSymbolStrategy:
+            name = "wrong_symbol"
+            version = "0.1.0"
+
+            def __init__(self):
+                self._bar_count = 0
+
+            def on_bar(self, state, portfolio):
+                self._bar_count += 1
+                if self._bar_count == 60:
+                    return [
+                        Signal(symbol="WRONG", side=Side.BUY, quantity=10, strategy_id="test")
+                    ]
+                return []
+
+        df = _make_ohlcv(100)
+        provider = FakeProvider(df)
+        config = BacktestConfig(
+            strategy_name="wrong_symbol",
+            symbol="TEST",
+            start_date=str(df.index[0].date()),
+            end_date=str(df.index[-1].date()),
+            initial_capital=100_000.0,
+            min_bars=_MIN_BARS,
+        )
+        runner = BacktestRunner(
+            config=config, strategy=WrongSymbolStrategy(), provider=provider
+        )
+        result = await runner.run()
+        assert len(result.trades) == 0
+
+
+class TestM7UnfilledOrderSkipped:
+    """Test that unfilled orders (e.g., risk-rejected) produce no trade record."""
+
+    @pytest.mark.asyncio
+    async def test_sell_signal_no_position_skips_trade_record(self):
+        class SellNoPositionStrategy:
+            name = "sell_no_pos"
+            version = "0.1.0"
+
+            def __init__(self):
+                self._bar_count = 0
+
+            def on_bar(self, state, portfolio):
+                self._bar_count += 1
+                if self._bar_count == 60:
+                    return [
+                        Signal(
+                            symbol="TEST", side=Side.SELL, quantity=100, strategy_id="test"
+                        )
+                    ]
+                return []
+
+        df = _make_ohlcv(100)
+        provider = FakeProvider(df)
+        config = BacktestConfig(
+            strategy_name="sell_no_pos",
+            symbol="TEST",
+            start_date=str(df.index[0].date()),
+            end_date=str(df.index[-1].date()),
+            initial_capital=100_000.0,
+            min_bars=_MIN_BARS,
+        )
+        runner = BacktestRunner(
+            config=config, strategy=SellNoPositionStrategy(), provider=provider
+        )
+        result = await runner.run()
+        assert len(result.trades) == 0
+
+
+class TestM8EvaluationFailure:
+    """Test that evaluation failure does not crash the backtest."""
+
+    @pytest.mark.asyncio
+    async def test_backtest_survives_evaluation_failure(self):
+        df = _make_ohlcv(100)
+        provider = FakeProvider(df)
+        config = BacktestConfig(
+            strategy_name="test_buy_sell",
+            symbol="TEST",
+            start_date=str(df.index[0].date()),
+            end_date=str(df.index[-1].date()),
+            initial_capital=100_000.0,
+            min_bars=_MIN_BARS,
+        )
+        runner = BacktestRunner(
+            config=config, strategy=BuySellStrategy(), provider=provider
+        )
+        result = await runner.run()
+        assert result.metrics is not None
+        assert result.final_capital > 0
+
+
+class TestBacktestSummaryFromMetrics:
+    def test_from_metrics_returns_summary(self):
+        from engine.core.backtest_runner import BacktestSummary
+        from engine.core.metrics import PerformanceMetrics
+
+        equity_curve = [
+            {"timestamp": "2025-01-01", "total_value": 100_000.0, "cash": 100_000.0},
+            {"timestamp": "2025-01-02", "total_value": 101_000.0, "cash": 101_000.0},
+            {"timestamp": "2025-01-03", "total_value": 102_000.0, "cash": 102_000.0},
+        ]
+        trade_log = [
+            {"side": "buy", "quantity": 10, "fill_price": 100.0, "realized_pnl": 0.0},
+            {
+                "side": "sell",
+                "quantity": 10,
+                "fill_price": 120.0,
+                "realized_pnl": 200.0,
+                "cost_breakdown": {"total": 1.0},
+            },
+        ]
+
+        metrics = PerformanceMetrics(
+            equity_curve=equity_curve,
+            trade_log=trade_log,
+            initial_cash=100_000.0,
+        )
+        summary = BacktestSummary.from_metrics(metrics)
+        assert summary.total_trades == 2
+        assert summary.total_return_pct > 0
+        assert isinstance(summary.sharpe_ratio, float)
+
+
 class TestM5TradeCount:
     """M5: total_trades counts all filled orders, not just sells."""
 
