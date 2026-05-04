@@ -91,7 +91,6 @@ make the source visible, and the reload watchers pick up changes.
 
 ```bash
 make test                    # full pytest suite (host, against current uv env)
-make test-cov                # with coverage report at htmlcov/index.html
 ```
 
 Inside the dev stack:
@@ -102,6 +101,42 @@ docker compose -f docker-compose.dev.yml exec app pytest
 
 CI runs the same suite against a Postgres service (see
 `.github/workflows/ci.yml`).
+
+### Coverage setup
+
+The project has two importable source packages measured for coverage:
+
+| Import name | Filesystem path | Description |
+|---|---|---|
+| `engine` | `engine/` | Main FastAPI application, DB, API routes |
+| `nexus_sdk` | `sdk/nexus_sdk/` | Strategy-plugin SDK |
+
+**Important:** The PyPI project name is `nexus-trade-engine` but there is
+no importable package called `nexus_trade_engine`. Always use the actual
+package names for coverage:
+
+```bash
+# Correct
+pytest --cov=engine --cov=nexus_sdk
+
+# WRONG — will produce "Module nexus_trade_engine was never imported"
+pytest --cov=nexus_trade_engine
+```
+
+Configuration lives in `pyproject.toml`:
+
+- `[tool.pytest.ini_options]` — `addopts` includes
+  `--cov=engine --cov=nexus_sdk`, and `pythonpath = [".", "sdk"]` makes
+  `nexus_sdk` importable from its `sdk/` directory.
+- `[tool.coverage.run]` — `source = ["engine", "nexus_sdk"]` tells
+  coverage.py which packages to measure. `fail_under = 80` gates merges.
+- `[tool.ruff.lint.isort]` — `known-first-party` must list both
+  `engine` and `nexus_sdk` so import sorting stays consistent.
+- `Makefile` — the `test` target delegates to `uv run pytest` without
+  overriding `--cov-fail-under`, letting `pyproject.toml` own the gate.
+
+Run `make test` (or `pytest`) to get a terminal report and an HTML
+report at `htmlcov/index.html`.
 
 ## Database migrations
 
