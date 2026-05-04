@@ -102,14 +102,14 @@ asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 pythonpath = [".", "sdk"]
-addopts = "-ra --strict-markers --cov=engine --cov-report=term-missing --cov-report=html"
+addopts = "-ra --strict-markers --cov=engine --cov=nexus_sdk --cov-report=term-missing --cov-report=html"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests requiring external services",
 ]
 
 [tool.coverage.run]
-source = ["engine"]
+source = ["engine", "nexus_sdk"]
 omit = ["tests/*", "engine/db/migrations/*"]
 
 [tool.coverage.report]
