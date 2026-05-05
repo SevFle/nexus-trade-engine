@@ -77,6 +77,10 @@ class TestNsccFee:
         with pytest.raises(ValueError):
             nscc_clearing_fee(-1)
 
+    def test_negative_per_side_rejected(self):
+        with pytest.raises(ValueError, match="per_side must be non-negative"):
+            nscc_clearing_fee(100, per_side=Decimal("-0.001"))
+
     def test_per_side_override(self):
         # Operator pin to a different rate.
         assert (
@@ -109,6 +113,10 @@ class TestTakerFee:
         with pytest.raises(ValueError):
             exchange_taker_fee(-1)
 
+    def test_negative_rate_rejected(self):
+        with pytest.raises(ValueError, match="rate_per_share must be non-negative"):
+            exchange_taker_fee(100, rate_per_share=Decimal("-0.001"))
+
 
 # ---------------------------------------------------------------------------
 # exchange_maker_rebate
@@ -128,6 +136,14 @@ class TestMakerRebate:
 
     def test_zero_quantity_zero_rebate(self):
         assert exchange_maker_rebate(0) == Decimal("0.00")
+
+    def test_negative_quantity_rejected(self):
+        with pytest.raises(ValueError, match="quantity must be non-negative"):
+            exchange_maker_rebate(-1)
+
+    def test_negative_rate_rejected(self):
+        with pytest.raises(ValueError, match="rate_per_share must be non-negative"):
+            exchange_maker_rebate(100, rate_per_share=Decimal("-0.001"))
 
 
 # ---------------------------------------------------------------------------

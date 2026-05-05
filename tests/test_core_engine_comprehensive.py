@@ -362,6 +362,42 @@ class TestDefaultCostModelEdgeCases:
         assert cb.tax_estimate.amount == 0.0
         assert cb.total.amount > 0
 
+    def test_estimate_tax_specific_lot_uses_original_order(self):
+        model = DefaultCostModel(short_term_tax_rate=0.37)
+        sell_date = datetime.now(UTC)
+        lot_a = TaxLot(
+            symbol="AAPL",
+            quantity=50,
+            purchase_price=100.0,
+            purchase_date=sell_date - timedelta(days=10),
+        )
+        lot_b = TaxLot(
+            symbol="AAPL",
+            quantity=50,
+            purchase_price=120.0,
+            purchase_date=sell_date - timedelta(days=5),
+        )
+        tax = model.estimate_tax(
+            "AAPL", 150.0, 100, [lot_b, lot_a], TaxMethod.SPECIFIC_LOT, sell_date=sell_date
+        )
+        gain_b = (150.0 - 120.0) * 50 * 0.37
+        gain_a = (150.0 - 100.0) * 50 * 0.37
+        assert tax.amount == pytest.approx(gain_b + gain_a)
+
+    def test_estimate_tax_lifo_ordering(self):
+        model = DefaultCostModel(short_term_tax_rate=0.37)
+        sell_date = datetime.now(UTC)
+        lots = [
+            TaxLot(symbol="AAPL", quantity=100, purchase_price=100.0,
+                   purchase_date=sell_date - timedelta(days=30)),
+            TaxLot(symbol="AAPL", quantity=100, purchase_price=130.0,
+                   purchase_date=sell_date - timedelta(days=5)),
+        ]
+        tax = model.estimate_tax("AAPL", 150.0, 150, lots, TaxMethod.LIFO, sell_date=sell_date)
+        gain_new = (150.0 - 130.0) * 100 * 0.37
+        gain_old = (150.0 - 100.0) * 50 * 0.37
+        assert tax.amount == pytest.approx(gain_new + gain_old)
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # 5. Position
