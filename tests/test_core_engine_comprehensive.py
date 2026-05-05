@@ -57,7 +57,7 @@ class _FakeBackend:
 
     async def execute(self, order, market_price, costs):
         if self._success:
-            return FillResult(success=True, price=self._price, quantity=self._quantity)
+            return FillResult(success=True, price=self._price, quantity=self._quantity, costs=costs)
         return FillResult(success=False, reason="Simulated failure")
 
 
@@ -72,6 +72,8 @@ class _SynthProvider(MarketDataProvider):
         return self._df
 
     async def get_multiple_prices(self, symbols):
+        if not symbols:
+            return {}
         if self._df.empty:
             return {}
         return {symbols[0]: float(self._df["close"].iloc[-1])}
@@ -121,7 +123,8 @@ class TestMoney:
 
     def test_as_pct_of_zero_total(self):
         m = Money(5.0)
-        assert m.as_pct_of(0.0) == 0.0
+        with pytest.raises(ValueError, match="total must not be zero"):
+            m.as_pct_of(0.0)
 
     def test_as_pct_of_negative(self):
         m = Money(50.0)

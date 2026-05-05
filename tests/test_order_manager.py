@@ -32,7 +32,7 @@ class FakeExecutionBackend:
 
     async def execute(self, order: Order, market_price: float, costs: CostBreakdown) -> FillResult:
         if self._success:
-            return FillResult(success=True, price=self._price, quantity=self._quantity)
+            return FillResult(success=True, price=self._price, quantity=self._quantity, costs=costs)
         return FillResult(success=False, reason="Simulated failure")
 
 

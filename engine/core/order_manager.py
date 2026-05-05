@@ -179,6 +179,7 @@ class OrderManager:
 
         # Step 6: Reconcile
         if fill.success:
+            assert fill.costs is not None, "FillResult must include costs when success=True"
             order.fill_price = fill.price
             order.fill_quantity = fill.quantity
             order.filled_at = datetime.now(UTC)

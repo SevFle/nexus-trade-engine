@@ -66,4 +66,5 @@ class PaperBackend(ExecutionBackend):
             success=True,
             price=round(fill_price, 4),
             quantity=order.quantity,
+            costs=costs,
         )

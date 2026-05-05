@@ -22,6 +22,7 @@ class FillResult:
     price: float = 0.0
     quantity: int = 0
     reason: str = ""
+    costs: object | None = None
 
 
 class ExecutionBackend(ABC):

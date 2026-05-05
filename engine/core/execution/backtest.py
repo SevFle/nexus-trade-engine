@@ -67,4 +67,5 @@ class BacktestBackend(ExecutionBackend):
             success=True,
             price=round(fill_price, 4),
             quantity=fill_quantity,
+            costs=costs,
         )

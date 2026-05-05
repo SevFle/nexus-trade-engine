@@ -40,7 +40,7 @@ class Money:
 
     def as_pct_of(self, total: float) -> float:
         if total == 0:
-            return 0.0
+            raise ValueError("total must not be zero")
         return (self.amount / total) * 100
 
 
