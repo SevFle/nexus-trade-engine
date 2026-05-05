@@ -36,15 +36,13 @@ from dataclasses import dataclass, fields, is_dataclass
 from datetime import date
 from decimal import Decimal
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from engine.core.tax.reports.carryover import (
-    CapitalLossApplication,
     CapitalLossCarryover,
     apply_carryover,
 )
 from engine.core.tax.reports.cgt_carryover import (
-    CgtApplication,
     CgtCarryover,
     apply_cgt_carryover,
 )
@@ -60,22 +58,14 @@ from engine.core.tax.reports.kest import (
     summarize_kest,
 )
 from engine.core.tax.reports.kest_carryover import (
-    KestApplication,
     KestCarryover,
     apply_kest_carryover,
 )
 from engine.core.tax.reports.pfu_carryover import (
-    PfuApplication,
     PfuCarryover,
     apply_pfu_carryover,
 )
 from engine.core.tax.reports.schedule_d import summarize_schedule_d
-
-if TYPE_CHECKING:
-    from engine.core.tax.reports.france_pfu import PfuSummary
-    from engine.core.tax.reports.hmrc_cgt import CgtSummary
-    from engine.core.tax.reports.kest import KestSummary
-    from engine.core.tax.reports.schedule_d import ScheduleDSummary
 
 JurisdictionSummary = (
     "ScheduleDSummary | CgtSummary | KestSummary | PfuSummary"
