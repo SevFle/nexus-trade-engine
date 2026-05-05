@@ -90,6 +90,21 @@ class TestMoney:
             m = Money(amount=100.0, currency=currency)
             assert m.currency == currency
 
+    def test_as_pct_of_near_zero_above_epsilon_works(self):
+        m = Money(amount=1e-10)
+        result = m.as_pct_of(1e-11)
+        assert result == pytest.approx(1000.0)
+
+    def test_as_pct_of_below_epsilon_raises(self):
+        m = Money(amount=1.0)
+        with pytest.raises(ValueError, match="total must not be zero"):
+            m.as_pct_of(1e-13)
+
+    def test_as_pct_of_at_epsilon_boundary_does_not_raise(self):
+        m = Money(amount=1.0)
+        result = m.as_pct_of(1e-12)
+        assert result == pytest.approx(1e14)
+
 
 class TestCostBreakdown:
     def test_default_all_zero(self):
@@ -186,6 +201,48 @@ class TestCostBreakdown:
         cb = CostBreakdown(tax_estimate=Money(42.0))
         assert cb.total.amount == 42.0
         assert cb.commission.amount == 0.0
+
+    def test_all_same_non_usd_currency(self):
+        cb = CostBreakdown(
+            commission=Money(1.0, currency="EUR"),
+            spread=Money(2.0, currency="EUR"),
+            slippage=Money(3.0, currency="EUR"),
+            exchange_fee=Money(4.0, currency="EUR"),
+            tax_estimate=Money(5.0, currency="EUR"),
+        )
+        total = cb.total
+        assert total.amount == 15.0
+        assert total.currency == "EUR"
+
+    def test_three_way_mixed_currency_raises(self):
+        cb = CostBreakdown(
+            commission=Money(1.0, currency="USD"),
+            spread=Money(2.0, currency="EUR"),
+            slippage=Money(3.0, currency="GBP"),
+        )
+        with pytest.raises(ValueError, match="different currencies"):
+            _ = cb.total
+
+    def test_four_mixed_one_different_raises(self):
+        cb = CostBreakdown(
+            commission=Money(1.0, currency="JPY"),
+            spread=Money(2.0, currency="JPY"),
+            slippage=Money(3.0, currency="JPY"),
+            exchange_fee=Money(4.0, currency="JPY"),
+            tax_estimate=Money(5.0, currency="USD"),
+        )
+        with pytest.raises(ValueError, match="different currencies"):
+            _ = cb.total
+
+    def test_total_currency_comes_from_commission(self):
+        cb = CostBreakdown(
+            commission=Money(10.0, currency="CHF"),
+            spread=Money(0.0, currency="CHF"),
+            slippage=Money(0.0, currency="CHF"),
+            exchange_fee=Money(0.0, currency="CHF"),
+            tax_estimate=Money(0.0, currency="CHF"),
+        )
+        assert cb.total.currency == "CHF"
 
 
 class TestPortfolioSnapshot:
