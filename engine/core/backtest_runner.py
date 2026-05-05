@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -12,7 +13,7 @@ from engine.core.metrics import PerformanceMetrics
 from engine.core.order_manager import OrderManager
 from engine.core.portfolio import Portfolio
 from engine.core.risk_engine import RiskEngine
-from engine.core.signal import Side
+from engine.core.signal import Side, Signal
 from engine.core.strategy_evaluator import StrategyEvaluator
 from engine.data.market_state import MarketStateBuilder, ValidationError
 from engine.plugins.manifest import StrategyManifest
@@ -38,6 +39,10 @@ class BacktestConfig:
     min_bars: int = 50
     debug: bool = False
     random_seed: int | None = 42
+    slippage_bps: float = 10.0
+    fill_probability: float = 0.98
+    commission_per_trade: float = 0.0
+    spread_bps: float = 5.0
 
 
 @dataclass
@@ -48,6 +53,10 @@ class BacktestResult:
     metrics: dict[str, float] = field(default_factory=dict)
     final_capital: float = 0.0
     total_return_pct: float = 0.0
+
+
+def _is_islategy(strategy: Any) -> bool:
+    return hasattr(strategy, "evaluate") and asyncio.iscoroutinefunction(strategy.evaluate)
 
 
 class BacktestRunner:
@@ -63,6 +72,7 @@ class BacktestRunner:
         self.strategy = strategy
         self.provider = provider
         self._builder = MarketStateBuilder(min_bars=config.min_bars, debug=config.debug)
+        self._use_evaluate = strategy is not None and _is_islategy(strategy)
 
     async def run(self) -> BacktestResult:  # noqa: PLR0912, PLR0915
         if self.provider is None:
@@ -99,6 +109,7 @@ class BacktestRunner:
             bars=len(timestamps),
             start=str(timestamps[0]),
             end=str(timestamps[-1]),
+            mode="evaluate" if self._use_evaluate else "on_bar",
         )
 
         portfolio = Portfolio(
@@ -107,9 +118,16 @@ class BacktestRunner:
             portfolio_id=self.config.portfolio_id,
         )
 
-        cost_model = DefaultCostModel()
+        cost_model = DefaultCostModel(
+            commission_per_trade=self.config.commission_per_trade,
+            spread_bps=self.config.spread_bps,
+            slippage_bps=self.config.slippage_bps,
+        )
         risk_engine = RiskEngine()
-        backend = BacktestBackend(random_seed=self.config.random_seed)
+        backend = BacktestBackend(
+            fill_probability=self.config.fill_probability,
+            random_seed=self.config.random_seed,
+        )
         await backend.connect()
 
         order_manager = OrderManager(
@@ -119,12 +137,14 @@ class BacktestRunner:
         )
         order_manager.set_execution_backend(backend)
 
-        manifest = StrategyManifest(
-            id=self.config.strategy_name,
-            name=self.config.strategy_name,
-            version="0.1.0",
-        )
-        sandbox = StrategySandbox(self.strategy, manifest)
+        sandbox: StrategySandbox | None = None
+        if not self._use_evaluate:
+            manifest = StrategyManifest(
+                id=self.config.strategy_name,
+                name=self.config.strategy_name,
+                version="0.1.0",
+            )
+            sandbox = StrategySandbox(self.strategy, manifest)
 
         result = BacktestResult(portfolio_id=self.config.portfolio_id)
 
@@ -140,11 +160,20 @@ class BacktestRunner:
                 continue
             current_price = market_state.prices.get(self.config.symbol, 0.0)
 
+            ts_dt = pd.Timestamp(ts)
+            if ts_dt is not pd.NaT:
+                portfolio.transaction_date = ts_dt.to_pydatetime()  # type: ignore[assignment]
             portfolio.update_prices(market_state.prices)
 
             snapshot = portfolio.snapshot()
 
-            signals = await sandbox.safe_evaluate(snapshot, market_state, cost_model)
+            if self._use_evaluate:
+                signals = await self._evaluate_via_islategy(
+                    snapshot, market_state, cost_model,
+                )
+            else:
+                assert sandbox is not None
+                signals = await sandbox.safe_evaluate(snapshot, market_state, cost_model)
 
             for signal in signals:
                 if signal.side == Side.HOLD:
@@ -231,6 +260,43 @@ class BacktestRunner:
         )
 
         return result
+
+    async def _evaluate_via_islategy(
+        self,
+        snapshot: Any,
+        market_state: Any,
+        cost_model: Any,
+    ) -> list[Signal]:
+        try:
+            sdk_market = market_state.to_sdk_state()
+            assert self.strategy is not None
+            raw_signals = await self.strategy.evaluate(snapshot, sdk_market, cost_model)  # type: ignore[union-attr]
+            return self._convert_sdk_signals(raw_signals)
+        except Exception:
+            logger.exception(
+                "backtest.strategy_evaluate_error",
+                strategy=getattr(self.strategy, "id", "unknown"),
+            )
+            return []
+
+    def _convert_sdk_signals(self, raw_signals: list[Any]) -> list[Signal]:
+        converted: list[Signal] = []
+        for s in raw_signals:
+            if isinstance(s, Signal):
+                converted.append(s)
+            elif hasattr(s, "symbol") and hasattr(s, "side"):
+                side = Side(s.side.value) if hasattr(s.side, "value") else Side(s.side)
+                if side == Side.HOLD:
+                    continue
+                converted.append(Signal(
+                    symbol=s.symbol,
+                    side=side,
+                    strategy_id=getattr(s, "strategy_id", self.config.strategy_name),
+                    quantity=getattr(s, "quantity", None),
+                    weight=getattr(s, "weight", 1.0),
+                    reason=getattr(s, "reason", ""),
+                ))
+        return converted
 
 
 @dataclass
