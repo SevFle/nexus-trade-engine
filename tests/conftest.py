@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from engine.api.auth.dependency import get_current_user
-from engine.app import create_app
 from engine.config import settings
 from engine.db.models import Base, User
 from engine.deps import get_db
@@ -65,6 +64,8 @@ def _bypass_auth(request, monkeypatch):
 
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
+    from engine.app import create_app
+
     app = create_app()
     app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
     transport = ASGITransport(app=app)
@@ -123,6 +124,8 @@ async def db_session(test_engine) -> AsyncIterator[AsyncSession]:
 
 @pytest.fixture
 async def db_client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
+    from engine.app import create_app
+
     app = create_app()
 
     async def override_get_db():
