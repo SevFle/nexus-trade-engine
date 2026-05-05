@@ -13,7 +13,6 @@ from engine.observability.metrics import (
 )
 from engine.observability.prometheus import PrometheusBackend
 
-
 _PROM_PREFIX = "text/plain; version=0.0.4"
 
 

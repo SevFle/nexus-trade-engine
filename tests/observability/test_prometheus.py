@@ -9,7 +9,6 @@ from engine.observability.prometheus import (
     render_prometheus,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers (private — exercise their invariants here)
 # ---------------------------------------------------------------------------

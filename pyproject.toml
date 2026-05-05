@@ -87,7 +87,7 @@ ignore = ["S101", "TRY003", "PLR0913"]
 "tests/*" = ["PLR2004", "S105", "S106", "PT019", "PLC0415", "ARG001", "ARG002", "ARG005", "PT011", "PT018", "E501", "SLF001", "TC002", "TC003"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["engine"]
+known-first-party = ["engine", "nexus_sdk"]
 
 [tool.basedpyright]
 pythonVersion = "3.11"
@@ -109,7 +109,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["engine", "sdk/nexus_sdk"]
+source = ["engine", "nexus_sdk"]
 omit = ["tests/*", "engine/db/migrations/*"]
 
 [tool.coverage.report]

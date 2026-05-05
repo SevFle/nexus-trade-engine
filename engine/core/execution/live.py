@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import structlog
+
 from engine.core.execution.base import ExecutionBackend, FillResult
 
 if TYPE_CHECKING:

@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
-import structlog
 import jwt
+import structlog
 from sqlalchemy import select
 
 from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo

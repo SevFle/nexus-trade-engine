@@ -15,7 +15,6 @@ from engine.core.tax.reports import (
 )
 from engine.core.tax.reports.form_1099b import to_date
 
-
 # ---------------------------------------------------------------------------
 # LotDisposition validation
 # ---------------------------------------------------------------------------

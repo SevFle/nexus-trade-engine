@@ -33,7 +33,6 @@ from engine.api.auth.mfa import (
 )
 from engine.config import settings
 
-
 _BACKUP_CODE_BYTES = 5  # 10 hex chars per code
 
 

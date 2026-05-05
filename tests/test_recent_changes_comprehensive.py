@@ -32,6 +32,8 @@ from engine.api.routes.reference import (
     _MAX_QUERY_LEN,
     _serialize_yahoo,
     get_search_index,
+)
+from engine.api.routes.reference import (
     router as reference_router,
 )
 from engine.core.backtest_runner import BacktestConfig, BacktestRunner
@@ -68,7 +70,6 @@ from engine.reference.model import (
 )
 from engine.reference.search import SearchIndex
 from engine.reference.seed import _INSTRUMENTS, seed_index
-
 
 # ---------------------------------------------------------------------------
 # Helpers

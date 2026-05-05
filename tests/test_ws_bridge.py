@@ -13,7 +13,6 @@ from engine.api.websocket.bridge import (
 )
 from engine.api.websocket.manager import ConnectionManager, Topic
 
-
 # ---------------------------------------------------------------------------
 # topic_for_event_type
 # ---------------------------------------------------------------------------

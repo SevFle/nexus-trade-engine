@@ -7,8 +7,8 @@ import re
 import pytest
 
 from engine.api.auth.api_keys import (
-    ApiKeyError,
     VALID_SCOPES,
+    ApiKeyError,
     generate_token,
     hash_token,
     is_engine_token,

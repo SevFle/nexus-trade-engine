@@ -10,11 +10,12 @@ from datetime import UTC, datetime
 from enum import Enum
 
 import structlog
+from pydantic import BaseModel, Field
+
 from engine.core.cost_model import ICostModel
 from engine.core.portfolio import Portfolio
 from engine.core.risk_engine import RiskEngine
 from engine.core.signal import Side, Signal
-from pydantic import BaseModel, Field
 
 logger = structlog.get_logger()
 

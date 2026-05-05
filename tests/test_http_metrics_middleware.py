@@ -26,7 +26,6 @@ from engine.observability.http_metrics import (
 )
 from engine.observability.metrics import RecordingBackend
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+
 from nexus_sdk.scoring import (
     FactorDirection,
     FactorScore,

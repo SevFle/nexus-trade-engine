@@ -9,6 +9,7 @@ Targets:
   - engine/observability/metrics.py — thread safety, timer, singleton
   - engine/reference/model.py — uncovered ValueError path (lines 146-147)
   - engine/api/routes/reference.py — Yahoo fallback with asset_class filter
+  - pyproject.toml — coverage source / isort known-first-party consistency
 """
 
 from __future__ import annotations
@@ -41,6 +42,8 @@ from engine.api.auth.jwt import (
 from engine.api.routes.reference import (
     _serialize_yahoo,
     get_search_index,
+)
+from engine.api.routes.reference import (
     router as reference_router,
 )
 from engine.core.backtest_runner import BacktestConfig, BacktestRunner
@@ -68,7 +71,6 @@ from engine.observability.metrics import (
 from engine.reference.model import RefInstrument
 from engine.reference.search import SearchIndex
 from engine.reference.seed import seed_index
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -909,3 +911,61 @@ class TestSeedDeepCoverage:
         suggestions = idx.suggest("EUR", asset_class="forex")
         for s in suggestions:
             assert s.record.asset_class == "forex"
+
+
+class TestPyprojectCoverageConfig:
+    def test_coverage_sources_match_addopts_cov_flags(self):
+        import tomllib
+        from pathlib import Path
+
+        pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+        with pyproject.open("rb") as f:
+            data = tomllib.load(f)
+
+        cov_sources = data["tool"]["coverage"]["run"]["source"]
+        addopts = data["tool"]["pytest"]["ini_options"]["addopts"]
+        cov_packages = [
+            arg.replace("--cov=", "")
+            for arg in addopts.split()
+            if arg.startswith("--cov=") and "=" in arg and not arg.startswith("--cov-report")
+        ]
+        assert sorted(cov_sources) == sorted(cov_packages)
+
+    def test_nexus_sdk_in_known_first_party(self):
+        import tomllib
+        from pathlib import Path
+
+        pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+        with pyproject.open("rb") as f:
+            data = tomllib.load(f)
+
+        kfp = data["tool"]["ruff"]["lint"]["isort"]["known-first-party"]
+        assert "nexus_sdk" in kfp
+        assert "engine" in kfp
+
+    def test_engine_importable(self):
+        import engine
+
+        assert engine.__file__ is not None
+
+    def test_nexus_sdk_importable(self):
+        import nexus_sdk
+
+        assert nexus_sdk.__file__ is not None
+
+    def test_nexus_sdk_public_api(self):
+        from nexus_sdk import (
+            CostBreakdown,
+            DataFeed,
+            IStrategy,
+            MarketState,
+            Signal,
+            StrategyConfig,
+        )
+
+        assert IStrategy is not None
+        assert Signal is not None
+        assert MarketState is not None
+        assert StrategyConfig is not None
+        assert CostBreakdown is not None
+        assert DataFeed is not None
