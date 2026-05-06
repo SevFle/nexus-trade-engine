@@ -83,6 +83,7 @@ ignore = ["S101", "TRY003", "PLR0913"]
 "engine/data/providers/*.py" = ["ARG002", "PLC0415", "TRY300", "TRY004"]
 "engine/plugins/registry.py" = ["PLC0415"]
 "engine/db/models.py" = ["UP042"]
+"engine/reference/seed.py" = ["E501"]
 "sdk/nexus_sdk/scoring.py" = ["UP042"]
 "tests/*" = ["PLR2004", "S105", "S106", "PT019", "PLC0415", "ARG001", "ARG002", "ARG005", "PT011", "PT018", "E501", "SLF001", "TC002", "TC003"]
 
