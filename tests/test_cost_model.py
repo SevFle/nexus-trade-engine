@@ -229,3 +229,101 @@ class TestDividendTax:
     def test_ordinary_dividend(self, cost_model):
         tax = cost_model.estimate_dividend_tax(1000.0, is_qualified=False)
         assert tax.amount == 1000.0 * 0.37
+
+
+class TestMoneyArithmetic:
+    def test_add_same_currency(self):
+        from engine.core.cost_model import Money
+
+        a = Money(amount=10.0, currency="USD")
+        b = Money(amount=5.0, currency="USD")
+        result = a + b
+        assert result.amount == 15.0
+        assert result.currency == "USD"
+
+    def test_sub_same_currency(self):
+        from engine.core.cost_model import Money
+
+        a = Money(amount=10.0, currency="USD")
+        b = Money(amount=3.0, currency="USD")
+        result = a - b
+        assert result.amount == 7.0
+        assert result.currency == "USD"
+
+    def test_is_zero_true(self):
+        from engine.core.cost_model import Money
+
+        assert Money(amount=0.0).is_zero is True
+
+    def test_is_zero_near_zero(self):
+        from engine.core.cost_model import Money
+
+        assert Money(amount=1e-11).is_zero is True
+
+    def test_is_zero_false(self):
+        from engine.core.cost_model import Money
+
+        assert Money(amount=0.01).is_zero is False
+
+    def test_as_pct_of_positive(self):
+        from engine.core.cost_model import Money
+
+        m = Money(amount=5.0)
+        assert m.as_pct_of(100.0) == 5.0
+
+    def test_as_pct_of_zero_total(self):
+        from engine.core.cost_model import Money
+
+        m = Money(amount=5.0)
+        assert m.as_pct_of(0.0) == 0.0
+
+
+class TestTaxLotCostBasis:
+    def test_cost_basis_calculation(self):
+        lot = TaxLot(
+            symbol="AAPL",
+            quantity=100,
+            purchase_price=150.0,
+            purchase_date=datetime.now(UTC),
+        )
+        assert lot.cost_basis == 15_000.0
+
+    def test_cost_basis_zero_quantity(self):
+        lot = TaxLot(
+            symbol="AAPL",
+            quantity=0,
+            purchase_price=150.0,
+            purchase_date=datetime.now(UTC),
+        )
+        assert lot.cost_basis == 0.0
+
+
+class TestSpecificLotTax:
+    def test_specific_lot_uses_unsorted_order(self, cost_model):
+        now = datetime.now(UTC)
+        lots = [
+            TaxLot(
+                symbol="AAPL",
+                quantity=50,
+                purchase_price=140.0,
+                purchase_date=now - timedelta(days=10),
+            ),
+            TaxLot(
+                symbol="AAPL",
+                quantity=50,
+                purchase_price=80.0,
+                purchase_date=now - timedelta(days=400),
+            ),
+        ]
+        tax = cost_model.estimate_tax(
+            "AAPL", 150.0, 50, lots, TaxMethod.SPECIFIC_LOT, sell_date=now
+        )
+        fifo_tax = cost_model.estimate_tax(
+            "AAPL", 150.0, 50, lots, TaxMethod.FIFO, sell_date=now
+        )
+
+        specific_expected = (150.0 - 140.0) * 50 * 0.37
+        fifo_expected = (150.0 - 80.0) * 50 * 0.20
+        assert abs(tax.amount - specific_expected) < 1e-6
+        assert abs(fifo_tax.amount - fifo_expected) < 1e-6
+        assert tax.amount != fifo_tax.amount
