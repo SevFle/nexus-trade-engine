@@ -9,7 +9,7 @@
 #   - app + worker are built from Dockerfile.dev (uv + dev deps).
 #   - Source is bind-mounted into /app so uvicorn --reload picks up edits.
 #   - frontend service runs Vite dev server with HMR on port 5173.
-#   - .venv is mounted as an anonymous volume so it doesn't get clobbered by
+#   - .venv is mounted as an anonymous volume so it doesnt get clobbered by
 #     the source bind-mount.
 #   - Anonymous volume on frontend/node_modules so npm install survives the
 #     source bind-mount.
@@ -18,15 +18,15 @@ services:
   db:
     image: timescale/timescaledb:latest-pg16
     environment:
-      POSTGRES_USER: nexus
-      POSTGRES_PASSWORD: nexus
-      POSTGRES_DB: nexus
+      POSTGRES_USER: ${POSTGRES_USER:?must be set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?must be set in .env}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/home/postgres/pgdata/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nexus"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -34,7 +34,7 @@ services:
   valkey:
     image: valkey/valkey:8-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
@@ -46,10 +46,10 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     ports:
-      - "8000:8000"
-    env_file: .env.example
+      - "127.0.0.1:8000:8000"
+    env_file: .env
     environment:
-      NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:nexus@db:5432/nexus
+      NEXUS_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       NEXUS_VALKEY_URL: valkey://valkey:6379/0
       NEXUS_DEBUG: "1"
       PYTHONUNBUFFERED: "1"
@@ -68,9 +68,9 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     command: ["uv", "run", "taskiq", "worker", "engine.tasks.worker:broker", "--reload"]
-    env_file: .env.example
+    env_file: .env
     environment:
-      NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:nexus@db:5432/nexus
+      NEXUS_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       NEXUS_VALKEY_URL: valkey://valkey:6379/0
       NEXUS_DEBUG: "1"
       WATCHFILES_FORCE_POLLING: "true"
@@ -88,7 +88,7 @@ services:
     working_dir: /app
     command: ["sh", "-c", "npm install && npm run dev -- --host 0.0.0.0"]
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     environment:
       CHOKIDAR_USEPOLLING: "true"        # bind-mounts on macOS/Windows need polling
       VITE_API_BASE_URL: http://localhost:8000

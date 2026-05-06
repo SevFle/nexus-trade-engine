@@ -2,15 +2,15 @@ services:
   db:
     image: timescale/timescaledb:latest-pg16
     environment:
-      POSTGRES_USER: nexus
-      POSTGRES_PASSWORD: nexus
-      POSTGRES_DB: nexus
+      POSTGRES_USER: ${POSTGRES_USER:?must be set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?must be set in .env}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/home/postgres/pgdata/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nexus"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -18,7 +18,7 @@ services:
   valkey:
     image: valkey/valkey:8-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
@@ -28,28 +28,28 @@ services:
   app:
     build: .
     ports:
-      - "8000:8000"
-    env_file: .env.example
+      - "127.0.0.1:8000:8000"
+    env_file: .env
     depends_on:
       db:
         condition: service_healthy
       valkey:
         condition: service_healthy
     environment:
-      NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:nexus@db:5432/nexus
+      NEXUS_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       NEXUS_VALKEY_URL: valkey://valkey:6379/0
 
   worker:
     build: .
     entrypoint: ["python", "-m", "taskiq", "worker", "engine.tasks.worker:broker"]
-    env_file: .env.example
+    env_file: .env
     depends_on:
       db:
         condition: service_healthy
       valkey:
         condition: service_healthy
     environment:
-      NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:nexus@db:5432/nexus
+      NEXUS_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       NEXUS_VALKEY_URL: valkey://valkey:6379/0
 
 volumes:
