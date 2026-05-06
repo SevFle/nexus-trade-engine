@@ -256,9 +256,9 @@ class DefaultCostModel(ICostModel):
         sell_date: datetime | None = None,
     ) -> Money:
         if method == TaxMethod.FIFO:
-            sorted_lots = sorted(lots, key=lambda l: l.purchase_date)
+            sorted_lots = sorted(lots, key=lambda lot: lot.purchase_date)
         elif method == TaxMethod.LIFO:
-            sorted_lots = sorted(lots, key=lambda l: l.purchase_date, reverse=True)
+            sorted_lots = sorted(lots, key=lambda lot: lot.purchase_date, reverse=True)
         else:
             sorted_lots = lots
 
