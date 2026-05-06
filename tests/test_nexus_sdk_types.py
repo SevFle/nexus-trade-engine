@@ -25,10 +25,9 @@ class TestMoney:
         m = Money(amount=25.0)
         assert m.as_pct_of(100.0) == 25.0
 
-    def test_as_pct_of_zero_total_raises(self):
+    def test_as_pct_of_zero_total_returns_zero(self):
         m = Money(amount=25.0)
-        with pytest.raises(ValueError, match="total must not be zero"):
-            m.as_pct_of(0.0)
+        assert m.as_pct_of(0.0) == 0.0
 
     def test_as_pct_of_negative_total(self):
         m = Money(amount=10.0)
@@ -69,13 +68,11 @@ class TestMoney:
 
     def test_as_pct_negative_zero_float(self):
         m = Money(amount=25.0)
-        with pytest.raises(ValueError, match="total must not be zero"):
-            m.as_pct_of(-0.0)
+        assert m.as_pct_of(-0.0) == 0.0
 
-    def test_as_pct_near_zero_total_raises(self):
+    def test_as_pct_near_zero_total_returns_zero(self):
         m = Money(amount=25.0)
-        with pytest.raises(ValueError, match="total must not be zero"):
-            m.as_pct_of(1e-13)
+        assert m.as_pct_of(1e-13) == 0.0
 
     def test_negative_amount(self):
         m = Money(amount=-100.0)

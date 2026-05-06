@@ -17,7 +17,7 @@ class Money:
 
     def as_pct_of(self, total: float) -> float:
         if abs(total) < 1e-12:
-            raise ValueError("total must not be zero")
+            return 0.0
         return (self.amount / total) * 100
 
 

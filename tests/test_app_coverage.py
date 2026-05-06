@@ -83,7 +83,7 @@ class TestConfigureDataProviders:
     def test_default_yahoo_registered_when_no_config(self):
         registry = get_registry()
         for p in list(registry.list_providers()):
-            registry.unregister(p.name)
+            registry.deregister(p.name)
         with patch.object(settings, "data_providers_config", ""):
             _configure_data_providers()
             providers = registry.list_providers()
@@ -92,7 +92,7 @@ class TestConfigureDataProviders:
     def test_config_file_failure_is_logged_not_raised(self):
         registry = get_registry()
         for p in list(registry.list_providers()):
-            registry.unregister(p.name)
+            registry.deregister(p.name)
         with (
             patch.object(settings, "data_providers_config", "/nonexistent/path.yaml"),
             patch("engine.app.configure_from_file", side_effect=FileNotFoundError("nope")),

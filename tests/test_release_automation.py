@@ -106,6 +106,10 @@ class TestReleaseWorkflow:
         assert "contents: write" in content
         assert "pull-requests: write" in content
 
+    def test_workflow_uses_custom_token(self):
+        content = (ROOT / ".github" / "workflows" / "release-please.yml").read_text()
+        assert "RELEASE_PLEASE_TOKEN" in content
+
 
 class TestReleasingDocs:
     def test_releasing_doc_exists(self):

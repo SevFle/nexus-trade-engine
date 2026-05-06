@@ -33,6 +33,7 @@ def _fake_authenticated_user(role: str = "admin") -> User:
         display_name="Test User",
         is_active=True,
         role=role,
+        auth_provider="local",
     )
 
 

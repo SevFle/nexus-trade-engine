@@ -15,11 +15,14 @@ from tests.conftest import _fake_authenticated_user
 
 class TestEngineVersion:
     def test_returns_string(self):
+        import re
+
         version = _engine_version()
         assert isinstance(version, str)
+        assert re.match(r"^\d+\.\d+\.\d+", version), f"version doesn't look semver: {version}"
 
     def test_fallback_on_missing_metadata(self):
-        with patch("engine.api.routes.system.version", side_effect=Exception("nope")):
+        with patch("importlib.metadata.version", side_effect=Exception("nope")):
             version = _engine_version()
             assert version == "0.0.0+unknown"
 
@@ -39,6 +42,7 @@ class TestCheckDatabase:
         db.execute = AsyncMock(side_effect=Exception("connection lost"))
         ok, detail = await _check_database(db)
         assert ok is False
+        assert detail is not None
         assert "connection lost" in detail
 
 
