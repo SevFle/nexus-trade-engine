@@ -12,5 +12,9 @@ edit this file by hand — it is regenerated as part of every release PR.
 
 ## [Unreleased]
 
+### Internal
+- (subagent) SEV-267 — Plugin Sandbox with Security Isolation (Phase 2, Lane B)
+
+
 The initial public 0.1.0 release line. Entries below this point are appended
 automatically once release-please starts cutting tagged releases.
