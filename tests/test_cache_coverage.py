@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -68,7 +69,7 @@ class TestMemoryFallback:
         result = await cache.get_dataframe(key)
         assert result is not None
         assert len(result) == 2
-        assert list(result["close"]) == [100.0, 101.0]
+        assert list(result["close"]) == pytest.approx([100.0, 101.0])
 
     @pytest.mark.asyncio
     async def test_memory_get_dataframe_missing(self):
@@ -97,7 +98,7 @@ class TestMemoryFallback:
     async def test_memory_expired_entry(self):
         cache = ProviderCache(url=None)
         key = "test_expire"
-        cache._memory[key] = (0.0, b'{"val": 1}')
+        cache._memory[key] = (time.time() - 1, b'{"val": 1}')
         result = await cache.get_json(key)
         assert result is None
 

@@ -9,7 +9,7 @@ from httpx import ASGITransport, AsyncClient
 
 from engine.api.auth.dependency import get_current_user
 from engine.app import create_app
-from engine.db.models import Portfolio
+from engine.db.models import Portfolio, User
 from engine.deps import get_db
 from tests.conftest import FAKE_USER_ID, _fake_authenticated_user
 
@@ -17,6 +17,9 @@ from tests.conftest import FAKE_USER_ID, _fake_authenticated_user
 class TestPortfolioRoutes:
     @pytest.mark.asyncio
     async def test_create_portfolio(self, db_session):
+        db_session.add(_fake_authenticated_user())
+        await db_session.flush()
+
         app = create_app()
 
         async def override_get_db():
@@ -33,7 +36,7 @@ class TestPortfolioRoutes:
             assert resp.status_code == 200
             data = resp.json()
             assert data["name"] == "Test Portfolio"
-            assert float(data["initial_capital"]) == 50000.0
+            assert float(data["initial_capital"]) == pytest.approx(50000.0)
 
     @pytest.mark.asyncio
     async def test_list_portfolios(self, db_session):
