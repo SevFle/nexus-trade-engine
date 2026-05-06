@@ -61,8 +61,7 @@ class TestPrivacyRoutes:
 
     @pytest.mark.asyncio
     async def test_request_deletion(self, db_session):
-        db_session.add(_fake_authenticated_user())
-        await db_session.flush()
+        await db_session.merge(_fake_authenticated_user())
         await db_session.commit()
 
         app = create_app()
