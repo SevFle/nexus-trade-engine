@@ -8,8 +8,12 @@ Postgres ``pg_trgm``; this seed ensures the dropdown works from day one.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from engine.reference.model import RefInstrument
-from engine.reference.search import SearchIndex
+
+if TYPE_CHECKING:
+    from engine.reference.search import SearchIndex
 
 
 def seed_index(index: SearchIndex) -> int:
