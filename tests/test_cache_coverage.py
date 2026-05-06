@@ -98,7 +98,7 @@ class TestMemoryFallback:
     async def test_memory_expired_entry(self):
         cache = ProviderCache(url=None)
         key = "test_expire"
-        cache._memory[key] = (time.time() - 1, b'{"val": 1}')
+        cache._memory[key] = (time.time() - 3600, b'{"val": 1}')
         result = await cache.get_json(key)
         assert result is None
 
