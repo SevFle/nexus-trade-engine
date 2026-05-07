@@ -13,6 +13,10 @@ edit this file by hand — it is regenerated as part of every release PR.
 ## [Unreleased]
 
 ### Internal
+- (write_tests) Write tests for the most recently changed code to break the loop
+
+
+### Internal
 - (subagent) SEV-267 — Plugin Sandbox with Security Isolation (Phase 2, Lane B)
 
 
