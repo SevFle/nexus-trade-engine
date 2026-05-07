@@ -149,7 +149,7 @@ class TestGDPRBacktestExport:
         bt_ids = [b["id"] for b in result["backtests"]]
         assert str(bt.id) in bt_ids
 
-    async def test_orphaned_backtests_without_portfolio_are_included(self, db_session):
+    async def test_orphaned_backtests_without_portfolio_are_excluded(self, db_session):
         uid = uuid.uuid4()
         user = User(
             id=uid,
@@ -175,7 +175,48 @@ class TestGDPRBacktestExport:
 
         result = await collect_user_data(db_session, uid)
         bt_ids = [b["id"] for b in result["backtests"]]
-        assert str(orphaned_bt.id) in bt_ids
+        assert str(orphaned_bt.id) not in bt_ids
+
+    async def test_orphaned_backtest_does_not_leak_to_other_user(self, db_session):
+        uid_a = uuid.uuid4()
+        uid_b = uuid.uuid4()
+        user_a = User(
+            id=uid_a,
+            email="leak-a@example.com",
+            display_name="Leak A",
+            is_active=True,
+            role="user",
+            auth_provider="local",
+        )
+        user_b = User(
+            id=uid_b,
+            email="leak-b@example.com",
+            display_name="Leak B",
+            is_active=True,
+            role="user",
+            auth_provider="local",
+        )
+        db_session.add_all([user_a, user_b])
+        await db_session.flush()
+
+        orphaned_bt = BacktestResult(
+            id=uuid.uuid4(),
+            portfolio_id=None,
+            strategy_name="leaky_orphan",
+            start_date=datetime(2026, 1, 1, tzinfo=UTC),
+            end_date=datetime(2026, 4, 1, tzinfo=UTC),
+            metrics={"note": "should not appear in any user export"},
+        )
+        db_session.add(orphaned_bt)
+        await db_session.flush()
+
+        result_a = await collect_user_data(db_session, uid_a)
+        bt_ids_a = [b["id"] for b in result_a["backtests"]]
+        assert str(orphaned_bt.id) not in bt_ids_a
+
+        result_b = await collect_user_data(db_session, uid_b)
+        bt_ids_b = [b["id"] for b in result_b["backtests"]]
+        assert str(orphaned_bt.id) not in bt_ids_b
 
     async def test_other_user_portfolio_backtests_excluded(self, db_session):
         uid_a = uuid.uuid4()

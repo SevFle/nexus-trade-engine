@@ -74,12 +74,8 @@ async def collect_user_data(
     backtests = (
         await session.execute(
             select(BacktestResult)
-            .outerjoin(Portfolio, BacktestResult.portfolio_id == Portfolio.id)
-            .where(
-                (Portfolio.user_id == user_id)
-                | (BacktestResult.portfolio_id.is_(None))
-            )
-            .distinct()
+            .join(Portfolio, BacktestResult.portfolio_id == Portfolio.id)
+            .where(Portfolio.user_id == user_id)
         )
     ).scalars().all()
     webhooks = (
