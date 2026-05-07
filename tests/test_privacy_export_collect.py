@@ -7,8 +7,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from engine.db.models import ApiKey, BacktestResult, DSRequest, LegalAcceptance, Portfolio, User, WebhookConfig
-from engine.privacy.export import _jsonify, _row_to_dict, collect_user_data
+from engine.db.models import ApiKey, BacktestResult, Portfolio, User, WebhookConfig
+from engine.privacy.export import collect_user_data
 
 
 @pytest.fixture
