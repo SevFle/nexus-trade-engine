@@ -72,7 +72,15 @@ async def collect_user_data(
         await session.execute(select(Portfolio).where(Portfolio.user_id == user_id))
     ).scalars().all()
     backtests = (
-        await session.execute(select(BacktestResult).where(BacktestResult.user_id == user_id))
+        await session.execute(
+            select(BacktestResult)
+            .outerjoin(Portfolio, BacktestResult.portfolio_id == Portfolio.id)
+            .where(
+                (Portfolio.user_id == user_id)
+                | (BacktestResult.portfolio_id.is_(None))
+            )
+            .distinct()
+        )
     ).scalars().all()
     webhooks = (
         await session.execute(select(WebhookConfig).where(WebhookConfig.user_id == user_id))
