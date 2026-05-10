@@ -1,3 +1,17 @@
+"""Shared test fixtures for the Nexus Trade Engine test suite.
+
+This conftest provides:
+- ``client``: an httpx AsyncClient wired to a real FastAPI app with auth bypassed.
+- ``test_engine``: a session-scoped SQLAlchemy async engine (SQLite in-memory by
+  default; switches to the configured ``database_url`` when it contains ``test``).
+- ``db_session``: a per-test database session backed by a nested transaction that
+  rolls back after each test, keeping the schema across tests without leaking data.
+- ``db_client``: an httpx client with the DB session injected, for integration tests
+  that need real DB rows visible to the app.
+- ``_bypass_auth``: an autouse fixture that patches ``FastAPI.__init__`` so every
+  new app instance gets a dependency override for ``get_current_user``.  Files
+  matching ``test_auth*`` or ``*_requires_auth`` opt out to exercise real auth.
+"""
 from __future__ import annotations
 
 import uuid
@@ -8,7 +22,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event as sa_event
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from engine.api.auth.dependency import get_current_user
@@ -67,7 +81,7 @@ def _bypass_auth(request, monkeypatch):
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
     app = create_app()
-    app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+    app.dependency_overrides[get_current_user] = _fake_authenticated_user
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -116,10 +130,17 @@ async def test_engine():
 
 @pytest.fixture
 async def db_session(test_engine) -> AsyncIterator[AsyncSession]:
-    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
-    async with session_factory() as session:
+    async with test_engine.connect() as connection:
+        transaction = await connection.begin()
+        await connection.begin_nested()
+        session = AsyncSession(
+            bind=connection,
+            expire_on_commit=False,
+        )
         yield session
-        await session.rollback()
+        await session.close()
+        if transaction.is_active:
+            await transaction.rollback()
 
 
 @pytest.fixture
@@ -130,7 +151,7 @@ async def db_client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+    app.dependency_overrides[get_current_user] = _fake_authenticated_user
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
