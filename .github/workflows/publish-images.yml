@@ -23,7 +23,7 @@ env:
 jobs:
   publish:
     name: Build & publish multi-arch image
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, nexus]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

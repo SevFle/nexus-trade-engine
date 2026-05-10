@@ -36,7 +36,7 @@ permissions:
 jobs:
   run:
     name: k6 ${{ github.event.inputs.scenario || 'baseline' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, nexus]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
