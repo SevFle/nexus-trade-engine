@@ -47,10 +47,10 @@ def user_id() -> uuid.UUID:
 
 class TestTopicEnum:
     def test_valid_topics_match_enum(self):
-        assert VALID_TOPICS == frozenset(t.value for t in Topic)
+        assert frozenset(t.value for t in Topic) == VALID_TOPICS
 
     def test_documented_topics(self):
-        assert VALID_TOPICS == frozenset({"portfolio", "backtest", "order", "alert"})
+        assert frozenset({"portfolio", "backtest", "order", "alert"}) == VALID_TOPICS
 
 
 class TestAttachDetach:
