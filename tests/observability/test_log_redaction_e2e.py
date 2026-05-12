@@ -38,7 +38,7 @@ class TestRedactionAtWire:
 
     def test_token_is_not_in_wire_output(self, stream_buf: io.StringIO):
         log = structlog.get_logger("redaction-test")
-        log.info("api_call", token="sk-very-secret-1234567890abcdef")
+        log.info("api_call", token="sk-very-secret-1234567890abcdef")  # gitleaks:allow
         wire = stream_buf.getvalue()
         assert "sk-very-secret-1234567890abcdef" not in wire
 

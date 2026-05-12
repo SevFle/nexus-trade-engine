@@ -110,7 +110,7 @@ class TestBannedKeyAllCovered:
 class TestBytesValue:
     def test_bytes_secret_is_scrubbed(self):
         pem = (
-            b"-----BEGIN RSA PRIVATE KEY-----\n"
+            b"-----BEGIN RSA PRIVATE KEY-----\n"  # gitleaks:allow
             b"MIIEowIBAAKCAQEAxxxxxxx\n"
             b"-----END RSA PRIVATE KEY-----"
         )
@@ -122,7 +122,7 @@ class TestBytesValue:
 class TestPemBlock:
     def test_pem_block_in_string_value_is_redacted(self):
         s = (
-            "header\n-----BEGIN RSA PRIVATE KEY-----\n"
+            "header\n-----BEGIN RSA PRIVATE KEY-----\n"  # gitleaks:allow
             "MIIE...secret\n"
             "-----END RSA PRIVATE KEY-----\nfooter"
         )

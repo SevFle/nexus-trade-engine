@@ -1,0 +1,6 @@
+[allowlist]
+  description = "Global allow list"
+  paths = [
+    "tests/observability/test_redact.py",
+    "tests/observability/test_log_redaction_e2e.py",
+  ]
