@@ -81,7 +81,7 @@ def rolling_volatility(
 ) -> list[float | None]:
     """Annualised volatility (% as decimal, e.g. ``0.20`` = 20 %).
 
-    Standard deviation × √(annualisation_factor). ``None`` for the
+    Standard deviation * √(annualisation_factor). ``None`` for the
     first ``window - 1`` indices.
     """
     _validate_window(window)

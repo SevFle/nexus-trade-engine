@@ -130,7 +130,7 @@ def tracking_error(
 ) -> float:
     """Annualised standard deviation of active returns.
 
-    ``TE = stdev(active) × √(annualisation_factor)``. Returns ``0.0``
+    ``TE = stdev(active) * √(annualisation_factor)``. Returns ``0.0``
     for fewer than 2 points. ``annualisation_factor <= 0`` rejected.
     """
     if annualisation_factor <= 0:

@@ -57,7 +57,7 @@ def perpetual_funding_payment(
     sum funding payments straight into a daily PnL ledger.
 
     The full one-day payment for the standard 8-hour cadence is
-    ``3 × per-interval rate × notional``; pass ``hours=24`` if the
+    ``3 * per-interval rate * notional``; pass ``hours=24`` if the
     caller's funding rate is already daily.
     """
     if notional < 0:

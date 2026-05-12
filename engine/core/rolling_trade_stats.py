@@ -95,7 +95,7 @@ def rolling_win_loss_ratio(
 
 
 def _annualised_return(equity_window: Sequence[float], periods_per_year: int) -> float:
-    """Compounded return × (periods_per_year / window) — annualised."""
+    """Compounded return * (periods_per_year / window) — annualised."""
     if len(equity_window) < 2 or equity_window[0] <= 0:
         return 0.0
     total_return = equity_window[-1] / equity_window[0] - 1.0

@@ -175,11 +175,6 @@ class TestRollingSortino:
         assert out[-1] < 0
 
 
-# ---------------------------------------------------------------------------
-# rolling_return
-# ---------------------------------------------------------------------------
-
-
 class TestRollingReturn:
     def test_empty_returns_empty(self):
         assert rolling_return([], 3) == []
@@ -195,7 +190,7 @@ class TestRollingReturn:
         assert out[-1] == pytest.approx(0.030301, rel=1e-9)
 
     def test_loss_then_recovery_compounds(self):
-        # -10% then +10% → (0.9 × 1.1) - 1 = -0.01.
+        # -10% then +10% -> (0.9 x 1.1) - 1 = -0.01.
         out = rolling_return([-0.10, 0.10], 2)
         assert out[-1] == pytest.approx(-0.01, rel=1e-9)
 

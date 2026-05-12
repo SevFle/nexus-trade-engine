@@ -57,7 +57,7 @@ def sec_section_31_fee(
 ) -> Decimal:
     """SEC Section 31 fee on US equity *sells*. Buys produce zero.
 
-    ``proceeds`` is the gross sale amount (price × quantity) in USD.
+    ``proceeds`` is the gross sale amount (price * quantity) in USD.
     Returns the fee in USD, quantised to the cent (the SEC rounds
     *up*, but at our precision a half-cent rounding is invisible —
     operators reconcile against the broker's clearing report).

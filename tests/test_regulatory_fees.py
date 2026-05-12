@@ -47,12 +47,12 @@ class TestSecSection31:
         )
 
     def test_known_sell_at_default_rate(self):
-        # $1,000,000 sell × $20.60 / $1,000,000 = $20.60.
+        # $1,000,000 sell * $20.60 / $1,000,000 = $20.60.
         out = sec_section_31_fee(Decimal("1000000"), side="sell")
         assert out == Decimal("20.60")
 
     def test_small_sell_quantises_to_cent(self):
-        # $10,000 × $20.60 / $1,000,000 = $0.206 → rounds to $0.21.
+        # $10,000 * $20.60 / $1,000,000 = $0.206 → rounds to $0.21.
         out = sec_section_31_fee(Decimal("10000"), side="sell")
         assert out == Decimal("0.21")
 
@@ -83,11 +83,11 @@ class TestFinraTaf:
         assert finra_taf(10_000, side="buy") == Decimal("0.00")
 
     def test_known_sell_at_default_rate(self):
-        # 1,000 shares × $0.000166 = $0.166 → rounds to $0.17.
+        # 1,000 shares * $0.000166 = $0.166 → rounds to $0.17.
         assert finra_taf(1_000, side="sell") == Decimal("0.17")
 
     def test_cap_kicks_in_for_huge_order(self):
-        # 1,000,000 shares × $0.000166 = $166 → capped at $8.30.
+        # 1,000,000 shares * $0.000166 = $166 → capped at $8.30.
         assert finra_taf(1_000_000, side="sell") == Decimal("8.30")
 
     def test_zero_quantity_zero_fee(self):
@@ -105,7 +105,7 @@ class TestFinraTaf:
 
 class TestOrf:
     def test_known_value(self):
-        # 100 contracts × $0.02905 = $2.905. Decimal default rounding
+        # 100 contracts * $0.02905 = $2.905. Decimal default rounding
         # is HALF_EVEN (banker's rounding), so 2.905 → 2.90 (rounds to
         # the nearest even cent). The amount that hits the broker is
         # the integer-cent quantisation regardless of mode.
@@ -126,7 +126,7 @@ class TestOrf:
 
 class TestOccClearingFee:
     def test_known_value(self):
-        # 100 contracts × $0.055 = $5.50.
+        # 100 contracts * $0.055 = $5.50.
         assert occ_clearing_fee(100) == Decimal("5.50")
 
     def test_zero_contracts_zero_fee(self):
@@ -144,7 +144,7 @@ class TestOccClearingFee:
 
 class TestMarginInterest:
     def test_one_day_accrual_known_value(self):
-        # $100,000 borrowed × 8.5 % / 365 ≈ $23.29 / day.
+        # $100,000 borrowed x 8.5 % / 365 = ~$23.29 / day.
         out = daily_margin_interest(
             Decimal("100000"), Decimal("0.085")
         )

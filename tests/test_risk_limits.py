@@ -318,7 +318,7 @@ class TestNumericValidation:
 
 class TestThreadSafety:
     def test_concurrent_checks_do_not_corrupt_velocity_buffer(self):
-        # Drives 8 threads × 100 checks each at a 500-cap. With a lock the
+        # Drives 8 threads x 100 checks each at a 500-cap. With a lock the
         # rolling buffer stays internally consistent (no IndexError, no
         # list mutation during iteration).
         import threading as _t

@@ -84,7 +84,7 @@ def jensen_alpha(
 ) -> float:
     """Annualised Jensen's alpha.
 
-    ``α = (E[Rp] - Rf) - β · (E[Rb] - Rf)`` in per-period units, then
+    ``alpha = (E[Rp] - Rf) - β · (E[Rb] - Rf)`` in per-period units, then
     multiplied by ``annualisation_factor``. Returns ``0.0`` for empty /
     too-short inputs.
     """

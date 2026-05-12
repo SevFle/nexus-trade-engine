@@ -162,7 +162,7 @@ class TestTradeEfficiency:
         assert trade_efficiency(trades) == pytest.approx(1.0)
 
     def test_half_efficiency(self):
-        # pnl == 0.5 × mfe — gave back half.
+        # pnl == 0.5 * mfe — gave back half.
         trades = [
             TradeExcursion(pnl=5.0, mfe=10.0, mae=2.0),
             TradeExcursion(pnl=10.0, mfe=20.0, mae=3.0),

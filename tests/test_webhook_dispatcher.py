@@ -66,14 +66,14 @@ class _FakeConfig:
         self,
         *,
         url: str = "https://example.com/hook",
-        secret: str = "topsecret",
+        secret: str | None = None,
         template: str = "generic",
         max_retries: int = 3,
         custom_headers: dict | None = None,
     ):
         self.id = "00000000-0000-0000-0000-000000000001"
         self.url = url
-        self.signing_secret = secret
+        self.signing_secret = secret if secret is not None else "test-signing-key"
         self.template = template
         self.max_retries = max_retries
         self.custom_headers = custom_headers or {}

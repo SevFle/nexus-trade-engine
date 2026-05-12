@@ -71,7 +71,7 @@ def skewness(returns: Sequence[float]) -> float:
 
 
 def kurtosis(returns: Sequence[float]) -> float:
-    """Excess kurtosis (kurtosis − 3, the Fisher convention).
+    """Excess kurtosis (kurtosis - 3, the Fisher convention).
 
     Bias-corrected per Joanes & Gill (1998). Normal distribution → 0;
     fat tails → > 0; thin tails → < 0. Returns ``0.0`` for empty input,
@@ -124,7 +124,7 @@ def value_at_risk_parametric(
 ) -> float:
     """Parametric VaR assuming Gaussian returns.
 
-    Uses ``VaR = -(μ + z · σ)`` where z is the standard-normal quantile
+    Uses ``VaR = -(μ + z · sigma)`` where z is the standard-normal quantile
     at ``1 - confidence``. Approximates z via inverse-CDF rational
     approximation (Beasley-Springer-Moro), so no scipy dependency.
     Returns ``0.0`` for empty input, fewer than 2 points, or zero

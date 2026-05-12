@@ -7,7 +7,7 @@ used to offset future stock gains. After ten years, the loss expires.
 Vintage tracking
 ----------------
 French law dates losses by their tax year of origin: a 2024 loss is
-usable in 2024–2034 inclusive, then expires. The carryover record
+usable in 2024-2034 inclusive, then expires. The carryover record
 therefore tracks loss *vintages* (year + amount), not a single
 aggregate balance like the US/UK forms. When a future year nets a
 gain, the *oldest* unexpired vintage absorbs first (FIFO) — that

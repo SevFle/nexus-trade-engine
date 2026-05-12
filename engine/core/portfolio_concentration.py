@@ -84,7 +84,7 @@ def gini_coefficient(weights: Mapping[str, float]) -> float:
     ``0`` = perfectly equal, approaches ``1`` as concentration grows.
     Uses the standard sorted-pair formula:
 
-        G = (2 · Σᵢ i·xᵢ) / (n · Σ xᵢ) − (n + 1) / n
+        G = (2 · Σᵢ i·xᵢ) / (n · Σ xᵢ) - (n + 1) / n
 
     where ``x`` is sorted ascending and ``i`` is 1-indexed.
     """

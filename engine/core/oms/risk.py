@@ -135,7 +135,7 @@ class MaxOrderQuantity:
 
 @dataclass(frozen=True)
 class MaxOrderNotional:
-    """Refuses orders whose ``quantity × reference_price`` exceeds ``limit``.
+    """Refuses orders whose ``quantity * reference_price`` exceeds ``limit``.
 
     The check skips silently when the caller cannot supply a
     reference price (returns :class:`Approve`). Operators who want

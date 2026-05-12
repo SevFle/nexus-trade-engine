@@ -94,7 +94,7 @@ def rolling_alpha(
 ) -> list[float | None]:
     """Rolling annualised Jensen's alpha.
 
-    Per-window: ``α = (E[Rp] - Rf) - β · (E[Rb] - Rf)`` × ``ann``.
+    Per-window: ``alpha = (E[Rp] - Rf) - β · (E[Rb] - Rf)`` * ``ann``.
     """
     _validate_window(window)
     if annualisation_factor <= 0:
@@ -133,7 +133,7 @@ def rolling_tracking_error(
 ) -> list[float | None]:
     """Rolling annualised stdev of active returns.
 
-    ``TE = stdev(active) × √(annualisation_factor)``. Constant-active
+    ``TE = stdev(active) * √(annualisation_factor)``. Constant-active
     windows (zero variance) return ``0.0``.
     """
     _validate_window(window)
@@ -166,7 +166,7 @@ def rolling_information_ratio(
 ) -> list[float | None]:
     """Rolling annualised Information Ratio.
 
-    ``IR = (E[Rp] - E[Rb]) / stdev(active) × √(ann)``. Returns ``0.0``
+    ``IR = (E[Rp] - E[Rb]) / stdev(active) * √(ann)``. Returns ``0.0``
     for zero-variance active streams (degenerate constant excess).
     """
     _validate_window(window)

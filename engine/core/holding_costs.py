@@ -62,7 +62,7 @@ def dividend_payment(
     shares_held: Decimal,
     dividend_per_share: Decimal,
 ) -> Decimal:
-    """Cash dividend received: ``shares_held × dividend_per_share``.
+    """Cash dividend received: ``shares_held * dividend_per_share``.
 
     Both inputs are non-negative. Returns USD quantised to the cent.
     Operators apply withholding-tax adjustments separately via the

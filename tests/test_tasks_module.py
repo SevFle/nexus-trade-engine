@@ -18,11 +18,13 @@ class TestTasksModule:
         mods_to_remove = [k for k in sys.modules if k.startswith("engine.tasks")]
         saved = {m: sys.modules.pop(m) for m in mods_to_remove}
 
-        with patch("engine.tasks.worker.ListQueueBroker", return_value=mock_broker_inst):
-            with patch("engine.tasks.worker.RedisAsyncResultBackend"):
-                with patch("engine.tasks.worker.CorrelationMiddleware"):
-                    with patch("engine.tasks.worker.TaskiqScheduler"):
-                        yield
+        with (
+            patch("engine.tasks.worker.ListQueueBroker", return_value=mock_broker_inst),
+            patch("engine.tasks.worker.RedisAsyncResultBackend"),
+            patch("engine.tasks.worker.CorrelationMiddleware"),
+            patch("engine.tasks.worker.TaskiqScheduler"),
+        ):
+            yield
 
         for m in mods_to_remove:
             sys.modules.pop(m, None)
