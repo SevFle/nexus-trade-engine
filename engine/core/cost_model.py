@@ -10,10 +10,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 
 
-class TaxMethod(str, Enum):
+class TaxMethod(StrEnum):
     FIFO = "fifo"
     LIFO = "lifo"
     SPECIFIC_LOT = "specific_lot"

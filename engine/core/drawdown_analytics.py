@@ -28,8 +28,11 @@ Out of scope:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 @dataclass(frozen=True)
@@ -76,8 +79,7 @@ def underwater_curve(equity: Sequence[float]) -> list[float]:
     out: list[float] = []
     peak = equity[0]
     for v in equity:
-        if v > peak:
-            peak = v
+        peak = max(peak, v)
         if peak <= 0:
             out.append(0.0)
         else:

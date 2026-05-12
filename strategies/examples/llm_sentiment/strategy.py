@@ -210,7 +210,7 @@ class LLMSentimentStrategy(IStrategy):
                 return json.loads(text)
 
         except Exception as e:
-            logger.error("llm_sentiment.api_error", symbol=symbol, error=str(e))
+            logger.exception("llm_sentiment.api_error", symbol=symbol, error=str(e))
             return None
 
     def get_config_schema(self) -> dict:

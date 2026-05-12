@@ -81,9 +81,9 @@ class TestDisposalValidation:
 
 class TestConstants:
     def test_components_sum_to_thirty_percent(self):
-        assert PFU_INCOME_TAX_RATE == Decimal("0.128")
-        assert PFU_SOCIAL_CHARGES_RATE == Decimal("0.172")
-        assert PFU_TOTAL_RATE == Decimal("0.300")
+        assert Decimal("0.128") == PFU_INCOME_TAX_RATE
+        assert Decimal("0.172") == PFU_SOCIAL_CHARGES_RATE
+        assert Decimal("0.300") == PFU_TOTAL_RATE
 
 
 # ---------------------------------------------------------------------------

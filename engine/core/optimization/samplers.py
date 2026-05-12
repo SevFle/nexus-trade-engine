@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import math
 import random
-from collections.abc import Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from engine.core.optimization.types import ParamSpec
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from engine.core.optimization.types import ParamSpec
 
 
 def grid_search(specs: list[ParamSpec]) -> Iterator[dict[str, Any]]:
@@ -79,7 +81,8 @@ def random_search(
                 assert s.choices is not None
                 params[s.name] = rng.choice(s.choices)
             else:
-                assert s.low is not None and s.high is not None
+                assert s.low is not None
+                assert s.high is not None
                 if s.log:
                     lo, hi = math.log(s.low), math.log(s.high)
                     params[s.name] = math.exp(rng.uniform(lo, hi))

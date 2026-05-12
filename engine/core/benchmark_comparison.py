@@ -33,7 +33,10 @@ Out of scope:
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def _mean(xs: Sequence[float]) -> float:
@@ -61,7 +64,7 @@ def beta(
     mp = _mean(portfolio_returns)
     mb = _mean(benchmark_returns)
     cov = (
-        sum((p - mp) * (b - mb) for p, b in zip(portfolio_returns, benchmark_returns))
+        sum((p - mp) * (b - mb) for p, b in zip(portfolio_returns, benchmark_returns, strict=False))
         / n
     )
     var_b = sum((b - mb) ** 2 for b in benchmark_returns) / n
@@ -128,7 +131,7 @@ def up_capture_ratio(
         )
     pairs = [
         (p, b)
-        for p, b in zip(portfolio_returns, benchmark_returns)
+        for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
         if b > 0
     ]
     if not pairs:
@@ -157,7 +160,7 @@ def down_capture_ratio(
         )
     pairs = [
         (p, b)
-        for p, b in zip(portfolio_returns, benchmark_returns)
+        for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
         if b < 0
     ]
     if not pairs:
@@ -208,7 +211,7 @@ def correlation(
     mb = _mean(benchmark_returns)
     num = sum(
         (p - mp) * (b - mb)
-        for p, b in zip(portfolio_returns, benchmark_returns)
+        for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
     )
     dp = math.sqrt(sum((p - mp) ** 2 for p in portfolio_returns))
     db = math.sqrt(sum((b - mb) ** 2 for b in benchmark_returns))

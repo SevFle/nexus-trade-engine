@@ -6,18 +6,18 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class Side(str, Enum):
+class Side(StrEnum):
     BUY = "buy"
     SELL = "sell"
     HOLD = "hold"
 
 
-class SignalStrength(str, Enum):
+class SignalStrength(StrEnum):
     STRONG = "strong"
     MODERATE = "moderate"
     WEAK = "weak"

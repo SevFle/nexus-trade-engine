@@ -8,11 +8,12 @@ It mirrors the engine's plugins.sdk but without engine dependencies.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
-from nexus_sdk.signals import Signal
+if TYPE_CHECKING:
+    from nexus_sdk.signals import Signal
 
 
 class StrategyConfig(BaseModel):

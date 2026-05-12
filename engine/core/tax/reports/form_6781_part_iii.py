@@ -34,8 +34,11 @@ from __future__ import annotations
 import csv
 import io
 from dataclasses import dataclass
-from datetime import date
 from decimal import Decimal
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from datetime import date
 
 _TWOPLACES = Decimal("0.01")
 _ZERO = Decimal("0.00")

@@ -41,10 +41,8 @@ What's NOT here (explicit follow-ups):
 
 from __future__ import annotations
 
-import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import structlog
@@ -60,6 +58,9 @@ from engine.core.oms.risk import Reject, RiskGate
 from engine.observability.metrics import MetricsBackend, get_metrics
 
 if TYPE_CHECKING:
+    import uuid
+    from decimal import Decimal
+
     from engine.core.brokers.base import BrokerAdapter
     from engine.core.oms.events import OrderEvent
     from engine.core.oms.order import Order
@@ -259,7 +260,7 @@ class LiveLoop:
         if self._persister is not None:
             try:
                 self._persister(order)
-            except Exception as exc:  # noqa: BLE001 - persister failures must not break the loop
+            except Exception as exc:
                 logger.warning(
                     "live_loop.persister_failed",
                     order_id=str(order.id),

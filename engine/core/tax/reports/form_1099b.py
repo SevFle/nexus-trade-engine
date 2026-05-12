@@ -31,7 +31,7 @@ import io
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 # Boundary between short-term and long-term capital gains under
@@ -39,7 +39,7 @@ from typing import Any
 _LONG_TERM_DAYS: int = 365
 
 
-class HoldingTerm(str, Enum):
+class HoldingTerm(StrEnum):
     SHORT_TERM = "short"
     LONG_TERM = "long"
 

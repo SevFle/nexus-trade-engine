@@ -38,7 +38,6 @@ from io import StringIO
 
 from engine.observability.metrics import RecordingBackend
 
-
 _LABEL_ESCAPES = str.maketrans(
     {
         "\\": "\\\\",

@@ -25,19 +25,16 @@ DEFAULT_PERIOD = "5y"
 DEFAULT_INTERVAL = "1d"
 
 
-async def seed_ohlcv(symbols: list[str] = None, period: str = DEFAULT_PERIOD):
+async def seed_ohlcv(symbols: list[str] | None = None, period: str = DEFAULT_PERIOD):
     """Download and store OHLCV data."""
     symbols = symbols or DEFAULT_SYMBOLS
-    print(f"Seeding OHLCV data for {len(symbols)} symbols, period={period}")
 
     for symbol in symbols:
         try:
-            print(f"  Downloading {symbol}...", end=" ")
             ticker = yf.Ticker(symbol)
             df = ticker.history(period=period, interval=DEFAULT_INTERVAL)
 
             if df.empty:
-                print("NO DATA")
                 continue
 
             # Insert into database
@@ -61,11 +58,9 @@ async def seed_ohlcv(symbols: list[str] = None, period: str = DEFAULT_PERIOD):
                         },
                     )
 
-            print(f"{len(df)} bars")
-        except Exception as e:
-            print(f"ERROR: {e}")
+        except Exception:
+            pass
 
-    print("Done!")
 
 
 if __name__ == "__main__":

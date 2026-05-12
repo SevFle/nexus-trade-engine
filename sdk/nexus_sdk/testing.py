@@ -51,7 +51,7 @@ class StrategyTestHarness:
         )
         self.signals_history: list[list[Signal]] = []
 
-    async def setup(self, params: dict = None, secrets: dict = None):
+    async def setup(self, params: dict | None = None, secrets: dict | None = None):
         config = StrategyConfig(
             strategy_id=self.strategy.id,
             params=params or {},
@@ -61,9 +61,9 @@ class StrategyTestHarness:
 
     async def tick(
         self,
-        prices: dict[str, float] = None,
-        ohlcv: dict[str, list[dict]] = None,
-        news: list[dict] = None,
+        prices: dict[str, float] | None = None,
+        ohlcv: dict[str, list[dict]] | None = None,
+        news: list[dict] | None = None,
     ) -> list[Signal]:
         market = MarketState(
             prices=prices or {},

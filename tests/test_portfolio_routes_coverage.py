@@ -9,9 +9,8 @@ from httpx import ASGITransport, AsyncClient
 
 from engine.api.auth.dependency import get_current_user
 from engine.app import create_app
-from engine.db.models import Portfolio, User
 from engine.deps import get_db
-from tests.conftest import FAKE_USER_ID, _fake_authenticated_user
+from tests.conftest import _fake_authenticated_user
 
 
 class TestPortfolioRoutes:
@@ -27,7 +26,7 @@ class TestPortfolioRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.post(
@@ -47,7 +46,7 @@ class TestPortfolioRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get("/api/v1/portfolio/")
@@ -62,7 +61,7 @@ class TestPortfolioRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get("/api/v1/portfolio/not-a-uuid")
@@ -76,7 +75,7 @@ class TestPortfolioRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get(f"/api/v1/portfolio/{uuid.uuid4()}")
@@ -90,7 +89,7 @@ class TestPortfolioRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.delete("/api/v1/portfolio/not-a-uuid")

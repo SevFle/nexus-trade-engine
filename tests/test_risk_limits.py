@@ -333,7 +333,7 @@ class TestThreadSafety:
             try:
                 for _ in range(100):
                     gate.check(_intent(), _state())
-            except BaseException as exc:  # noqa: BLE001 - want all failures
+            except BaseException as exc:
                 errors.append(exc)
 
         threads = [_t.Thread(target=worker) for _ in range(8)]

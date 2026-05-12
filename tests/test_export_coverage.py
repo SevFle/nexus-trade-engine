@@ -7,8 +7,6 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-import pytest
-
 from engine.privacy.export import _jsonify, _row_to_dict
 
 

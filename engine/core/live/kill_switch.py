@@ -33,11 +33,12 @@ What's *not* here (explicit follow-ups):
 
 from __future__ import annotations
 
+import contextlib
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 import structlog
 
@@ -51,7 +52,7 @@ logger = structlog.get_logger()
 _DISENGAGE_TOKEN: str = "I_UNDERSTAND_THE_RISK"
 
 
-class KillSwitchState(str, Enum):
+class KillSwitchState(StrEnum):
     DISENGAGED = "disengaged"  # trading allowed
     ENGAGED = "engaged"        # trading blocked
 
@@ -203,11 +204,8 @@ class KillSwitch:
             self._observers.append(observer)
 
     def remove_observer(self, observer: Observer) -> None:
-        with self._lock:
-            try:
-                self._observers.remove(observer)
-            except ValueError:
-                pass
+        with self._lock, contextlib.suppress(ValueError):
+            self._observers.remove(observer)
 
     def _notify(self, snap: KillSwitchSnapshot) -> None:
         with self._lock:
@@ -215,7 +213,7 @@ class KillSwitch:
         for obs in observers:
             try:
                 obs(snap)
-            except Exception as exc:  # noqa: BLE001 - observer is untrusted
+            except Exception as exc:
                 logger.warning(
                     "kill_switch.observer_failed",
                     observer=getattr(obs, "__name__", repr(obs)),

@@ -19,10 +19,9 @@ from engine.api.auth.dependency import get_current_user
 from engine.api.auth.local import _hash_password
 from engine.api.auth.mfa_service import MFAServiceError
 from engine.app import create_app
-from engine.db.models import LegalDocument, Portfolio, User, WebhookConfig
+from engine.db.models import LegalDocument, User, WebhookConfig
 from engine.deps import get_db
 from tests.conftest import _fake_authenticated_user
-
 
 # ---------- engine/app.py ----------
 
@@ -37,8 +36,8 @@ class TestConfigureDataProviders:
             _configure_data_providers()
 
     def test_configure_from_file_success(self, monkeypatch):
-        from engine.app import _configure_data_providers
         from engine import config
+        from engine.app import _configure_data_providers
 
         monkeypatch.setattr(config.settings, "data_providers_config", "/path/to/config.yaml")
 
@@ -53,8 +52,8 @@ class TestConfigureDataProviders:
             _configure_data_providers()
 
     def test_configure_from_file_failure_logs(self, monkeypatch):
-        from engine.app import _configure_data_providers
         from engine import config
+        from engine.app import _configure_data_providers
 
         monkeypatch.setattr(config.settings, "data_providers_config", "/bad/path")
 
@@ -68,8 +67,8 @@ class TestConfigureDataProviders:
             _configure_data_providers()
 
     def test_configure_default_yahoo(self, monkeypatch):
-        from engine.app import _configure_data_providers
         from engine import config
+        from engine.app import _configure_data_providers
 
         monkeypatch.setattr(config.settings, "data_providers_config", None)
 
@@ -82,8 +81,8 @@ class TestConfigureDataProviders:
             mock_registry.register.assert_called_once()
 
     def test_configure_default_yahoo_already_registered(self, monkeypatch):
-        from engine.app import _configure_data_providers
         from engine import config
+        from engine.app import _configure_data_providers
 
         monkeypatch.setattr(config.settings, "data_providers_config", None)
 
@@ -97,24 +96,24 @@ class TestConfigureDataProviders:
 
 class TestBuildAuthRegistry:
     def test_build_with_local(self, monkeypatch):
-        from engine.app import _build_auth_registry
         from engine import config
+        from engine.app import _build_auth_registry
 
         monkeypatch.setattr(config.settings, "auth_providers", "local")
         registry = _build_auth_registry()
         assert "local" in registry.providers
 
     def test_build_with_empty(self, monkeypatch):
-        from engine.app import _build_auth_registry
         from engine import config
+        from engine.app import _build_auth_registry
 
         monkeypatch.setattr(config.settings, "auth_providers", "")
         registry = _build_auth_registry()
         assert len(registry.providers) == 0
 
     def test_build_with_unknown_logs_warning(self, monkeypatch):
-        from engine.app import _build_auth_registry
         from engine import config
+        from engine.app import _build_auth_registry
 
         monkeypatch.setattr(config.settings, "auth_providers", "unknown_provider")
         registry = _build_auth_registry()
@@ -154,7 +153,7 @@ class TestAuthRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.post(
@@ -178,7 +177,7 @@ class TestAuthRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.post(
@@ -211,7 +210,7 @@ class TestAuthRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.post(
@@ -232,7 +231,7 @@ class TestAuthRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get("/api/v1/auth/nonexistent/authorize")
@@ -246,7 +245,7 @@ class TestAuthRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get("/api/v1/auth/google/callback?code=x&state=")
@@ -260,7 +259,7 @@ class TestAuthRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get(
@@ -334,7 +333,7 @@ class TestMFARoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         with patch(
             "engine.api.routes.mfa.verify_challenge", side_effect=MFAServiceError("bad token")
@@ -435,7 +434,6 @@ class TestMFARoutes:
 class TestWebhookRoutesExtended:
     @staticmethod
     def _add_user_to_db(db_session, fake_user):
-        from engine.db.models import User
 
         db_user = User(
             id=fake_user.id,
@@ -609,7 +607,7 @@ class TestWebhookRoutesExtended:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.post(f"/api/v1/webhooks/{uuid.uuid4()}/test")
@@ -660,7 +658,7 @@ class TestLegalRoutesExtended:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get("/api/v1/legal/documents/nonexistent-doc")
@@ -726,7 +724,7 @@ class TestLegalRoutesExtended:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get("/api/v1/legal/documents?category=terms")
@@ -754,13 +752,13 @@ class TestApiKeyHelpers:
             generate_token(env="has spaces")
 
     def test_split_token_too_short(self):
-        from engine.api.auth.api_keys import split_token, ApiKeyError
+        from engine.api.auth.api_keys import ApiKeyError, split_token
 
         with pytest.raises(ApiKeyError):
             split_token("nxs_short")
 
     def test_split_token_not_engine(self):
-        from engine.api.auth.api_keys import split_token, ApiKeyError
+        from engine.api.auth.api_keys import ApiKeyError, split_token
 
         with pytest.raises(ApiKeyError):
             split_token("not_engine_token_at_all")

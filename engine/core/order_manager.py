@@ -7,19 +7,23 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
+from typing import TYPE_CHECKING
 
 import structlog
-from engine.core.cost_model import ICostModel
-from engine.core.portfolio import Portfolio
-from engine.core.risk_engine import RiskEngine
-from engine.core.signal import Side, Signal
 from pydantic import BaseModel, Field
+
+from engine.core.signal import Side, Signal
+
+if TYPE_CHECKING:
+    from engine.core.cost_model import ICostModel
+    from engine.core.portfolio import Portfolio
+    from engine.core.risk_engine import RiskEngine
 
 logger = structlog.get_logger()
 
 
-class OrderStatus(str, Enum):
+class OrderStatus(StrEnum):
     PENDING = "pending"
     VALIDATED = "validated"
     COSTED = "costed"
@@ -33,7 +37,7 @@ class OrderStatus(str, Enum):
     FAILED = "failed"
 
 
-class OrderType(str, Enum):
+class OrderType(StrEnum):
     MARKET = "market"
     LIMIT = "limit"
     STOP = "stop"

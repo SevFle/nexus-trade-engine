@@ -14,7 +14,6 @@ from engine.core.options import (
     implied_volatility,
 )
 
-
 # ---------------------------------------------------------------------------
 # Pricing — golden values
 # ---------------------------------------------------------------------------
@@ -145,7 +144,7 @@ class TestGreeks:
 
     def test_call_put_gamma_equal(self):
         # Gamma is the same for calls and puts.
-        kw = dict(S=100, K=100, T=0.5, r=0.05, sigma=0.20)
+        kw = {"S": 100, "K": 100, "T": 0.5, "r": 0.05, "sigma": 0.20}
         gc = bs_greeks(option_type=OptionType.CALL, **kw)
         gp = bs_greeks(option_type=OptionType.PUT, **kw)
         assert gc.gamma == pytest.approx(gp.gamma, abs=1e-12)
@@ -158,7 +157,7 @@ class TestGreeks:
         assert g.vega > 0
 
     def test_call_rho_positive_put_rho_negative(self):
-        kw = dict(S=100, K=100, T=0.5, r=0.05, sigma=0.20)
+        kw = {"S": 100, "K": 100, "T": 0.5, "r": 0.05, "sigma": 0.20}
         gc = bs_greeks(option_type=OptionType.CALL, **kw)
         gp = bs_greeks(option_type=OptionType.PUT, **kw)
         assert gc.rho > 0
@@ -166,7 +165,7 @@ class TestGreeks:
 
     def test_finite_difference_delta(self):
         # delta ~= (P(S+h) - P(S-h)) / (2h)
-        kw = dict(K=100, T=0.5, r=0.05, sigma=0.20)
+        kw = {"K": 100, "T": 0.5, "r": 0.05, "sigma": 0.20}
         S = 100.0
         h = 1e-3
         analytic = bs_greeks(option_type=OptionType.CALL, S=S, **kw).delta
@@ -178,7 +177,7 @@ class TestGreeks:
 
     def test_finite_difference_vega(self):
         # vega ~= (P(sigma+h) - P(sigma-h)) / (2h)
-        kw = dict(S=100, K=100, T=0.5, r=0.05)
+        kw = {"S": 100, "K": 100, "T": 0.5, "r": 0.05}
         sigma = 0.20
         h = 1e-4
         analytic = bs_greeks(option_type=OptionType.CALL, sigma=sigma, **kw).vega
@@ -208,7 +207,7 @@ class TestGreeks:
 
 class TestImpliedVol:
     def test_round_trip_call(self):
-        kw = dict(S=100, K=100, T=0.5, r=0.05, q=0.0)
+        kw = {"S": 100, "K": 100, "T": 0.5, "r": 0.05, "q": 0.0}
         true_sigma = 0.234
         market = bs_price(option_type=OptionType.CALL, sigma=true_sigma, **kw)
         iv = implied_volatility(
@@ -217,7 +216,7 @@ class TestImpliedVol:
         assert iv == pytest.approx(true_sigma, abs=1e-6)
 
     def test_round_trip_put(self):
-        kw = dict(S=100, K=110, T=0.25, r=0.03, q=0.01)
+        kw = {"S": 100, "K": 110, "T": 0.25, "r": 0.03, "q": 0.01}
         true_sigma = 0.45
         market = bs_price(option_type=OptionType.PUT, sigma=true_sigma, **kw)
         iv = implied_volatility(

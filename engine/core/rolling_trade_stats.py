@@ -25,7 +25,7 @@ Out of scope:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from engine.core.drawdown_analytics import underwater_curve
 from engine.core.trade_stats import (
@@ -33,6 +33,9 @@ from engine.core.trade_stats import (
     profit_factor,
     win_loss_ratio,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def _validate_window(window: int) -> None:

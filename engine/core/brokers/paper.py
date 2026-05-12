@@ -269,7 +269,7 @@ class PaperBroker:
 class _Pending:
     """Internal record for a resting paper order."""
 
-    __slots__ = ("oms_order_id", "symbol", "quantity", "order_type")
+    __slots__ = ("oms_order_id", "order_type", "quantity", "symbol")
 
     def __init__(
         self,

@@ -8,10 +8,10 @@ signals.py, and testing.py modules working together.
 
 from __future__ import annotations
 
-import math
 from datetime import UTC, datetime
 
 import pytest
+
 from nexus_sdk import (
     CostBreakdown,
     DataFeed,
@@ -124,7 +124,7 @@ class _UniverseScorer(IScoringStrategy):
         self, universe: list[str], market: MarketState, costs
     ) -> ScoringResult:
         scores = []
-        normalizer = ZScoreNormalizer()
+        ZScoreNormalizer()
         for symbol in universe:
             price = market.latest(symbol)
             if price is None:

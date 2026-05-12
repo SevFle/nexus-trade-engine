@@ -7,9 +7,11 @@ ScoringExecutor, and API endpoints.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 import yaml
+
 from nexus_sdk.scoring import (
     FactorDirection,
     FactorScore,
@@ -19,8 +21,10 @@ from nexus_sdk.scoring import (
     SymbolScore,
     ZScoreNormalizer,
 )
-from nexus_sdk.signals import Signal
 from nexus_sdk.strategy import MarketState, StrategyConfig
+
+if TYPE_CHECKING:
+    from nexus_sdk.signals import Signal
 
 
 @pytest.fixture

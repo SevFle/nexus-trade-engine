@@ -86,7 +86,7 @@ class TestIsPendingDeletion:
     async def test_false_after_cancel(self, db_session: AsyncSession, test_user):
         await request_deletion(db_session, user_id=test_user.id)
         await cancel_deletion(db_session, user_id=test_user.id)
-        pending, due_at = await is_pending_deletion(db_session, test_user.id)
+        pending, _due_at = await is_pending_deletion(db_session, test_user.id)
         assert pending is False
 
 

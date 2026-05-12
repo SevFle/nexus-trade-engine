@@ -7,7 +7,7 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from engine.db.models import DSRequest, User
+from engine.db.models import User
 from engine.privacy.dsr import (
     DSR_KINDS,
     list_user_requests,

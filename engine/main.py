@@ -8,13 +8,14 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 import structlog
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 from engine.api.routes import backtest, marketplace, portfolio, strategies
 from engine.config import settings
 from engine.db.session import dispose_engine, init_db
 from engine.events.bus import EventBus
 from engine.plugins.registry import PluginRegistry
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

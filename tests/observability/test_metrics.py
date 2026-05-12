@@ -90,9 +90,8 @@ class TestRecordingBackend:
 
     def test_timer_records_even_on_exception(self):
         b = RecordingBackend()
-        with pytest.raises(RuntimeError):
-            with b.timer("request.latency_ms"):
-                raise RuntimeError("boom")
+        with pytest.raises(RuntimeError), b.timer("request.latency_ms"):
+            raise RuntimeError("boom")
         # Failure latency must still be captured.
         assert ("request.latency_ms", ()) in b.histograms
 

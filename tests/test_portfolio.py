@@ -5,11 +5,11 @@ tax lot consumption, error paths, and snapshot methods.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 
-from engine.core.cost_model import DefaultCostModel, TaxMethod
+from engine.core.cost_model import TaxMethod
 from engine.core.portfolio import Portfolio, PortfolioSnapshot, Position
 
 

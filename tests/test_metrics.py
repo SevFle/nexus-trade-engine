@@ -451,7 +451,7 @@ class TestConsecutiveStreaks:
         )
         report = metrics.calculate()
 
-        assert report.max_consecutive_wins == 2  # noqa: PLR2004
+        assert report.max_consecutive_wins == 2
         assert report.max_consecutive_losses == 1
 
 
@@ -631,9 +631,9 @@ class TestRollingWindowMetrics:
         )
         report = metrics.calculate()
 
-        assert len(report.rolling_metrics) == 2  # noqa: PLR2004
-        assert report.rolling_metrics[0].window_days == 20  # noqa: PLR2004
-        assert report.rolling_metrics[1].window_days == 60  # noqa: PLR2004
+        assert len(report.rolling_metrics) == 2
+        assert report.rolling_metrics[0].window_days == 20
+        assert report.rolling_metrics[1].window_days == 60
         for rm in report.rolling_metrics:
             assert isinstance(rm.sharpe_ratio, float)
             assert isinstance(rm.volatility_annual_pct, float)

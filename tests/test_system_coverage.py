@@ -75,7 +75,7 @@ class TestSystemStatusEndpoint:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get("/api/v1/system/status")

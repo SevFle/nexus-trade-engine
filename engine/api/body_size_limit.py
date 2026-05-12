@@ -23,8 +23,10 @@ app or by raising the cap at the proxy layer.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 
 class BodySizeLimitExceededError(Exception):

@@ -21,19 +21,23 @@ import hmac
 import json
 import time
 import uuid
-from collections.abc import Awaitable, Callable
-from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import structlog
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from engine.db.models import WebhookConfig, WebhookDelivery
-from engine.events.bus import EventBus, EventType
 from engine.observability.metrics import MetricsBackend, get_metrics
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+    from contextlib import AbstractAsyncContextManager
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from engine.events.bus import EventBus, EventType
 
 logger = structlog.get_logger()
 

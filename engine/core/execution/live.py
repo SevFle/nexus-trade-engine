@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import structlog
+
 from engine.core.execution.base import ExecutionBackend, FillResult
 
 if TYPE_CHECKING:
@@ -77,5 +78,5 @@ class LiveBackend(ExecutionBackend):
             )
 
         except Exception as e:
-            logger.error("live.execution_error", order_id=order.id, error=str(e))
+            logger.exception("live.execution_error", order_id=order.id, error=str(e))
             return FillResult(success=False, reason=f"Broker error: {e!s}")

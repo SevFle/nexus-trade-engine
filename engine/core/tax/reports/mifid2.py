@@ -80,17 +80,17 @@ import io
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 
 _TWOPLACES = Decimal("0.01")
 
 
-class Side(str, Enum):
+class Side(StrEnum):
     BUYI = "BUYI"  # ESMA RTS 22 buy code
     SELL = "SELL"  # ESMA RTS 22 sell code
 
 
-class TradingCapacity(str, Enum):
+class TradingCapacity(StrEnum):
     """ESMA RTS 22 trading-capacity codes."""
 
     DEAL = "DEAL"  # dealing on own account
@@ -98,7 +98,7 @@ class TradingCapacity(str, Enum):
     AOTC = "AOTC"  # any other trading capacity (agency)
 
 
-class IdType(str, Enum):
+class IdType(StrEnum):
     """Identification type for buyer/seller. The full RTS 22 set is
     larger; this scaffold covers LEI for entities and NIDN (national
     identifier) for natural persons."""
@@ -107,7 +107,7 @@ class IdType(str, Enum):
     NIDN = "NIDN"
 
 
-class ShortSaleIndicator(str, Enum):
+class ShortSaleIndicator(StrEnum):
     """ESMA RTS 22 field 63 short-sale codes."""
 
     SESH = "SESH"  # short sale with no exemption

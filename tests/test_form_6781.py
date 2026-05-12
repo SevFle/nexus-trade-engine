@@ -81,9 +81,9 @@ class TestContractValidation:
 
 class TestConstants:
     def test_60_40_split_constants_pinned(self):
-        assert LONG_TERM_PCT == Decimal("0.60")
-        assert SHORT_TERM_PCT == Decimal("0.40")
-        assert LONG_TERM_PCT + SHORT_TERM_PCT == Decimal("1.00")
+        assert Decimal("0.60") == LONG_TERM_PCT
+        assert Decimal("0.40") == SHORT_TERM_PCT
+        assert Decimal("1.00") == LONG_TERM_PCT + SHORT_TERM_PCT
 
 
 # ---------------------------------------------------------------------------

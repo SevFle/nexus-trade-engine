@@ -33,9 +33,12 @@ What's NOT here (explicit follow-ups)
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from datetime import date
 
 _TWOPLACES = Decimal("0.01")
 _ZERO = Decimal("0.00")
@@ -57,7 +60,7 @@ CHURCH_TAX_RATE_BAYERN_BW: Decimal = Decimal("0.08")
 CHURCH_TAX_RATE_OTHER: Decimal = Decimal("0.09")
 
 
-class AssetClass(str, Enum):
+class AssetClass(StrEnum):
     """Coarse asset bucket. ``EQUITY`` losses are ring-fenced under
     § 20 Abs. 6 Satz 4 EStG; ``OTHER`` losses can offset any other
     capital income."""

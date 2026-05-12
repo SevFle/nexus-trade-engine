@@ -25,8 +25,11 @@ Out of scope:
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping, Sequence
 
 
 @dataclass(frozen=True)
@@ -82,7 +85,7 @@ def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float:
     if len(xs) < 2:
         return 0.0
     mx, my = _mean(xs), _mean(ys)
-    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=False))
     dx = math.sqrt(sum((x - mx) ** 2 for x in xs))
     dy = math.sqrt(sum((y - my) ** 2 for y in ys))
     if dx == 0.0 or dy == 0.0:

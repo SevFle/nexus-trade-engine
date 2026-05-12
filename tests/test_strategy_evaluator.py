@@ -9,7 +9,6 @@ import pytest
 from engine.core.metrics import MetricsReport, RollingWindowMetrics
 from engine.core.strategy_evaluator import (
     EvaluationDimension,
-    EvaluationResult,
     EvaluationWeights,
     StrategyEvaluator,
     StrategyEvaluatorError,
@@ -335,7 +334,7 @@ class TestGrade:
         assert out.grade == "F"
 
     @pytest.mark.parametrize(
-        "score,expected",
+        ("score", "expected"),
         [
             (95.0, "A+"),
             (85.0, "A"),

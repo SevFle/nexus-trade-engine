@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -18,7 +18,7 @@ from engine.data.retention_cleanup import (
     partition_boundaries,
 )
 
-UTC = timezone.utc
+UTC = UTC
 NOW = datetime(2026, 5, 3, 12, 0, tzinfo=UTC)
 
 

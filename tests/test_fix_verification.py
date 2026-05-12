@@ -16,12 +16,10 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
-from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
+from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from unittest.mock import AsyncMock, patch
 
-import httpx
 import jwt
 import numpy as np
 import pandas as pd
@@ -39,8 +37,9 @@ from engine.api.auth.jwt import (
     hash_token,
 )
 from engine.api.routes.reference import (
-    _serialize_yahoo,
     get_search_index,
+)
+from engine.api.routes.reference import (
     router as reference_router,
 )
 from engine.core.backtest_runner import BacktestConfig, BacktestRunner
@@ -56,7 +55,6 @@ from engine.data.feeds import MarketDataProvider
 from engine.data.providers._resilience import call_with_retry
 from engine.data.providers.base import (
     FatalProviderError,
-    RateLimit,
     TransientProviderError,
 )
 from engine.observability.metrics import (
@@ -68,7 +66,6 @@ from engine.observability.metrics import (
 from engine.reference.model import RefInstrument
 from engine.reference.search import SearchIndex
 from engine.reference.seed import seed_index
-
 
 # ---------------------------------------------------------------------------
 # Helpers

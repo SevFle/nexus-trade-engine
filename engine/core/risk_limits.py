@@ -32,8 +32,11 @@ import math
 import threading
 import time
 import types
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
 
 class RiskLimitsError(ValueError):

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 
-class Topic(str, Enum):
+class Topic(StrEnum):
     """Broadcast channels addressable by clients."""
 
     PORTFOLIO = "portfolio"

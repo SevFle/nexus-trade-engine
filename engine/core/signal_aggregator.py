@@ -46,13 +46,16 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from collections.abc import Callable, Iterable
-from enum import Enum
+from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from engine.core.signal import Side, Signal, SignalBatch
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
 
-class AggregationMethod(str, Enum):
+
+class AggregationMethod(StrEnum):
     UNANIMOUS = "unanimous"
     MAJORITY = "majority"
     WEIGHTED = "weighted"
@@ -122,7 +125,7 @@ class SignalAggregator:
                 per_symbol[sig.symbol][batch.strategy_id] = sig
 
         out: list[Signal] = []
-        for _symbol, by_strategy in per_symbol.items():
+        for by_strategy in per_symbol.values():
             decision = self._decide(by_strategy)
             if decision is None:
                 continue

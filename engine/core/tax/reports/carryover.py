@@ -31,8 +31,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
-from engine.core.tax.reports.schedule_d import ScheduleDSummary
+if TYPE_CHECKING:
+    from engine.core.tax.reports.schedule_d import ScheduleDSummary
 
 _TWOPLACES = Decimal("0.01")
 _ZERO = Decimal("0.00")
@@ -156,9 +158,9 @@ def apply_carryover(
 
 
 __all__ = [
-    "CapitalLossApplication",
-    "CapitalLossCarryover",
     "DEDUCTIBLE_CAP_DEFAULT",
     "DEDUCTIBLE_CAP_MFS",
+    "CapitalLossApplication",
+    "CapitalLossCarryover",
     "apply_carryover",
 ]

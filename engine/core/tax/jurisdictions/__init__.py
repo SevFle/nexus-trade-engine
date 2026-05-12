@@ -24,14 +24,14 @@ Out of scope (explicit follow-ups):
 """
 
 from engine.core.tax.jurisdictions.base import LotMethod, TaxJurisdiction
+from engine.core.tax.jurisdictions.de import Germany
+from engine.core.tax.jurisdictions.fr import France
+from engine.core.tax.jurisdictions.gb import UnitedKingdom
 from engine.core.tax.jurisdictions.registry import (
     get_jurisdiction,
     list_jurisdictions,
     register_jurisdiction,
 )
-from engine.core.tax.jurisdictions.de import Germany
-from engine.core.tax.jurisdictions.fr import France
-from engine.core.tax.jurisdictions.gb import UnitedKingdom
 from engine.core.tax.jurisdictions.us import UnitedStates
 
 __all__ = [

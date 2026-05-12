@@ -33,7 +33,10 @@ Out of scope:
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def cumulative_returns(returns: Sequence[float]) -> list[float]:
@@ -116,7 +119,7 @@ def active_returns(
         raise ValueError(
             f"length mismatch: {len(portfolio)} vs {len(benchmark)}"
         )
-    return [p - b for p, b in zip(portfolio, benchmark)]
+    return [p - b for p, b in zip(portfolio, benchmark, strict=False)]
 
 
 def tracking_error(
@@ -155,7 +158,7 @@ def beating_benchmark_pct(
         )
     if not portfolio:
         return 0.0
-    wins = sum(1 for p, b in zip(portfolio, benchmark) if p > b)
+    wins = sum(1 for p, b in zip(portfolio, benchmark, strict=False) if p > b)
     return wins / len(portfolio)
 
 

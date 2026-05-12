@@ -55,7 +55,7 @@ class SystemStatusResponse(BaseModel):
 
 @router.get("/status", response_model=SystemStatusResponse)
 async def system_status(
-    user: User = Depends(get_current_user),  # noqa: ARG001 — auth is the goal
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SystemStatusResponse:
     components: list[ComponentStatus] = []

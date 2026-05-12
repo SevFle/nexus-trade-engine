@@ -24,7 +24,10 @@ Out of scope:
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 DEFAULT_ANNUALISATION = 252
 
@@ -50,7 +53,7 @@ def _beta_window(
         return 0.0
     mp = sum(port) / n
     mb = sum(bench) / n
-    cov = sum((p - mp) * (b - mb) for p, b in zip(port, bench)) / n
+    cov = sum((p - mp) * (b - mb) for p, b in zip(port, bench, strict=False)) / n
     var_b = sum((b - mb) ** 2 for b in bench) / n
     if var_b < 1e-20:
         return 0.0
@@ -147,7 +150,7 @@ def rolling_tracking_error(
             p - b
             for p, b in zip(
                 portfolio_returns[i - window + 1 : i + 1],
-                benchmark_returns[i - window + 1 : i + 1],
+                benchmark_returns[i - window + 1 : i + 1], strict=False,
             )
         ]
         out[i] = _stdev(active) * sqrt_ann
@@ -178,7 +181,7 @@ def rolling_information_ratio(
     for i in range(window - 1, n):
         port = portfolio_returns[i - window + 1 : i + 1]
         bench = benchmark_returns[i - window + 1 : i + 1]
-        active = [p - b for p, b in zip(port, bench)]
+        active = [p - b for p, b in zip(port, bench, strict=False)]
         sd = _stdev(active)
         if sd == 0.0:
             out[i] = 0.0

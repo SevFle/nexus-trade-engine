@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from nexus_sdk.signals import Signal, Side, SignalStrength
+from nexus_sdk.signals import Side, Signal, SignalStrength
 from nexus_sdk.strategy import (
     DataFeed,
     IStrategy,

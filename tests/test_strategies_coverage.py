@@ -22,7 +22,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
 
         mock_registry = MagicMock()
         mock_registry.list_all.return_value = []
@@ -43,7 +43,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
 
         mock_registry = MagicMock()
         mock_registry.get.return_value = None
@@ -62,7 +62,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
 
         mock_registry = MagicMock()
         mock_registry.unload = AsyncMock()
@@ -83,7 +83,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
 
         mock_registry = MagicMock()
         mock_registry.reload = AsyncMock(return_value=True)
@@ -102,7 +102,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
 
         mock_registry = MagicMock()
         mock_registry.reload = AsyncMock(return_value=False)
@@ -121,7 +121,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
 
         mock_registry = MagicMock()
         mock_entry = MagicMock()
@@ -142,7 +142,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
 
         mock_registry = MagicMock()
         mock_entry = MagicMock()

@@ -12,7 +12,6 @@ from engine.core.rolling_correlation import (
     rolling_correlation_matrix,
 )
 
-
 # ---------------------------------------------------------------------------
 # rolling_correlation
 # ---------------------------------------------------------------------------

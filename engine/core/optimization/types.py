@@ -28,7 +28,8 @@ class ParamSpec:
                 f"ParamSpec({self.name!r}): set exactly one of `choices` or `low`+`high`"
             )
         if has_range:
-            assert self.low is not None and self.high is not None
+            assert self.low is not None
+            assert self.high is not None
             if self.low > self.high:
                 raise ValueError(
                     f"ParamSpec({self.name!r}): low must be <= high"

@@ -19,7 +19,6 @@ import asyncio
 import json
 import time
 from datetime import UTC, datetime, timedelta
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -50,7 +49,6 @@ from engine.data.providers.base import (
     RateLimit,
     TransientProviderError,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -113,13 +111,13 @@ class _FakeClient:
 
 
 def _settings(monkeypatch, **overrides):
-    defaults = dict(
-        oidc_discovery_url="https://id.example.com/.well-known/openid-configuration",
-        oidc_client_id="cid",
-        oidc_client_secret="csecret",
-        oidc_redirect_uri="https://app.example.com/callback",
-        oidc_role_claim="roles",
-    )
+    defaults = {
+        "oidc_discovery_url": "https://id.example.com/.well-known/openid-configuration",
+        "oidc_client_id": "cid",
+        "oidc_client_secret": "csecret",
+        "oidc_redirect_uri": "https://app.example.com/callback",
+        "oidc_role_claim": "roles",
+    }
     defaults.update(overrides)
     s = Settings(**defaults)
     monkeypatch.setattr("engine.api.auth.oidc.settings", s)
@@ -216,7 +214,7 @@ class TestTokenBucketUnit:
             pass
         now = time.monotonic()
         elapsed = now - bucket._updated
-        expected_tokens = min(1.0, 0.0 + elapsed * (600 / 60.0))
+        min(1.0, 0.0 + elapsed * (600 / 60.0))
         assert bucket._tokens >= 0.0
 
 
@@ -348,7 +346,7 @@ class TestOIDCDiscoveryEdgeCases:
 
 class TestOIDCJWKSEdgeCases:
     async def test_jwks_missing_keys_field(self, oidc_provider, mock_settings, rsa_keys):
-        _, pub = rsa_keys
+        _, _pub = rsa_keys
         disc_resp = _FakeResponse(json_data=DISCOVERY_DOC)
         jwks_resp = _FakeResponse(json_data={})
         with patch("httpx.AsyncClient", return_value=_FakeClient(get_responses=[disc_resp, jwks_resp])):
@@ -456,7 +454,7 @@ class TestOIDCAuthenticateEdgeCases:
             post_responses=[_FakeResponse(json_data={"id_token": "x"})],
         )
         with patch("httpx.AsyncClient", return_value=counting2):
-            r2 = await oidc_provider.authenticate(code="c2", db=mock_db)
+            await oidc_provider.authenticate(code="c2", db=mock_db)
 
         assert call_count <= 3
 
@@ -475,7 +473,7 @@ class TestOIDCAuthenticateEdgeCases:
         mock_db.refresh = AsyncMock()
 
         created = []
-        mock_db.add = MagicMock(side_effect=lambda u: created.append(u))
+        mock_db.add = MagicMock(side_effect=created.append)
 
         with patch("httpx.AsyncClient", return_value=client):
             result = await oidc_provider.authenticate(code="code", db=mock_db)
@@ -485,7 +483,7 @@ class TestOIDCAuthenticateEdgeCases:
         assert created[0].role == "user"
 
     async def test_custom_role_claim(self, monkeypatch, rsa_keys):
-        s = _settings(monkeypatch, oidc_role_claim="groups")
+        _settings(monkeypatch, oidc_role_claim="groups")
         provider = OIDCAuthProvider()
 
         client = _full_client(
@@ -505,7 +503,7 @@ class TestOIDCAuthenticateEdgeCases:
         mock_db.refresh = AsyncMock()
 
         created = []
-        mock_db.add = MagicMock(side_effect=lambda u: created.append(u))
+        mock_db.add = MagicMock(side_effect=created.append)
 
         with patch("httpx.AsyncClient", return_value=client):
             result = await provider.authenticate(code="code", db=mock_db)
@@ -794,7 +792,6 @@ class TestOIDCIntegrationWithDB:
         await db_session.commit()
 
     async def test_existing_user_lookup_in_db(self, oidc_provider, mock_settings, rsa_keys, db_session):
-        from sqlalchemy import select
 
         from engine.db.models import User
 

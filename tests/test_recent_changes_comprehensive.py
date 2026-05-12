@@ -19,7 +19,6 @@ from decimal import Decimal
 from http import HTTPStatus
 from unittest.mock import AsyncMock, patch
 
-import httpx
 import numpy as np
 import pandas as pd
 import pytest
@@ -28,10 +27,10 @@ from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 
 from engine.api.routes.reference import (
-    _MAX_LIMIT,
-    _MAX_QUERY_LEN,
     _serialize_yahoo,
     get_search_index,
+)
+from engine.api.routes.reference import (
     router as reference_router,
 )
 from engine.core.backtest_runner import BacktestConfig, BacktestRunner
@@ -68,7 +67,6 @@ from engine.reference.model import (
 )
 from engine.reference.search import SearchIndex
 from engine.reference.seed import _INSTRUMENTS, seed_index
-
 
 # ---------------------------------------------------------------------------
 # Helpers

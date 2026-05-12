@@ -17,7 +17,6 @@ from engine.core.execution_costs import (
     opportunity_cost,
 )
 
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -25,9 +24,9 @@ from engine.core.execution_costs import (
 
 class TestConstants:
     def test_defaults_pinned(self):
-        assert NSCC_FEE_PER_SIDE_2025 == Decimal("0.0002")
-        assert DEFAULT_TAKER_FEE_PER_SHARE == Decimal("0.0030")
-        assert DEFAULT_MAKER_REBATE_PER_SHARE == Decimal("0.0020")
+        assert Decimal("0.0002") == NSCC_FEE_PER_SIDE_2025
+        assert Decimal("0.0030") == DEFAULT_TAKER_FEE_PER_SHARE
+        assert Decimal("0.0020") == DEFAULT_MAKER_REBATE_PER_SHARE
 
 
 # ---------------------------------------------------------------------------

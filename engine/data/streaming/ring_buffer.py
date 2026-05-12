@@ -20,14 +20,16 @@ from __future__ import annotations
 
 import threading
 from collections import deque
-from collections.abc import Iterator
-from enum import Enum
-from typing import Generic, TypeVar
+from enum import StrEnum
+from typing import TYPE_CHECKING, Generic, TypeVar
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 T = TypeVar("T")
 
 
-class DropPolicy(str, Enum):
+class DropPolicy(StrEnum):
     """How a full :class:`BoundedBuffer` reacts to a new ``put``."""
 
     # Push out the oldest item to make room — preserves the freshest

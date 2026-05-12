@@ -36,7 +36,6 @@ What's NOT here (explicit follow-ups):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import structlog
@@ -44,6 +43,8 @@ import structlog
 from engine.observability.metrics import MetricsBackend, get_metrics
 
 if TYPE_CHECKING:
+    from decimal import Decimal
+
     from engine.core.live.kill_switch import KillSwitch
     from engine.core.oms.order import Order
 

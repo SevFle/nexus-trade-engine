@@ -26,7 +26,10 @@ Out of scope:
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
 
 
 def _validate_window(window: int) -> None:
@@ -41,7 +44,7 @@ def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float:
         return 0.0
     mx = sum(xs) / n
     my = sum(ys) / n
-    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=False))
     dx = math.sqrt(sum((x - mx) ** 2 for x in xs))
     dy = math.sqrt(sum((y - my) ** 2 for y in ys))
     if dx == 0.0 or dy == 0.0:

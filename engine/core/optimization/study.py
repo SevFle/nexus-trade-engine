@@ -85,7 +85,7 @@ class Study:
                 break
             try:
                 score = float(self.objective(params))
-            except Exception as exc:  # noqa: BLE001 - the operator's objective is untrusted
+            except Exception as exc:
                 logger.warning(
                     "optimization.trial_failed",
                     sampler=sampler,

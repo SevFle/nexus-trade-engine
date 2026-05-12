@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 # Maximum iterations + convergence tolerance for the implied-vol solver.
 _IV_MAX_ITER: int = 100
@@ -48,7 +48,7 @@ _VOL_LO: float = 1e-4
 _VOL_HI: float = 5.0  # 500% annualised — enough head room for crisis vol
 
 
-class OptionType(str, Enum):
+class OptionType(StrEnum):
     CALL = "call"
     PUT = "put"
 
@@ -118,10 +118,9 @@ def bs_price(
     _validate(S, K, T, sigma)
     if T == 0:
         # At expiration: intrinsic value.
-        intrinsic = (
+        return (
             max(S - K, 0.0) if option_type == OptionType.CALL else max(K - S, 0.0)
         )
-        return intrinsic
     if S == 0:
         # Underlying worthless: call worth 0; put worth K * exp(-rT).
         if option_type == OptionType.CALL:

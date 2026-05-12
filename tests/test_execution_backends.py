@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from engine.core.execution.base import ExecutionBackend, FillResult
+from engine.core.execution.base import FillResult
 from engine.core.execution.live import LiveBackend
 from engine.core.execution.paper import PaperBackend
 

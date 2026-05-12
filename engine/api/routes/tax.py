@@ -91,7 +91,7 @@ class TaxReportRequest(BaseModel):
 async def tax_report(
     code: str,
     req: TaxReportRequest,
-    user: User = Depends(get_current_user),  # noqa: ARG001 - auth gate
+    user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Return the per-jurisdiction tax summary as a JSON dict.
 
@@ -118,7 +118,7 @@ async def tax_report(
 async def tax_report_csv(
     code: str,
     req: TaxReportRequest,
-    user: User = Depends(get_current_user),  # noqa: ARG001 - auth gate
+    user: User = Depends(get_current_user),
 ) -> Response:
     """Same dispatch as :func:`tax_report` but returns the summary as
     a 2-row CSV (header + values). Useful for spreadsheet round-trips

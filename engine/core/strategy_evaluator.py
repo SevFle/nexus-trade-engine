@@ -35,18 +35,21 @@ marketplace ranking.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
+from typing import TYPE_CHECKING
 
-from engine.core.metrics import MetricsReport
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from engine.core.metrics import MetricsReport
 
 
 class StrategyEvaluatorError(ValueError):
     """Bad evaluator configuration or invalid metrics input."""
 
 
-class EvaluationDimension(str, Enum):
+class EvaluationDimension(StrEnum):
     RISK_ADJUSTED_RETURN = "risk_adjusted_return"
     DRAWDOWN_CONTROL = "drawdown_control"
     CONSISTENCY = "consistency"

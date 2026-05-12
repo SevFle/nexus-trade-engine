@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -25,7 +24,6 @@ from engine.core.backtest_runner import BacktestConfig, BacktestResult, Backtest
 from engine.core.cost_model import (
     CostBreakdown,
     DefaultCostModel,
-    ICostModel,
     Money,
     TaxLot,
     TaxMethod,
@@ -36,7 +34,6 @@ from engine.core.portfolio import Portfolio, PortfolioSnapshot, Position
 from engine.core.risk_engine import RiskCheckResult, RiskEngine
 from engine.core.signal import Side, Signal
 from engine.data.feeds import MarketDataProvider
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # Helpers

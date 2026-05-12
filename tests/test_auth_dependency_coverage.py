@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import uuid
-
 import pytest
 
 from engine.api.auth.dependency import (
     ROLE_HIERARCHY,
-    _SCOPE_HIERARCHY,
     _scope_satisfied,
     require_api_scope,
     require_role,

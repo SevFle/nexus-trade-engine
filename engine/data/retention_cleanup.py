@@ -24,11 +24,14 @@ Out of scope:
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
-from engine.data.retention import RetentionPolicy
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from engine.data.retention import RetentionPolicy
 
 DEFAULT_BATCH_SIZE = 10_000
 MAX_BATCH_SIZE = 100_000
@@ -65,7 +68,7 @@ def compute_cleanup_window(
     ``now - compress_after_days`` respectively, or ``None`` when the
     corresponding setting is unset on the policy.
     """
-    now = now if now is not None else datetime.now(timezone.utc)
+    now = now if now is not None else datetime.now(UTC)
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     delete_before = (
@@ -103,7 +106,7 @@ def partition_boundaries(
     """
     if chunk_days <= 0:
         raise ValueError("chunk_days must be > 0")
-    now = now if now is not None else datetime.now(timezone.utc)
+    now = now if now is not None else datetime.now(UTC)
     if window.is_noop:
         return []
     earliest = window.delete_before or window.compress_before
@@ -149,10 +152,10 @@ def estimate_batches(item_count: int, *, batch_size: int = DEFAULT_BATCH_SIZE) -
 
 
 __all__ = [
-    "CleanupWindow",
     "DEFAULT_BATCH_SIZE",
     "MAX_BATCH_SIZE",
     "MIN_BATCH_SIZE",
+    "CleanupWindow",
     "batch_iter",
     "compute_cleanup_window",
     "estimate_batches",

@@ -13,11 +13,9 @@ from engine.app import (
     _configure_data_providers,
     create_app,
 )
-from engine.api.auth.dependency import get_current_user
 from engine.config import settings
 from engine.data.providers import ProviderRegistration, get_registry
 from engine.data.providers.base import AssetClass
-from tests.conftest import _fake_authenticated_user
 
 
 class TestCreateApp:

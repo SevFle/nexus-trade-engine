@@ -12,23 +12,20 @@ Covers:
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from engine.api.auth.dependency import (
-    ROLE_HIERARCHY,
-    _SCOPE_HIERARCHY,
     _scope_satisfied,
+    get_current_user,
     require_api_scope,
     require_role,
 )
-from engine.api.auth.dependency import get_current_user
 from engine.api.routes.websocket import _coerce_topic_list
-from engine.app import create_app
 from engine.api.websocket.manager import VALID_TOPICS
+from engine.app import create_app
 from engine.db.models import User
 from engine.deps import get_db
 from tests.conftest import _fake_authenticated_user
@@ -305,8 +302,8 @@ class TestLocalAuthProvider:
 
     @pytest.mark.asyncio
     async def test_create_user_registration_disabled(self, monkeypatch):
-        from engine.api.auth.local import LocalAuthProvider
         from engine import config
+        from engine.api.auth.local import LocalAuthProvider
 
         monkeypatch.setattr(config.settings, "auth_local_allow_registration", False)
 
@@ -320,8 +317,8 @@ class TestLocalAuthProvider:
 
     @pytest.mark.asyncio
     async def test_create_user_short_password(self, monkeypatch):
-        from engine.api.auth.local import LocalAuthProvider
         from engine import config
+        from engine.api.auth.local import LocalAuthProvider
 
         monkeypatch.setattr(config.settings, "auth_local_allow_registration", True)
 
@@ -335,8 +332,8 @@ class TestLocalAuthProvider:
 
     @pytest.mark.asyncio
     async def test_create_user_email_exists(self, monkeypatch):
-        from engine.api.auth.local import LocalAuthProvider
         from engine import config
+        from engine.api.auth.local import LocalAuthProvider
 
         monkeypatch.setattr(config.settings, "auth_local_allow_registration", True)
 
@@ -355,8 +352,8 @@ class TestLocalAuthProvider:
 
     @pytest.mark.asyncio
     async def test_create_user_success(self, monkeypatch):
-        from engine.api.auth.local import LocalAuthProvider
         from engine import config
+        from engine.api.auth.local import LocalAuthProvider
 
         monkeypatch.setattr(config.settings, "auth_local_allow_registration", True)
 
@@ -378,8 +375,8 @@ class TestLocalAuthProvider:
 
     @pytest.mark.asyncio
     async def test_create_user_default_display_name(self, monkeypatch):
-        from engine.api.auth.local import LocalAuthProvider
         from engine import config
+        from engine.api.auth.local import LocalAuthProvider
 
         monkeypatch.setattr(config.settings, "auth_local_allow_registration", True)
 
@@ -458,7 +455,7 @@ class TestWebSocketHelpers:
         assert result == []
 
     def test_coerce_topic_list_mixed(self):
-        topics = list(VALID_TOPICS)[:1] + ["invalid"]
+        topics = [*list(VALID_TOPICS)[:1], "invalid"]
         result = _coerce_topic_list(topics)
         assert all(t in VALID_TOPICS for t in result)
 
@@ -620,7 +617,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get("/api/v1/strategies/")
@@ -637,7 +634,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get("/api/v1/strategies/nonexistent")
@@ -666,7 +663,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get("/api/v1/strategies/sma_crossover")
@@ -684,7 +681,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.post(
@@ -703,7 +700,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.post("/api/v1/strategies/test/deactivate")
@@ -720,7 +717,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.post("/api/v1/strategies/test/reload")
@@ -737,7 +734,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.post("/api/v1/strategies/test/reload")
@@ -756,7 +753,7 @@ class TestStrategiesRoutes:
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = lambda: _fake_authenticated_user()
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get("/api/v1/strategies/test/health")
@@ -780,13 +777,13 @@ class TestApiKeyHelpers:
             generate_token(env="")
 
     def test_split_token_too_short(self):
-        from engine.api.auth.api_keys import split_token, ApiKeyError
+        from engine.api.auth.api_keys import ApiKeyError, split_token
 
         with pytest.raises(ApiKeyError):
             split_token("nxs_short")
 
     def test_split_token_not_engine(self):
-        from engine.api.auth.api_keys import split_token, ApiKeyError
+        from engine.api.auth.api_keys import ApiKeyError, split_token
 
         with pytest.raises(ApiKeyError):
             split_token("not_engine_token")

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import time
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC
 
 import pandas as pd
 import pytest

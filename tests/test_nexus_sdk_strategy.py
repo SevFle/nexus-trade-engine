@@ -5,8 +5,6 @@ Covers MarketState indicators, IStrategy defaults, DataFeed, and StrategyConfig.
 
 from __future__ import annotations
 
-import pytest
-
 from nexus_sdk.strategy import (
     DataFeed,
     IStrategy,

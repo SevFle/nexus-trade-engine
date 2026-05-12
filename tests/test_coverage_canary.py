@@ -1,9 +1,8 @@
 """Canary test — verifies pytest-cov actually measures nexus_sdk coverage."""
 from __future__ import annotations
 
-import pytest
-
 import coverage
+import pytest
 
 from nexus_sdk import Money, Side, Signal
 

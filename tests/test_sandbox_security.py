@@ -43,7 +43,7 @@ class _ImportOsStrategy:
     version = "1.0.0"
 
     def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
-        import os  # noqa: F401, PLC0415
+        import os  # noqa: F401
 
         return []
 
@@ -53,7 +53,7 @@ class _ImportSubprocessStrategy:
     version = "1.0.0"
 
     def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
-        import subprocess  # noqa: F401, PLC0415
+        import subprocess  # noqa: F401
 
         return []
 
@@ -63,7 +63,7 @@ class _FromOsPathImportStrategy:
     version = "1.0.0"
 
     def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
-        from os.path import join  # noqa: F401, PLC0415
+        from os.path import join  # noqa: F401
 
         return []
 
@@ -73,7 +73,7 @@ class _ImportSysStrategy:
     version = "1.0.0"
 
     def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
-        import sys  # noqa: F401, PLC0415
+        import sys  # noqa: F401
 
         return []
 
@@ -83,7 +83,7 @@ class _ImportIoStrategy:
     version = "1.0.0"
 
     def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
-        import io  # noqa: F401, PLC0415
+        import io  # noqa: F401
 
         return []
 
@@ -177,7 +177,7 @@ class _IoOpenReadStrategy:
         self._target = target_path
 
     def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
-        import io  # noqa: PLC0415
+        import io
 
         with io.open(self._target) as f:  # type: ignore[attr-defined]  # noqa: UP020
             f.read()
@@ -191,7 +191,7 @@ class _DirectHttpxStrategy:
     version = "1.0.0"
 
     async def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
-        import httpx as hx  # noqa: PLC0415
+        import httpx as hx
 
         transport = hx.MockTransport(lambda _r: hx.Response(200))
         async with hx.AsyncClient(transport=transport) as client:
@@ -231,10 +231,10 @@ class TestRestrictedImporter:
         importer = RestrictedImporter()
         importer.install()
         assert importer in sys.meta_path
-        assert importer._installed is True  # noqa: SLF001
+        assert importer._installed is True
         importer.uninstall()
         assert importer not in sys.meta_path
-        assert importer._installed is False  # noqa: SLF001
+        assert importer._installed is False
 
     def test_double_install_is_noop(self) -> None:
         importer = RestrictedImporter()
@@ -393,7 +393,7 @@ class TestSandboxedHttpClient:
         )
         async with client:
             response = await client.get("https://api.anthropic.com/v1/models")
-            assert response.status_code == 200  # noqa: PLR2004
+            assert response.status_code == 200
 
     async def test_blocked_host_raises_permission_error(self) -> None:
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -418,7 +418,7 @@ class TestSandboxedHttpClient:
         )
         async with client:
             response = await client.get("https://api.anthropic.com/v1/models")
-            assert response.status_code == 200  # noqa: PLR2004
+            assert response.status_code == 200
 
     async def test_empty_whitelist_blocks_everything(self) -> None:
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -438,8 +438,8 @@ class TestSandboxedHttpClient:
     ) -> None:
         sandbox = StrategySandbox(_GoodStrategy(), networked_manifest)
         try:
-            assert sandbox._http_client is not None  # noqa: SLF001
-            assert isinstance(sandbox._http_client, SandboxedHttpClient)  # noqa: SLF001
+            assert sandbox._http_client is not None
+            assert isinstance(sandbox._http_client, SandboxedHttpClient)
         finally:
             sandbox.cleanup()
 
@@ -448,7 +448,7 @@ class TestSandboxedHttpClient:
     ) -> None:
         sandbox = StrategySandbox(_GoodStrategy(), manifest)
         try:
-            assert sandbox._http_client is None  # noqa: SLF001
+            assert sandbox._http_client is None
         finally:
             sandbox.cleanup()
 
@@ -470,25 +470,25 @@ class TestBypassDirectHttpx:
 
 class TestResourceLimits:
     def test_parse_memory_mb(self) -> None:
-        assert StrategySandbox._parse_memory("512MB") == 512 * 1024**2  # noqa: SLF001
+        assert StrategySandbox._parse_memory("512MB") == 512 * 1024**2
 
     def test_parse_memory_gb(self) -> None:
-        assert StrategySandbox._parse_memory("2GB") == 2 * 1024**3  # noqa: SLF001
+        assert StrategySandbox._parse_memory("2GB") == 2 * 1024**3
 
     def test_parse_memory_kb(self) -> None:
-        assert StrategySandbox._parse_memory("256KB") == 256 * 1024  # noqa: SLF001
+        assert StrategySandbox._parse_memory("256KB") == 256 * 1024
 
     def test_parse_memory_b(self) -> None:
-        assert StrategySandbox._parse_memory("1024B") == 1024  # noqa: SLF001, PLR2004
+        assert StrategySandbox._parse_memory("1024B") == 1024
 
     def test_parse_memory_plain_number(self) -> None:
-        assert StrategySandbox._parse_memory("1048576") == 1_048_576  # noqa: SLF001, PLR2004
+        assert StrategySandbox._parse_memory("1048576") == 1_048_576
 
     def test_parse_memory_case_insensitive(self) -> None:
-        assert StrategySandbox._parse_memory("512mb") == 512 * 1024**2  # noqa: SLF001
+        assert StrategySandbox._parse_memory("512mb") == 512 * 1024**2
 
     def test_parse_memory_with_spaces(self) -> None:
-        assert StrategySandbox._parse_memory("  512MB  ") == 512 * 1024**2  # noqa: SLF001
+        assert StrategySandbox._parse_memory("  512MB  ") == 512 * 1024**2
 
 
 # ── Layer 4: Filesystem isolation ────────────────────────────────────
@@ -531,14 +531,14 @@ class TestFilesystemIsolation:
     async def test_sandbox_work_dir_created(self, manifest: StrategyManifest) -> None:
         sandbox = StrategySandbox(_GoodStrategy(), manifest)
         try:
-            assert sandbox._work_dir is not None  # noqa: SLF001
-            assert os.path.isdir(sandbox._work_dir)  # noqa: SLF001
+            assert sandbox._work_dir is not None
+            assert os.path.isdir(sandbox._work_dir)
         finally:
             sandbox.cleanup()
 
     async def test_cleanup_removes_work_dir(self, manifest: StrategyManifest) -> None:
         sandbox = StrategySandbox(_GoodStrategy(), manifest)
-        work_dir = sandbox._work_dir  # noqa: SLF001
+        work_dir = sandbox._work_dir
         assert work_dir is not None
         sandbox.cleanup()
         assert not os.path.isdir(work_dir)
@@ -555,7 +555,7 @@ class _InitStashStrategy:
     _os: Any = None
 
     def __init__(self) -> None:
-        import os  # noqa: PLC0415
+        import os
 
         self._os = os
 
@@ -597,7 +597,7 @@ class _ImportCtypesStrategy:
     version = "1.0.0"
 
     def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
-        import _ctypes  # noqa: F401, PLC0415
+        import _ctypes  # noqa: F401
 
         return []
 
@@ -607,7 +607,7 @@ class _ImportThreadStrategy:
     version = "1.0.0"
 
     def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
-        import threading  # noqa: F401, PLC0415
+        import threading  # noqa: F401
 
         return []
 
@@ -617,7 +617,7 @@ class _ImportGcStrategy:
     version = "1.0.0"
 
     def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
-        import gc  # noqa: F401, PLC0415
+        import gc  # noqa: F401
 
         return []
 
@@ -627,7 +627,7 @@ class _ImportPickleStrategy:
     version = "1.0.0"
 
     def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
-        import pickle  # noqa: F401, PLC0415
+        import pickle  # noqa: F401
 
         return []
 

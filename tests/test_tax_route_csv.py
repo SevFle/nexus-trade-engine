@@ -8,7 +8,6 @@ import io
 import pytest
 from httpx import AsyncClient
 
-
 _CSV_PREFIX = "text/csv"
 
 

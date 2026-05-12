@@ -20,7 +20,6 @@ import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.serialization import Encoding
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from engine.api.auth.oidc import OIDCAuthProvider
@@ -245,7 +244,7 @@ class TestOIDCAuthenticate:
         self, oidc_provider, mock_settings, rsa_keys
     ):
         private_key, pub_key = rsa_keys
-        jwk_dict, kid = _make_jwk_kid(pub_key)
+        _jwk_dict, kid = _make_jwk_kid(pub_key)
         id_token = _sign_id_token(
             {"sub": "x", "email": "x@x.com"}, private_key, kid
         )
@@ -513,7 +512,7 @@ class TestOIDCAuthenticate:
         mock_db.refresh = AsyncMock()
 
         created_users = []
-        mock_db.add = MagicMock(side_effect=lambda u: created_users.append(u))
+        mock_db.add = MagicMock(side_effect=created_users.append)
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
@@ -542,7 +541,7 @@ class TestOIDCAuthenticate:
         mock_db.refresh = AsyncMock()
 
         created_users = []
-        mock_db.add = MagicMock(side_effect=lambda u: created_users.append(u))
+        mock_db.add = MagicMock(side_effect=created_users.append)
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await oidc_provider.authenticate(code="auth-code", db=mock_db)

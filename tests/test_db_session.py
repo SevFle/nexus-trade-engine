@@ -1,10 +1,7 @@
 """Tests for engine.db.session — get_engine, get_session_factory, dispose_engine."""
 from __future__ import annotations
 
-from unittest.mock import patch
-
-import pytest
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 import engine.db.session as mod
 

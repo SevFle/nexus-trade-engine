@@ -160,9 +160,9 @@ class TestMarketStateBuilderConstruction:
     def test_look_ahead_bias_detected_when_bars_exceed_timestamp(self):
         df = _make_ohlcv_df(60)
         builder = MarketStateBuilder(min_bars=10, debug=True)
-        bars = builder._df_to_bars(df)  # noqa: SLF001
+        bars = builder._df_to_bars(df)
         with pytest.raises(AssertionError, match=r"Look.ahead|future"):
-            builder._assert_no_look_ahead(bars, df.index[30], "AAPL")  # noqa: SLF001
+            builder._assert_no_look_ahead(bars, df.index[30], "AAPL")
 
 
 class TestMarketStateIndicators:

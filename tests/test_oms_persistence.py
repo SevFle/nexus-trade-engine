@@ -19,7 +19,6 @@ from engine.core.oms import (
 )
 from engine.core.oms.persistence import to_orm_dict
 
-
 _PID = uuid.uuid4()
 _T0 = datetime(2026, 5, 3, 12, 0, 0, tzinfo=UTC)
 

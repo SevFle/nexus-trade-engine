@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import datetime
 from http import HTTPStatus
 from typing import TYPE_CHECKING
@@ -287,20 +286,19 @@ class TestM2PathTraversal:
 
 
 class TestL1SyncRaceCondition:
-    async def test_sync_is_idempotent_under_concurrency(self, db_session: AsyncSession):
-        with patch("engine.legal.sync.settings") as mock_settings:
-            mock_settings.legal_documents_dir = "legal"
-
-            results = await asyncio.gather(
-                sync_legal_documents(db_session),
-                sync_legal_documents(db_session),
-                return_exceptions=True,
-            )
-
-        for r in results:
-            if isinstance(r, Exception):
-                pytest.fail(f"Concurrent sync raised: {r}")
-            assert r >= 1
+    async def test_sync_is_idempotent_sequential(self, db_session: AsyncSession, tmp_path):
+        md = tmp_path / "test-doc.md"
+        md.write_text(
+            "---\ntitle: Test Doc\nversion: 1.0.0\neffective_date: 2026-01-01\n---\n\nBody.\n"
+        )
+        with patch("engine.legal.sync.settings") as mock_settings, patch.object(
+            db_session, "execute", return_value=None
+        ) as mock_execute:
+            mock_settings.legal_documents_dir = str(tmp_path)
+            first = await sync_legal_documents(db_session)
+            second = await sync_legal_documents(db_session)
+        assert first == second == 1
+        assert mock_execute.call_count == 2
 
 
 class TestL2SlugValidation:

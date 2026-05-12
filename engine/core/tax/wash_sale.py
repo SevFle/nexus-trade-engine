@@ -34,12 +34,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 
 WASH_SALE_WINDOW_DAYS: int = 30
 
 
-class TradeSide(str, Enum):
+class TradeSide(StrEnum):
     BUY = "buy"
     SELL = "sell"
 
@@ -233,7 +233,7 @@ def detect_wash_sales(
 
 def detect_wash_sales_for_jurisdiction(
     trades: list[Trade],
-    jurisdiction,  # noqa: ANN001 - duck-typed against TaxJurisdiction Protocol
+    jurisdiction,
     *,
     cost_basis_for: dict[str, Decimal] | None = None,
 ) -> list[WashSaleAdjustment]:

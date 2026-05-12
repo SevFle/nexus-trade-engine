@@ -40,7 +40,10 @@ Out of scope (explicit follow-ups for the remaining ~72 of 86):
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def compute_omega_ratio(

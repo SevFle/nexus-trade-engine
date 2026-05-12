@@ -20,7 +20,6 @@ from engine.core.regulatory_fees import (
     sec_section_31_fee,
 )
 
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -28,11 +27,11 @@ from engine.core.regulatory_fees import (
 
 class TestConstants:
     def test_default_rates_pinned(self):
-        assert SEC_SECTION_31_RATE_PER_MILLION_2026 == Decimal("20.60")
-        assert FINRA_TAF_PER_SHARE_2025 == Decimal("0.000166")
-        assert FINRA_TAF_MAX_PER_TRADE_2025 == Decimal("8.30")
-        assert ORF_PER_CONTRACT_2025 == Decimal("0.02905")
-        assert OCC_CLEARING_FEE_PER_CONTRACT == Decimal("0.055")
+        assert Decimal("20.60") == SEC_SECTION_31_RATE_PER_MILLION_2026
+        assert Decimal("0.000166") == FINRA_TAF_PER_SHARE_2025
+        assert Decimal("8.30") == FINRA_TAF_MAX_PER_TRADE_2025
+        assert Decimal("0.02905") == ORF_PER_CONTRACT_2025
+        assert Decimal("0.055") == OCC_CLEARING_FEE_PER_CONTRACT
         assert DAYS_PER_YEAR == 365
 
 

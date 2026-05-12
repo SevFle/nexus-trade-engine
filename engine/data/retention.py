@@ -25,13 +25,16 @@ Out of scope:
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
 
 
-class RetentionAction(str, Enum):
+class RetentionAction(StrEnum):
     """What to do with a record under a policy."""
 
     KEEP = "keep"
@@ -114,7 +117,7 @@ def is_expired(
     """
     if policy.retain_days is None:
         return False
-    now = now if now is not None else datetime.now(timezone.utc)
+    now = now if now is not None else datetime.now(UTC)
     age = _age_days(record_ts, now=now)
     return age > policy.retain_days
 
@@ -125,7 +128,7 @@ def is_compressible(
     """``True`` when the record is old enough to compress but not yet expired."""
     if policy.compress_after_days is None:
         return False
-    now = now if now is not None else datetime.now(timezone.utc)
+    now = now if now is not None else datetime.now(UTC)
     age = _age_days(record_ts, now=now)
     if age <= policy.compress_after_days:
         return False
@@ -136,7 +139,7 @@ def decide_action(
     record_ts: datetime, policy: RetentionPolicy, *, now: datetime | None = None
 ) -> RetentionAction:
     """Resolve ``DELETE`` > ``COMPRESS`` > ``KEEP`` for one record."""
-    now = now if now is not None else datetime.now(timezone.utc)
+    now = now if now is not None else datetime.now(UTC)
     if is_expired(record_ts, policy, now=now):
         return RetentionAction.DELETE
     if is_compressible(record_ts, policy, now=now):
@@ -156,7 +159,7 @@ def partition_by_action(
     supplies record IDs of any string-coercible shape; this helper does
     no I/O.
     """
-    now = now if now is not None else datetime.now(timezone.utc)
+    now = now if now is not None else datetime.now(UTC)
     buckets: dict[RetentionAction, list[str]] = {
         RetentionAction.KEEP: [],
         RetentionAction.COMPRESS: [],
