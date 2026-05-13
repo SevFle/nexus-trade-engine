@@ -137,12 +137,12 @@ class TestConsentEnforcementIntegration:
         app.dependency_overrides[get_db] = override_get_db
 
         @app.get("/protected/backtest")
-        async def protected_backtest(db: AsyncSession = Depends(get_db)):  # noqa: B008
+        async def protected_backtest(db: AsyncSession = Depends(get_db)):
             await require_legal_acceptance(db)
             return {"status": "ok"}
 
         @app.get("/protected/live-trade")
-        async def protected_live_trade(db: AsyncSession = Depends(get_db)):  # noqa: B008
+        async def protected_live_trade(db: AsyncSession = Depends(get_db)):
             await require_legal_acceptance(db)
             return {"order_id": "123"}
 

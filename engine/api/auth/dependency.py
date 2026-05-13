@@ -24,7 +24,15 @@ logger = structlog.get_logger()
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
-ROLE_HIERARCHY: dict[str, int] = {"user": 0, "developer": 1, "admin": 2}
+ROLE_HIERARCHY: dict[str, int] = {
+    "viewer": 0,
+    "user": 1,
+    "retail_trader": 2,
+    "quant_dev": 3,
+    "developer": 4,
+    "portfolio_manager": 5,
+    "admin": 6,
+}
 
 
 _UNAUTHORIZED_MISSING = HTTPException(
@@ -108,6 +116,14 @@ async def get_current_user(
         return user
 
     return await _user_from_jwt(token, db)
+
+
+async def require_auth(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    return await get_current_user(request, credentials, db)
 
 
 def require_role(minimum_role: str):

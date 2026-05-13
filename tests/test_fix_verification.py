@@ -96,7 +96,7 @@ def _make_df(
     n_days: int = 60, base_price: float = 100.0, seed: int = 42
 ) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
-    start = datetime(2024, 1, 1)
+    start = datetime(2024, 1, 1, tzinfo=UTC)
     dates = [start + timedelta(days=i) for i in range(n_days)]
     returns = rng.normal(0.001, 0.02, n_days)
     closes = base_price * np.cumprod(1 + returns)
