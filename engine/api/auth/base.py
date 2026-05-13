@@ -37,7 +37,15 @@ class IAuthProvider(ABC):
         return AuthResult(success=False, error=f"User creation not supported by {self.name}")
 
     def map_roles(self, external_roles: list[str]) -> str:
-        role_priority = {"admin": 2, "developer": 1, "user": 0}
+        role_priority: dict[str, int] = {
+            "viewer": 0,
+            "user": 1,
+            "retail_trader": 2,
+            "quant_dev": 3,
+            "developer": 4,
+            "portfolio_manager": 5,
+            "admin": 6,
+        }
         best = "user"
         for role in external_roles:
             normalized = role.lower().strip()

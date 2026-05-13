@@ -8,9 +8,11 @@ This conftest provides:
   rolls back after each test, keeping the schema across tests without leaking data.
 - ``db_client``: an httpx client with the DB session injected, for integration tests
   that need real DB rows visible to the app.
-- ``_bypass_auth``: an autouse fixture that patches ``FastAPI.__init__`` so every
+ - ``_bypass_auth``: an autouse fixture that patches ``FastAPI.__init__`` so every
   new app instance gets a dependency override for ``get_current_user``.  Files
   matching ``test_auth*`` or ``*_requires_auth`` opt out to exercise real auth.
+
+Intentionally empty — session-scoped asyncio loop is configured in pyproject.toml.
 """
 from __future__ import annotations
 

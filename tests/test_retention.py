@@ -145,7 +145,7 @@ class TestIsExpired:
 
     def test_naive_record_ts_rejected(self):
         p = RetentionPolicy("foo", retain_days=30)
-        naive = datetime(2026, 1, 1)  # noqa: DTZ001
+        naive = datetime(2026, 1, 1)
         with pytest.raises(ValueError, match="timezone-aware"):
             is_expired(naive, p, now=NOW)
 
