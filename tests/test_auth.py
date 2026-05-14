@@ -309,6 +309,44 @@ class TestJWT:
         assert payload["role"] == "user"
         assert payload["type"] == "access"
 
+    def test_token_includes_scopes_from_role(self, _set_test_settings):
+        token = create_access_token(
+            sub=str(uuid.uuid4()),
+            email="test@example.com",
+            role="user",
+            provider="local",
+        )
+        payload = decode_token(token)
+        assert payload is not None
+        assert "scopes" in payload
+        assert "read" in payload["scopes"]
+        assert "write" not in payload["scopes"]
+
+    def test_admin_token_includes_all_scopes(self, _set_test_settings):
+        token = create_access_token(
+            sub=str(uuid.uuid4()),
+            email="admin@example.com",
+            role="admin",
+            provider="local",
+        )
+        payload = decode_token(token)
+        assert payload is not None
+        assert set(payload["scopes"]) == {"read", "write", "trade", "admin"}
+
+    def test_developer_token_includes_trade_scope(self, _set_test_settings):
+        token = create_access_token(
+            sub=str(uuid.uuid4()),
+            email="dev@example.com",
+            role="developer",
+            provider="local",
+        )
+        payload = decode_token(token)
+        assert payload is not None
+        assert "read" in payload["scopes"]
+        assert "write" in payload["scopes"]
+        assert "trade" in payload["scopes"]
+        assert "admin" not in payload["scopes"]
+
     def test_decode_expired_token(self, _set_test_settings):
         token = create_access_token(
             sub=str(uuid.uuid4()),
@@ -349,7 +387,24 @@ class TestProtectedRoutes:
         )
         assert resp.status_code in (401, 403)
 
-    async def test_backtest_with_auth(self, auth_client: AsyncClient, auth_tokens: dict):
+    async def test_backtest_with_auth(
+        self, auth_client: AsyncClient, auth_tokens: dict, auth_db: AsyncSession
+    ):
+        from sqlalchemy import update
+
+        from engine.db.models import User as UserModel
+
+        me_resp = await auth_client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {auth_tokens['access_token']}"},
+        )
+        user_id = uuid.UUID(me_resp.json()["id"])
+
+        await auth_db.execute(
+            update(UserModel).where(UserModel.id == user_id).values(role="developer")
+        )
+        await auth_db.commit()
+
         resp = await auth_client.post(
             "/api/v1/backtest/run",
             json={

@@ -9,6 +9,7 @@ from engine.api.auth.dependency import (
     _scope_satisfied,
     require_api_scope,
     require_role,
+    require_scope,
 )
 
 
@@ -21,6 +22,12 @@ class TestRoleHierarchy:
 
     def test_admin_highest(self):
         assert ROLE_HIERARCHY["admin"] > ROLE_HIERARCHY["user"]
+
+    def test_viewer_equals_user(self):
+        assert ROLE_HIERARCHY["viewer"] == ROLE_HIERARCHY["user"]
+
+    def test_trader_equals_developer(self):
+        assert ROLE_HIERARCHY["trader"] == ROLE_HIERARCHY["developer"]
 
 
 class TestScopeSatisfied:
@@ -64,3 +71,22 @@ class TestRequireApiScope:
     def test_unknown_scope_raises(self):
         with pytest.raises(ValueError, match="unknown scope"):
             require_api_scope("nonexistent")
+
+
+class TestRequireScope:
+    def test_returns_callable(self):
+        checker = require_scope("read")
+        assert callable(checker)
+
+    def test_valid_permissions(self):
+        for perm in ("read", "write", "trade", "admin"):
+            checker = require_scope(perm)
+            assert callable(checker)
+
+    def test_unknown_permission_raises(self):
+        with pytest.raises(ValueError, match="unknown permission"):
+            require_scope("nonexistent")
+
+    def test_write_is_valid(self):
+        checker = require_scope("write")
+        assert callable(checker)

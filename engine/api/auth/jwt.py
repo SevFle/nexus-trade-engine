@@ -8,6 +8,7 @@ from typing import Any
 import jwt
 from jwt.exceptions import InvalidTokenError as JWTError
 
+from engine.auth.rbac import get_permissions_for_role
 from engine.config import settings
 
 ALGORITHM = "HS256"
@@ -30,11 +31,13 @@ def create_access_token(
     expire = datetime.now(tz=UTC) + (
         expires_delta or timedelta(minutes=settings.jwt_access_token_expire_minutes)
     )
+    permissions = [str(p) for p in get_permissions_for_role(role)]
     payload: dict[str, Any] = {
         "sub": sub,
         "email": email,
         "role": role,
         "provider": provider,
+        "scopes": permissions,
         "type": "access",
         "iat": datetime.now(tz=UTC),
         "exp": expire,

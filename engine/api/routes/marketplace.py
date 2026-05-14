@@ -5,7 +5,7 @@ Marketplace API — browse, search, install, and rate community strategies.
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from engine.api.auth.dependency import get_current_user, require_role
+from engine.api.auth.dependency import get_current_user, require_scope
 from engine.db.models import User
 from engine.legal.dependencies import require_legal_acceptance
 
@@ -93,10 +93,9 @@ async def list_categories(user: User = Depends(get_current_user)):
 @router.post("/install")
 async def install_strategy(
     req: InstallRequest,
-    user: User = Depends(require_role("developer")),
+    user: User = Depends(require_scope("trade")),
 ):
     """Install a strategy from the marketplace."""
-    # TODO: Download strategy package, validate manifest, install to plugin dir
     return {
         "status": "not_implemented",
         "strategy_id": req.strategy_id,
@@ -107,10 +106,9 @@ async def install_strategy(
 @router.delete("/uninstall/{strategy_id}")
 async def uninstall_strategy(
     strategy_id: str,
-    user: User = Depends(require_role("developer")),
+    user: User = Depends(require_scope("trade")),
 ):
     """Uninstall a strategy."""
-    # TODO: Deactivate, remove files, update DB
     return {"status": "not_implemented", "strategy_id": strategy_id}
 
 

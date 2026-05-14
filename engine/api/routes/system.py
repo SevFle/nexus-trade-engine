@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
-from engine.api.auth.dependency import get_current_user
+from engine.api.auth.dependency import require_scope
 from engine.db.models import ApiKey, BacktestResult, Portfolio, User, WebhookConfig
 from engine.deps import get_db
 
@@ -55,7 +55,7 @@ class SystemStatusResponse(BaseModel):
 
 @router.get("/status", response_model=SystemStatusResponse)
 async def system_status(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_scope("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> SystemStatusResponse:
     components: list[ComponentStatus] = []

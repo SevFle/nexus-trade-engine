@@ -97,13 +97,13 @@ class IStrategy(ABC):
     async def evaluate(self, portfolio, market: MarketState, costs) -> list[Signal]: ...
 
     async def on_order_fill(self, fill: dict) -> None:
-        pass
+        ...
 
     async def on_market_open(self) -> None:
-        pass
+        ...
 
     async def on_market_close(self) -> None:
-        pass
+        ...
 
     @abstractmethod
     def get_config_schema(self) -> dict: ...

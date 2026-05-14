@@ -14,6 +14,7 @@ from engine.api.auth.api_keys import (
     touch_last_used,
 )
 from engine.api.auth.jwt import decode_token
+from engine.auth.rbac import Permission, role_has_permission
 from engine.db.models import ApiKey, User
 from engine.deps import get_db
 
@@ -24,7 +25,13 @@ logger = structlog.get_logger()
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
-ROLE_HIERARCHY: dict[str, int] = {"user": 0, "developer": 1, "admin": 2}
+ROLE_HIERARCHY: dict[str, int] = {
+    "user": 0,
+    "viewer": 0,
+    "developer": 1,
+    "trader": 1,
+    "admin": 2,
+}
 
 
 _UNAUTHORIZED_MISSING = HTTPException(
@@ -171,6 +178,52 @@ def require_api_scope(required_scope: str):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"API key missing required scope: {required_scope}",
+            )
+        return user
+
+    return _check
+
+
+# ---------------------------------------------------------------------------
+# Unified scope enforcement (ADR-0002 RBAC)
+# ---------------------------------------------------------------------------
+#
+# ``require_scope`` checks permissions for BOTH JWT and API-key principals.
+# For JWT auth, the user's role is resolved to a permission set via the
+# RBAC module (engine.auth.rbac). For API-key auth, the declared scopes
+# on the key are checked. This replaces the JWT bypass in
+# ``require_api_scope`` and should be preferred for new routes.
+
+
+def require_scope(required_permission: str):
+    """FastAPI dependency factory that enforces a permission for any auth method.
+
+    Works for JWT-authenticated users (role → permission resolution via RBAC)
+    and API-key-authenticated users (declared key scopes).
+
+    Raises ValueError if *required_permission* is not a known permission.
+    """
+    valid_values = {p.value for p in Permission}
+    if required_permission not in valid_values:
+        raise ValueError(f"unknown permission: {required_permission!r}")
+
+    async def _check(
+        request: Request,
+        user: User = Depends(get_current_user),
+    ) -> User:
+        api_key: ApiKey | None = getattr(request.state, "api_key", None)
+        if api_key is not None:
+            if not _scope_satisfied(list(api_key.scopes or []), required_permission):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"API key missing required scope: {required_permission}",
+                )
+            return user
+
+        if not role_has_permission(user.role, required_permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Insufficient permissions: requires '{required_permission}'",
             )
         return user
 

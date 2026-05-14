@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from engine.api.auth.dependency import get_current_user
+from engine.api.auth.dependency import get_current_user, require_scope
 from engine.core.backtest_runner import BacktestConfig, BacktestRunner
 from engine.data.feeds import get_data_provider
 from engine.db.models import User
@@ -203,7 +203,7 @@ async def _run_backtest_background(
 async def run_backtest(
     request: BacktestRequest,
     background_tasks: BackgroundTasks,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_scope("write")),
 ) -> BacktestResponse:
     backtest_id = str(uuid.uuid4())
     background_tasks.add_task(

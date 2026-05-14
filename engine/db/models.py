@@ -373,3 +373,105 @@ class ApiKey(Base):
     )
 
     __table_args__ = (Index("ix_api_keys_user_active", "user_id", "revoked_at"),)
+
+
+# ---------------------------------------------------------------------------
+# RBAC models (ADR-0002)
+# ---------------------------------------------------------------------------
+
+
+class RbacRole(Base):
+    __tablename__ = "rbac_roles"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(50), unique=True)
+    display_name: Mapped[str] = mapped_column(String(100))
+    level: Mapped[int] = mapped_column()
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    permissions: Mapped[list[RbacRolePermission]] = relationship(
+        back_populates="role", cascade="all, delete-orphan"
+    )
+    user_assignments: Mapped[list[RbacUserRole]] = relationship(
+        back_populates="role", cascade="all, delete-orphan"
+    )
+
+
+class RbacPermission(Base):
+    __tablename__ = "rbac_permissions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(50), unique=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class RbacRolePermission(Base):
+    __tablename__ = "rbac_role_permissions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("rbac_roles.id", ondelete="CASCADE")
+    )
+    permission_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("rbac_permissions.id", ondelete="CASCADE")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    role: Mapped[RbacRole] = relationship(back_populates="permissions")
+    permission: Mapped[RbacPermission] = relationship()
+
+    __table_args__ = (
+        Index("ix_rbac_role_permissions_unique", "role_id", "permission_id", unique=True),
+    )
+
+
+class RbacUserRole(Base):
+    __tablename__ = "rbac_user_roles"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("rbac_roles.id", ondelete="CASCADE")
+    )
+    granted_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
+    role: Mapped[RbacRole] = relationship(back_populates="user_assignments")
+    granted_by_user: Mapped[User | None] = relationship(foreign_keys=[granted_by])
+
+    __table_args__ = (
+        Index("ix_rbac_user_roles_unique", "user_id", "role_id", unique=True),
+    )
+
+
+class AuthToken(Base):
+    """Revocable access token tracking (ADR-0002).
+
+    Stores hashed access tokens so they can be revoked individually,
+    per-user, or globally without waiting for expiry.
+    """
+
+    __tablename__ = "auth_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True)
+    token_type: Mapped[str] = mapped_column(String(20), default="access")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    user: Mapped[User] = relationship()
+
+    __table_args__ = (
+        Index("ix_auth_tokens_hash_active", "token_hash", "revoked_at"),
+    )

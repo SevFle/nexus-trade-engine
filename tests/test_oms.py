@@ -303,5 +303,5 @@ class TestImmutability:
 
     def test_order_is_frozen(self):
         o = _market_buy()
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):
             o.status = OrderStatus.SUBMITTED  # type: ignore[misc]

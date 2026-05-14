@@ -16,7 +16,6 @@ import httpx
 import structlog
 
 try:
-    from core.cost_model import ICostModel
     from core.portfolio import PortfolioSnapshot
     from core.signal import Signal, SignalStrength
     from plugins.sdk import DataFeed, IStrategy, MarketState, StrategyConfig

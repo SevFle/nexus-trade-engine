@@ -15,7 +15,6 @@ import structlog
 # When running inside the engine, these come from the engine's modules.
 # When developing standalone, they come from the SDK.
 try:
-    from core.cost_model import ICostModel
     from core.portfolio import PortfolioSnapshot
     from core.signal import Signal
     from plugins.sdk import DataFeed, IStrategy, MarketState, StrategyConfig
