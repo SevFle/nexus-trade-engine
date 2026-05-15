@@ -41,24 +41,6 @@ from engine.plugins.sandbox.core.violation import (
 from engine.plugins.sandbox.layers.filesystem_isolation import FilesystemIsolation
 from engine.plugins.sandbox.layers.import_restriction import RestrictedImporter
 from engine.plugins.sandbox.layers.introspection_guard import (
-    IntrospectionGuard,
-    _BLOCKED_BUILTINS_DEFAULT,
-    _EXPLICITLY_BLOCKED_ATTRS,
-    _FRAME_ATTRS,
-)
-from engine.plugins.sandbox.layers.network_guard import NetworkGuard
-from engine.plugins.sandbox.layers.resource_limiter import (
-    HAS_RESOURCE_MODULE,
-    ResourceLimiter,
-)
-from engine.plugins.sandbox.core.violation import (
-    ImportViolation,
-    ResourceExhausted,
-    SandboxViolationCategory,
-)
-from engine.plugins.sandbox.layers.filesystem_isolation import FilesystemIsolation
-from engine.plugins.sandbox.layers.import_restriction import RestrictedImporter
-from engine.plugins.sandbox.layers.introspection_guard import (
     _BLOCKED_BUILTINS_DEFAULT,
     _EXPLICITLY_BLOCKED_ATTRS,
     _FRAME_ATTRS,
@@ -213,10 +195,10 @@ class TestRestrictedImporterUnit:
         original_import = builtins.__import__
         called = False
 
-        def fake_import(name, g=None, l=None, fromlist=(), level=0):
+        def fake_import(name, g=None, local_vars=None, fromlist=(), level=0):
             nonlocal called
             called = True
-            return original_import(name, g, l, fromlist, level)
+            return original_import(name, g, local_vars, fromlist, level)
 
         try:
             builtins.__import__ = importer._restricted_import
@@ -767,17 +749,17 @@ class TestFilesystemIsolationUnit:
         finally:
             fs.cleanup()
 
-    def test_restricted_open_detects_append_mode(self) -> None:
+    def test_restricted_open_detects_append_mode(self, tmp_path: Any) -> None:
         fs = FilesystemIsolation(FilesystemPolicy())
         fs._original_open = builtins.open
         with pytest.raises(PermissionError):
-            fs._restricted_open("/tmp/blocked_append", "a")
+            fs._restricted_open(str(tmp_path / "blocked_append"), "a")
 
-    def test_restricted_open_detects_plus_mode(self) -> None:
+    def test_restricted_open_detects_plus_mode(self, tmp_path: Any) -> None:
         fs = FilesystemIsolation(FilesystemPolicy())
         fs._original_open = builtins.open
         with pytest.raises(PermissionError):
-            fs._restricted_open("/tmp/blocked_plus", "r+")
+            fs._restricted_open(str(tmp_path / "blocked_plus"), "r+")
 
     def test_violation_get_and_clear(self) -> None:
         fs = FilesystemIsolation(FilesystemPolicy())
@@ -873,7 +855,7 @@ class TestIntrospectionGuardUnit:
         try:
             guard.install()
             with pytest.raises(PermissionError, match="not accessible"):
-                eval("1 + 1")
+                eval("1 + 1")  # noqa: S307
         finally:
             guard.uninstall()
 
@@ -882,7 +864,7 @@ class TestIntrospectionGuardUnit:
         try:
             guard.install()
             with pytest.raises(PermissionError, match="not accessible"):
-                exec("x = 1")
+                exec("x = 1")  # noqa: S102
         finally:
             guard.uninstall()
 
@@ -993,7 +975,7 @@ class TestIntrospectionGuardUnit:
         try:
             guard.install()
             with pytest.raises(PermissionError):
-                eval("1")
+                eval("1")  # noqa: S307
             with pytest.raises(PermissionError):
                 credits()
         finally:
