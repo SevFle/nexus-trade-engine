@@ -16,10 +16,6 @@ from engine.core.cumulative_returns import (
     tracking_error,
 )
 
-# ---------------------------------------------------------------------------
-# cumulative_returns
-# ---------------------------------------------------------------------------
-
 
 class TestCumulativeReturns:
     def test_empty_returns_empty(self):
@@ -43,10 +39,6 @@ class TestCumulativeReturns:
         out = cumulative_returns([0.01, 0.02, 0.03, 0.04, 0.05])
         assert len(out) == 5
 
-
-# ---------------------------------------------------------------------------
-# equity_curve_from_returns
-# ---------------------------------------------------------------------------
 
 
 class TestEquityCurveFromReturns:
@@ -76,10 +68,6 @@ class TestEquityCurveFromReturns:
         out = equity_curve_from_returns([0.01] * 5)
         assert len(out) == 6
 
-
-# ---------------------------------------------------------------------------
-# log_returns
-# ---------------------------------------------------------------------------
 
 
 class TestLogReturns:
@@ -113,10 +101,6 @@ class TestLogReturns:
             compounded *= 1.0 + r
         assert sum(logs) == pytest.approx(math.log(compounded), rel=1e-12)
 
-
-# ---------------------------------------------------------------------------
-# returns_from_equity
-# ---------------------------------------------------------------------------
 
 
 class TestReturnsFromEquity:
@@ -154,10 +138,6 @@ class TestReturnsFromEquity:
         for o, r in zip(original, recovered, strict=False):
             assert r == pytest.approx(o, rel=1e-12)
 
-
-# ---------------------------------------------------------------------------
-# active_returns
-# ---------------------------------------------------------------------------
 
 
 class TestActiveReturns:

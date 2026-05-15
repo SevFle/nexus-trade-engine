@@ -30,10 +30,12 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 DEFAULT_ANNUALISATION = 252
+_MIN_DATA_POINTS = 2
+_ZERO_VARIANCE_TOLERANCE = 1e-20
 
 
 def _validate_window(window: int) -> None:
-    if window < 2:
+    if window < _MIN_DATA_POINTS:
         raise ValueError("window must be >= 2")
 
 
@@ -49,13 +51,13 @@ def _beta_window(
 ) -> float:
     """OLS slope of portfolio on benchmark over one window. ``0.0`` if degenerate."""
     n = len(port)
-    if n < 2:
+    if n < _MIN_DATA_POINTS:
         return 0.0
     mp = sum(port) / n
     mb = sum(bench) / n
     cov = sum((p - mp) * (b - mb) for p, b in zip(port, bench, strict=False)) / n
     var_b = sum((b - mb) ** 2 for b in bench) / n
-    if var_b < 1e-20:
+    if var_b < _ZERO_VARIANCE_TOLERANCE:
         return 0.0
     return cov / var_b
 

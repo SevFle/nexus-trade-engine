@@ -37,6 +37,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+_SKEWNESS_MIN_DATA_POINTS = 3
+_KURTOSIS_MIN_DATA_POINTS = 4
+_VAR_MIN_DATA_POINTS = 2
+_PERCENTILE_LOWER_BOUND = 0.5
+
 
 def _mean(xs: Sequence[float]) -> float:
     return sum(xs) / len(xs)
@@ -58,7 +63,7 @@ def skewness(returns: Sequence[float]) -> float:
     zero-variance series.
     """
     n = len(returns)
-    if n < 3:
+    if n < _SKEWNESS_MIN_DATA_POINTS:
         return 0.0
     m = _mean(returns)
     s = _stdev(returns)
@@ -78,7 +83,7 @@ def kurtosis(returns: Sequence[float]) -> float:
     fewer than 4 data points, or a zero-variance series.
     """
     n = len(returns)
-    if n < 4:
+    if n < _KURTOSIS_MIN_DATA_POINTS:
         return 0.0
     m = _mean(returns)
     s = _stdev(returns)
@@ -131,7 +136,7 @@ def value_at_risk_parametric(
     variance.
     """
     n = len(returns)
-    if n < 2:
+    if n < _VAR_MIN_DATA_POINTS:
         return 0.0
     _validate_confidence(confidence)
     m = _mean(returns)
@@ -232,7 +237,7 @@ def tail_ratio(
     """
     if not returns:
         return 0.0
-    if not 0.5 < percentile < 1.0:
+    if not _PERCENTILE_LOWER_BOUND < percentile < 1.0:
         raise ValueError(
             f"percentile must be in (0.5, 1.0); got {percentile}"
         )

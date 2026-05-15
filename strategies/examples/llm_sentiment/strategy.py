@@ -16,7 +16,6 @@ import httpx
 import structlog
 
 try:
-    from core.cost_model import ICostModel
     from core.portfolio import PortfolioSnapshot
     from core.signal import Signal, SignalStrength
     from plugins.sdk import DataFeed, IStrategy, MarketState, StrategyConfig
@@ -33,15 +32,21 @@ except ImportError:
 
 logger = structlog.get_logger()
 
-SENTIMENT_PROMPT = """Analyze the following news headlines for {symbol} and return a JSON object with:
-- "score": a float from -1.0 (very bearish) to 1.0 (very bullish)
-- "confidence": a float from 0.0 to 1.0
-- "reasoning": a brief explanation
+_MIN_CONFIDENCE_BUY = 0.5
+_STRONG_SIGNAL_CONFIDENCE = 0.8
 
-Headlines:
-{headlines}
-
-Respond ONLY with valid JSON, no other text."""
+SENTIMENT_PROMPT = (
+    "Analyze the following news headlines for {symbol}"
+    " and return a JSON object with:\n"
+    "- \"score\": a float from -1.0 (very bearish) to 1.0 (very bullish)\n"
+    "- \"confidence\": a float from 0.0 to 1.0\n"
+    "- \"reasoning\": a brief explanation\n"
+    "\n"
+    "Headlines:\n"
+    "{headlines}\n"
+    "\n"
+    "Respond ONLY with valid JSON, no other text."
+)
 
 
 class LLMSentimentStrategy(IStrategy):
@@ -94,7 +99,9 @@ class LLMSentimentStrategy(IStrategy):
         self._watchlist = params.get("watchlist", ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"])
 
         if not self._api_key:
-            logger.warning("llm_sentiment.no_api_key", note="Set 'llm_api_key' in strategy secrets")
+            logger.warning(
+                "llm_sentiment.no_api_key", note="Set 'llm_api_key' in strategy secrets"
+            )
 
         self._http_client = httpx.AsyncClient(timeout=30.0)
         logger.info("llm_sentiment.initialized", provider=self._provider, model=self._model)
@@ -139,7 +146,11 @@ class LLMSentimentStrategy(IStrategy):
             has_position = portfolio.has_position(symbol)
 
             # BUY: strong positive sentiment
-            if score > self._sentiment_threshold and confidence > 0.5 and not has_position:
+            if (
+                score > self._sentiment_threshold
+                and confidence > _MIN_CONFIDENCE_BUY
+                and not has_position
+            ):
                 cost_pct = costs.estimate_pct(symbol, price, "buy")
                 weight = min(self._max_allocation, confidence * self._max_allocation)
 
@@ -147,8 +158,16 @@ class LLMSentimentStrategy(IStrategy):
                     symbol=symbol,
                     strategy_id=self.id,
                     weight=weight,
-                    strength=SignalStrength.STRONG if confidence > 0.8 else SignalStrength.MODERATE,
-                    reason=f"LLM sentiment={score:.2f}, confidence={confidence:.2f}: {sentiment.get('reasoning', '')}",
+                    strength=(
+                        SignalStrength.STRONG
+                        if confidence > _STRONG_SIGNAL_CONFIDENCE
+                        else SignalStrength.MODERATE
+                    ),
+                    reason=(
+                        f"LLM sentiment={score:.2f},"
+                        f" confidence={confidence:.2f}:"
+                        f" {sentiment.get('reasoning', '')}"
+                    ),
                     metadata={"sentiment": sentiment, "cost_pct": cost_pct},
                 ))
 
@@ -217,7 +236,11 @@ class LLMSentimentStrategy(IStrategy):
         return {
             "type": "object",
             "properties": {
-                "llm_provider": {"type": "string", "enum": ["anthropic", "openai"], "default": "anthropic"},
+                "llm_provider": {
+                    "type": "string",
+                    "enum": ["anthropic", "openai"],
+                    "default": "anthropic",
+                },
                 "model_name": {"type": "string", "default": "claude-sonnet-4-20250514"},
                 "sentiment_threshold": {"type": "number", "default": 0.6},
                 "max_allocation_pct": {"type": "number", "default": 0.15},

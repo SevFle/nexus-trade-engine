@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import ClassVar
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,7 +31,7 @@ class TestJsonifyExtended:
         assert _jsonify(dt).startswith("2026-05-03T12:00:00")
 
     def test_nested_structures(self):
-        nested = {"a": [1, {"b": datetime(2026, 1, 1)}]}
+        nested = {"a": [1, {"b": datetime(2026, 1, 1, tzinfo=UTC)}]}
         result = _jsonify(nested)
         assert isinstance(result["a"][1]["b"], str)
 
@@ -100,8 +101,8 @@ class TestRowToDictExtended:
 
     def test_none_value_included(self):
         class _FakeRow:
-            class __table__:
-                columns = [type("C", (), {"name": "field"})]
+            class __table__:  # noqa: N801
+                columns: ClassVar[list] = [type("C", (), {"name": "field"})]
             field = None
 
         result = _row_to_dict(_FakeRow())
@@ -109,8 +110,8 @@ class TestRowToDictExtended:
 
     def test_uuid_stringified(self):
         class _FakeRow:
-            class __table__:
-                columns = [type("C", (), {"name": "uid"})]
+            class __table__:  # noqa: N801
+                columns: ClassVar[list] = [type("C", (), {"name": "uid"})]
             uid = uuid.UUID("12345678-1234-1234-1234-123456789abc")
 
         result = _row_to_dict(_FakeRow())
@@ -118,8 +119,8 @@ class TestRowToDictExtended:
 
     def test_datetime_serialised(self):
         class _FakeRow:
-            class __table__:
-                columns = [type("C", (), {"name": "created_at"})]
+            class __table__:  # noqa: N801
+                columns: ClassVar[list] = [type("C", (), {"name": "created_at"})]
             created_at = datetime(2026, 5, 3, tzinfo=UTC)
 
         out = _row_to_dict(_FakeRow())

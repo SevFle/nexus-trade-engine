@@ -42,35 +42,20 @@ class LiveBackend(ExecutionBackend):
 
     async def connect(self) -> None:
         # TODO: Initialize broker client
-        # Example for Alpaca:
-        #   from alpaca.trading.client import TradingClient
-        #   self._client = TradingClient(self.api_key, self.api_secret)
         logger.info("live.backend.connected", broker=self.broker_name)
 
     async def disconnect(self) -> None:
         self._client = None
         logger.info("live.backend.disconnected", broker=self.broker_name)
 
-    async def execute(self, order: Order, market_price: float, costs: CostBreakdown) -> FillResult:
+    async def execute(
+        self, order: Order, _market_price: float, _costs: CostBreakdown
+    ) -> FillResult:
         if self._client is None:
             return FillResult(success=False, reason="Broker client not connected")
 
         try:
             # TODO: Implement broker-specific order submission
-            # Example:
-            #   broker_order = self._client.submit_order(
-            #       symbol=order.symbol,
-            #       qty=order.quantity,
-            #       side=order.side.value,
-            #       type="market",
-            #       time_in_force="day",
-            #   )
-            #   return FillResult(
-            #       success=True,
-            #       price=float(broker_order.filled_avg_price),
-            #       quantity=int(broker_order.filled_qty),
-            #   )
-
             logger.warning("live.backend.not_implemented", order_id=order.id)
             return FillResult(
                 success=False,

@@ -112,7 +112,7 @@ def _build_auth_registry() -> AuthProviderRegistry:
 
 def _seed_reference_index() -> None:
     index = get_search_index()
-    if index._records:
+    if index._records:  # noqa: SLF001
         return
     count = seed_index(index)
     logger.info("reference.seed.complete", instruments=count)

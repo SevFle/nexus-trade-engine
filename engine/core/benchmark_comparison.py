@@ -38,6 +38,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+_MIN_DATA_POINTS = 2
+_SQUARED_POWER = 2
+_ZERO_VARIANCE_TOLERANCE = 1e-20
+
 
 def _mean(xs: Sequence[float]) -> float:
     return sum(xs) / len(xs)
@@ -59,18 +63,19 @@ def beta(
             f"vs {len(benchmark_returns)}"
         )
     n = len(portfolio_returns)
-    if n < 2:
+    if n < _MIN_DATA_POINTS:
         return 0.0
     mp = _mean(portfolio_returns)
     mb = _mean(benchmark_returns)
     cov = (
-        sum((p - mp) * (b - mb) for p, b in zip(portfolio_returns, benchmark_returns, strict=False))
+        sum(
+            (p - mp) * (b - mb)
+            for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
+        )
         / n
     )
-    var_b = sum((b - mb) ** 2 for b in benchmark_returns) / n
-    # Guard against float-precision residuals from constant-input series
-    # (e.g. mean-subtracted [0.05, 0.05, 0.05] leaves ~1e-17 bits).
-    if var_b < 1e-20:
+    var_b = sum((b - mb) ** _SQUARED_POWER for b in benchmark_returns) / n
+    if var_b < _ZERO_VARIANCE_TOLERANCE:
         return 0.0
     return cov / var_b
 
@@ -96,7 +101,7 @@ def jensen_alpha(
             f"vs {len(benchmark_returns)}"
         )
     n = len(portfolio_returns)
-    if n < 2:
+    if n < _MIN_DATA_POINTS:
         return 0.0
     rf_period = risk_free_rate / annualisation_factor
     b = beta(portfolio_returns, benchmark_returns)
@@ -205,7 +210,7 @@ def correlation(
             f"vs {len(benchmark_returns)}"
         )
     n = len(portfolio_returns)
-    if n < 2:
+    if n < _MIN_DATA_POINTS:
         return 0.0
     mp = _mean(portfolio_returns)
     mb = _mean(benchmark_returns)
@@ -213,8 +218,8 @@ def correlation(
         (p - mp) * (b - mb)
         for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
     )
-    dp = math.sqrt(sum((p - mp) ** 2 for p in portfolio_returns))
-    db = math.sqrt(sum((b - mb) ** 2 for b in benchmark_returns))
+    dp = math.sqrt(sum((p - mp) ** _SQUARED_POWER for p in portfolio_returns))
+    db = math.sqrt(sum((b - mb) ** _SQUARED_POWER for b in benchmark_returns))
     if dp == 0.0 or db == 0.0:
         return 0.0
     return num / (dp * db)

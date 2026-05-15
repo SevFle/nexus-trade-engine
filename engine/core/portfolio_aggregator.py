@@ -31,6 +31,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
+_MIN_DATA_POINTS = 2
+_MIN_HOLDERS_FOR_OVERLAP = 2
+
 
 @dataclass(frozen=True)
 class PortfolioView:
@@ -82,7 +85,7 @@ def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float:
     """Pearson correlation. Returns 0.0 if either series has zero variance."""
     if len(xs) != len(ys):
         raise ValueError(f"series length mismatch: {len(xs)} vs {len(ys)}")
-    if len(xs) < 2:
+    if len(xs) < _MIN_DATA_POINTS:
         return 0.0
     mx, my = _mean(xs), _mean(ys)
     num = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=False))
@@ -115,7 +118,7 @@ def correlation_matrix(
         for j, b in enumerate(keys):
             if i == j:
                 xs = return_series[a]
-                if len(xs) >= 2 and len(set(xs)) > 1:
+                if len(xs) >= _MIN_DATA_POINTS and len(set(xs)) > 1:
                     out[a][b] = 1.0
                 else:
                     out[a][b] = 0.0
@@ -139,7 +142,11 @@ def position_overlap(
     for p in portfolios:
         for symbol, qty in p.positions.items():
             by_symbol.setdefault(symbol, {})[p.portfolio_id] = qty
-    return {sym: holders for sym, holders in by_symbol.items() if len(holders) >= 2}
+    return {
+        sym: holders
+        for sym, holders in by_symbol.items()
+        if len(holders) >= _MIN_HOLDERS_FOR_OVERLAP
+    }
 
 
 def aggregate_exposure(

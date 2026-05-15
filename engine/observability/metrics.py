@@ -89,24 +89,24 @@ class NullBackend:
     def counter(
         self,
         name: str,
-        value: float = 1.0,
-        tags: Mapping[str, str] | None = None,
+        _value: float = 1.0,
+        _tags: Mapping[str, str] | None = None,
     ) -> None:
         _check_name(name)
 
     def gauge(
         self,
         name: str,
-        value: float,
-        tags: Mapping[str, str] | None = None,
+        _value: float,
+        _tags: Mapping[str, str] | None = None,
     ) -> None:
         _check_name(name)
 
     def histogram(
         self,
         name: str,
-        value: float,
-        tags: Mapping[str, str] | None = None,
+        _value: float,
+        _tags: Mapping[str, str] | None = None,
     ) -> None:
         _check_name(name)
 
@@ -114,7 +114,7 @@ class NullBackend:
     def timer(
         self,
         name: str,
-        tags: Mapping[str, str] | None = None,
+        _tags: Mapping[str, str] | None = None,
     ) -> Iterator[None]:
         _check_name(name)
         yield

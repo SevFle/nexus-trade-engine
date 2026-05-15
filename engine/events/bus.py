@@ -68,7 +68,12 @@ class EventType(StrEnum):
 class Event:
     """A single event payload."""
 
-    def __init__(self, event_type: EventType, data: dict[str, Any] | None = None, source: str = "engine"):
+    def __init__(
+        self,
+        event_type: EventType,
+        data: dict[str, Any] | None = None,
+        source: str = "engine",
+    ):
         self.event_type = event_type
         self.data = data or {}
         self.source = source
@@ -117,7 +122,7 @@ class EventBus:
     async def connect(self):
         """Initialize Redis connection for cross-process pub/sub."""
         try:
-            import redis.asyncio as aioredis
+            import redis.asyncio as aioredis  # noqa: PLC0415
 
             self._redis = aioredis.from_url(self.redis_url)
             await self._redis.ping()

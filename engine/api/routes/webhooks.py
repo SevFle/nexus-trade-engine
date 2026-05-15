@@ -180,7 +180,7 @@ async def delete_webhook(
 
 
 @router.post("/{webhook_id}/test", response_model=DeliveryResponse)
-async def test_webhook(
+async def trigger_test_webhook(
     webhook_id: uuid.UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

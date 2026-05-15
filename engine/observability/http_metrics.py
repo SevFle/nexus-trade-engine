@@ -32,19 +32,26 @@ from engine.observability.metrics import MetricsBackend, get_metrics
 if TYPE_CHECKING:
     from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+_HTTP_STATUS_1XX = 100
+_HTTP_STATUS_2XX = 200
+_HTTP_STATUS_3XX = 300
+_HTTP_STATUS_4XX = 400
+_HTTP_STATUS_5XX = 500
+_HTTP_STATUS_MAX = 600
 
-def _status_class(status: int | None) -> str:
+
+def _status_class(status: int | None) -> str:  # noqa: PLR0911
     if status is None:
         return "unknown"
-    if 100 <= status < 200:
+    if _HTTP_STATUS_1XX <= status < _HTTP_STATUS_2XX:
         return "1xx"
-    if 200 <= status < 300:
+    if _HTTP_STATUS_2XX <= status < _HTTP_STATUS_3XX:
         return "2xx"
-    if 300 <= status < 400:
+    if _HTTP_STATUS_3XX <= status < _HTTP_STATUS_4XX:
         return "3xx"
-    if 400 <= status < 500:
+    if _HTTP_STATUS_4XX <= status < _HTTP_STATUS_5XX:
         return "4xx"
-    if 500 <= status < 600:
+    if _HTTP_STATUS_5XX <= status < _HTTP_STATUS_MAX:
         return "5xx"
     return "unknown"
 

@@ -156,9 +156,8 @@ class TestOIDCDiscovery:
         )
         fake_client = _FakeAsyncClient(get_responses=[resp])
 
-        with patch("httpx.AsyncClient", return_value=fake_client):
-            with pytest.raises(httpx.HTTPStatusError):
-                await oidc_provider._get_discovery()
+        with patch("httpx.AsyncClient", return_value=fake_client), pytest.raises(httpx.HTTPStatusError):
+            await oidc_provider._get_discovery()
 
 
 class TestOIDCJWKS:

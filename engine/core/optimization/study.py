@@ -17,6 +17,7 @@ batches.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from math import isnan
 from typing import Any
 
 import structlog
@@ -96,7 +97,7 @@ class Study:
                 )
                 trials.append(Trial(index=index, params=params, error=str(exc)[:200]))
                 continue
-            if score != score:  # NaN check
+            if isnan(score):
                 logger.warning(
                     "optimization.trial_nan",
                     sampler=sampler,

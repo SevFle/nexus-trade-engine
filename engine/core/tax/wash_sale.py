@@ -107,7 +107,7 @@ class _SaleState:
     remaining_loss: Decimal  # always non-negative; only loss sales tracked
 
 
-def detect_wash_sales(
+def detect_wash_sales(  # noqa: PLR0912
     trades: list[Trade],
     *,
     cost_basis_for: dict[str, Decimal] | None = None,

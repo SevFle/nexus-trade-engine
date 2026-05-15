@@ -30,6 +30,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+_MIN_DATA_POINTS = 2
+
 
 def _normalise(weights: Mapping[str, float]) -> dict[str, float]:
     """Re-scale weights to sum to one, dropping non-positive entries."""
@@ -127,12 +129,15 @@ def variance_decomposition(
         "r_squared": 0.0,
     }
     n = len(portfolio_returns)
-    if n != len(benchmark_returns) or n < 2:
+    if n != len(benchmark_returns) or n < _MIN_DATA_POINTS:
         return zero
     mp = sum(portfolio_returns) / n
     mb = sum(benchmark_returns) / n
     cov = (
-        sum((p - mp) * (b - mb) for p, b in zip(portfolio_returns, benchmark_returns, strict=False))
+        sum(
+            (p - mp) * (b - mb)
+            for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
+        )
         / n
     )
     var_b = sum((b - mb) ** 2 for b in benchmark_returns) / n

@@ -18,9 +18,9 @@ from tests.conftest import _fake_authenticated_user
 
 class TestAware:
     def test_naive_datetime_gets_utc(self):
-        from datetime import datetime
+        from datetime import UTC, datetime
 
-        naive = datetime(2024, 1, 1, 12, 0, 0)
+        naive = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
         result = _aware(naive)
         assert result.tzinfo is not None
 

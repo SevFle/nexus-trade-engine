@@ -234,24 +234,29 @@ _WARN_EXCESSIVE_DRAWDOWN = "Excessive drawdown"
 _WARN_HIGH_COST_DRAG = "High cost drag"
 _WARN_HIGH_VOLATILITY = "High volatility"
 _WARN_POOR_WIN_QUALITY = "Poor win/loss profile"
+_EXCESSIVE_DRAWDOWN_THRESHOLD = 20.0
+_HIGH_COST_DRAG_THRESHOLD = 5.0
+_HIGH_VOLATILITY_THRESHOLD = 30.0
+_POOR_WIN_QUALITY_THRESHOLD = 0.5
+_MIN_ROLLING_WINDOWS = 2
 
 
 def _build_warnings(report: MetricsReport) -> list[str]:
     warnings: list[str] = []
     if report.sharpe_ratio < 0:
         warnings.append(_WARN_NEGATIVE_SHARPE)
-    if report.max_drawdown_pct >= 20.0:
+    if report.max_drawdown_pct >= _EXCESSIVE_DRAWDOWN_THRESHOLD:
         warnings.append(_WARN_EXCESSIVE_DRAWDOWN)
-    if report.cost_drag_pct >= 5.0:
+    if report.cost_drag_pct >= _HIGH_COST_DRAG_THRESHOLD:
         warnings.append(_WARN_HIGH_COST_DRAG)
-    if report.volatility_annual_pct >= 30.0:
+    if report.volatility_annual_pct >= _HIGH_VOLATILITY_THRESHOLD:
         warnings.append(_WARN_HIGH_VOLATILITY)
     if report.avg_loser != 0 and report.total_trades > 0:
         wr = (
             report.win_rate / 100.0 if report.win_rate > 1.0 else report.win_rate
         )
         quality = wr * (report.avg_winner / abs(report.avg_loser))
-        if quality < 0.5:
+        if quality < _POOR_WIN_QUALITY_THRESHOLD:
             warnings.append(_WARN_POOR_WIN_QUALITY)
     return warnings
 
@@ -315,7 +320,7 @@ class StrategyEvaluator:
             for r in report.rolling_metrics
             if math.isfinite(r.sharpe_ratio)
         ]
-        if len(sharpes) < 2:
+        if len(sharpes) < _MIN_ROLLING_WINDOWS:
             return 50.0
         mean = sum(sharpes) / len(sharpes)
         variance = sum((s - mean) ** 2 for s in sharpes) / len(sharpes)

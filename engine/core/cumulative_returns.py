@@ -38,6 +38,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+_MIN_DATA_POINTS = 2
+
 
 def cumulative_returns(returns: Sequence[float]) -> list[float]:
     """Per-bar compounded cumulative return.
@@ -95,7 +97,7 @@ def returns_from_equity(equity: Sequence[float]) -> list[float]:
     divide-by-zero) so this works on stub data.
     """
     n = len(equity)
-    if n < 2:
+    if n < _MIN_DATA_POINTS:
         return []
     out: list[float] = []
     for i in range(1, n):
@@ -137,7 +139,7 @@ def tracking_error(
         raise ValueError("annualisation_factor must be > 0")
     active = active_returns(portfolio, benchmark)
     n = len(active)
-    if n < 2:
+    if n < _MIN_DATA_POINTS:
         return 0.0
     m = sum(active) / n
     var = sum((x - m) ** 2 for x in active) / (n - 1)

@@ -34,6 +34,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+_MIN_DATA_POINTS = 2
+
 
 @dataclass(frozen=True)
 class DrawdownEpisode:
@@ -95,7 +97,7 @@ def drawdown_episodes(equity: Sequence[float]) -> list[DrawdownEpisode]:
     (``recovery_idx is None``) when the curve has not recovered by
     the last input.
     """
-    if len(equity) < 2:
+    if len(equity) < _MIN_DATA_POINTS:
         return []
     episodes: list[DrawdownEpisode] = []
     peak_value = equity[0]
