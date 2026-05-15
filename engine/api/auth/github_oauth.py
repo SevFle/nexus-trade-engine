@@ -107,7 +107,7 @@ class GitHubAuthProvider(IAuthProvider):
             ),
         )
 
-    def get_authorize_url(self, state: str = "") -> str:
+    async def get_authorize_url(self, state: str = "") -> str:
         url = (
             f"https://github.com/login/oauth/authorize"
             f"?client_id={settings.github_client_id}"
