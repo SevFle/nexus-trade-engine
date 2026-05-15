@@ -46,9 +46,11 @@ class CostBreakdown:
             )
         return Money(
             amount=(
-                self.commission.amount + self.spread.amount +
-                self.slippage.amount + self.exchange_fee.amount +
-                self.tax_estimate.amount
+                self.commission.amount
+                + self.spread.amount
+                + self.slippage.amount
+                + self.exchange_fee.amount
+                + self.tax_estimate.amount
             ),
             currency=self.commission.currency,
         )

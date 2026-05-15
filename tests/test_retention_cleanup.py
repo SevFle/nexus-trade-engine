@@ -86,9 +86,7 @@ class TestComputeCleanupWindow:
 
 class TestPartitionBoundaries:
     def test_noop_window_returns_empty(self):
-        w = CleanupWindow(
-            "foo", delete_before=None, compress_before=None, archive_to=None
-        )
+        w = CleanupWindow("foo", delete_before=None, compress_before=None, archive_to=None)
         assert partition_boundaries(w, now=NOW) == []
 
     def test_simple_horizon_chunked(self):

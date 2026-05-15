@@ -120,11 +120,7 @@ def drawdown_episodes(equity: Sequence[float]) -> list[DrawdownEpisode]:
                 trough_value = v
                 trough_idx = i
             if v >= peak_value:
-                depth = (
-                    (peak_value - trough_value) / peak_value
-                    if peak_value > 0
-                    else 0.0
-                )
+                depth = (peak_value - trough_value) / peak_value if peak_value > 0 else 0.0
                 episodes.append(
                     DrawdownEpisode(
                         peak_idx=peak_idx,
@@ -137,9 +133,7 @@ def drawdown_episodes(equity: Sequence[float]) -> list[DrawdownEpisode]:
                 peak_value = v
                 peak_idx = i
     if in_drawdown:
-        depth = (
-            (peak_value - trough_value) / peak_value if peak_value > 0 else 0.0
-        )
+        depth = (peak_value - trough_value) / peak_value if peak_value > 0 else 0.0
         episodes.append(
             DrawdownEpisode(
                 peak_idx=peak_idx,

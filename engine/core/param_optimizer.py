@@ -179,9 +179,7 @@ def optimize(
             score = float(objective(params))
         except Exception as exc:
             optimizer.tell(params, float("-inf"))
-            history.append(
-                {"params": dict(params), "score": float("-inf"), "error": str(exc)}
-            )
+            history.append({"params": dict(params), "score": float("-inf"), "error": str(exc)})
             n_run += 1
             continue
         if math.isnan(score):
@@ -221,9 +219,7 @@ class GridSearchOptimizer:
                 value_lists.append(list(dim.choices))
             names.append(name)
 
-        def _recurse(
-            idx: int, current: dict[str, Any]
-        ) -> Iterator[dict[str, Any]]:
+        def _recurse(idx: int, current: dict[str, Any]) -> Iterator[dict[str, Any]]:
             if idx == len(names):
                 yield dict(current)
                 return
@@ -262,10 +258,7 @@ class GeneticOptimizer:
         seed: int | None = None,
     ) -> None:
         if population_size < _MIN_POPULATION:
-            msg = (
-                f"population_size must be >= {_MIN_POPULATION}; "
-                f"got {population_size}"
-            )
+            msg = f"population_size must be >= {_MIN_POPULATION}; got {population_size}"
             raise OptimizerError(msg)
         if not 0.0 <= mutation_rate <= 1.0:
             msg = f"mutation_rate must be in [0, 1]; got {mutation_rate}"
@@ -302,17 +295,10 @@ class GeneticOptimizer:
             offspring.append(child)
         self._pending = offspring
 
-    def _crossover(
-        self, a: dict[str, Any], b: dict[str, Any]
-    ) -> dict[str, Any]:
-        return {
-            k: (a[k] if self._rng.random() < _CROSSOVER_PROB else b[k])
-            for k in a
-        }
+    def _crossover(self, a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
+        return {k: (a[k] if self._rng.random() < _CROSSOVER_PROB else b[k]) for k in a}
 
-    def _mutate(
-        self, params: dict[str, Any], space: ParameterSpace
-    ) -> dict[str, Any]:
+    def _mutate(self, params: dict[str, Any], space: ParameterSpace) -> dict[str, Any]:
         out = dict(params)
         for name, dim in space.dimensions.items():
             if self._rng.random() < self.mutation_rate:

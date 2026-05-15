@@ -87,9 +87,7 @@ def hash_backup_codes(codes: list[str]) -> dict:
         "version": 1,
         "codes": [
             {
-                "hash": bcrypt.hashpw(c.encode("ascii"), bcrypt.gensalt()).decode(
-                    "ascii"
-                ),
+                "hash": bcrypt.hashpw(c.encode("ascii"), bcrypt.gensalt()).decode("ascii"),
                 "used_at": None,
             }
             for c in codes
@@ -209,9 +207,7 @@ def verify_challenge(token: str) -> str:
         body_b64, sig_b64 = token.split(".", 1)
     except ValueError as exc:
         raise MFAServiceError("malformed challenge token") from exc
-    expected_sig = hmac.new(
-        _challenge_key(), body_b64.encode("ascii"), hashlib.sha256
-    ).digest()
+    expected_sig = hmac.new(_challenge_key(), body_b64.encode("ascii"), hashlib.sha256).digest()
     try:
         provided_sig = base64.urlsafe_b64decode(sig_b64)
     except (ValueError, TypeError) as exc:

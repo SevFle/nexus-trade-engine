@@ -50,9 +50,7 @@ class TestPriceGoldens:
         S = 100.0  # noqa: N806
         sigma = 0.20
         T = 1.0  # noqa: N806
-        expected = S * (
-            2 * (0.5 * (1 + math.erf((sigma / 2) / math.sqrt(2)))) - 1
-        )
+        expected = S * (2 * (0.5 * (1 + math.erf((sigma / 2) / math.sqrt(2)))) - 1)
         price = bs_price(
             option_type=OptionType.CALL,
             S=S,
@@ -76,22 +74,14 @@ class TestPutCallParity:
 
 class TestEdgeCases:
     def test_t_zero_call_intrinsic(self):
-        assert bs_price(
-            option_type=OptionType.CALL, S=110, K=100, T=0, r=0.05, sigma=0.2
-        ) == 10.0
-        assert bs_price(
-            option_type=OptionType.CALL, S=90, K=100, T=0, r=0.05, sigma=0.2
-        ) == 0.0
+        assert bs_price(option_type=OptionType.CALL, S=110, K=100, T=0, r=0.05, sigma=0.2) == 10.0
+        assert bs_price(option_type=OptionType.CALL, S=90, K=100, T=0, r=0.05, sigma=0.2) == 0.0
 
     def test_t_zero_put_intrinsic(self):
-        assert bs_price(
-            option_type=OptionType.PUT, S=90, K=100, T=0, r=0.05, sigma=0.2
-        ) == 10.0
+        assert bs_price(option_type=OptionType.PUT, S=90, K=100, T=0, r=0.05, sigma=0.2) == 10.0
 
     def test_zero_underlying_call_zero(self):
-        assert bs_price(
-            option_type=OptionType.CALL, S=0, K=100, T=1.0, r=0.05, sigma=0.2
-        ) == 0.0
+        assert bs_price(option_type=OptionType.CALL, S=0, K=100, T=1.0, r=0.05, sigma=0.2) == 0.0
 
     def test_zero_underlying_put_discounted_strike(self):
         K, T, r = 100.0, 1.0, 0.05  # noqa: N806
@@ -102,13 +92,9 @@ class TestEdgeCases:
 
     def test_negative_inputs_rejected(self):
         with pytest.raises(ValueError):
-            bs_price(
-                option_type=OptionType.CALL, S=-1, K=100, T=1, r=0, sigma=0.2
-            )
+            bs_price(option_type=OptionType.CALL, S=-1, K=100, T=1, r=0, sigma=0.2)
         with pytest.raises(ValueError):
-            bs_price(
-                option_type=OptionType.CALL, S=100, K=100, T=1, r=0, sigma=0
-            )
+            bs_price(option_type=OptionType.CALL, S=100, K=100, T=1, r=0, sigma=0)
 
 
 # ---------------------------------------------------------------------------
@@ -120,26 +106,30 @@ class TestGreeks:
     def test_call_delta_in_range(self):
         g = bs_greeks(
             option_type=OptionType.CALL,
-            S=100, K=100, T=0.5, r=0.05, sigma=0.20,
+            S=100,
+            K=100,
+            T=0.5,
+            r=0.05,
+            sigma=0.20,
         )
         assert 0.0 <= g.delta <= 1.0
 
     def test_put_delta_in_range(self):
         g = bs_greeks(
             option_type=OptionType.PUT,
-            S=100, K=100, T=0.5, r=0.05, sigma=0.20,
+            S=100,
+            K=100,
+            T=0.5,
+            r=0.05,
+            sigma=0.20,
         )
         assert -1.0 <= g.delta <= 0.0
 
     def test_call_minus_put_delta_equals_disc_q(self):
         # delta_call - delta_put = exp(-qT)
         S, K, T, r, q, sigma = 100, 100, 0.5, 0.05, 0.02, 0.20  # noqa: N806
-        gc = bs_greeks(
-            option_type=OptionType.CALL, S=S, K=K, T=T, r=r, sigma=sigma, q=q
-        )
-        gp = bs_greeks(
-            option_type=OptionType.PUT, S=S, K=K, T=T, r=r, sigma=sigma, q=q
-        )
+        gc = bs_greeks(option_type=OptionType.CALL, S=S, K=K, T=T, r=r, sigma=sigma, q=q)
+        gp = bs_greeks(option_type=OptionType.PUT, S=S, K=K, T=T, r=r, sigma=sigma, q=q)
         assert gc.delta - gp.delta == pytest.approx(math.exp(-q * T), abs=1e-9)
 
     def test_call_put_gamma_equal(self):
@@ -152,7 +142,11 @@ class TestGreeks:
     def test_vega_positive(self):
         g = bs_greeks(
             option_type=OptionType.CALL,
-            S=100, K=100, T=0.5, r=0.05, sigma=0.20,
+            S=100,
+            K=100,
+            T=0.5,
+            r=0.05,
+            sigma=0.20,
         )
         assert g.vega > 0
 
@@ -188,9 +182,7 @@ class TestGreeks:
         assert analytic == pytest.approx(fd, abs=1e-3)
 
     def test_t_zero_greeks_collapse(self):
-        g = bs_greeks(
-            option_type=OptionType.CALL, S=110, K=100, T=0, r=0.05, sigma=0.2
-        )
+        g = bs_greeks(option_type=OptionType.CALL, S=110, K=100, T=0, r=0.05, sigma=0.2)
         assert isinstance(g, Greeks)
         assert g.gamma == 0.0
         assert g.vega == 0.0
@@ -210,18 +202,14 @@ class TestImpliedVol:
         kw = {"S": 100, "K": 100, "T": 0.5, "r": 0.05, "q": 0.0}
         true_sigma = 0.234
         market = bs_price(option_type=OptionType.CALL, sigma=true_sigma, **kw)
-        iv = implied_volatility(
-            option_type=OptionType.CALL, market_price=market, **kw
-        )
+        iv = implied_volatility(option_type=OptionType.CALL, market_price=market, **kw)
         assert iv == pytest.approx(true_sigma, abs=1e-6)
 
     def test_round_trip_put(self):
         kw = {"S": 100, "K": 110, "T": 0.25, "r": 0.03, "q": 0.01}
         true_sigma = 0.45
         market = bs_price(option_type=OptionType.PUT, sigma=true_sigma, **kw)
-        iv = implied_volatility(
-            option_type=OptionType.PUT, market_price=market, **kw
-        )
+        iv = implied_volatility(option_type=OptionType.PUT, market_price=market, **kw)
         assert iv == pytest.approx(true_sigma, abs=1e-6)
 
     def test_below_intrinsic_rejected(self):

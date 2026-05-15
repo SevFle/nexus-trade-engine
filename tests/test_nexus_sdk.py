@@ -148,7 +148,9 @@ class TestNexusSdkSignalConstructors:
         assert sig.symbol == "GOOGL"
 
     def test_buy_with_extra_kwargs(self):
-        sig = Signal.buy(symbol="AAPL", strategy_id="t", weight=0.5, strength=SignalStrength.STRONG)
+        sig = Signal.buy(
+            symbol="AAPL", strategy_id="t", weight=0.5, strength=SignalStrength.STRONG
+        )
         assert sig.weight == 0.5
         assert sig.strength == SignalStrength.STRONG
 
@@ -302,7 +304,9 @@ class TestStrategyConfig:
         assert config.secrets == {}
 
     def test_custom_params(self):
-        config = StrategyConfig(strategy_id="test", params={"threshold": 0.5}, secrets={"api_key": "xxx"})
+        config = StrategyConfig(
+            strategy_id="test", params={"threshold": 0.5}, secrets={"api_key": "xxx"}
+        )
         assert config.params["threshold"] == 0.5
         assert config.secrets["api_key"] == "xxx"
 

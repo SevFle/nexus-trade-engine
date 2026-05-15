@@ -54,7 +54,7 @@ _DISENGAGE_TOKEN: str = "I_UNDERSTAND_THE_RISK"  # noqa: S105
 
 class KillSwitchState(StrEnum):
     DISENGAGED = "disengaged"  # trading allowed
-    ENGAGED = "engaged"        # trading blocked
+    ENGAGED = "engaged"  # trading blocked
 
 
 @dataclass(frozen=True)
@@ -132,9 +132,7 @@ class KillSwitch:
                     new_reason=reason,
                     actor=actor,
                 )
-                self.metrics.counter(
-                    "kill_switch.engage_noop", tags={"actor": actor}
-                )
+                self.metrics.counter("kill_switch.engage_noop", tags={"actor": actor})
                 return False
             self._state = KillSwitchState.ENGAGED
             self._engaged_at = datetime.now(tz=UTC)
@@ -167,8 +165,7 @@ class KillSwitch:
         """
         if confirmation != _DISENGAGE_TOKEN:
             raise KillSwitchError(
-                "disengage requires confirmation token "
-                f"{_DISENGAGE_TOKEN!r} (see runbook)"
+                f"disengage requires confirmation token {_DISENGAGE_TOKEN!r} (see runbook)"
             )
         with self._lock:
             if self._state == KillSwitchState.DISENGAGED:

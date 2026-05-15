@@ -63,18 +63,14 @@ class TestBootstrap:
         returns = rng.normal(0.001, 0.001, size=100)
         out = bootstrap_returns(returns, n_simulations=2000, seed=13)
         sample_compound = float(np.prod(1.0 + returns) - 1.0)
-        assert out.mean_total_return == pytest.approx(
-            sample_compound, abs=0.05
-        )
+        assert out.mean_total_return == pytest.approx(sample_compound, abs=0.05)
 
 
 class TestBlockBootstrap:
     def test_block_bootstrap_runs(self):
         rng = np.random.default_rng(0)
         returns = rng.normal(0.0, 0.01, size=200)
-        out = block_bootstrap(
-            returns, n_simulations=200, block_size=10, seed=42
-        )
+        out = block_bootstrap(returns, n_simulations=200, block_size=10, seed=42)
         assert isinstance(out, SimulationStats)
 
     def test_block_bootstrap_seeded_deterministic(self):
@@ -106,9 +102,7 @@ class TestValidation:
 
     def test_non_finite_returns_rejected(self):
         with pytest.raises(MonteCarloError):
-            bootstrap_returns(
-                np.array([0.01, np.nan]), n_simulations=10, seed=0
-            )
+            bootstrap_returns(np.array([0.01, np.nan]), n_simulations=10, seed=0)
 
 
 class TestSimulationStats:

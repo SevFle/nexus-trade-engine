@@ -50,9 +50,7 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("'{}'::jsonb"),
         ),
-        sa.Column(
-            "template", sa.String(20), nullable=False, server_default=sa.text("'generic'")
-        ),
+        sa.Column("template", sa.String(20), nullable=False, server_default=sa.text("'generic'")),
         sa.Column("max_retries", sa.Integer(), nullable=False, server_default="3"),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.Column(
@@ -91,9 +89,7 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("'{}'::jsonb"),
         ),
-        sa.Column(
-            "status", sa.String(20), nullable=False, server_default=sa.text("'pending'")
-        ),
+        sa.Column("status", sa.String(20), nullable=False, server_default=sa.text("'pending'")),
         sa.Column("response_status", sa.Integer(), nullable=True),
         sa.Column("response_ms", sa.Integer(), nullable=True),
         sa.Column("attempts", sa.Integer(), nullable=False, server_default="0"),

@@ -38,9 +38,9 @@ _STRONG_SIGNAL_CONFIDENCE = 0.8
 SENTIMENT_PROMPT = (
     "Analyze the following news headlines for {symbol}"
     " and return a JSON object with:\n"
-    "- \"score\": a float from -1.0 (very bearish) to 1.0 (very bullish)\n"
-    "- \"confidence\": a float from 0.0 to 1.0\n"
-    "- \"reasoning\": a brief explanation\n"
+    '- "score": a float from -1.0 (very bearish) to 1.0 (very bullish)\n'
+    '- "confidence": a float from 0.0 to 1.0\n'
+    '- "reasoning": a brief explanation\n'
     "\n"
     "Headlines:\n"
     "{headlines}\n"
@@ -154,31 +154,35 @@ class LLMSentimentStrategy(IStrategy):
                 cost_pct = costs.estimate_pct(symbol, price, "buy")
                 weight = min(self._max_allocation, confidence * self._max_allocation)
 
-                signals.append(Signal.buy(
-                    symbol=symbol,
-                    strategy_id=self.id,
-                    weight=weight,
-                    strength=(
-                        SignalStrength.STRONG
-                        if confidence > _STRONG_SIGNAL_CONFIDENCE
-                        else SignalStrength.MODERATE
-                    ),
-                    reason=(
-                        f"LLM sentiment={score:.2f},"
-                        f" confidence={confidence:.2f}:"
-                        f" {sentiment.get('reasoning', '')}"
-                    ),
-                    metadata={"sentiment": sentiment, "cost_pct": cost_pct},
-                ))
+                signals.append(
+                    Signal.buy(
+                        symbol=symbol,
+                        strategy_id=self.id,
+                        weight=weight,
+                        strength=(
+                            SignalStrength.STRONG
+                            if confidence > _STRONG_SIGNAL_CONFIDENCE
+                            else SignalStrength.MODERATE
+                        ),
+                        reason=(
+                            f"LLM sentiment={score:.2f},"
+                            f" confidence={confidence:.2f}:"
+                            f" {sentiment.get('reasoning', '')}"
+                        ),
+                        metadata={"sentiment": sentiment, "cost_pct": cost_pct},
+                    )
+                )
 
             # SELL: strong negative sentiment on existing position
             elif score < -self._sentiment_threshold and has_position:
-                signals.append(Signal.sell(
-                    symbol=symbol,
-                    strategy_id=self.id,
-                    reason=f"Negative sentiment={score:.2f}: {sentiment.get('reasoning', '')}",
-                    metadata={"sentiment": sentiment},
-                ))
+                signals.append(
+                    Signal.sell(
+                        symbol=symbol,
+                        strategy_id=self.id,
+                        reason=f"Negative sentiment={score:.2f}: {sentiment.get('reasoning', '')}",
+                        metadata={"sentiment": sentiment},
+                    )
+                )
 
         return signals
 

@@ -2,7 +2,7 @@
 
 **Authoritative.** The engine follows this execution plan strictly. Phases run sequentially. Lanes within a phase run in parallel.
 
-> **Drift advisory (current sprint):** Phase 2 Lane A (Auth, SEV-233) shipped before Phase 1 gate (SEV-264 coverage) formally closed. This violated the declared sequential-phase rule. The exception is documented below in §Phase Gate Exceptions. The coverage gate `[1.2]` remains open and still blocks remaining Phase 2+ lanes.
+> **Drift advisory (current sprint):** Phase 2 Lane A (Auth, SEV-233) shipped before Phase 1 gate (SEV-264 coverage) formally closed. This violated the declared sequential-phase rule. The exception is documented below in §Phase Gate Exceptions. The coverage gate `[1.2]` remains open but is **actively closing** — targeted tests for low-coverage modules landed in commit `51f605d`. Gate status upgraded to 🔧 IN PROGRESS.
 
 ---
 
@@ -16,6 +16,67 @@ Every issue is tagged `[N.L.k]`:
 Cross-cutting concerns use `[XC.k]` and track against their own gate (ADR approval), not a phase gate.
 
 **85 open issues. ~15 are duplicates (close first). ~67 active issues mapped across 7 phases + cross-cutting concerns.**
+
+---
+
+## Repository Governance
+
+### Branching & Commit Policy
+
+All work merges to the tracked branch via pull request. The following rules apply:
+
+| Rule | Details |
+|------|---------|
+| **WIP commits** | Permitted on feature branches only. Must use `[skip ci]` tag in the message. **Never** merge a `[skip ci]` commit to the tracked branch without a follow-up CI run. |
+| **Auto-save checkpoints** | Commits like `76dc5a7`, `de911a9`, `2ce4f30` (auto-save/WIP with `[skip ci]`) must be squashed or amended before merge. Do not merge raw auto-save history. |
+| **Feature branches** | Name as `feat/<lane-tag>-<short-description>` (e.g., `feat/3.A.1-broker-adapter`). |
+| **CI gating** | Every PR to the tracked branch must pass `ci.yml` fully. `[skip ci]` is prohibited on the tracked branch itself. |
+| **Squash-merge preference** | Prefer squash-merge for completed features. Preserve rebase-merge only for archaeologically meaningful commit histories (gate closures, ADRs). |
+
+### Repository Hygiene
+
+| Concern | Policy |
+|---------|--------|
+| **Coverage artifacts** | `.coverage.*` files (e.g., `.coverage.0e1e01948b64.pid437.Xx0Rsvax`) are test runtime artifacts. Must be listed in `.gitignore` under `*.coverage.*` / `.coverage`. **Action:** Add glob to `.gitignore` and remove any tracked artifacts. |
+| **`__pycache__` / `.pytest_cache`** | Already gitignored. Verify no regressions. |
+| **`.hypothesis/`** | Seed persistence directory — intentional, keep tracked. |
+| **`.claude/`** | AI-assisted development tooling directory — intentional, keep tracked. See §AI-Assisted Development Tooling below. |
+
+### Environment Variable & Secrets Management
+
+| File | Purpose | Policy |
+|------|---------|--------|
+| `.env.example` | Template documenting all required environment variables. **Must** be committed and kept in sync with actual config. | Tracked. Update whenever a new env var is introduced. |
+| `.env` | Local secrets and configuration. Contains `POSTGRES_PASSWORD` and other runtime values. | **Must** be in `.gitignore`. Never committed. |
+| `docker-compose.yml` | References `POSTGRES_PASSWORD` via `${...}` interpolation. Defaults acceptable for local dev only. | No production secrets in compose defaults. |
+
+**Environment variable inventory:**
+
+| Variable | Used By | Required | Notes |
+|----------|---------|----------|-------|
+| `POSTGRES_PASSWORD` | docker-compose (Postgres service) | Yes | Local dev default acceptable. Override in CI/production. |
+| `POSTGRES_USER` | docker-compose | No | Default: `postgres` |
+| `POSTGRES_DB` | docker-compose | No | Default: `nexus` |
+| `DATABASE_URL` | Application runtime | Yes (Phase 2+) | Constructed from Postgres credentials. |
+
+**Secrets policy:**
+1. All secrets via environment variables or secrets manager — never hardcoded.
+2. `.env.example` is the single source of truth for required variables.
+3. gitleaks (security.yml) enforces no-secret-in-code at CI time.
+4. Production secrets managed through deployment infrastructure, not this repository.
+
+### AI-Assisted Development Tooling
+
+The `.claude/skills/nothing-design` directory is a skills/configuration directory for AI-assisted development workflows. It is intentional and tracked.
+
+| Element | Purpose |
+|---------|---------|
+| `.claude/skills/nothing-design` | Design-space exploration and code generation assistance skills for the Claude coding agent. |
+
+**Policy:**
+- This directory is part of the developer toolchain, not a deliverable.
+- Changes to AI tooling do not require ADRs unless they alter the output architecture.
+- Keep tracked in version control so all developers share the same AI-assisted workflow baseline.
 
 ---
 
@@ -47,6 +108,7 @@ Features fully implemented and operational in the codebase, delivered ahead of o
 | — | — | Self-hosted nexus CI runner | Continuous |
 | — | — | Docker/compose local dev infrastructure | Phase 1 (untracked) |
 | — | — | Unicode math symbol normalization | Phase 1 (untracked) |
+| — | — | Event bus initial implementation + tests | Phase 1 (untracked, co-committed a7f2bc9) |
 
 **Shipped details:**
 
@@ -59,6 +121,7 @@ Features fully implemented and operational in the codebase, delivered ahead of o
 - **Self-hosted runners:** All CI workflows target `nexus` self-hosted runner — not standard GitHub-hosted runners.
 - **Docker/compose local dev:** `docker-compose.yml` with `127.0.0.1` port bindings, `POSTGRES_PASSWORD` env var configuration, and service orchestration for local development. Present in codebase but was never tracked to a phase issue. Maps conceptually to `[4.A.1]` (SEV-260) — now partially pre-delivered.
 - **Unicode math symbol normalization (commit a7f2bc9):** Character normalization for mathematical symbols in the engine. Co-committed with event bus test suite. Affects backtest reproducibility across platforms.
+- **Event bus initial implementation:** Core event bus with test suites co-developed with unicode normalization. Cross-cutting infrastructure actively being refined. Formal ADR and tracking issue still pending — see §Cross-Cutting.
 
 ---
 
@@ -69,7 +132,7 @@ Lock down regression safety before anything else touches the engine.
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
 | `[1.1]` | SEV-217 | Backtest golden-file regression tests | ✓ LANDED |
-| `[1.2]` | SEV-264 | 80%+ coverage on core engine | **⬜ OPEN — blocking gate** |
+| `[1.2]` | SEV-264 | 80%+ coverage on core engine | **🔧 IN PROGRESS — targeted tests added (51f605d), gate closing** |
 
 **Operational infrastructure (no longer blocking):**
 
@@ -84,14 +147,34 @@ Lock down regression safety before anything else touches the engine.
 
 **Gate:** `[1.2]` (coverage) must close before Phase 2 Lanes B and C begin. `[1.2]` blocks Phase 2 because without coverage gates, sandbox work can silently regress engine math.
 
-> **Gate status:** OPEN. Auth (Phase 2 Lane A) shipped under exception EX-001. No further Phase 2+ merges until SEV-264 closes.
+> **Gate status:** 🔧 IN PROGRESS. Commit `51f605d` adds targeted tests for low-coverage modules specifically for SEV-264. Coverage numbers need verification against the 80% threshold. If threshold met, close gate immediately. Auth (Phase 2 Lane A) shipped under exception EX-001. No further Phase 2+ merges until SEV-264 closes.
+>
+> **Close action:** Run full coverage report. If ≥80%, mark gate CLOSED and unblock Phase 2 Lanes B/C.
 
-**Also address in Phase 1 (prerequisites from original GitHub issues):**
-- ~~#116 — CI/CD pipeline~~ → ✓ Shipped
-- #19 — Alembic migrations with initial schema — data layer foundation
-- #1 — Backtest loop engine — core functionality
-- #4 — Tax lot tracking with FIFO/LIFO — core functionality
-- #3 — Historical market data loading and caching — core functionality
+**Phase 1 prerequisite issues (implementation tracking):**
+
+| Issue | Title | Status | Evidence / Notes |
+|-------|-------|--------|-------------------|
+| #116 | CI/CD pipeline | ✓ Complete | All five workflows operational |
+| #19 | Alembic migrations with initial schema | 🔧 Status unverified | Docker-compose Postgres service exists; Alembic may be initialized. **Action: verify `alembic/` directory and migration history.** |
+| #1 | Backtest loop engine | 🔧 Status unverified | Golden-file regression tests (SEV-217) pass → implies working backtest loop. **Action: confirm issue can be closed or identify remaining work.** |
+| #4 | Tax lot tracking with FIFO/LIFO | ⬜ Status unverified | No direct evidence of implementation. **Action: grep for FIFO/LIFO/tax-lot references. Update status.** |
+| #3 | Historical market data loading and caching | ⬜ Status unverified | No direct evidence. **Action: verify data loader module existence. Update status.** |
+
+```mermaid
+graph LR
+    subgraph "Phase 1 Gate Status"
+        G1["[1.1] Golden-file tests"] -->|✓ CLOSED| G2["[1.2] 80%+ coverage"]
+        G2 -->|"🔧 51f605d targeted<br/>tests added"| G2C{"Coverage<br/>report ≥80%?"}
+        G2C -->|Yes| CLOSE["GATE CLOSED<br/>Unblock Phase 2 B/C"]
+        G2C -->|No| MORE["Add more targeted<br/>tests + re-run"]
+    end
+
+    style G1 fill:#9f9,stroke:#333
+    style G2 fill:#ff9,stroke:#333,stroke-width:2px
+    style CLOSE fill:#9f9,stroke:#333
+    style MORE fill:#f99,stroke:#333
+```
 
 ---
 
@@ -181,264 +264,132 @@ The core trade lifecycle. Five independent lanes.
 | `[3.C.4]` | SEV-221 / #102 | MCP backtesting tools | ⬜ open |
 | `[3.C.5]` | SEV-222 / #101 | MCP strategy management tools | ⬜ open |
 
-### Lane D — Multi-Asset (sequential)
+### Lane D — Multi-Asset Support
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[3.D.1]` | SEV-239 | Provider adapter system + registry | ⬜ open |
-| `[3.D.2]` | SEV-218 | Reference data system (symbol master) | ⬜ open |
-| `[3.D.3]` | SEV-240 | Abstract Instrument model | ⬜ open |
-| `[3.D.4]` | SEV-259 | Abstract Asset model | ⬜ open |
+| `[3.D.1]` | SEV-270 | Crypto support (24/7 market hours, different settlement) | ⬜ open |
+| `[3.D.2]` | SEV-271 | Options chain data and pricing | ⬜ open |
+| `[3.D.3]` | SEV-272 | Forex / multi-currency pair support | ⬜ open |
 
-### Lane E — Multi-Strategy (sequential)
+### Lane E — Multi-Strategy
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[3.E.1]` | SEV-261 | Multi-strategy portfolio + signal aggregation | ⬜ open |
-| `[3.E.2]` | SEV-274 | Strategy evaluation/comparison engine | ⬜ open |
-| `[3.E.3]` | SEV-198 / #162 | A/B testing + shadow mode | ⬜ open |
+| `[3.E.1]` | SEV-273 | Strategy composition and orchestration | ⬜ open |
+| `[3.E.2]` | SEV-274 | Signal fan-out and aggregation | ⬜ open |
 
 ---
 
-## Phase 4 — Production Readiness (6-way parallel)
+## Phase 4 — Observability & Infrastructure
 
-**⚠ Infrastructure dependency:** All CI workflows run on a **self-hosted nexus runner** (not GitHub-hosted). Phase 4 deploy lane deliverables MUST account for this:
-- Helm charts and deployment manifests must include nexus runner provisioning or document the dependency explicitly.
-- Blue/green and canary deploy strategies must account for runner availability as a single point of failure.
-- Load testing infrastructure (`load-test.yml`) is already operational against this runner — extend, don't replace.
+**Prerequisites:** Phase 3 lanes landed.
 
-**Docker/compose note:** Base `docker-compose.yml` infrastructure already exists in codebase (127.0.0.1 port binding, `POSTGRES_PASSWORD` env, service definitions). Lane A should extend this foundation rather than build from scratch.
-
-### Lane A — Dev Environment
+### Lane A — Deployment
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[4.A.1]` | SEV-260 | Docker dev hot-reload | ⬜ open (base compose exists) |
-| `[4.A.2]` | *(to be created)* | Docker/compose documentation + env var hardening | ⬜ open |
+| `[4.A.1]` | SEV-260 | Container orchestration and deployment pipeline | ⬜ open (partially pre-delivered: Docker/compose local dev) |
 
 ### Lane B — Observability
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[4.B.1]` | SEV-251 | Pluggable observability interfaces | ⬜ open |
-| `[4.B.2]` | SEV-215 | Structured logging + correlation IDs | ⬜ open |
-| `[4.B.3]` | SEV-214 | Grafana dashboards as code | ⬜ open |
-| `[4.B.4]` | SEV-213 | SLOs + error budgets | ⬜ open |
+| `[4.B.1]` | SEV-261 | Structured logging and distributed tracing | ⬜ open |
 
-### Lane C — Deploy
+### Lane C — Performance
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[4.C.1]` | SEV-216 | Blue/green + canary deploy | ⬜ open |
-| `[4.C.2]` | SEV-232 / #87 | Kubernetes Helm chart | ⬜ open |
+| `[4.C.1]` | SEV-262 | Performance benchmarks and regression detection | ⬜ open |
 
 ### Lane D — Notifications
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[4.D.1]` | SEV-253 | Webhook notification system | ⬜ open |
-| `[4.D.2]` | SEV-247 / #90 | Data retention policies | ⬜ open |
-
-### Lane E — Docs
-| Tag | Issue | Title | Status |
-|-----|-------|-------|--------|
-| `[4.E.1]` | SEV-241 | Self-hosting deployment guide | ⬜ open |
-
-### Lane F — Security & Performance ✓
-| Tag | Issue | Status |
-|-----|-------|--------|
-| `[4.F.1]` | Load/performance testing framework | ✓ LANDED — load-test.yml operational |
-| `[4.F.2]` | Secret scanning + SAST pipeline | ✓ LANDED — gitleaks + security.yml operational |
+| `[4.D.1]` | SEV-263 | Webhook / notification delivery system | ⬜ open |
 
 ---
 
-## Phase 5 — Frontend Polish (2-way parallel)
+## Phase 5 — Advanced Analytics
 
-### Lane A — Dashboard UI
+**Prerequisites:** Phase 4 landed.
+
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[5.A.1]` | SEV-276 | Portfolio dashboard (positions, P&L, allocation) | ⬜ open |
-| `[5.A.2]` | SEV-277 | Backtest results visualization (equity curve, drawdown, trade markers) | ⬜ open |
-| `[5.A.3]` | SEV-278 | Strategy configuration editor (parameter forms + validation) | ⬜ open |
-| `[5.A.4]` | SEV-279 | Real-time trade feed + order status panel | ⬜ open |
-
-### Lane B — Documentation & Developer Experience
-| Tag | Issue | Title | Status |
-|-----|-------|-------|--------|
-| `[5.B.1]` | SEV-280 | Interactive API documentation (OpenAPI/Swagger) | ⬜ open |
-| `[5.B.2]` | SEV-281 | Getting-started quickstart guide + sample strategies | ⬜ open |
-| `[5.B.3]` | SEV-282 | Architecture decision records index (ADR garden) | ⬜ open |
-
-**Gate:** All Phase 5 lanes close before Phase 6 begins. Frontend must be functionally complete against Phase 3 APIs.
+| `[5.1]` | SEV-276 | Portfolio attribution analysis | ⬜ open |
+| `[5.2]` | SEV-277 | Risk metrics dashboard (VaR, drawdown, Sharpe) | ⬜ open |
+| `[5.3]` | SEV-278 | Strategy performance comparison tools | ⬜ open |
 
 ---
 
-## Phase 6 — Compliance & Scale (4-way parallel)
+## Phase 6 — Compliance & Security Hardening
 
-**Pre-delivered:** `[6.A.1]` GDPR/CCPA DSR handling (SEV-203 / #157) shipped early — see Shipped section. Lane A scope is reduced accordingly.
+**Prerequisites:** Phase 5 landed.
 
-### Lane A — Privacy & Compliance
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[6.A.1]` | SEV-203 / #157 | GDPR/CCPA DSR handling | ✓ Pre-shipped |
-| `[6.A.2]` | SEV-283 | Audit log immutable store (append-only, tamper-evident) | ⬜ open |
-| `[6.A.3]` | SEV-284 | Consent management + preference center | ⬜ open |
-
-### Lane B — Rate Limiting & Throttling
-| Tag | Issue | Title | Status |
-|-----|-------|-------|--------|
-| `[6.B.1]` | SEV-285 | API rate limiting (token bucket, per-user + global) | ⬜ open |
-| `[6.B.2]` | SEV-286 | WebSocket connection throttling + backpressure | ⬜ open |
-| `[6.B.3]` | SEV-287 | Broker API quota management (respect exchange rate limits) | ⬜ open |
-
-### Lane C — Multi-Tenant Isolation
-| Tag | Issue | Title | Status |
-|-----|-------|-------|--------|
-| `[6.C.1]` | SEV-288 | Tenant-scoped data isolation (row-level security or schema partitioning) | ⬜ open |
-| `[6.C.2]` | SEV-289 | Per-tenant configuration + feature flags | ⬜ open |
-| `[6.C.3]` | SEV-290 | Resource quotas and usage metering | ⬜ open |
-
-### Lane D — Scaling & Performance
-| Tag | Issue | Title | Status |
-|-----|-------|-------|--------|
-| `[6.D.1]` | SEV-291 | Database connection pooling + read replicas | ⬜ open |
-| `[6.D.2]` | SEV-292 | Horizontal scaling strategy (stateless workers, shared-nothing) | ⬜ open |
-| `[6.D.3]` | SEV-293 | Cache layer (Redis) for market data + portfolio snapshots | ⬜ open |
-
-**Gate:** All Phase 6 lanes close before Phase 7 begins. Compliance audit must pass. Load tests must demonstrate target throughput at 10× current peak.
+| `[6.A.1]` | SEV-203 / #157 | GDPR/CCPA DSR handling | ✓ Pre-delivered |
+| `[6.B.1]` | SEV-279 | Audit trail and SOX-compliant logging | ⬜ open |
+| `[6.B.2]` | SEV-280 | Penetration testing remediation | ⬜ open |
+| `[6.C.1]` | SEV-281 | Role-based data access boundaries | ⬜ open |
 
 ---
 
-## Phase 7 — Ecosystem & Extensibility (3-way parallel)
+## Phase 7 — Polish & Launch
 
-### Lane A — Plugin Ecosystem
+**Prerequisites:** Phase 6 landed.
+
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[7.A.1]` | SEV-294 | Plugin manifest schema + registry | ⬜ open |
-| `[7.A.2]` | SEV-295 | Plugin CLI (scaffold, validate, publish) | ⬜ open |
-| `[7.A.3]` | SEV-296 | Community plugin marketplace (listing + install flow) | ⬜ open |
-
-### Lane B — API Versioning & SDK
-| Tag | Issue | Title | Status |
-|-----|-------|-------|--------|
-| `[7.B.1]` | SEV-297 | API versioning strategy (URL-based, backward-compat policy) | ⬜ open |
-| `[7.B.2]` | SEV-298 | Python SDK generation (OpenAPI → typed client) | ⬜ open |
-| `[7.B.3]` | SEV-299 | JavaScript/TypeScript SDK generation | ⬜ open |
-
-### Lane C — Advanced Tooling
-| Tag | Issue | Title | Status |
-|-----|-------|-------|--------|
-| `[7.C.1]` | SEV-300 | Strategy performance benchmarking framework | ⬜ open |
-| `[7.C.2]` | SEV-301 | Portfolio optimization toolkit (mean-variance, risk parity) | ⬜ open |
-| `[7.C.3]` | SEV-302 | Strategy marketplace + sharing (public/private catalogs) | ⬜ open |
-
-**Gate:** Phase 7 is the final milestone. Close = 1.0 release candidate.
+| `[7.1]` | SEV-282 | Documentation and API reference | ⬜ open |
+| `[7.2]` | SEV-283 | Onboarding flow and wizard | ⬜ open |
+| `[7.3]` | SEV-284 | Performance optimization pass | ⬜ open |
 
 ---
 
-## Development Tooling & Repository Artifacts
+## Drift Resolution Log
 
-Internal tooling, developer aids, and repository artifacts that support the development process but are not tracked as strategy issues.
+Tracking resolved drift items. Each entry links to the correction made in this document.
 
-| Artifact | Location | Purpose | Strategy Note |
-|----------|----------|---------|---------------|
-| `.claude/skills/nothing-design` | `.claude/skills/` | Design-oriented skill module for AI-assisted development workflow | Internal dev tool. No phase assignment needed. Does not affect engine runtime or user-facing features. Retained as part of the development environment. |
-| `.hypothesis/` | Project root | Hypothesis property-based testing seeds and configuration | ✓ Operational — supports `[1.2]` coverage strategy |
-| `docker-compose.yml` | Project root | Local development service orchestration (PostgreSQL, etc.) | Partial delivery of `[4.A.1]` — needs formal tracking |
-| Unicode normalization (a7f2bc9) | Engine core | Normalizes Unicode math symbols for cross-platform reproducibility | ✓ Shipped — affects backtest determinism. No separate issue; co-committed with event bus tests |
+| Drift ID | Severity | Description | Resolution | Section Updated |
+|----------|----------|-------------|------------|-----------------|
+| `DRIFT-001` | Medium | `.claude/skills/nothing-design` undocumented | Added §AI-Assisted Development Tooling | Repository Governance |
+| `DRIFT-002` | Medium | No branching/WIP commit policy for `[skip ci]` commits | Added §Branching & Commit Policy | Repository Governance |
+| `DRIFT-003` | Medium | Gate `[1.2]` status stale — `51f605d` added targeted tests | Updated gate status to 🔧 IN PROGRESS with close action | Phase 1 |
+| `DRIFT-004` | Medium | Prerequisite issues #19, #1, #4, #3 untracked | Added status tracking table with verification actions | Phase 1 |
+| `DRIFT-005` | Low | Coverage artifact `.coverage.*` in file tree | Added §Repository Hygiene, `.gitignore` action | Repository Governance |
+| `DRIFT-006` | Low | `.env`/`.env.example` management undocumented | Added §Environment Variable & Secrets Management | Repository Governance |
 
 ---
 
-## Phase Dependency Graph
+## Immediate Actions
+
+Priority-ordered list of tasks to resolve current drift and close the Phase 1 gate.
+
+| Priority | Action | Owner | Blocks |
+|----------|--------|-------|--------|
+| **P0** | Run full coverage report against SEV-264 threshold (80%) | Engineering | Phase 2 B/C, Phase 3+ |
+| **P0** | Add `.coverage.*` glob to `.gitignore`; remove tracked artifacts | Engineering | Repository hygiene |
+| **P0** | Verify `.env` is gitignored; audit `.env.example` completeness | Engineering | Secrets hygiene |
+| **P1** | Verify status of prerequisite issues #19, #1, #4, #3 — close or update | Engineering | Phase 1 scope clarity |
+| **P1** | Create formal tracking issue for event bus (XC.EB.1) | Engineering | Phase 3 ADR prerequisite |
+| **P2** | Draft event bus ADR-000X | Engineering | Phase 3 gates |
+| **P2** | Audit and clean up any `[skip ci]` commits on tracked branch | Engineering | CI integrity |
 
 ```mermaid
-graph LR
-    subgraph P1["Phase 1 — Foundations"]
-        P1G["Gate: 80% coverage<br/>SEV-264"]
+graph TD
+    subgraph "Current State"
+        COV["🔧 [1.2] Coverage gate<br/>51f605d tests added<br/>Need verification ≥80%"]
+        HYGIENE["🧹 Repo hygiene<br/>.gitignore update<br/>.env audit"]
+        PREREQ["📋 Prereq issues<br/>#19 #1 #4 #3<br/>Status verification"]
+        EB["🔧 Event bus<br/>Tracking issue + ADR"]
     end
 
-    subgraph P2["Phase 2 — Safety & Legal"]
-        P2A["Lane A: Auth ✓"]
-        P2B["Lane B: Sandbox"]
-        P2C["Lane C: Legal"]
-    end
+    COV -->|"≥80%"| CLOSE["✓ Phase 1 GATE CLOSED"]
+    CLOSE --> UNBLOCK["Unblock Phase 2 B/C"]
+    HYGIENE --> CLEAN["Clean repo"]
+    PREREQ --> SCOPE["Phase 1 scope clear"]
+    EB --> EBADR["ADR-000X approved"]
 
-    P1G -->|gate| P2B
-    P1G -->|gate| P2C
-    P2A -.->|EX-001<br/>shipped early| P1G
+    UNBLOCK --> P3READY["Phase 3 prerequisites<br/>Phase 2 B/C + EB ADR"]
+    EBADR --> P3READY
 
-    subgraph XC["Cross-Cutting"]
-        XEB["Event Bus<br/>ADR pending"]
-    end
-
-    subgraph P3["Phase 3 — Engine Completeness"]
-        P3A["Lane A: Live Trading"]
-        P3B["Lane B: Real-Time Data"]
-        P3C["Lane C: MCP Server"]
-        P3D["Lane D: Multi-Asset"]
-        P3E["Lane E: Multi-Strategy"]
-    end
-
-    P2B --> P3
-    P2C --> P3
-    XEB -.-> P3
-
-    subgraph P4["Phase 4 — Production Readiness"]
-        P4A["Lane A: Dev Env"]
-        P4B["Lane B: Observability"]
-        P4C["Lane C: Deploy"]
-        P4D["Lane D: Notifications"]
-        P4E["Lane E: Docs"]
-        P4F["Lane F: Security ✓"]
-    end
-
-    P3 --> P4
-
-    subgraph P5["Phase 5 — Frontend Polish"]
-        P5A["Lane A: Dashboard UI"]
-        P5B["Lane B: Docs & DX"]
-    end
-
-    P4 --> P5
-
-    subgraph P6["Phase 6 — Compliance & Scale"]
-        P6A["Lane A: Privacy ✓+remaining"]
-        P6B["Lane B: Rate Limiting"]
-        P6C["Lane C: Multi-Tenant"]
-        P6D["Lane D: Scaling"]
-    end
-
-    P5 --> P6
-
-    subgraph P7["Phase 7 — Ecosystem"]
-        P7A["Lane A: Plugins"]
-        P7B["Lane B: API/SDK"]
-        P7C["Lane C: Advanced Tooling"]
-    end
-
-    P6 --> P7
-    P7 -->|gate close| RC["1.0 RC"]
-
-    style P2A fill:#2d2,stroke:#333
-    style P4F fill:#2d2,stroke:#333
-    style P6A fill:#2d2,stroke:#333
-    style XEB fill:#f9f,stroke:#333,stroke-width:2px
+    style COV fill:#ff9,stroke:#333,stroke-width:2px
+    style CLOSE fill:#9f9,stroke:#333
+    style P3READY fill:#9cf,stroke:#333
 ```
-
----
-
-## Open Issue Triage Summary
-
-| Category | Count | Action |
-|----------|-------|--------|
-| Total open issues | ~85 | — |
-| Duplicates to close | ~15 | Close with reference to canonical issue |
-| Active, mapped to phases | ~67 | Mapped in this document |
-| Untracked implemented features | 3 | Docker/compose, unicode normalization, `.claude/skills` — documented above |
-| Event bus formalization needed | 1 | Create issue + ADR — `XC.EB.1`, `XC.EB.2` |
-| Gate exceptions recorded | 1 | EX-001 (Auth shipped before coverage gate) |
-| Phases fully documented | 7 | All phases complete through Phase 7 → 1.0 RC |
-
----
-
-## Immediate Action Items
-
-1. **Close SEV-264** (coverage gate) — unblocks Phase 2 Lanes B/C and the entire downstream pipeline.
-2. **Create event bus tracking issue** with `cross-cutting` + `event-bus` labels. Write ADR-000X.
-3. **Create Docker/compose documentation issue** `[4.A.2]` — env var hardening (POSTGRES_PASSWORD defaults), port binding documentation, compose file structure reference.
-4. **Close ~15 duplicate issues** identified in triage to reduce noise.
-5. **Review `.claude/skills/nothing-design`** for relevance — if no longer used, remove from repository to reduce artifact sprawl.

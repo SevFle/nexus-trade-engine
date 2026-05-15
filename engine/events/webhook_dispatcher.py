@@ -93,10 +93,7 @@ def render_template(template: str, payload: dict[str, Any]) -> dict[str, Any]:
         }
     if template == "telegram":
         return {
-            "text": (
-                f"*{payload['event']}*\n"
-                f"```\n{json.dumps(payload['data'], indent=2)}\n```"
-            ),
+            "text": (f"*{payload['event']}*\n```\n{json.dumps(payload['data'], indent=2)}\n```"),
             "parse_mode": "Markdown",
         }
     return payload

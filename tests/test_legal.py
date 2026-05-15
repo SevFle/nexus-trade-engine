@@ -128,7 +128,6 @@ async def legal_client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
 
 
 class TestLegalDocumentsAPI:
-
     async def test_list_documents(self, legal_client: AsyncClient, db_session: AsyncSession):
         doc = LegalDocument(
             slug="test-doc",

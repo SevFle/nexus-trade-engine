@@ -146,9 +146,7 @@ async def _yahoo_search(query: str, limit: int) -> list[dict[str, object]]:
 async def suggest(
     q: str = Query(..., description="User-typed query (ticker or name fragment)"),
     limit: int = Query(_DEFAULT_LIMIT, ge=1, description="Maximum results"),
-    asset_class: AssetClassLiteral | None = Query(
-        None, description="Optional asset-class filter"
-    ),
+    asset_class: AssetClassLiteral | None = Query(None, description="Optional asset-class filter"),
     index: SearchIndex = Depends(get_search_index),
 ) -> dict[str, list[dict[str, object]]]:
     if not q or not q.strip():
@@ -171,8 +169,7 @@ async def suggest(
 
     if asset_class is not None:
         yahoo_results = [
-            r for r in yahoo_results
-            if r.get("record", {}).get("asset_class") == asset_class
+            r for r in yahoo_results if r.get("record", {}).get("asset_class") == asset_class
         ]
 
     if yahoo_results:

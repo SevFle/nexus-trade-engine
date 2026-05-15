@@ -117,17 +117,19 @@ class MeanReversionStrategy(IStrategy):
                 net_return_pct = expected_return_pct - cost_pct
 
                 if net_return_pct >= self._min_net_return_pct:
-                    signals.append(Signal.buy(
-                        symbol=symbol,
-                        strategy_id=self.id,
-                        weight=self._position_weight,
-                        reason=f"z={z_score:.2f}, exp_net_return={net_return_pct:.2f}%",
-                        metadata={
-                            "z_score": z_score,
-                            "sma": sma,
-                            "expected_return": expected_return_pct,
-                        },
-                    ))
+                    signals.append(
+                        Signal.buy(
+                            symbol=symbol,
+                            strategy_id=self.id,
+                            weight=self._position_weight,
+                            reason=f"z={z_score:.2f}, exp_net_return={net_return_pct:.2f}%",
+                            metadata={
+                                "z_score": z_score,
+                                "sma": sma,
+                                "expected_return": expected_return_pct,
+                            },
+                        )
+                    )
                 else:
                     logger.debug(
                         "mean_reversion.skip_costly",
@@ -138,12 +140,14 @@ class MeanReversionStrategy(IStrategy):
 
             # ── SELL: price returned to (or above) the mean ──
             elif z_score > self._exit_std and has_position:
-                signals.append(Signal.sell(
-                    symbol=symbol,
-                    strategy_id=self.id,
-                    reason=f"z={z_score:.2f}, returned to mean",
-                    metadata={"z_score": z_score, "sma": sma},
-                ))
+                signals.append(
+                    Signal.sell(
+                        symbol=symbol,
+                        strategy_id=self.id,
+                        reason=f"z={z_score:.2f}, returned to mean",
+                        metadata={"z_score": z_score, "sma": sma},
+                    )
+                )
 
         return signals
 

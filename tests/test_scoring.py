@@ -688,11 +688,13 @@ class TestScoringFactorEdgeCases:
 
     def test_weight_exceeds_one_rejected(self):
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             ScoringFactor(name="test", weight=1.1)
 
     def test_weight_negative_rejected(self):
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             ScoringFactor(name="test", weight=-0.1)
 

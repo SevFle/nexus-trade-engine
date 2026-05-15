@@ -39,16 +39,12 @@ def _validate_window(window: int) -> None:
         raise ValueError("window must be >= 2")
 
 
-def _validate_pair(
-    a: Sequence[float], b: Sequence[float]
-) -> None:
+def _validate_pair(a: Sequence[float], b: Sequence[float]) -> None:
     if len(a) != len(b):
         raise ValueError(f"length mismatch: {len(a)} vs {len(b)}")
 
 
-def _beta_window(
-    port: Sequence[float], bench: Sequence[float]
-) -> float:
+def _beta_window(port: Sequence[float], bench: Sequence[float]) -> float:
     """OLS slope of portfolio on benchmark over one window. ``0.0`` if degenerate."""
     n = len(port)
     if n < _MIN_DATA_POINTS:
@@ -152,7 +148,8 @@ def rolling_tracking_error(
             p - b
             for p, b in zip(
                 portfolio_returns[i - window + 1 : i + 1],
-                benchmark_returns[i - window + 1 : i + 1], strict=False,
+                benchmark_returns[i - window + 1 : i + 1],
+                strict=False,
             )
         ]
         out[i] = _stdev(active) * sqrt_ann

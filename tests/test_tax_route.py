@@ -31,9 +31,7 @@ def _disposal(
 
 
 class TestUsRouting:
-    async def test_us_returns_schedule_d_summary_json(
-        self, client: AsyncClient
-    ):
+    async def test_us_returns_schedule_d_summary_json(self, client: AsyncClient):
         # Long-term lot (>1 year) with a +5,000 gain.
         resp = await client.post(
             "/api/v1/tax/report/US",
@@ -59,9 +57,7 @@ class TestUsRouting:
 
 
 class TestGbRouting:
-    async def test_gb_returns_cgt_summary_with_aea_applied(
-        self, client: AsyncClient
-    ):
+    async def test_gb_returns_cgt_summary_with_aea_applied(self, client: AsyncClient):
         resp = await client.post(
             "/api/v1/tax/report/GB",
             json={
@@ -81,9 +77,7 @@ class TestGbRouting:
 
 
 class TestDeRouting:
-    async def test_de_returns_kest_summary_with_solz_breakdown(
-        self, client: AsyncClient
-    ):
+    async def test_de_returns_kest_summary_with_solz_breakdown(self, client: AsyncClient):
         resp = await client.post(
             "/api/v1/tax/report/DE",
             json={
@@ -102,9 +96,7 @@ class TestDeRouting:
 
 
 class TestFrRouting:
-    async def test_fr_returns_pfu_summary_with_30_percent_breakdown(
-        self, client: AsyncClient
-    ):
+    async def test_fr_returns_pfu_summary_with_30_percent_breakdown(self, client: AsyncClient):
         resp = await client.post(
             "/api/v1/tax/report/FR",
             json={
@@ -128,9 +120,7 @@ class TestFrRouting:
 
 
 class TestCaseInsensitive:
-    async def test_lowercase_code_normalises_in_response(
-        self, client: AsyncClient
-    ):
+    async def test_lowercase_code_normalises_in_response(self, client: AsyncClient):
         resp = await client.post(
             "/api/v1/tax/report/us",
             json={"disposals": []},
@@ -148,9 +138,7 @@ class TestCaseInsensitive:
 
 
 class TestUnknownJurisdiction:
-    async def test_unknown_code_returns_400_with_supported_list(
-        self, client: AsyncClient
-    ):
+    async def test_unknown_code_returns_400_with_supported_list(self, client: AsyncClient):
         resp = await client.post(
             "/api/v1/tax/report/ZZ",
             json={"disposals": []},
@@ -165,9 +153,7 @@ class TestUnknownJurisdiction:
 
 
 class TestInvalidPayload:
-    async def test_non_decimal_proceeds_rejected_by_pydantic(
-        self, client: AsyncClient
-    ):
+    async def test_non_decimal_proceeds_rejected_by_pydantic(self, client: AsyncClient):
         resp = await client.post(
             "/api/v1/tax/report/US",
             json={
@@ -178,9 +164,7 @@ class TestInvalidPayload:
         # Pydantic returns 422 for validator failures.
         assert resp.status_code == 422
 
-    async def test_acquired_after_disposed_rejected_at_taxable_layer(
-        self, client: AsyncClient
-    ):
+    async def test_acquired_after_disposed_rejected_at_taxable_layer(self, client: AsyncClient):
         resp = await client.post(
             "/api/v1/tax/report/US",
             json={

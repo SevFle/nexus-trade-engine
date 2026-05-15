@@ -237,9 +237,7 @@ class TestActionTypeValidation:
 
 
 def _spinoff(eff: date, ratio: float, sym: str = "PARENT") -> CorporateAction:
-    return CorporateAction(
-        action_type="spinoff", symbol=sym, effective_date=eff, ratio=ratio
-    )
+    return CorporateAction(action_type="spinoff", symbol=sym, effective_date=eff, ratio=ratio)
 
 
 def _stock_merger(
@@ -263,9 +261,7 @@ def _cash_merger(eff: date, cash: float, sym: str = "TARGET") -> CorporateAction
     )
 
 
-def _symbol_change(
-    eff: date, new_symbol: str, sym: str = "OLD"
-) -> CorporateAction:
+def _symbol_change(eff: date, new_symbol: str, sym: str = "OLD") -> CorporateAction:
     return CorporateAction(
         action_type="symbol_change",
         symbol=sym,

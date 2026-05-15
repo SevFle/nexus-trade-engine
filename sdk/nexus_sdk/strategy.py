@@ -55,7 +55,7 @@ class MarketState(BaseModel):
         closes = [b["close"] for b in bars[-period:]]
         mean = sum(closes) / period
         variance = sum((c - mean) ** 2 for c in closes) / period
-        return variance ** 0.5
+        return variance**0.5
 
     def get_news(self, _hours: int = 24) -> list[dict]:
         return self.news

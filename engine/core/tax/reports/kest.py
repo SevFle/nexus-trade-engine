@@ -80,9 +80,7 @@ class KestDisposal:
 
     def __post_init__(self) -> None:
         if self.acquired > self.disposed:
-            raise ValueError(
-                f"acquired {self.acquired} is after disposed {self.disposed}"
-            )
+            raise ValueError(f"acquired {self.acquired} is after disposed {self.disposed}")
         if self.proceeds < 0:
             raise ValueError("proceeds must be non-negative")
         if self.cost < 0:

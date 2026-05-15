@@ -193,17 +193,10 @@ class RateLimitMiddleware:
         ok, remaining, retry_after = await bucket.consume(key)
 
         async def send_wrapper(message: Any) -> None:
-            if (
-                self.config.expose_headers
-                and message["type"] == "http.response.start"
-            ):
+            if self.config.expose_headers and message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
-                headers.append(
-                    (b"x-ratelimit-limit", str(burst).encode("latin-1"))
-                )
-                headers.append(
-                    (b"x-ratelimit-remaining", str(remaining).encode("latin-1"))
-                )
+                headers.append((b"x-ratelimit-limit", str(burst).encode("latin-1")))
+                headers.append((b"x-ratelimit-remaining", str(remaining).encode("latin-1")))
                 message = {**message, "headers": headers}
             await send(message)
 
@@ -222,9 +215,7 @@ class RateLimitMiddleware:
             for raw_name, raw_value in scope.get("headers", []):
                 if raw_name == b"x-forwarded-for":
                     parts = [
-                        p.strip().decode("latin-1")
-                        for p in raw_value.split(b",")
-                        if p.strip()
+                        p.strip().decode("latin-1") for p in raw_value.split(b",") if p.strip()
                     ]
                     # Trust the rightmost N hops — the leftmost element
                     # is client-controlled and trivially spoofable.

@@ -53,9 +53,7 @@ async def request_deletion(
     """
     existing = await _find_active_deletion(session, user_id)
     if existing is not None:
-        raise DeletionError(
-            f"user already has an active deletion request ({existing.id})"
-        )
+        raise DeletionError(f"user already has an active deletion request ({existing.id})")
     return await record_request(
         session,
         user_id=user_id,
@@ -90,9 +88,7 @@ async def is_pending_deletion(
     return True, row.sla_due_at
 
 
-async def is_due_for_purge(
-    session: AsyncSession, user_id: uuid.UUID
-) -> bool:
+async def is_due_for_purge(session: AsyncSession, user_id: uuid.UUID) -> bool:
     """Return True iff a pending deletion's grace window has elapsed.
 
     The actual purge job is not in this module; this is the predicate
@@ -104,9 +100,7 @@ async def is_due_for_purge(
     return row.sla_due_at <= datetime.now(tz=UTC)
 
 
-async def _find_active_deletion(
-    session: AsyncSession, user_id: uuid.UUID
-) -> DSRequest | None:
+async def _find_active_deletion(session: AsyncSession, user_id: uuid.UUID) -> DSRequest | None:
     result = await session.execute(
         select(DSRequest)
         .where(

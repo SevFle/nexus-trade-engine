@@ -12,6 +12,7 @@ This conftest provides:
   new app instance gets a dependency override for ``get_current_user``.  Files
   matching ``test_auth*`` or ``*_requires_auth`` opt out to exercise real auth.
 """
+
 from __future__ import annotations
 
 import uuid

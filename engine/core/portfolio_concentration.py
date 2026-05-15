@@ -135,8 +135,7 @@ def variance_decomposition(
     mb = sum(benchmark_returns) / n
     cov = (
         sum(
-            (p - mp) * (b - mb)
-            for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
+            (p - mp) * (b - mb) for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
         )
         / n
     )

@@ -56,9 +56,7 @@ class TestNestedRedaction:
     def test_nested_dict_redacts_inner_banned_key(self):
         # When the outer key is *not* banned, recursion redacts the
         # banned inner key while preserving siblings.
-        out = _emit(
-            {"event": "x", "payload": {"token": "leak", "user": "ok"}}
-        )
+        out = _emit({"event": "x", "payload": {"token": "leak", "user": "ok"}})
         assert out["payload"]["token"] == REDACTED
         assert out["payload"]["user"] == "ok"
 
@@ -76,11 +74,7 @@ class TestPatternRedaction:
     def test_jwt_like_string_value_redacted(self):
         # Real JWT segments are 16+ chars; the regex requires that to
         # avoid matching dotted module paths.
-        jwt_like = (
-            "aaaaaaaaaaaaaaaaaaaa."
-            "bbbbbbbbbbbbbbbbbbbb."
-            "cccccccccccccccc-dddd"
-        )
+        jwt_like = "aaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbb.cccccccccccccccc-dddd"
         out = _emit({"event": "x", "note": f"token={jwt_like}"})
         assert jwt_like not in str(out["note"])
 

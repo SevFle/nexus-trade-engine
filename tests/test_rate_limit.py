@@ -113,9 +113,7 @@ class TestMiddleware429:
         assert "Retry-After" in r.headers
 
     @pytest.mark.asyncio
-    async def test_429_response_carries_rate_limit_headers(
-        self, client: AsyncClient
-    ):
+    async def test_429_response_carries_rate_limit_headers(self, client: AsyncClient):
         for _ in range(3):
             r = await client.get("/ping")
         assert r.status_code == 429
@@ -167,9 +165,7 @@ class TestKeyingXFF:
     async def test_xff_trusted_when_proxy_depth_one(self):
         # depth=1: rightmost XFF entry is trusted; spoofed leftmost
         # values are ignored. Two distinct rightmost IPs => two buckets.
-        cfg = RateLimitConfig(
-            default_per_minute=60, default_burst=1, trusted_proxy_depth=1
-        )
+        cfg = RateLimitConfig(default_per_minute=60, default_burst=1, trusted_proxy_depth=1)
         app = _build_app(cfg)
         async with AsyncClient(
             transport=ASGITransport(app=app),
@@ -194,9 +190,7 @@ class TestRetryAfterClamping:
         # 429 builder must never see `inf`.
         from engine.api.rate_limit import RateLimitMiddleware
 
-        resp = RateLimitMiddleware._build_429(
-            burst=1, remaining=0, retry_after=float("inf")
-        )
+        resp = RateLimitMiddleware._build_429(burst=1, remaining=0, retry_after=float("inf"))
         assert resp.status_code == 429
         # Retry-After header is a finite int seconds value.
         assert int(resp.headers["Retry-After"]) <= 86_400
@@ -218,9 +212,7 @@ class TestHeadersDefaultOff:
     async def test_no_disclosure_by_default(self):
         cfg = RateLimitConfig(default_per_minute=60, default_burst=2)
         app = _build_app(cfg)
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             r = await ac.get("/ping")
             assert "X-RateLimit-Limit" not in r.headers
             assert "X-RateLimit-Remaining" not in r.headers
@@ -231,8 +223,6 @@ class TestConcurrency:
     async def test_simultaneous_consumes_do_not_exceed_capacity(self):
         backend = InMemoryBucketBackend()
         bucket = TokenBucket(backend, capacity=3, refill_per_sec=0.0)
-        results = await asyncio.gather(
-            *(bucket.consume("c") for _ in range(10))
-        )
+        results = await asyncio.gather(*(bucket.consume("c") for _ in range(10)))
         passed = sum(1 for ok, _, _ in results if ok)
         assert passed == 3

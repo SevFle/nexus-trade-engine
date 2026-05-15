@@ -40,7 +40,6 @@ class TestCumulativeReturns:
         assert len(out) == 5
 
 
-
 class TestEquityCurveFromReturns:
     def test_empty_returns_initial_only(self):
         assert equity_curve_from_returns([]) == [1.0]
@@ -67,7 +66,6 @@ class TestEquityCurveFromReturns:
     def test_length_is_returns_plus_one(self):
         out = equity_curve_from_returns([0.01] * 5)
         assert len(out) == 6
-
 
 
 class TestLogReturns:
@@ -100,7 +98,6 @@ class TestLogReturns:
         for r in simple:
             compounded *= 1.0 + r
         assert sum(logs) == pytest.approx(math.log(compounded), rel=1e-12)
-
 
 
 class TestReturnsFromEquity:
@@ -139,7 +136,6 @@ class TestReturnsFromEquity:
             assert r == pytest.approx(o, rel=1e-12)
 
 
-
 class TestActiveReturns:
     def test_empty_returns_empty(self):
         assert active_returns([], []) == []
@@ -175,15 +171,11 @@ class TestTrackingError:
 
     def test_constant_active_zero_te(self):
         # Constant excess return → no variance → TE 0.
-        out = tracking_error(
-            [0.05, 0.05, 0.05, 0.05], [0.02, 0.02, 0.02, 0.02]
-        )
+        out = tracking_error([0.05, 0.05, 0.05, 0.05], [0.02, 0.02, 0.02, 0.02])
         assert out == pytest.approx(0.0, abs=1e-12)
 
     def test_non_constant_active_positive_te(self):
-        out = tracking_error(
-            [0.10, -0.05, 0.10, -0.05], [0.05, 0.05, 0.05, 0.05]
-        )
+        out = tracking_error([0.10, -0.05, 0.10, -0.05], [0.05, 0.05, 0.05, 0.05])
         assert out > 0
 
     def test_length_mismatch_rejected(self):
@@ -218,9 +210,7 @@ class TestBeatingBenchmarkPct:
 
     def test_mixed(self):
         # 2 of 4 beat.
-        out = beating_benchmark_pct(
-            [0.10, 0.01, 0.10, 0.01], [0.05, 0.05, 0.05, 0.05]
-        )
+        out = beating_benchmark_pct([0.10, 0.01, 0.10, 0.01], [0.05, 0.05, 0.05, 0.05])
         assert out == pytest.approx(0.5)
 
     def test_ties_not_counted_as_beating(self):

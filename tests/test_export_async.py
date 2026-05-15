@@ -1,4 +1,5 @@
 """Tests for engine.privacy.export — helper functions and collect_user_data error path."""
+
 from __future__ import annotations
 
 import uuid
@@ -103,6 +104,7 @@ class TestRowToDictExtended:
         class _FakeRow:
             class __table__:  # noqa: N801
                 columns: ClassVar[list] = [type("C", (), {"name": "field"})]
+
             field = None
 
         result = _row_to_dict(_FakeRow())
@@ -112,6 +114,7 @@ class TestRowToDictExtended:
         class _FakeRow:
             class __table__:  # noqa: N801
                 columns: ClassVar[list] = [type("C", (), {"name": "uid"})]
+
             uid = uuid.UUID("12345678-1234-1234-1234-123456789abc")
 
         result = _row_to_dict(_FakeRow())
@@ -121,6 +124,7 @@ class TestRowToDictExtended:
         class _FakeRow:
             class __table__:  # noqa: N801
                 columns: ClassVar[list] = [type("C", (), {"name": "created_at"})]
+
             created_at = datetime(2026, 5, 3, tzinfo=UTC)
 
         out = _row_to_dict(_FakeRow())

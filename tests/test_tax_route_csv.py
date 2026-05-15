@@ -53,10 +53,7 @@ class TestSuccess:
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith(_CSV_PREFIX)
         # Browser-friendly download; filename echoes the jurisdiction.
-        assert (
-            resp.headers["content-disposition"]
-            == 'attachment; filename="tax-report-US.csv"'
-        )
+        assert resp.headers["content-disposition"] == 'attachment; filename="tax-report-US.csv"'
 
         header, values = _parse_csv(resp.text)
         idx = {col: i for i, col in enumerate(header)}
@@ -81,10 +78,7 @@ class TestSuccess:
         )
 
         assert resp.status_code == 200
-        assert (
-            resp.headers["content-disposition"]
-            == 'attachment; filename="tax-report-DE.csv"'
-        )
+        assert resp.headers["content-disposition"] == 'attachment; filename="tax-report-DE.csv"'
 
 
 class TestErrors:
@@ -105,9 +99,7 @@ class TestErrors:
 
         assert resp.status_code == 422
 
-    async def test_acquired_after_disposed_rejected_at_taxable(
-        self, client: AsyncClient
-    ):
+    async def test_acquired_after_disposed_rejected_at_taxable(self, client: AsyncClient):
         resp = await client.post(
             "/api/v1/tax/report/US/csv",
             json={

@@ -39,7 +39,18 @@ class TestReleasePleaseConfig:
         cfg = _read_json(ROOT / "release-please-config.json")
         sections = cfg["changelog-sections"]
         types = {s["type"] for s in sections}
-        expected = {"feat", "fix", "perf", "refactor", "docs", "test", "build", "ci", "chore", "revert"}
+        expected = {
+            "feat",
+            "fix",
+            "perf",
+            "refactor",
+            "docs",
+            "test",
+            "build",
+            "ci",
+            "chore",
+            "revert",
+        }
         assert types == expected
 
     def test_config_extra_files_includes_frontend_package_json(self):

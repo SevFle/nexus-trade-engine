@@ -77,9 +77,7 @@ CheckResult = Approve | Reject
 class RiskCheck(Protocol):
     """Anything callable with ``(Order, *, reference_price)`` is a check."""
 
-    def __call__(
-        self, order: Order, *, reference_price: Decimal | None = None
-    ) -> CheckResult: ...
+    def __call__(self, order: Order, *, reference_price: Decimal | None = None) -> CheckResult: ...
 
 
 # ---------------------------------------------------------------------------
@@ -99,14 +97,10 @@ class KillSwitchCheck:
             switch = get_kill_switch()
         self._switch = switch
 
-    def __call__(
-        self, _order: Order, *, _reference_price: Decimal | None = None
-    ) -> CheckResult:
+    def __call__(self, _order: Order, *, _reference_price: Decimal | None = None) -> CheckResult:
         if self._switch.is_engaged():
             snap = self._switch.snapshot()
-            return Reject(
-                reason=f"kill-switch engaged: {snap.reason or 'no reason recorded'}"
-            )
+            return Reject(reason=f"kill-switch engaged: {snap.reason or 'no reason recorded'}")
         return Approve()
 
 
@@ -120,14 +114,11 @@ class MaxOrderQuantity:
         if self.limit <= 0:
             raise ValueError("MaxOrderQuantity.limit must be positive")
 
-    def __call__(
-        self, order: Order, *, _reference_price: Decimal | None = None
-    ) -> CheckResult:
+    def __call__(self, order: Order, *, _reference_price: Decimal | None = None) -> CheckResult:
         if order.quantity > self.limit:
             return Reject(
                 reason=(
-                    f"order quantity {order.quantity} exceeds max {self.limit} "
-                    f"for {order.symbol}"
+                    f"order quantity {order.quantity} exceeds max {self.limit} for {order.symbol}"
                 )
             )
         return Approve()
@@ -148,9 +139,7 @@ class MaxOrderNotional:
         if self.limit <= 0:
             raise ValueError("MaxOrderNotional.limit must be positive")
 
-    def __call__(
-        self, order: Order, *, reference_price: Decimal | None = None
-    ) -> CheckResult:
+    def __call__(self, order: Order, *, reference_price: Decimal | None = None) -> CheckResult:
         if reference_price is None or reference_price <= 0:
             return Approve()
         notional = order.quantity * reference_price

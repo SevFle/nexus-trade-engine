@@ -118,11 +118,7 @@ class TestRiskAdjustedReturnDimension:
     def test_sharpe_one_scores_around_60(self):
         ev = StrategyEvaluator()
         out = ev.evaluate(_report(sharpe=1.0))
-        assert (
-            55.0
-            <= out.dimensions[EvaluationDimension.RISK_ADJUSTED_RETURN]
-            <= 65.0
-        )
+        assert 55.0 <= out.dimensions[EvaluationDimension.RISK_ADJUSTED_RETURN] <= 65.0
 
     def test_negative_sharpe_scores_zero(self):
         ev = StrategyEvaluator()
@@ -200,31 +196,23 @@ class TestConsistencyDimension:
 class TestWinRateQualityDimension:
     def test_high_quality_scores_high(self):
         ev = StrategyEvaluator()
-        out = ev.evaluate(
-            _report(win_rate=60.0, avg_winner=30.0, avg_loser=-10.0)
-        )
+        out = ev.evaluate(_report(win_rate=60.0, avg_winner=30.0, avg_loser=-10.0))
         assert out.dimensions[EvaluationDimension.WIN_RATE_QUALITY] >= 60.0
 
     def test_break_even_quality_scores_around_25(self):
         ev = StrategyEvaluator()
-        out = ev.evaluate(
-            _report(win_rate=50.0, avg_winner=10.0, avg_loser=-10.0)
-        )
+        out = ev.evaluate(_report(win_rate=50.0, avg_winner=10.0, avg_loser=-10.0))
         score = out.dimensions[EvaluationDimension.WIN_RATE_QUALITY]
         assert 20.0 <= score <= 35.0
 
     def test_low_quality_scores_low(self):
         ev = StrategyEvaluator()
-        out = ev.evaluate(
-            _report(win_rate=30.0, avg_winner=5.0, avg_loser=-10.0)
-        )
+        out = ev.evaluate(_report(win_rate=30.0, avg_winner=5.0, avg_loser=-10.0))
         assert out.dimensions[EvaluationDimension.WIN_RATE_QUALITY] <= 15.0
 
     def test_zero_avg_loser_does_not_divide_by_zero(self):
         ev = StrategyEvaluator()
-        out = ev.evaluate(
-            _report(win_rate=80.0, avg_winner=20.0, avg_loser=0.0)
-        )
+        out = ev.evaluate(_report(win_rate=80.0, avg_winner=20.0, avg_loser=0.0))
         assert out.dimensions[EvaluationDimension.WIN_RATE_QUALITY] == 100.0
 
 

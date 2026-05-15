@@ -114,9 +114,9 @@ class RiskEngine:
                 return RiskCheckResult(
                     approved=False,
                     reason=(
-                    f"Position {order.symbol} would be {new_weight:.1%}"
-                    f" of portfolio (max {self.max_position_pct:.0%})"
-                ),
+                        f"Position {order.symbol} would be {new_weight:.1%}"
+                        f" of portfolio (max {self.max_position_pct:.0%})"
+                    ),
                 )
 
         # Single order value cap

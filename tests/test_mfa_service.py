@@ -70,9 +70,7 @@ class TestBackupCodes:
         assert ok2 is False
 
     def test_verify_rejects_unknown_code(self):
-        storage = mfa_service.hash_backup_codes(
-            mfa_service.generate_backup_codes(1)
-        )
+        storage = mfa_service.hash_backup_codes(mfa_service.generate_backup_codes(1))
         ok, _ = mfa_service.verify_backup_code(storage, "deadbeef00")
         assert ok is False
 
@@ -94,22 +92,15 @@ class TestEnrollment:
 
         counter = int(time.time() // 30)
         code = _hotp(artifact.secret_b32, counter)
-        confirmed = mfa_service.confirm_enrollment(
-            secret_b32=artifact.secret_b32, code=code
-        )
-        assert (
-            mfa_service.decrypt_secret(confirmed.encrypted_secret)
-            == artifact.secret_b32
-        )
+        confirmed = mfa_service.confirm_enrollment(secret_b32=artifact.secret_b32, code=code)
+        assert mfa_service.decrypt_secret(confirmed.encrypted_secret) == artifact.secret_b32
         assert len(confirmed.backup_codes_plaintext) == 5
         assert confirmed.backup_codes_storage["version"] == 1
 
     def test_confirm_rejects_wrong_code(self):
         artifact = mfa_service.begin_enrollment(account="alice@example.com")
         with pytest.raises(mfa_service.MFAServiceError):
-            mfa_service.confirm_enrollment(
-                secret_b32=artifact.secret_b32, code="000000"
-            )
+            mfa_service.confirm_enrollment(secret_b32=artifact.secret_b32, code="000000")
 
 
 class TestVerifyLoginCode:
@@ -119,9 +110,7 @@ class TestVerifyLoginCode:
 
         counter = int(time.time() // 30)
         code = _hotp(artifact.secret_b32, counter)
-        confirmed = mfa_service.confirm_enrollment(
-            secret_b32=artifact.secret_b32, code=code
-        )
+        confirmed = mfa_service.confirm_enrollment(secret_b32=artifact.secret_b32, code=code)
         return artifact, confirmed
 
     def test_totp_path_succeeds(self):

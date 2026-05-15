@@ -140,9 +140,7 @@ class TestGini:
     def test_drops_non_positive_weights(self):
         equal_pos = {f"x{i}": 1.0 for i in range(5)}
         with_zeros = {**equal_pos, "z": 0.0, "n": -10.0}
-        assert gini_coefficient(with_zeros) == pytest.approx(
-            gini_coefficient(equal_pos)
-        )
+        assert gini_coefficient(with_zeros) == pytest.approx(gini_coefficient(equal_pos))
 
 
 # ---------------------------------------------------------------------------
