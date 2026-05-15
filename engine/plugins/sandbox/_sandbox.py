@@ -182,6 +182,10 @@ class StrategySandbox:
             self.metrics.total_cpu_time_ms / self.metrics.total_evaluations
         )
 
+    @property
+    def _work_dir(self) -> str | None:
+        return self._context.work_dir
+
     def cleanup(self) -> None:
         self._context.cleanup()
 
