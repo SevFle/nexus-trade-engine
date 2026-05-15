@@ -174,9 +174,13 @@ class SandboxPolicy:
             artifacts = list(manifest.artifacts)
 
         rw_paths: list[str] = []
-        if _TRUST_FILESYSTEM_RW[trust] and hasattr(manifest, "permissions"):
-            if hasattr(manifest, "has_permission") and manifest.has_permission("filesystem_write"):
-                rw_paths = artifacts
+        if (
+            _TRUST_FILESYSTEM_RW[trust]
+            and hasattr(manifest, "permissions")
+            and hasattr(manifest, "has_permission")
+            and manifest.has_permission("filesystem_write")
+        ):
+            rw_paths = artifacts
 
         return cls(
             plugin_id=getattr(manifest, "id", "unknown"),
