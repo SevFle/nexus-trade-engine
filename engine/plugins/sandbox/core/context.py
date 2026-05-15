@@ -4,11 +4,8 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from engine.plugins.sandbox.core.policy import SandboxPolicy
-    from engine.plugins.sandbox.core.violation import (
-        SandboxViolation,
-        SandboxViolationCategory,
-    )
 
+from engine.plugins.sandbox.core import state as _state
 from engine.plugins.sandbox.layers import (
     FilesystemIsolation,
     IntrospectionGuard,
@@ -72,6 +69,7 @@ class SandboxContext:
             self._introspection_layer.install()
             self._import_layer.install()
             self._active = True
+            self._set_thread_local()
         except Exception:
             self._force_deactivate()
             raise
@@ -81,6 +79,13 @@ class SandboxContext:
             return
         self._force_deactivate()
 
+    def _set_thread_local(self) -> None:
+        _state.set_current_context(self)
+
+    def _clear_thread_local(self) -> None:
+        if _state.get_current_context() is self:
+            _state.set_current_context(None)
+
     def _force_deactivate(self) -> None:
         self._import_layer.uninstall()
         self._introspection_layer.uninstall()
@@ -89,6 +94,7 @@ class SandboxContext:
         self._network_layer.uninstall()
         self._collect_violations()
         self._active = False
+        self._clear_thread_local()
 
     def _collect_violations(self) -> None:
         for v in self._import_layer.get_violations():

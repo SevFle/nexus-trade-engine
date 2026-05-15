@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from engine.plugins.trust_levels import TrustLevel, get_trust_level, get_trust_policy
@@ -104,6 +106,18 @@ def _get_full_blocked_modules() -> set[str]:
         }
 
 
+def _build_introspection_policy(data: dict[str, Any]) -> IntrospectionPolicy:
+    bb = data.get("blocked_builtins")
+    ba = data.get("blocked_attributes")
+    return IntrospectionPolicy(
+        blocked_builtins=set(bb) if bb is not None else None,
+        blocked_attributes=set(ba) if ba is not None else None,
+        block_gc=data.get("block_gc", True),
+        block_inspect=data.get("block_inspect", True),
+        block_frame_access=data.get("block_frame_access", True),
+    )
+
+
 _TRUST_IMPORT_PRESETS: dict[TrustLevel, set[str]] = {
     TrustLevel.TRUSTED_FULL: {"subprocess", "ctypes", "_ctypes"},
     TrustLevel.TRUSTED_LIMITED: _get_full_blocked_modules(),
@@ -174,9 +188,13 @@ class SandboxPolicy:
             artifacts = list(manifest.artifacts)
 
         rw_paths: list[str] = []
-        if _TRUST_FILESYSTEM_RW[trust] and hasattr(manifest, "permissions"):
-            if hasattr(manifest, "has_permission") and manifest.has_permission("filesystem_write"):
-                rw_paths = artifacts
+        if (
+            _TRUST_FILESYSTEM_RW[trust]
+            and hasattr(manifest, "permissions")
+            and hasattr(manifest, "has_permission")
+            and manifest.has_permission("filesystem_write")
+        ):
+            rw_paths = artifacts
 
         return cls(
             plugin_id=getattr(manifest, "id", "unknown"),
@@ -231,6 +249,105 @@ class SandboxPolicy:
                 blocked_attributes={"__subclasses__", "__globals__"},
             ),
         )
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SandboxPolicy:
+        import_data = data.get("import_policy", {})
+        network_data = data.get("network_policy", {})
+        resource_data = data.get("resource_policy", {})
+        fs_data = data.get("filesystem_policy", {})
+        intro_data = data.get("introspection_policy", {})
+
+        return cls(
+            plugin_id=data.get("plugin_id", "unknown"),
+            trust_level=data.get("trust_level", "untrusted"),
+            import_policy=ImportPolicy(
+                allowed_modules=set(import_data.get("allowed_modules", [])),
+                blocked_modules=set(import_data.get("blocked_modules", [])),
+            ),
+            network_policy=NetworkPolicy(
+                allowed_endpoints=network_data.get("allowed_endpoints", []),
+                allowed_cidrs=network_data.get("allowed_cidrs", []),
+                allowed_ports=set(network_data.get("allowed_ports", [])),
+                block_dns=network_data.get("block_dns", True),
+            ),
+            resource_policy=ResourcePolicy(
+                max_cpu_seconds=float(resource_data.get("max_cpu_seconds", 30.0)),
+                max_memory_bytes=int(resource_data.get("max_memory_bytes", 512 * 1024 * 1024)),
+                max_file_descriptors=int(resource_data.get("max_file_descriptors", 64)),
+                max_threads=int(resource_data.get("max_threads", 1)),
+                wall_time_seconds=float(resource_data.get("wall_time_seconds", 60.0)),
+            ),
+            filesystem_policy=FilesystemPolicy(
+                read_only_paths=fs_data.get("read_only_paths", []),
+                read_write_paths=fs_data.get("read_write_paths", []),
+                virtual_root=fs_data.get("virtual_root"),
+                block_symlinks=fs_data.get("block_symlinks", True),
+                block_absolute_paths=fs_data.get("block_absolute_paths", True),
+            ),
+            introspection_policy=_build_introspection_policy(intro_data),
+        )
+
+    @classmethod
+    def from_json(cls, json_str: str) -> SandboxPolicy:
+        return cls.from_dict(json.loads(json_str))
+
+    @classmethod
+    def from_json_file(cls, path: str | Path) -> SandboxPolicy:
+        return cls.from_dict(json.loads(Path(path).read_text()))
+
+    @classmethod
+    def from_yaml(cls, yaml_str: str) -> SandboxPolicy:
+        import yaml  # noqa: PLC0415
+
+        return cls.from_dict(yaml.safe_load(yaml_str))
+
+    @classmethod
+    def from_yaml_file(cls, path: str | Path) -> SandboxPolicy:
+        import yaml  # noqa: PLC0415
+
+        with Path(path).open() as f:
+            return cls.from_dict(yaml.safe_load(f))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "plugin_id": self.plugin_id,
+            "trust_level": self.trust_level,
+            "import_policy": {
+                "allowed_modules": sorted(self.import_policy.allowed_modules),
+                "blocked_modules": sorted(self.import_policy.blocked_modules),
+            },
+            "network_policy": {
+                "allowed_endpoints": self.network_policy.allowed_endpoints,
+                "allowed_cidrs": self.network_policy.allowed_cidrs,
+                "allowed_ports": sorted(self.network_policy.allowed_ports),
+                "block_dns": self.network_policy.block_dns,
+            },
+            "resource_policy": {
+                "max_cpu_seconds": self.resource_policy.max_cpu_seconds,
+                "max_memory_bytes": self.resource_policy.max_memory_bytes,
+                "max_file_descriptors": self.resource_policy.max_file_descriptors,
+                "max_threads": self.resource_policy.max_threads,
+                "wall_time_seconds": self.resource_policy.wall_time_seconds,
+            },
+            "filesystem_policy": {
+                "read_only_paths": self.filesystem_policy.read_only_paths,
+                "read_write_paths": self.filesystem_policy.read_write_paths,
+                "virtual_root": self.filesystem_policy.virtual_root,
+                "block_symlinks": self.filesystem_policy.block_symlinks,
+                "block_absolute_paths": self.filesystem_policy.block_absolute_paths,
+            },
+            "introspection_policy": {
+                "blocked_builtins": sorted(self.introspection_policy.blocked_builtins),
+                "blocked_attributes": sorted(self.introspection_policy.blocked_attributes),
+                "block_gc": self.introspection_policy.block_gc,
+                "block_inspect": self.introspection_policy.block_inspect,
+                "block_frame_access": self.introspection_policy.block_frame_access,
+            },
+        }
+
+    def to_json(self, indent: int = 2) -> str:
+        return json.dumps(self.to_dict(), indent=indent)
 
 
 def _parse_memory(mem_str: str) -> int:
