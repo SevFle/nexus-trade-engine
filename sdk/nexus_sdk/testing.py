@@ -24,7 +24,7 @@ class MockCostModel:
         _symbol: str,
         quantity: int,
         price: float,
-        _side: str,
+        side: str,  # noqa: ARG002
         _avg_volume: int = 0,
     ):
         spread = price * (self.spread_bps / 10_000)
@@ -34,7 +34,7 @@ class MockCostModel:
             slippage=Money(slippage),
         )
 
-    def estimate_pct(self, _symbol: str, _price: float, _side: str = "buy") -> float:
+    def estimate_pct(self, _symbol: str, price: float, _side: str = "buy") -> float:  # noqa: ARG002
         return (self.spread_bps + self.slippage_bps) * 2 / 10_000
 
 

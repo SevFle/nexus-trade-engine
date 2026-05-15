@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from engine.core.cost_model import ICostModel
     from engine.core.portfolio import PortfolioSnapshot
     from engine.plugins.manifest import StrategyManifest
+    from engine.plugins.sandboxed_http import SandboxedHttpClient
 
 logger = structlog.get_logger()
 
@@ -72,6 +73,16 @@ class StrategySandbox:
 
         self._policy = SandboxPolicy.from_manifest(manifest)
         self._context = SandboxContext(self._policy)
+
+        endpoints = self._policy.network_policy.allowed_endpoints
+        if endpoints:
+            from engine.plugins.sandboxed_http import SandboxedHttpClient  # noqa: PLC0415
+
+            self._http_client: SandboxedHttpClient | None = SandboxedHttpClient(
+                allowed_endpoints=endpoints,
+            )
+        else:
+            self._http_client = None
 
     @classmethod
     def from_factory(

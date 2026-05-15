@@ -100,7 +100,7 @@ class KillSwitchCheck:
         self._switch = switch
 
     def __call__(
-        self, _order: Order, *, _reference_price: Decimal | None = None
+        self, _order: Order, *, reference_price: Decimal | None = None  # noqa: ARG002
     ) -> CheckResult:
         if self._switch.is_engaged():
             snap = self._switch.snapshot()
@@ -121,7 +121,7 @@ class MaxOrderQuantity:
             raise ValueError("MaxOrderQuantity.limit must be positive")
 
     def __call__(
-        self, order: Order, *, _reference_price: Decimal | None = None
+        self, order: Order, *, reference_price: Decimal | None = None  # noqa: ARG002
     ) -> CheckResult:
         if order.quantity > self.limit:
             return Reject(

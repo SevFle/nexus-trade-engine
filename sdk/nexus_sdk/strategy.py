@@ -96,14 +96,14 @@ class IStrategy(ABC):
     @abstractmethod
     async def evaluate(self, portfolio, market: MarketState, costs) -> list[Signal]: ...
 
-    async def on_order_fill(self, fill: dict) -> None:
-        raise NotImplementedError
+    async def on_order_fill(self, fill: dict) -> None:  # noqa: B027
+        pass
 
-    async def on_market_open(self) -> None:
-        raise NotImplementedError
+    async def on_market_open(self) -> None:  # noqa: B027
+        pass
 
-    async def on_market_close(self) -> None:
-        raise NotImplementedError
+    async def on_market_close(self) -> None:  # noqa: B027
+        pass
 
     @abstractmethod
     def get_config_schema(self) -> dict: ...

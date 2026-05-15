@@ -56,7 +56,7 @@ class FilesystemPolicy:
 @dataclass
 class IntrospectionPolicy:
     blocked_builtins: set[str] = field(default_factory=lambda: {
-        "eval", "exec", "compile", "__import__",
+        "eval", "exec", "compile",
         "breakpoint", "credits", "license", "quit", "exit",
     })
     blocked_attributes: set[str] = field(default_factory=lambda: {
