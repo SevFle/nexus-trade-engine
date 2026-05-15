@@ -42,6 +42,10 @@ async def run_backtest_task(
     start_date: str,
     end_date: str,
     initial_capital: float = 100_000.0,
+    symbols: list[str] | None = None,
+    strategy_params: dict | None = None,
+    cost_config: dict | None = None,
+    interval: str = "1d",
 ) -> dict:
     """Run a full backtest as an async task, persisting results to Redis."""
     from engine.core.backtest_runner import BacktestConfig, BacktestRunner  # noqa: PLC0415
@@ -67,6 +71,10 @@ async def run_backtest_task(
             start_date=start_date,
             end_date=end_date,
             initial_capital=initial_capital,
+            symbols=symbols,
+            strategy_params=strategy_params or {},
+            cost_config=cost_config or {},
+            interval=interval,
         )
 
         from engine.plugins.registry import PluginRegistry  # noqa: PLC0415

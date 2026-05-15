@@ -23,6 +23,10 @@ class BacktestRequest(BaseModel):
     end_date: str
     initial_capital: float = 100_000.0
     config: dict | None = None
+    symbols: list[str] | None = None
+    strategy_params: dict[str, Any] | None = None
+    cost_config: dict[str, Any] | None = None
+    interval: str = "1d"
 
 
 class BacktestResponse(BaseModel):
@@ -135,6 +139,10 @@ async def run_backtest(
         start_date=request.start_date,
         end_date=request.end_date,
         initial_capital=request.initial_capital,
+        symbols=request.symbols,
+        strategy_params=request.strategy_params or {},
+        cost_config=request.cost_config or {},
+        interval=request.interval,
     )
 
     return BacktestResponse(status="accepted", backtest_id=backtest_id)

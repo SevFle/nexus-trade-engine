@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
+_SENTINEL = object()
+
 
 @dataclass
 class BacktestConfig:
@@ -38,6 +40,10 @@ class BacktestConfig:
     min_bars: int = 50
     debug: bool = False
     random_seed: int | None = 42
+    symbols: list[str] | None = None
+    strategy_params: dict[str, Any] = field(default_factory=dict)
+    cost_config: dict[str, Any] = field(default_factory=dict)
+    interval: str = "1d"
 
 
 @dataclass
@@ -48,6 +54,39 @@ class BacktestResult:
     metrics: dict[str, float] = field(default_factory=dict)
     final_capital: float = 0.0
     total_return_pct: float = 0.0
+
+
+def build_timeline(
+    data: dict[str, pd.DataFrame],
+) -> list[tuple[pd.Timestamp, dict[str, dict[str, Any]]]]:
+    """Build sorted timeline of ``(timestamp, {symbol: bar_dict})`` tuples.
+
+    Takes raw DataFrames from the data provider and produces a sorted list
+    of all unique timestamps.  Symbols missing at a given timestamp are
+    simply absent from that entry (no forward-fill).
+    """
+    all_timestamps: set[pd.Timestamp] = set()
+    for df in data.values():
+        all_timestamps.update(df.index.tolist())
+
+    timeline: list[tuple[pd.Timestamp, dict[str, dict[str, Any]]]] = []
+    for ts in sorted(all_timestamps):
+        bars_at_t: dict[str, dict[str, Any]] = {}
+        for symbol, df in data.items():
+            if ts not in df.index:
+                continue
+            row = df.loc[ts]
+            bars_at_t[symbol] = {
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+                "volume": int(row["volume"]),
+            }
+        if bars_at_t:
+            timeline.append((ts, bars_at_t))
+
+    return timeline
 
 
 class BacktestRunner:
@@ -70,36 +109,54 @@ class BacktestRunner:
         if self.strategy is None:
             raise RuntimeError("No strategy configured")
 
-        df = await self.provider.get_ohlcv(
-            self.config.symbol,
-            period="max",
-            interval="1d",
-        )
-        if df.empty:
-            raise RuntimeError(f"No OHLCV data returned for {self.config.symbol}")
+        symbols = self.config.symbols or [self.config.symbol]
+        active_symbols: list[str] = []
 
-        start = pd.Timestamp(self.config.start_date)
-        end = pd.Timestamp(self.config.end_date)
-        if df.index.tz is not None:
-            start = start.tz_localize(df.index.tz)
-            end = end.tz_localize(df.index.tz)
-        mask = (df.index >= start) & (df.index <= end)
-        df = df.loc[mask]
-        if df.empty:
-            raise RuntimeError(
-                f"No data in range {self.config.start_date} to {self.config.end_date}"
+        all_data: dict[str, pd.DataFrame] = {}
+        for sym in symbols:
+            df = await self.provider.get_ohlcv(
+                sym,
+                period="max",
+                interval=self.config.interval,
             )
+            if df.empty:
+                if len(symbols) == 1:
+                    raise RuntimeError(f"No OHLCV data returned for {sym}")
+                logger.warning("backtest.no_data_for_symbol", symbol=sym)
+                continue
 
-        all_data = {self.config.symbol: df}
-        timestamps = df.index.tolist()
+            start = pd.Timestamp(self.config.start_date)
+            end = pd.Timestamp(self.config.end_date)
+            if df.index.tz is not None:
+                start = start.tz_localize(df.index.tz)
+                end = end.tz_localize(df.index.tz)
+            mask = (df.index >= start) & (df.index <= end)
+            df = df.loc[mask]
+            if df.empty:
+                if len(symbols) == 1:
+                    raise RuntimeError(
+                        f"No data in range {self.config.start_date} to {self.config.end_date}"
+                    )
+                logger.warning("backtest.no_data_in_range", symbol=sym)
+                continue
+
+            all_data[sym] = df
+            active_symbols.append(sym)
+
+        if not all_data:
+            raise RuntimeError("No OHLCV data for any symbol")
+
+        timeline = build_timeline(all_data)
 
         logger.info(
             "backtest.start",
-            symbol=self.config.symbol,
-            bars=len(timestamps),
-            start=str(timestamps[0]),
-            end=str(timestamps[-1]),
+            symbols=active_symbols,
+            bars=len(timeline),
+            start=str(timeline[0][0]) if timeline else "",
+            end=str(timeline[-1][0]) if timeline else "",
         )
+
+        self._apply_strategy_params()
 
         portfolio = Portfolio(
             initial_cash=self.config.initial_capital,
@@ -107,7 +164,7 @@ class BacktestRunner:
             portfolio_id=self.config.portfolio_id,
         )
 
-        cost_model = DefaultCostModel()
+        cost_model = DefaultCostModel(**self.config.cost_config)
         risk_engine = RiskEngine()
         backend = BacktestBackend(random_seed=self.config.random_seed)
         await backend.connect()
@@ -128,19 +185,19 @@ class BacktestRunner:
 
         result = BacktestResult(portfolio_id=self.config.portfolio_id)
 
-        for ts in timestamps:
+        for ts, bars_at_t in timeline:
             try:
                 market_state = self._builder.build_for_backtest(
                     all_data,
                     ts,
-                    [self.config.symbol],
+                    active_symbols,
                 )
             except ValidationError:
                 logger.debug("backtest.warmup_skip", timestamp=str(ts))
                 continue
-            current_price = market_state.prices.get(self.config.symbol, 0.0)
 
-            portfolio.update_prices(market_state.prices)
+            prices = {sym: bar["close"] for sym, bar in bars_at_t.items()}
+            portfolio.update_prices(prices)
 
             snapshot = portfolio.snapshot()
 
@@ -149,8 +206,11 @@ class BacktestRunner:
             for signal in signals:
                 if signal.side == Side.HOLD:
                     continue
-                if signal.symbol != self.config.symbol:
+                if signal.symbol not in active_symbols:
                     continue
+
+                price = prices.get(signal.symbol, 0)
+                volume = bars_at_t.get(signal.symbol, {}).get("volume", 0)
 
                 sell_avg_cost = None
                 if signal.side == Side.SELL:
@@ -160,7 +220,8 @@ class BacktestRunner:
 
                 order = await order_manager.process_signal(
                     signal,
-                    current_price,
+                    price,
+                    volume,
                 )
 
                 if order.status.value != "filled":
@@ -231,6 +292,34 @@ class BacktestRunner:
         )
 
         return result
+
+    def _apply_strategy_params(self) -> None:
+        if not self.config.strategy_params or self.strategy is None:
+            return
+        for key, value in self.config.strategy_params.items():
+            existing = getattr(self.strategy, key, _SENTINEL)
+            if existing is _SENTINEL or callable(existing):
+                continue
+            setattr(self.strategy, key, value)
+
+
+async def run_backtest(config: BacktestConfig) -> BacktestResult:
+    """Standalone backtest entry point.
+
+    Loads the strategy from the plugin registry, obtains a data provider,
+    wires all components, and runs the full backtest loop.
+    """
+    from engine.data.feeds import get_data_provider  # noqa: PLC0415
+    from engine.plugins.registry import PluginRegistry  # noqa: PLC0415
+
+    provider = get_data_provider("yahoo")
+    registry = PluginRegistry()
+    strategy = registry.load_strategy(config.strategy_name)
+    if strategy is None:
+        raise ValueError(f"Strategy not found: {config.strategy_name}")
+
+    runner = BacktestRunner(config=config, strategy=strategy, provider=provider)
+    return await runner.run()
 
 
 @dataclass
