@@ -16,20 +16,16 @@ Covers:
 
 from __future__ import annotations
 
-import asyncio
 import builtins
 import textwrap
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any
 
 import pytest
 import yaml
 
-from engine.core.signal import Signal
 from engine.plugins.manifest import StrategyManifest
 from engine.plugins.plugin_signing import PluginSigner
-from engine.plugins.registry import PluginRegistry, discover_strategies
+from engine.plugins.registry import PluginRegistry
 from engine.plugins.sandbox import StrategySandbox
 from engine.plugins.sandbox.core.context import SandboxContext
 from engine.plugins.sandbox.core.policy import (
@@ -38,7 +34,6 @@ from engine.plugins.sandbox.core.policy import (
     ResourcePolicy,
     SandboxPolicy,
 )
-from engine.plugins.sandbox.core.violation import SandboxViolationCategory
 from engine.plugins.sandbox.executor import PluginSandboxExecutor
 from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
 from engine.plugins.sandbox.monitoring.violation_report import ViolationReport
