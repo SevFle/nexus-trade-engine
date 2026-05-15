@@ -464,7 +464,7 @@ class TestLDAPAuthenticate:
         mock_db.flush = AsyncMock()
         mock_db.refresh = AsyncMock()
 
-        with patch("engine.api.auth.ldap.ldap", mock_ldap) as mock_ldap_mod, \
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars") as mock_escape:
             mock_escape.side_effect = lambda x: x.replace("*", "\\2a")
             await ldap_provider.authenticate(
