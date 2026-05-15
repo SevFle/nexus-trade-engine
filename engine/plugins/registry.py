@@ -112,8 +112,7 @@ class PluginRegistry:
         policy = SandboxPolicy.from_manifest(manifest)
 
         try:
-            executor = PluginSandboxExecutor.from_factory(cls, policy)
-            return executor
+            return PluginSandboxExecutor.from_factory(cls, policy)
         except Exception as exc:
             logger.exception(
                 "sandboxed_load_failed",

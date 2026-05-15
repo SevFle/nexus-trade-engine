@@ -91,7 +91,7 @@ class StrategySandbox:
         self,
         portfolio: PortfolioSnapshot,
         market: Any,
-        costs: ICostModel,
+        _costs: ICostModel,
     ) -> list[Signal]:
         async with _eval_lock:
             return await self._evaluate_inner(portfolio, market)

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import socket as _socket_module
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx as _httpx_module
 
-from engine.plugins.sandbox.core.policy import NetworkPolicy
+if TYPE_CHECKING:
+    from engine.plugins.sandbox.core.policy import NetworkPolicy
+
 from engine.plugins.sandbox.core.violation import NetworkViolation
 
 

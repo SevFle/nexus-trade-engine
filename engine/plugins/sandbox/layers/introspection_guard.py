@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import builtins
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from engine.plugins.sandbox.core.policy import IntrospectionPolicy
+if TYPE_CHECKING:
+    from engine.plugins.sandbox.core.policy import IntrospectionPolicy
+
 from engine.plugins.sandbox.core.violation import IntrospectionViolation
 
 _BLOCKED_ATTRS: frozenset[str] = frozenset(
@@ -43,7 +45,7 @@ class IntrospectionGuard:
         return self._original_getattr(obj, name, *default)
 
     def _make_restricted_builtin(self, name: str) -> Any:
-        def _blocked(*args: Any, **kwargs: Any) -> Any:
+        def _blocked(*_args: Any, **_kwargs: Any) -> Any:
             violation = IntrospectionViolation(name, plugin_id=self._plugin_id)
             self._violation_log.append(violation)
             raise PermissionError(f"builtin '{name}' is not available in strategy sandbox")

@@ -8,7 +8,6 @@ import structlog
 
 from engine.core.signal import Signal
 from engine.plugins.sandbox.core.context import SandboxContext
-from engine.plugins.sandbox.core.policy import SandboxPolicy
 from engine.plugins.sandbox.monitoring.event_logger import SecurityEventLogger
 from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
 
@@ -17,6 +16,7 @@ if TYPE_CHECKING:
 
     from engine.core.cost_model import ICostModel
     from engine.core.portfolio import PortfolioSnapshot
+    from engine.plugins.sandbox.core.policy import SandboxPolicy
 
 logger = structlog.get_logger()
 
@@ -62,7 +62,7 @@ class PluginSandboxExecutor:
         self,
         portfolio: PortfolioSnapshot,
         market: Any,
-        costs: ICostModel,
+        _costs: ICostModel,
     ) -> list[Signal]:
         async with _eval_lock:
             return await self._evaluate_inner(portfolio, market)

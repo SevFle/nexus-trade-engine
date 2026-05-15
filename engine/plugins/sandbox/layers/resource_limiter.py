@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import contextlib
-import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from engine.plugins.sandbox.core.policy import ResourcePolicy
+if TYPE_CHECKING:
+    import threading
+
+    from engine.plugins.sandbox.core.policy import ResourcePolicy
+
 from engine.plugins.sandbox.core.violation import ResourceExhausted
 
 try:

@@ -34,7 +34,7 @@ def __getattr__(name: str):
         "RestrictedImporter": "engine.plugins.sandbox.layers.import_restriction",
     }
     if name in lazy_exports:
-        import importlib
+        import importlib  # noqa: PLC0415
         mod = importlib.import_module(lazy_exports[name])
         value = getattr(mod, name)
         globals()[name] = value

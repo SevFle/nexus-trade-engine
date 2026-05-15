@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +31,5 @@ class PluginSigner:
 
     @staticmethod
     def compute_manifest_hash(manifest_data: dict[str, Any]) -> str:
-        import json
-
         canonical = json.dumps(manifest_data, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical.encode()).hexdigest()

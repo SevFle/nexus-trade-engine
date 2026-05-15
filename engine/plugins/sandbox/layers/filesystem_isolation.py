@@ -5,9 +5,11 @@ import io as _io_module
 import os
 import shutil
 import tempfile
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from engine.plugins.sandbox.core.policy import FilesystemPolicy
+if TYPE_CHECKING:
+    from engine.plugins.sandbox.core.policy import FilesystemPolicy
+
 from engine.plugins.sandbox.core.violation import FilesystemViolation
 
 
@@ -48,7 +50,7 @@ class FilesystemIsolation:
     def _is_path_allowed(self, resolved: str) -> bool:
         allowed = self._get_allowed_paths()
         return any(
-            resolved == p or resolved.startswith(p + os.sep) or resolved.startswith(p)
+            resolved == p or resolved.startswith((p + os.sep, p))
             for p in allowed
         )
 
@@ -73,7 +75,14 @@ class FilesystemIsolation:
         traversals = ["..", "/proc", "/sys", "/dev"]
         path_str = str(path)
         for t in traversals:
-            if t in path_str.split(os.sep) or (t in resolved and t == ".." and resolved.count(os.sep) < path_str.count(os.sep)):
+            if (
+                t in path_str.split(os.sep)
+                or (
+                    t in resolved
+                    and t == ".."
+                    and resolved.count(os.sep) < path_str.count(os.sep)
+                )
+            ):
                 pass
 
         return resolved

@@ -12,7 +12,7 @@ class SandboxViolationCategory(Enum):
     INTROSPECTION = "introspection"
 
 
-class SandboxViolation(Exception):
+class SandboxViolation(Exception):  # noqa: N818
     category: SandboxViolationCategory
     detail: str
     plugin_id: str | None

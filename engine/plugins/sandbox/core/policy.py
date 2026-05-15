@@ -12,11 +12,10 @@ class ImportPolicy:
 
     def is_allowed(self, module_name: str) -> bool:
         root = module_name.split(".", maxsplit=1)[0]
-        if root in self.blocked_modules:
-            return False
-        if self.allowed_modules and root not in self.allowed_modules:
-            return False
-        return True
+        return not (
+            root in self.blocked_modules
+            or (self.allowed_modules and root not in self.allowed_modules)
+        )
 
 
 @dataclass
@@ -89,7 +88,7 @@ class SandboxPolicy:
             pass
 
         try:
-            from engine.plugins.restricted_importer import BLOCKED_MODULES
+            from engine.plugins.restricted_importer import BLOCKED_MODULES  # noqa: PLC0415
             import_blocked = set(BLOCKED_MODULES)
         except ImportError:
             import_blocked = {
@@ -106,9 +105,12 @@ class SandboxPolicy:
             }
 
         network_endpoints: list[str] = []
-        if hasattr(manifest, "network") and hasattr(manifest, "requires_network"):
-            if manifest.requires_network():
-                network_endpoints = manifest.network.allowed_endpoints
+        if (
+            hasattr(manifest, "network")
+            and hasattr(manifest, "requires_network")
+            and manifest.requires_network()
+        ):
+            network_endpoints = manifest.network.allowed_endpoints
 
         max_cpu_seconds = 30
         max_memory_str = "512MB"
@@ -126,7 +128,10 @@ class SandboxPolicy:
             plugin_id=getattr(manifest, "id", "unknown"),
             import_policy=ImportPolicy(blocked_modules=import_blocked),
             network_policy=NetworkPolicy(allowed_endpoints=network_endpoints),
-            resource_policy=ResourcePolicy(max_cpu_seconds=max_cpu_seconds, max_memory_bytes=memory_bytes),
+            resource_policy=ResourcePolicy(
+                max_cpu_seconds=max_cpu_seconds,
+                max_memory_bytes=memory_bytes,
+            ),
             filesystem_policy=FilesystemPolicy(read_only_paths=artifacts),
             introspection_policy=IntrospectionPolicy(),
         )

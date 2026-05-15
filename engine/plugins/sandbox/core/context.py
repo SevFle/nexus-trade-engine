@@ -3,13 +3,15 @@ from __future__ import annotations
 import time
 import traceback
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from engine.plugins.sandbox.core.policy import SandboxPolicy
-from engine.plugins.sandbox.core.violation import (
-    SandboxViolation,
-    SandboxViolationCategory,
-)
+if TYPE_CHECKING:
+    from engine.plugins.sandbox.core.policy import SandboxPolicy
+    from engine.plugins.sandbox.core.violation import (
+        SandboxViolation,
+        SandboxViolationCategory,
+    )
+
 from engine.plugins.sandbox.layers import (
     FilesystemIsolation,
     IntrospectionGuard,
