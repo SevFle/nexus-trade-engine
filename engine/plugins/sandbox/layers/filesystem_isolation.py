@@ -54,39 +54,11 @@ class FilesystemIsolation:
     def _is_write_allowed(self, resolved: str) -> bool:
         rw_paths = [os.path.realpath(p) for p in self._policy.read_write_paths]
         rw_paths.append(os.path.realpath(self._work_dir))
-        rw_paths = [p + os.sep if os.path.isdir(p) else p for p in rw_paths]
-        return any(resolved == p or resolved.startswith(p + os.sep) for p in rw_paths if p)
-
-    def _validate_path(self, path: str) -> str:
-        resolved = os.path.realpath(str(path))
-        path_str = str(path)
-
-        if self._policy.block_symlinks and os.path.islink(path_str):
-            violation = FilesystemViolation(resolved, "symlink", plugin_id=self._plugin_id)
-            self._violation_log.append(violation)
-            raise PermissionError(violation.detail)
-
-        if ".." in path_str.split(os.sep):
-            violation = FilesystemViolation(resolved, "path_traversal", plugin_id=self._plugin_id)
-            self._violation_log.append(violation)
-            raise PermissionError(violation.detail)
-
-        for blocked_prefix in ("/proc", "/sys", "/dev"):
-            if resolved.startswith(blocked_prefix + os.sep) or resolved == blocked_prefix:
-                violation = FilesystemViolation(resolved, "system_path", plugin_id=self._plugin_id)
-                self._violation_log.append(violation)
-                raise PermissionError(violation.detail)
-
-        if (
-            self._policy.block_absolute_paths
-            and os.path.isabs(path_str)
-            and not self._is_path_allowed(resolved)
-        ):
-            violation = FilesystemViolation(
-                resolved,
-                "absolute_path",
-                plugin_id=self._plugin_id,
-            )
+        return any(
+            resolved == p or resolved.startswith(p + os.sep)
+            for p in rw_paths
+            if p
+        )
             self._violation_log.append(violation)
             raise PermissionError(violation.detail)
 

@@ -179,9 +179,9 @@ class TestFilesystemIsolationLifecycle:
         assert builtins.open is original
 
     def test_cleanup_removes_work_dir(self, tmp_path: Any) -> None:
-        work = str(tmp_path / "sandbox_cleanup_test")
         policy = FilesystemPolicy()
-        fs = FilesystemIsolation(policy=policy, work_dir=work)
+        fs = FilesystemIsolation(policy=policy)
+        work = fs.work_dir
         os.makedirs(work, exist_ok=True)
         assert os.path.isdir(work)
         fs.cleanup()

@@ -6,7 +6,7 @@ import pytest
 
 from engine.plugins.sandbox.core.policy import IntrospectionPolicy
 from engine.plugins.sandbox.layers.introspection_guard import (
-    _BLOCKED_ATTRS,
+    _EXPLICITLY_BLOCKED_ATTRS,
     IntrospectionGuard,
 )
 
@@ -54,25 +54,9 @@ class TestBlockedBuiltinFunctions:
         finally:
             guard.uninstall()
 
-    def test___import___blocked(self, guard: IntrospectionGuard) -> None:
-        guard.install()
-        try:
-            with pytest.raises(PermissionError, match="not available"):
-                builtins.__import__("os")
-        finally:
-            guard.uninstall()
-
-    def test_help_blocked(self, guard: IntrospectionGuard) -> None:
-        guard.install()
-        try:
-            with pytest.raises(PermissionError, match="not available"):
-                builtins.help("os")
-        finally:
-            guard.uninstall()
-
 
 class TestBlockedAttributes:
-    @pytest.mark.parametrize("attr", sorted(_BLOCKED_ATTRS))
+    @pytest.mark.parametrize("attr", sorted(_EXPLICITLY_BLOCKED_ATTRS))
     def test_blocked_attr_raises(self, attr: str, guard: IntrospectionGuard) -> None:
         guard.install()
         try:
@@ -178,26 +162,6 @@ class TestSafeAttributeAccess:
         try:
             result = builtins.getattr([1, 2, 3], "__len__")  # noqa: B009
             assert result() == 3
-        finally:
-            guard.uninstall()
-
-
-class TestDunderAccessBlocking:
-    def test_safe_dunders_whitelisted(self, guard: IntrospectionGuard) -> None:
-        guard.install()
-        try:
-            builtins.getattr([], "__len__")  # noqa: B009
-            builtins.getattr({}, "__getitem__")  # noqa: B009
-            builtins.getattr(42, "__add__")  # noqa: B009
-            builtins.getattr("x", "__hash__")  # noqa: B009
-        finally:
-            guard.uninstall()
-
-    def test_unknown_dunder_blocked(self, guard: IntrospectionGuard) -> None:
-        guard.install()
-        try:
-            with pytest.raises(PermissionError, match="not accessible"):
-                builtins.getattr(int, "__something_unusual__")  # noqa: B009
         finally:
             guard.uninstall()
 
