@@ -98,8 +98,8 @@ class TestLDAPAuthenticate:
         )
 
         mock_db = AsyncMock(spec=AsyncSession)
-        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
-             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+        with patch("engine.api.auth.ldap._ldap_mod", mock_ldap), \
+             patch("engine.api.auth.ldap._escape_filter_chars", lambda x: x):
             result = await ldap_provider.authenticate(
                 username="testuser", password="wrongpass", db=mock_db,
             )
@@ -113,8 +113,8 @@ class TestLDAPAuthenticate:
         mock_ldap.SCOPE_SUBTREE = 2
 
         mock_db = AsyncMock(spec=AsyncSession)
-        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
-             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+        with patch("engine.api.auth.ldap._ldap_mod", mock_ldap), \
+             patch("engine.api.auth.ldap._escape_filter_chars", lambda x: x):
             result = await ldap_provider.authenticate(
                 username="testuser", password="pass", db=mock_db,
             )
@@ -136,8 +136,8 @@ class TestLDAPAuthenticate:
         mock_db.flush = AsyncMock()
         mock_db.refresh = AsyncMock()
 
-        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
-             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+        with patch("engine.api.auth.ldap._ldap_mod", mock_ldap), \
+             patch("engine.api.auth.ldap._escape_filter_chars", lambda x: x):
             result = await ldap_provider.authenticate(
                 username="testuser", password="correctpass", db=mock_db,
             )
@@ -173,8 +173,8 @@ class TestLDAPAuthenticate:
         mock_result.scalar_one_or_none.return_value = existing_user
         mock_db.execute.return_value = mock_result
 
-        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
-             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+        with patch("engine.api.auth.ldap._ldap_mod", mock_ldap), \
+             patch("engine.api.auth.ldap._escape_filter_chars", lambda x: x):
             result = await ldap_provider.authenticate(
                 username="testuser", password="correctpass", db=mock_db,
             )
@@ -212,8 +212,8 @@ class TestLDAPAuthenticate:
         mock_result.scalar_one_or_none.return_value = existing_user
         mock_db.execute.return_value = mock_result
 
-        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
-             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+        with patch("engine.api.auth.ldap._ldap_mod", mock_ldap), \
+             patch("engine.api.auth.ldap._escape_filter_chars", lambda x: x):
             result = await ldap_provider.authenticate(
                 username="testuser", password="correctpass", db=mock_db,
             )
@@ -251,8 +251,8 @@ class TestLDAPAuthenticate:
 
         mock_db.execute = mock_execute
 
-        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
-             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+        with patch("engine.api.auth.ldap._ldap_mod", mock_ldap), \
+             patch("engine.api.auth.ldap._escape_filter_chars", lambda x: x):
             result = await ldap_provider.authenticate(
                 username="testuser", password="correctpass", db=mock_db,
             )
@@ -280,8 +280,8 @@ class TestLDAPAuthenticate:
         mock_result.scalar_one_or_none.return_value = disabled_user
         mock_db.execute.return_value = mock_result
 
-        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
-             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+        with patch("engine.api.auth.ldap._ldap_mod", mock_ldap), \
+             patch("engine.api.auth.ldap._escape_filter_chars", lambda x: x):
             result = await ldap_provider.authenticate(
                 username="testuser", password="correctpass", db=mock_db,
             )
@@ -309,8 +309,8 @@ class TestLDAPAuthenticate:
         mock_db.flush = AsyncMock()
         mock_db.refresh = AsyncMock()
 
-        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
-             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+        with patch("engine.api.auth.ldap._ldap_mod", mock_ldap), \
+             patch("engine.api.auth.ldap._escape_filter_chars", lambda x: x):
             result = await ldap_provider.authenticate(
                 username="newuser", password="pass", db=mock_db,
             )
@@ -336,8 +336,8 @@ class TestLDAPAuthenticate:
         mock_db.flush = AsyncMock()
         mock_db.refresh = AsyncMock()
 
-        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
-             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+        with patch("engine.api.auth.ldap._ldap_mod", mock_ldap), \
+             patch("engine.api.auth.ldap._escape_filter_chars", lambda x: x):
             result = await ldap_provider.authenticate(
                 username="devuser", password="pass", db=mock_db,
             )
@@ -362,8 +362,8 @@ class TestLDAPAuthenticate:
         mock_db.flush = AsyncMock()
         mock_db.refresh = AsyncMock()
 
-        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
-             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+        with patch("engine.api.auth.ldap._ldap_mod", mock_ldap), \
+             patch("engine.api.auth.ldap._escape_filter_chars", lambda x: x):
             result = await ldap_provider.authenticate(
                 username="plainuser", password="pass", db=mock_db,
             )
@@ -390,8 +390,8 @@ class TestLDAPAuthenticate:
         mock_db.flush = AsyncMock()
         mock_db.refresh = AsyncMock()
 
-        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
-             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+        with patch("engine.api.auth.ldap._ldap_mod", mock_ldap), \
+             patch("engine.api.auth.ldap._escape_filter_chars", lambda x: x):
             result = await ldap_provider.authenticate(
                 username="nomailuser", password="pass", db=mock_db,
             )
@@ -418,8 +418,8 @@ class TestLDAPAuthenticate:
         mock_db.flush = AsyncMock()
         mock_db.refresh = AsyncMock()
 
-        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
-             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+        with patch("engine.api.auth.ldap._ldap_mod", mock_ldap), \
+             patch("engine.api.auth.ldap._escape_filter_chars", lambda x: x):
             result = await ldap_provider.authenticate(
                 username="nocnuser", password="pass", db=mock_db,
             )
@@ -443,8 +443,8 @@ class TestLDAPAuthenticate:
         mock_db.flush = AsyncMock()
         mock_db.refresh = AsyncMock()
 
-        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
-             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+        with patch("engine.api.auth.ldap._ldap_mod", mock_ldap), \
+             patch("engine.api.auth.ldap._escape_filter_chars", lambda x: x):
             result = await ldap_provider.authenticate(
                 username="testuser", password="pass", db=mock_db,
             )
@@ -464,8 +464,8 @@ class TestLDAPAuthenticate:
         mock_db.flush = AsyncMock()
         mock_db.refresh = AsyncMock()
 
-        with patch("engine.api.auth.ldap.ldap", mock_ldap) as mock_ldap_mod, \
-             patch("engine.api.auth.ldap.escape_filter_chars") as mock_escape:
+        with patch("engine.api.auth.ldap._ldap_mod", mock_ldap), \
+             patch("engine.api.auth.ldap._escape_filter_chars") as mock_escape:
             mock_escape.side_effect = lambda x: x.replace("*", "\\2a")
             await ldap_provider.authenticate(
                 username="test*user", password="pass", db=mock_db,

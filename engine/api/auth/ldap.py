@@ -13,6 +13,13 @@ from engine.db.models import User
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+try:
+    import ldap as _ldap_mod
+    from ldap.filter import escape_filter_chars as _escape_filter_chars
+except ImportError:
+    _ldap_mod = None  # type: ignore[assignment]
+    _escape_filter_chars = None  # type: ignore[assignment]
+
 logger = structlog.get_logger()
 
 
@@ -30,21 +37,19 @@ class LDAPAuthProvider(IAuthProvider):
             return AuthResult(success=False, error="Username, password, and db session required")
 
         try:
-            import ldap
-            from ldap.filter import escape_filter_chars
+            assert _ldap_mod is not None
+            conn = _ldap_mod.initialize(settings.ldap_server_url)
+            conn.set_option(_ldap_mod.OPT_NETWORK_TIMEOUT, 10)
+            conn.set_option(_ldap_mod.OPT_TIMEOUT, 10)
 
-            conn = ldap.initialize(settings.ldap_server_url)
-            conn.set_option(ldap.OPT_NETWORK_TIMEOUT, 10)
-            conn.set_option(ldap.OPT_TIMEOUT, 10)
-
-            safe_username = escape_filter_chars(username)
+            safe_username = _escape_filter_chars(username)
             user_dn = f"{settings.ldap_bind_dn.replace('{{username}}', safe_username)}"
             conn.simple_bind_s(user_dn, password)
 
             search_filter = f"(uid={safe_username})"
             results = conn.search_s(
                 settings.ldap_search_base,
-                ldap.SCOPE_SUBTREE,
+                _ldap_mod.SCOPE_SUBTREE,
                 search_filter,
                 ["uid", "mail", "cn", "memberOf"],
             )
@@ -94,6 +99,7 @@ class LDAPAuthProvider(IAuthProvider):
                 email=ldap_mail,
                 hashed_password=None,
                 display_name=ldap_cn,
+                is_active=True,
                 role=mapped_role,
                 auth_provider="ldap",
                 external_id=ldap_uid,
