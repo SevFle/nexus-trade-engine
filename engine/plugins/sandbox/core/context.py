@@ -4,10 +4,6 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from engine.plugins.sandbox.core.policy import SandboxPolicy
-    from engine.plugins.sandbox.core.violation import (
-        SandboxViolation,
-        SandboxViolationCategory,
-    )
 
 from engine.plugins.sandbox.layers import (
     FilesystemIsolation,

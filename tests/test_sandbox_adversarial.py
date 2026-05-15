@@ -291,7 +291,7 @@ class TestCrossLayerAdversarial:
                     tb = e.__traceback__
                     frame = getattr(tb, "tb_frame", None)
                     if frame is not None:
-                        _ = frame.f_globals  # noqa: B018
+                        _ = frame.f_globals
 
             def on_bar(self, s, p):
                 self._try_escape()
