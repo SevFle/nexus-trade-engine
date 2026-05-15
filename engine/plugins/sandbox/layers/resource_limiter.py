@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import contextlib
+import threading
+import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    import threading
-
     from engine.plugins.sandbox.core.policy import ResourcePolicy
 
 from engine.plugins.sandbox.core.violation import ResourceExhausted
@@ -19,26 +19,78 @@ except ImportError:
     HAS_RESOURCE_MODULE = False
 
 
+class _CPUTimer:
+    def __init__(self, seconds: float, plugin_id: str | None = None) -> None:
+        self._seconds = seconds
+        self._plugin_id = plugin_id
+        self._timer: threading.Timer | None = None
+        self._expired = False
+        self._start_time = 0.0
+
+    @property
+    def expired(self) -> bool:
+        return self._expired
+
+    def _on_timeout(self) -> None:
+        self._expired = True
+
+    def start(self) -> None:
+        self._start_time = time.monotonic()
+        self._timer = threading.Timer(self._seconds, self._on_timeout)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def stop(self) -> None:
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
+
+    def check(self) -> None:
+        if self._expired:
+            raise ResourceExhausted(
+                resource_type="cpu_time",
+                limit=self._seconds,
+                current=time.monotonic() - self._start_time,
+                plugin_id=self._plugin_id,
+            )
+        elapsed = time.monotonic() - self._start_time
+        if elapsed > self._seconds:
+            self._expired = True
+            raise ResourceExhausted(
+                resource_type="cpu_time",
+                limit=self._seconds,
+                current=elapsed,
+                plugin_id=self._plugin_id,
+            )
+
+    @property
+    def elapsed(self) -> float:
+        return time.monotonic() - self._start_time
+
+
 class ResourceLimiter:
     def __init__(self, policy: ResourcePolicy, plugin_id: str | None = None) -> None:
         self._policy = policy
         self._plugin_id = plugin_id
         self._saved_limits: dict[str, tuple[int, int]] = {}
-        self._active_threads: list[threading.Thread] = []
+        self._active_threads: list[Any] = []
         self._installed = False
         self._violation_log: list[ResourceExhausted] = []
         self._thread_count = 0
         self._original_thread_init: Any = None
+        self._cpu_timer: _CPUTimer | None = None
 
     def install(self) -> None:
         if self._installed:
             return
         self._apply_resource_limits()
+        self._start_cpu_timer()
         self._installed = True
 
     def uninstall(self) -> None:
         if not self._installed:
             return
+        self._stop_cpu_timer()
         self._restore_resource_limits()
         self._installed = False
 
@@ -62,6 +114,28 @@ class ResourceLimiter:
             self._saved_limits["RLIMIT_NOFILE"] = (soft, hard)
         except (ValueError, OSError, AttributeError):
             pass
+
+    def _start_cpu_timer(self) -> None:
+        self._cpu_timer = _CPUTimer(
+            self._policy.max_cpu_seconds,
+            plugin_id=self._plugin_id,
+        )
+        self._cpu_timer.start()
+
+    def _stop_cpu_timer(self) -> None:
+        if self._cpu_timer is not None:
+            self._cpu_timer.stop()
+            self._cpu_timer = None
+
+    def check_cpu_timer(self) -> None:
+        if self._cpu_timer is not None:
+            self._cpu_timer.check()
+
+    @property
+    def cpu_elapsed(self) -> float:
+        if self._cpu_timer is not None:
+            return self._cpu_timer.elapsed
+        return 0.0
 
     def _restore_resource_limits(self) -> None:
         if not HAS_RESOURCE_MODULE:

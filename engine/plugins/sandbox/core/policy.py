@@ -62,6 +62,9 @@ class IntrospectionPolicy:
             "license",
             "quit",
             "exit",
+            "vars",
+            "globals",
+            "locals",
         }
     )
     blocked_attributes: set[str] = field(

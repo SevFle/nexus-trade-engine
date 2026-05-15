@@ -27,6 +27,13 @@ class RestrictedImporter(MetaPathFinder):
         self._original_import: Callable[..., Any] = builtins.__import__
         self._plugin_id = plugin_id
         self._violation_log: list[ImportViolation] = []
+        self._original_importlib_import_module: Any = None
+
+    def _is_module_blocked(self, name: str) -> bool:
+        root = name.split(".", maxsplit=1)[0]
+        if root in self.blocked:
+            return True
+        return self.allowed is not None and root not in self.allowed
 
     def find_spec(
         self,
@@ -34,12 +41,7 @@ class RestrictedImporter(MetaPathFinder):
         _path: object = None,
         _target: object = None,
     ) -> ModuleSpec | None:
-        root = fullname.split(".", maxsplit=1)[0]
-        if root in self.blocked:
-            violation = ImportViolation(fullname, plugin_id=self._plugin_id)
-            self._violation_log.append(violation)
-            raise ImportError(violation.detail)
-        if self.allowed is not None and root not in self.allowed:
+        if self._is_module_blocked(fullname):
             violation = ImportViolation(fullname, plugin_id=self._plugin_id)
             self._violation_log.append(violation)
             raise ImportError(violation.detail)
@@ -53,23 +55,29 @@ class RestrictedImporter(MetaPathFinder):
         fromlist: tuple[str, ...] = (),
         level: int = 0,
     ) -> object:
-        if level == 0:
-            root = name.split(".", maxsplit=1)[0]
-            if root in self.blocked:
-                violation = ImportViolation(name, plugin_id=self._plugin_id)
-                self._violation_log.append(violation)
-                raise ImportError(violation.detail)
-            if self.allowed is not None and root not in self.allowed:
-                violation = ImportViolation(name, plugin_id=self._plugin_id)
-                self._violation_log.append(violation)
-                raise ImportError(violation.detail)
+        if level == 0 and self._is_module_blocked(name):
+            violation = ImportViolation(name, plugin_id=self._plugin_id)
+            self._violation_log.append(violation)
+            raise ImportError(violation.detail)
         return self._original_import(name, globals_, locals_, fromlist, level)
+
+    def _restricted_importlib_import_module(self, name: str, *args: Any, **kwargs: Any) -> Any:
+        if self._is_module_blocked(name):
+            violation = ImportViolation(name, plugin_id=self._plugin_id)
+            self._violation_log.append(violation)
+            raise ImportError(violation.detail)
+        return self._original_importlib_import_module(name, *args, **kwargs)
 
     def install(self) -> None:
         if not self._installed:
             self._original_import = builtins.__import__
             builtins.__import__ = self._restricted_import
             sys.meta_path.insert(0, self)
+            if "importlib" in sys.modules:
+                importlib_mod = sys.modules["importlib"]
+                if hasattr(importlib_mod, "import_module"):
+                    self._original_importlib_import_module = importlib_mod.import_module
+                    importlib_mod.import_module = self._restricted_importlib_import_module
             self._installed = True
 
     def uninstall(self) -> None:
@@ -77,6 +85,10 @@ class RestrictedImporter(MetaPathFinder):
             builtins.__import__ = self._original_import
             if self in sys.meta_path:
                 sys.meta_path.remove(self)
+            if self._original_importlib_import_module is not None:
+                if "importlib" in sys.modules:
+                    sys.modules["importlib"].import_module = self._original_importlib_import_module
+                self._original_importlib_import_module = None
             self._installed = False
 
     def get_violations(self) -> list[ImportViolation]:

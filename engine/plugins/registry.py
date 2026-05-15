@@ -7,6 +7,8 @@ from typing import Any
 import structlog
 import yaml
 
+from engine.plugins.plugin_signing import PluginSigner
+
 logger = structlog.get_logger()
 
 STRATEGIES_DIR = Path(__file__).resolve().parent.parent.parent / "strategies"
@@ -64,8 +66,6 @@ def load_strategy_class(module_path: str) -> Any:
 
 
 class PluginRegistry:
-    """Discovers and instantiates strategy plugins."""
-
     def __init__(self, strategies_dir: Path | None = None, use_sandbox: bool = False) -> None:
         self._strategies = discover_strategies(strategies_dir)
         self._use_sandbox = use_sandbox
@@ -95,9 +95,31 @@ class PluginRegistry:
             )
             return None
 
+    def _verify_integrity(self, strategy_name: str, entry: dict[str, Any]) -> bool:
+        manifest_data = entry.get("manifest", {})
+        content_hash = manifest_data.get("content_hash")
+        if not content_hash:
+            return True
+        module_path = entry.get("module_path")
+        if not module_path:
+            return False
+        if not PluginSigner.verify_hash(module_path, content_hash):
+            logger.error(
+                "strategy_integrity_check_failed",
+                strategy=strategy_name,
+                expected_hash=content_hash,
+            )
+            return False
+        logger.info("strategy_integrity_verified", strategy=strategy_name)
+        return True
+
     def _load_sandboxed(self, strategy_name: str, cls: Any, entry: dict[str, Any]) -> Any | None:
         from engine.plugins.manifest import StrategyManifest
         from engine.plugins.sandbox import PluginSandboxExecutor, SandboxPolicy
+
+        if not self._verify_integrity(strategy_name, entry):
+            logger.error("strategy_load_aborted_integrity", strategy=strategy_name)
+            return None
 
         manifest_data = entry.get("manifest", {})
         manifest_data.setdefault("id", strategy_name)
