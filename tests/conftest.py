@@ -18,6 +18,7 @@ file because it is handled declaratively in ``pyproject.toml`` via the
 ``asyncio_default_test_loop_scope`` settings under ``[tool.pytest.ini_options]``.
 No manual ``event_loop`` or ``event_loop_policy`` fixture is needed here.
 """
+# Intentionally empty — session-scoped asyncio loop configured in pyproject.toml
 from __future__ import annotations
 
 import uuid
