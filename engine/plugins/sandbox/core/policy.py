@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from engine.plugins.trust_levels import TrustLevel, get_trust_level, get_trust_policy
+
 
 @dataclass
 class ImportPolicy:
@@ -85,6 +87,54 @@ class IntrospectionPolicy:
     block_frame_access: bool = True
 
 
+def _get_full_blocked_modules() -> set[str]:
+    try:
+        from engine.plugins.restricted_importer import BLOCKED_MODULES  # noqa: PLC0415
+
+        return set(BLOCKED_MODULES)
+    except ImportError:
+        return {
+            "os", "subprocess", "shutil", "pathlib", "io", "_io",
+            "socket", "_socket", "http", "urllib", "ftplib", "smtplib",
+            "ctypes", "_ctypes", "multiprocessing", "signal", "sys",
+            "importlib", "threading", "_thread", "concurrent", "gc",
+            "inspect", "code", "codeop", "ast", "dis", "pkgutil",
+            "zipimport", "runpy", "pickle", "shelve", "marshal",
+            "atexit", "sched", "pty", "tty", "pdb", "bdb", "site",
+        }
+
+
+_TRUST_IMPORT_PRESETS: dict[TrustLevel, set[str]] = {
+    TrustLevel.TRUSTED_FULL: {"subprocess", "ctypes", "_ctypes"},
+    TrustLevel.TRUSTED_LIMITED: _get_full_blocked_modules(),
+    TrustLevel.UNTRUSTED: _get_full_blocked_modules(),
+}
+
+_TRUST_INTROSPECTION_PRESETS: dict[TrustLevel, IntrospectionPolicy] = {
+    TrustLevel.TRUSTED_FULL: IntrospectionPolicy(
+        blocked_builtins={"exec", "compile"},
+        blocked_attributes={"__subclasses__", "__globals__"},
+    ),
+    TrustLevel.TRUSTED_LIMITED: IntrospectionPolicy(
+        blocked_builtins={"eval", "exec", "compile", "breakpoint"},
+        blocked_attributes={"__subclasses__", "__globals__", "__bases__", "__mro__"},
+    ),
+    TrustLevel.UNTRUSTED: IntrospectionPolicy(),
+}
+
+_TRUST_RESOURCE_MULTIPLIERS: dict[TrustLevel, float] = {
+    TrustLevel.TRUSTED_FULL: 4.0,
+    TrustLevel.TRUSTED_LIMITED: 2.0,
+    TrustLevel.UNTRUSTED: 1.0,
+}
+
+_TRUST_FILESYSTEM_RW: dict[TrustLevel, bool] = {
+    TrustLevel.TRUSTED_FULL: True,
+    TrustLevel.TRUSTED_LIMITED: True,
+    TrustLevel.UNTRUSTED: False,
+}
+
+
 @dataclass
 class SandboxPolicy:
     plugin_id: str = "unknown"
@@ -97,58 +147,11 @@ class SandboxPolicy:
 
     @classmethod
     def from_manifest(cls, manifest: Any) -> SandboxPolicy:
+        trust = get_trust_level(manifest)
+        trust_dict = get_trust_policy(trust)
+        multiplier = trust_dict.get("resource_multiplier", 1.0)
 
-        import_blocked: set[str] = set()
-        if hasattr(manifest, "dependencies"):
-            pass
-
-        try:
-            from engine.plugins.restricted_importer import BLOCKED_MODULES  # noqa: PLC0415
-
-            import_blocked = set(BLOCKED_MODULES)
-        except ImportError:
-            import_blocked = {
-                "os",
-                "subprocess",
-                "shutil",
-                "pathlib",
-                "io",
-                "_io",
-                "socket",
-                "_socket",
-                "http",
-                "urllib",
-                "ftplib",
-                "smtplib",
-                "ctypes",
-                "_ctypes",
-                "multiprocessing",
-                "signal",
-                "sys",
-                "importlib",
-                "threading",
-                "_thread",
-                "concurrent",
-                "gc",
-                "inspect",
-                "code",
-                "codeop",
-                "ast",
-                "dis",
-                "pkgutil",
-                "zipimport",
-                "runpy",
-                "pickle",
-                "shelve",
-                "marshal",
-                "atexit",
-                "sched",
-                "pty",
-                "tty",
-                "pdb",
-                "bdb",
-                "site",
-            }
+        import_blocked = _TRUST_IMPORT_PRESETS[trust]
 
         network_endpoints: list[str] = []
         if (
@@ -158,10 +161,10 @@ class SandboxPolicy:
         ):
             network_endpoints = manifest.network.allowed_endpoints
 
-        max_cpu_seconds = 30
+        base_cpu_seconds = 30
         max_memory_str = "512MB"
         if hasattr(manifest, "resources"):
-            max_cpu_seconds = manifest.resources.max_cpu_seconds
+            base_cpu_seconds = manifest.resources.max_cpu_seconds
             max_memory_str = manifest.resources.max_memory
 
         memory_bytes = _parse_memory(max_memory_str)
@@ -170,16 +173,50 @@ class SandboxPolicy:
         if hasattr(manifest, "artifacts"):
             artifacts = list(manifest.artifacts)
 
+        rw_paths: list[str] = []
+        if _TRUST_FILESYSTEM_RW[trust] and hasattr(manifest, "permissions"):
+            if hasattr(manifest, "has_permission") and manifest.has_permission("filesystem_write"):
+                rw_paths = artifacts
+
         return cls(
             plugin_id=getattr(manifest, "id", "unknown"),
+            trust_level=trust.value,
             import_policy=ImportPolicy(blocked_modules=import_blocked),
             network_policy=NetworkPolicy(allowed_endpoints=network_endpoints),
             resource_policy=ResourcePolicy(
-                max_cpu_seconds=max_cpu_seconds,
-                max_memory_bytes=memory_bytes,
+                max_cpu_seconds=base_cpu_seconds * multiplier,
+                max_memory_bytes=int(memory_bytes * multiplier),
             ),
-            filesystem_policy=FilesystemPolicy(read_only_paths=artifacts),
-            introspection_policy=IntrospectionPolicy(),
+            filesystem_policy=FilesystemPolicy(
+                read_only_paths=artifacts,
+                read_write_paths=rw_paths,
+            ),
+            introspection_policy=_TRUST_INTROSPECTION_PRESETS[trust],
+        )
+
+    @classmethod
+    def from_trust_level(
+        cls,
+        trust_level: TrustLevel,
+        plugin_id: str = "unknown",
+        *,
+        network_endpoints: list[str] | None = None,
+        max_cpu_seconds: float = 30.0,
+        max_memory_bytes: int = 512 * 1024 * 1024,
+        read_only_paths: list[str] | None = None,
+    ) -> SandboxPolicy:
+        multiplier = _TRUST_RESOURCE_MULTIPLIERS[trust_level]
+        return cls(
+            plugin_id=plugin_id,
+            trust_level=trust_level.value,
+            import_policy=ImportPolicy(blocked_modules=_TRUST_IMPORT_PRESETS[trust_level]),
+            network_policy=NetworkPolicy(allowed_endpoints=network_endpoints or []),
+            resource_policy=ResourcePolicy(
+                max_cpu_seconds=max_cpu_seconds * multiplier,
+                max_memory_bytes=int(max_memory_bytes * multiplier),
+            ),
+            filesystem_policy=FilesystemPolicy(read_only_paths=read_only_paths or []),
+            introspection_policy=_TRUST_INTROSPECTION_PRESETS[trust_level],
         )
 
     @classmethod

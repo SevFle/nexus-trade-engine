@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import time
-import traceback
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -19,50 +16,7 @@ from engine.plugins.sandbox.layers import (
     ResourceLimiter,
     RestrictedImporter,
 )
-
-
-@dataclass
-class SecurityEvent:
-    timestamp: float
-    category: SandboxViolationCategory
-    detail: str
-    plugin_id: str | None
-    attempted_action: str | None
-    stack_trace: str | None
-
-
-class SecurityEventLogger:
-    def __init__(self, plugin_id: str | None = None) -> None:
-        self._plugin_id = plugin_id
-        self._events: list[SecurityEvent] = []
-
-    def log_violation(self, violation: SandboxViolation) -> None:
-        event = SecurityEvent(
-            timestamp=time.time(),
-            category=violation.category,
-            detail=violation.detail,
-            plugin_id=violation.plugin_id or self._plugin_id,
-            attempted_action=violation.attempted_action,
-            stack_trace=traceback.format_stack(),
-        )
-        self._events.append(event)
-
-    def get_events(
-        self,
-        category: SandboxViolationCategory | None = None,
-        limit: int = 100,
-    ) -> list[SecurityEvent]:
-        events = self._events
-        if category is not None:
-            events = [e for e in events if e.category == category]
-        return events[-limit:]
-
-    def clear(self) -> None:
-        self._events.clear()
-
-    @property
-    def event_count(self) -> int:
-        return len(self._events)
+from engine.plugins.sandbox.monitoring.event_logger import SecurityEventLogger
 
 
 class SandboxContext:

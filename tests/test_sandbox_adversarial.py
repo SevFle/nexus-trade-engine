@@ -65,13 +65,12 @@ class TestImportlibBypassGuard:
             importer.uninstall()
 
     def test_importlib_import_module_not_blocked_when_not_installed(self) -> None:
-        RestrictedImporter(blocked={"os"}, plugin_id="p1")  # noqa: F841
+        importer = RestrictedImporter(blocked={"os"}, plugin_id="p1")
         import importlib
 
-            mod = importlib.import_module("json")
-            assert mod is not None
-        finally:
-            importer.uninstall()
+        mod = importlib.import_module("json")
+        assert mod is not None
+        importer.uninstall()
 
     def test_importlib_import_module_logs_violation(self) -> None:
         importer = RestrictedImporter(blocked={"os"}, plugin_id="p1")
