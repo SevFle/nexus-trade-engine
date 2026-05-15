@@ -66,8 +66,22 @@ class StrategyManifest(BaseModel):
         default_factory=list, description="Default symbols. Empty = user chooses."
     )
 
+    # ── Security ──
+    trust_level: str = "untrusted"
+    permissions: list[str] = Field(
+        default_factory=list,
+        description="Required permissions: network, filesystem_read, filesystem_write, threads",
+    )
+    content_hash: str | None = Field(
+        default=None,
+        description="SHA-256 hash of the strategy module for integrity verification.",
+    )
+
     def requires_network(self) -> bool:
         return len(self.network.allowed_endpoints) > 0
 
     def requires_gpu(self) -> bool:
         return self.resources.gpu == "required"
+
+    def has_permission(self, permission: str) -> bool:
+        return permission in self.permissions
