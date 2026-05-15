@@ -49,7 +49,7 @@ logger = structlog.get_logger()
 
 # Documented disengage token. Operators are expected to type this
 # explicitly so a stray script can't toggle the switch off.
-_DISENGAGE_TOKEN: str = "I_UNDERSTAND_THE_RISK"
+_DISENGAGE_TOKEN: str = "I_UNDERSTAND_THE_RISK"  # noqa: S105
 
 
 class KillSwitchState(StrEnum):
@@ -232,7 +232,7 @@ _INSTANCE_LOCK = threading.Lock()
 
 
 def get_kill_switch() -> KillSwitch:
-    global _INSTANCE  # noqa: PLW0603 - process-wide singleton
+    global _INSTANCE
     if _INSTANCE is None:
         with _INSTANCE_LOCK:
             if _INSTANCE is None:
@@ -242,6 +242,6 @@ def get_kill_switch() -> KillSwitch:
 
 def _reset_for_tests() -> None:
     """Test-only: clear the singleton so each test starts fresh."""
-    global _INSTANCE  # noqa: PLW0603
+    global _INSTANCE
     with _INSTANCE_LOCK:
         _INSTANCE = None

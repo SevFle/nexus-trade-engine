@@ -6,6 +6,7 @@ it in the database for backtest use.
 """
 
 import asyncio
+import logging
 import sys
 
 import yfinance as yf
@@ -14,6 +15,8 @@ from sqlalchemy import text
 # Add engine to path
 sys.path.insert(0, "../engine")
 from db.session import engine as db_engine
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_SYMBOLS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "META",
@@ -42,8 +45,11 @@ async def seed_ohlcv(symbols: list[str] | None = None, period: str = DEFAULT_PER
                 for idx, row in df.iterrows():
                     await conn.execute(
                         text("""
-                            INSERT INTO ohlcv_bars (symbol, timestamp, interval, open, high, low, close, volume)
-                            VALUES (:symbol, :ts, :interval, :open, :high, :low, :close, :volume)
+                            INSERT INTO ohlcv_bars
+                                (symbol, timestamp, interval,
+                                 open, high, low, close, volume)
+                            VALUES (:symbol, :ts, :interval,
+                                    :open, :high, :low, :close, :volume)
                             ON CONFLICT DO NOTHING
                         """),
                         {
@@ -59,7 +65,7 @@ async def seed_ohlcv(symbols: list[str] | None = None, period: str = DEFAULT_PER
                     )
 
         except Exception:
-            pass
+            logger.exception("Failed to seed data for %s", symbol)
 
 
 

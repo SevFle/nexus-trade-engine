@@ -369,12 +369,12 @@ _GLOBAL_REGISTRY: DataProviderRegistry | None = None
 
 def get_registry() -> DataProviderRegistry:
     """Process-wide registry singleton. Safe to call before configuration."""
-    global _GLOBAL_REGISTRY  # noqa: PLW0603
+    global _GLOBAL_REGISTRY
     if _GLOBAL_REGISTRY is None:
         _GLOBAL_REGISTRY = DataProviderRegistry()
     return _GLOBAL_REGISTRY
 
 
 def reset_registry_for_tests() -> None:
-    global _GLOBAL_REGISTRY  # noqa: PLW0603
+    global _GLOBAL_REGISTRY
     _GLOBAL_REGISTRY = None

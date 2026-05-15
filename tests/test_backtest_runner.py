@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -60,7 +60,7 @@ def _make_synthetic_df(
     n_days: int = 252, base_price: float = 150.0, seed: int = 42
 ) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
-    start = datetime(2024, 1, 1)
+    start = datetime(2024, 1, 1, tzinfo=UTC)
     dates = [start + timedelta(days=i) for i in range(n_days)]
     returns = rng.normal(0.0005, 0.015, n_days)
     closes = base_price * np.cumprod(1 + returns)

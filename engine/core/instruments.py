@@ -38,7 +38,7 @@ class InstrumentAssetClass(StrEnum):
     OPTION = "option"
     FUTURE = "future"
 
-    def to_provider_class(self) -> ProviderAssetClass:  # noqa: PLR0911 - one return per case
+    def to_provider_class(self) -> ProviderAssetClass:
         """Map to the data-routing :class:`AssetClass` used by providers."""
         from typing import assert_never  # noqa: PLC0415
 
@@ -153,7 +153,7 @@ class Instrument(BaseModel):
     # ── Derived properties ───────────────────────────────────────────
 
     @property
-    def uid(self) -> str:  # noqa: PLR0911 - one return per asset class
+    def uid(self) -> str:
         """Stable identifier — distinct per (asset_class, identifying fields).
 
         Spot, perpetual, and dated future on the same pair MUST produce

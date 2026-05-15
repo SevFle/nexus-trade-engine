@@ -139,13 +139,11 @@ def mean_pairwise_correlation(
     if n < window:
         return [None] * n
     pair_series: list[list[float | None]] = []
-    for i in range(len(keys)):
-        for j in range(i + 1, len(keys)):
-            pair_series.append(
-                rolling_correlation(
-                    return_series[keys[i]], return_series[keys[j]], window
-                )
-            )
+    pair_series.extend(
+        rolling_correlation(return_series[keys[i]], return_series[keys[j]], window)
+        for i in range(len(keys))
+        for j in range(i + 1, len(keys))
+    )
     if not pair_series:
         return [None] * n
     out: list[float | None] = [None] * n

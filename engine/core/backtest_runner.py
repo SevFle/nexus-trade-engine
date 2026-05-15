@@ -64,7 +64,7 @@ class BacktestRunner:
         self.provider = provider
         self._builder = MarketStateBuilder(min_bars=config.min_bars, debug=config.debug)
 
-    async def run(self) -> BacktestResult:  # noqa: PLR0912, PLR0915
+    async def run(self) -> BacktestResult:
         if self.provider is None:
             raise RuntimeError("No data provider configured")
         if self.strategy is None:

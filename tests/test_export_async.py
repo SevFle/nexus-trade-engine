@@ -30,7 +30,7 @@ class TestJsonifyExtended:
         assert _jsonify(dt).startswith("2026-05-03T12:00:00")
 
     def test_nested_structures(self):
-        nested = {"a": [1, {"b": datetime(2026, 1, 1)}]}
+        nested = {"a": [1, {"b": datetime(2026, 1, 1, tzinfo=UTC)}]}
         result = _jsonify(nested)
         assert isinstance(result["a"][1]["b"], str)
 
@@ -99,28 +99,55 @@ class TestRowToDictExtended:
         assert out == {"id": "abc", "name": "Alice"}
 
     def test_none_value_included(self):
-        class _FakeRow:
-            class __table__:
-                columns = [type("C", (), {"name": "field"})]
-            field = None
+        class _FakeColumn:
+            def __init__(self, name: str) -> None:
+                self.name = name
 
-        result = _row_to_dict(_FakeRow())
+        class _FakeTable:
+            def __init__(self, columns: list[str]) -> None:
+                self.columns = [_FakeColumn(c) for c in columns]
+
+        class _FakeRow:
+            def __init__(self, **fields) -> None:
+                self.__table__ = _FakeTable(list(fields.keys()))
+                for k, v in fields.items():
+                    setattr(self, k, v)
+
+        result = _row_to_dict(_FakeRow(field=None))
         assert result["field"] is None
 
     def test_uuid_stringified(self):
-        class _FakeRow:
-            class __table__:
-                columns = [type("C", (), {"name": "uid"})]
-            uid = uuid.UUID("12345678-1234-1234-1234-123456789abc")
+        class _FakeColumn:
+            def __init__(self, name: str) -> None:
+                self.name = name
 
-        result = _row_to_dict(_FakeRow())
+        class _FakeTable:
+            def __init__(self, columns: list[str]) -> None:
+                self.columns = [_FakeColumn(c) for c in columns]
+
+        class _FakeRow:
+            def __init__(self, **fields) -> None:
+                self.__table__ = _FakeTable(list(fields.keys()))
+                for k, v in fields.items():
+                    setattr(self, k, v)
+
+        result = _row_to_dict(_FakeRow(uid=uuid.UUID("12345678-1234-1234-1234-123456789abc")))
         assert isinstance(result["uid"], str)
 
     def test_datetime_serialised(self):
-        class _FakeRow:
-            class __table__:
-                columns = [type("C", (), {"name": "created_at"})]
-            created_at = datetime(2026, 5, 3, tzinfo=UTC)
+        class _FakeColumn:
+            def __init__(self, name: str) -> None:
+                self.name = name
 
-        out = _row_to_dict(_FakeRow())
+        class _FakeTable:
+            def __init__(self, columns: list[str]) -> None:
+                self.columns = [_FakeColumn(c) for c in columns]
+
+        class _FakeRow:
+            def __init__(self, **fields) -> None:
+                self.__table__ = _FakeTable(list(fields.keys()))
+                for k, v in fields.items():
+                    setattr(self, k, v)
+
+        out = _row_to_dict(_FakeRow(created_at=datetime(2026, 5, 3, tzinfo=UTC)))
         assert out["created_at"].startswith("2026-05-03")

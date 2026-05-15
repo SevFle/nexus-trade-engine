@@ -16,10 +16,6 @@ from engine.core.cumulative_returns import (
     tracking_error,
 )
 
-# ---------------------------------------------------------------------------
-# cumulative_returns
-# ---------------------------------------------------------------------------
-
 
 class TestCumulativeReturns:
     def test_empty_returns_empty(self):
@@ -42,11 +38,6 @@ class TestCumulativeReturns:
     def test_output_length_matches_input(self):
         out = cumulative_returns([0.01, 0.02, 0.03, 0.04, 0.05])
         assert len(out) == 5
-
-
-# ---------------------------------------------------------------------------
-# equity_curve_from_returns
-# ---------------------------------------------------------------------------
 
 
 class TestEquityCurveFromReturns:
@@ -75,11 +66,6 @@ class TestEquityCurveFromReturns:
     def test_length_is_returns_plus_one(self):
         out = equity_curve_from_returns([0.01] * 5)
         assert len(out) == 6
-
-
-# ---------------------------------------------------------------------------
-# log_returns
-# ---------------------------------------------------------------------------
 
 
 class TestLogReturns:
@@ -112,11 +98,6 @@ class TestLogReturns:
         for r in simple:
             compounded *= 1.0 + r
         assert sum(logs) == pytest.approx(math.log(compounded), rel=1e-12)
-
-
-# ---------------------------------------------------------------------------
-# returns_from_equity
-# ---------------------------------------------------------------------------
 
 
 class TestReturnsFromEquity:
@@ -155,11 +136,6 @@ class TestReturnsFromEquity:
             assert r == pytest.approx(o, rel=1e-12)
 
 
-# ---------------------------------------------------------------------------
-# active_returns
-# ---------------------------------------------------------------------------
-
-
 class TestActiveReturns:
     def test_empty_returns_empty(self):
         assert active_returns([], []) == []
@@ -175,11 +151,6 @@ class TestActiveReturns:
     def test_zero_active_when_identical(self):
         out = active_returns([0.01, 0.02, 0.03], [0.01, 0.02, 0.03])
         assert all(v == pytest.approx(0.0) for v in out)
-
-
-# ---------------------------------------------------------------------------
-# tracking_error
-# ---------------------------------------------------------------------------
 
 
 class TestTrackingError:
@@ -217,11 +188,6 @@ class TestTrackingError:
     def test_negative_annualisation_rejected(self):
         with pytest.raises(ValueError, match="annualisation_factor"):
             tracking_error([0.01, 0.02], [0.01, 0.02], annualisation_factor=-1)
-
-
-# ---------------------------------------------------------------------------
-# beating_benchmark_pct
-# ---------------------------------------------------------------------------
 
 
 class TestBeatingBenchmarkPct:

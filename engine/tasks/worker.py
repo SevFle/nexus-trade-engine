@@ -8,7 +8,10 @@ from taskiq import TaskiqScheduler
 from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
 
 from engine.config import settings
+from engine.core.backtest_runner import BacktestConfig, BacktestRunner
+from engine.data.feeds import get_data_provider
 from engine.observability.taskiq_middleware import CorrelationMiddleware
+from engine.plugins.registry import PluginRegistry
 
 logger = structlog.get_logger()
 
@@ -24,6 +27,14 @@ broker = (
 scheduler = TaskiqScheduler(broker=broker, sources=[])
 
 
+def _load_strategy(strategy_name: str):
+    registry = PluginRegistry()
+    strategy = registry.load_strategy(strategy_name)
+    if strategy is None:
+        raise ValueError(f"Strategy not found: {strategy_name}")
+    return strategy
+
+
 @broker.task
 async def run_backtest_task(
     strategy_name: str,
@@ -33,9 +44,6 @@ async def run_backtest_task(
     initial_capital: float = 100_000.0,
 ) -> dict:
     """Run a full backtest as an async task with proper error propagation."""
-    from engine.core.backtest_runner import BacktestConfig, BacktestRunner
-    from engine.data.feeds import get_data_provider
-
     logger.info(
         "backtest_task.start",
         strategy=strategy_name,
@@ -54,12 +62,7 @@ async def run_backtest_task(
             initial_capital=initial_capital,
         )
 
-        from engine.plugins.registry import PluginRegistry
-
-        registry = PluginRegistry()
-        strategy = registry.load_strategy(strategy_name)
-        if strategy is None:
-            raise ValueError(f"Strategy not found: {strategy_name}")
+        strategy = _load_strategy(strategy_name)
 
         runner = BacktestRunner(config=config, strategy=strategy, provider=provider)
         result = await runner.run()

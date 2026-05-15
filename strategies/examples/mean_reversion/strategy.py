@@ -15,7 +15,6 @@ import structlog
 # When running inside the engine, these come from the engine's modules.
 # When developing standalone, they come from the SDK.
 try:
-    from core.cost_model import ICostModel
     from core.portfolio import PortfolioSnapshot
     from core.signal import Signal
     from plugins.sdk import DataFeed, IStrategy, MarketState, StrategyConfig
@@ -123,7 +122,11 @@ class MeanReversionStrategy(IStrategy):
                         strategy_id=self.id,
                         weight=self._position_weight,
                         reason=f"z={z_score:.2f}, exp_net_return={net_return_pct:.2f}%",
-                        metadata={"z_score": z_score, "sma": sma, "expected_return": expected_return_pct},
+                        metadata={
+                            "z_score": z_score,
+                            "sma": sma,
+                            "expected_return": expected_return_pct,
+                        },
                     ))
                 else:
                     logger.debug(

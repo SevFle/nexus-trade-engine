@@ -87,7 +87,7 @@ def _scrub_string(s: str) -> str:
     return out
 
 
-def _scrub_value(value: Any) -> Any:  # noqa: PLR0911 - clear branch per type
+def _scrub_value(value: Any) -> Any:
     if isinstance(value, str):
         return _scrub_string(value)
     if isinstance(value, bytes):

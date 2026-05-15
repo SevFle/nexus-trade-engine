@@ -121,7 +121,7 @@ class SearchIndex:
         return fuzzy[:cap]
 
     @staticmethod
-    def _suggest_score(rec: RefInstrument, q: str) -> tuple[int, str]:  # noqa: PLR0911 - one return per scoring tier
+    def _suggest_score(rec: RefInstrument, q: str) -> tuple[int, str]:
         """Score for typeahead. Returns (score, completion) or (0, '')."""
         ticker = rec.primary_ticker.lower()
         name = rec.name.lower()
@@ -162,7 +162,7 @@ class SearchIndex:
         return None
 
     @staticmethod
-    def _score(rec: RefInstrument, q: str) -> int:  # noqa: PLR0911 - one return per scoring tier
+    def _score(rec: RefInstrument, q: str) -> int:
         """Rank both ticker and company-name matches.
 
         Both symbol-style queries (e.g. ``AAPL``) and company-name

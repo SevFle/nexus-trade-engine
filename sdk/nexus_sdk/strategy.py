@@ -57,7 +57,7 @@ class MarketState(BaseModel):
         variance = sum((c - mean) ** 2 for c in closes) / period
         return variance ** 0.5
 
-    def get_news(self, hours: int = 24) -> list[dict]:
+    def get_news(self, _hours: int = 24) -> list[dict]:
         return self.news
 
     def get_macro_indicators(self) -> dict[str, Any]:
@@ -96,12 +96,15 @@ class IStrategy(ABC):
     @abstractmethod
     async def evaluate(self, portfolio, market: MarketState, costs) -> list[Signal]: ...
 
+    @abstractmethod
     async def on_order_fill(self, fill: dict) -> None:
         pass
 
+    @abstractmethod
     async def on_market_open(self) -> None:
         pass
 
+    @abstractmethod
     async def on_market_close(self) -> None:
         pass
 

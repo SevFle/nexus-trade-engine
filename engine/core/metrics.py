@@ -178,7 +178,7 @@ class PerformanceMetrics:
         )
 
     def _calculate_daily_returns(self, values: list[float]) -> list[float]:
-        if len(values) < 2:  # noqa: PLR2004
+        if len(values) < 2:
             return []
         returns = []
         for i in range(1, len(values)):

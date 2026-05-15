@@ -91,10 +91,8 @@ class KillSwitchCheck:
     """Refuses to submit when the global kill-switch is engaged."""
 
     def __init__(self, switch: KillSwitch | None = None) -> None:
-        # Late import to avoid a hard dependency for tests that pass
-        # their own switch in.
         if switch is None:
-            from engine.core.live import get_kill_switch
+            from engine.core.live import get_kill_switch  # noqa: PLC0415
 
             switch = get_kill_switch()
         self._switch = switch

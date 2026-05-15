@@ -321,9 +321,9 @@ class TestOIDCDiscoveryEdgeCases:
                 "Bad Gateway", request=MagicMock(), response=MagicMock(status_code=502)
             )
         )
-        with patch("httpx.AsyncClient", return_value=_FakeClient(get_responses=[resp])):
-            with pytest.raises(httpx.HTTPStatusError):
-                await oidc_provider._get_discovery()
+        with patch("httpx.AsyncClient", return_value=_FakeClient(get_responses=[resp])), \
+             pytest.raises(httpx.HTTPStatusError):
+            await oidc_provider._get_discovery()
 
     async def test_discovery_ftp_scheme_rejected(self, oidc_provider, mock_settings):
         mock_settings.oidc_discovery_url = "ftp://id.example.com/.well-known"
@@ -339,9 +339,9 @@ class TestOIDCDiscoveryEdgeCases:
         resp = _FakeResponse(
             raise_error=httpx.ConnectError("Connection refused")
         )
-        with patch("httpx.AsyncClient", return_value=_FakeClient(get_responses=[resp])):
-            with pytest.raises(httpx.ConnectError):
-                await oidc_provider._get_discovery()
+        with patch("httpx.AsyncClient", return_value=_FakeClient(get_responses=[resp])), \
+             pytest.raises(httpx.ConnectError):
+            await oidc_provider._get_discovery()
 
 
 class TestOIDCJWKSEdgeCases:
@@ -360,9 +360,9 @@ class TestOIDCJWKSEdgeCases:
                 "Not Found", request=MagicMock(), response=MagicMock(status_code=404)
             )
         )
-        with patch("httpx.AsyncClient", return_value=_FakeClient(get_responses=[disc_resp, jwks_resp])):
-            with pytest.raises(httpx.HTTPStatusError):
-                await oidc_provider._get_jwks()
+        with patch("httpx.AsyncClient", return_value=_FakeClient(get_responses=[disc_resp, jwks_resp])), \
+             pytest.raises(httpx.HTTPStatusError):
+            await oidc_provider._get_jwks()
 
 
 class TestOIDCAuthenticateEdgeCases:

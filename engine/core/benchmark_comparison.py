@@ -64,7 +64,10 @@ def beta(
     mp = _mean(portfolio_returns)
     mb = _mean(benchmark_returns)
     cov = (
-        sum((p - mp) * (b - mb) for p, b in zip(portfolio_returns, benchmark_returns, strict=False))
+        sum(
+            (p - mp) * (b - mb)
+            for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
+        )
         / n
     )
     var_b = sum((b - mb) ** 2 for b in benchmark_returns) / n

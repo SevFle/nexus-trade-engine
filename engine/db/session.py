@@ -14,7 +14,7 @@ _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
 def get_engine() -> AsyncEngine:
-    global _engine  # noqa: PLW0603
+    global _engine
     if _engine is None:
         _engine = create_async_engine(
             settings.database_url,
@@ -26,7 +26,7 @@ def get_engine() -> AsyncEngine:
 
 
 def get_session_factory() -> async_sessionmaker[AsyncSession]:
-    global _session_factory  # noqa: PLW0603
+    global _session_factory
     if _session_factory is None:
         _session_factory = async_sessionmaker(
             get_engine(), class_=AsyncSession, expire_on_commit=False
@@ -35,7 +35,7 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 async def dispose_engine() -> None:
-    global _engine, _session_factory  # noqa: PLW0603
+    global _engine, _session_factory
     if _engine is not None:
         await _engine.dispose()
         _engine = None

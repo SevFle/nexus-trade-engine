@@ -37,7 +37,7 @@ class BacktestBackend(ExecutionBackend):
     ):
         self.fill_probability = fill_probability
         self.partial_fill_enabled = partial_fill_enabled
-        self._rng = random.Random(random_seed)
+        self._rng = random.Random(random_seed)  # noqa: S311
 
     async def connect(self) -> None:
         logger.info("backtest.backend.ready")

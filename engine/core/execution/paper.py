@@ -31,7 +31,7 @@ class PaperBackend(ExecutionBackend):
 
     def __init__(self):
         self._connected = False
-        self._rng = random.Random()
+        self._rng = random.Random()  # noqa: S311
 
     async def connect(self) -> None:
         self._connected = True

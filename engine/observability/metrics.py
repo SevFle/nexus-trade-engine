@@ -197,7 +197,7 @@ def set_metrics(backend: MetricsBackend) -> None:
     """Install ``backend`` as the active singleton. Wired once at app
     startup based on ``settings.metrics_backend`` (when that's added);
     tests use this to swap in a :class:`RecordingBackend`."""
-    global _BACKEND  # noqa: PLW0603 - process-wide singleton
+    global _BACKEND
     with _BACKEND_LOCK:
         _BACKEND = backend
 

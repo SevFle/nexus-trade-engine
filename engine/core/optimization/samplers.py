@@ -73,7 +73,7 @@ def random_search(
     """
     if n_trials <= 0:
         return
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # noqa: S311
     for _ in range(n_trials):
         params: dict[str, Any] = {}
         for s in specs:

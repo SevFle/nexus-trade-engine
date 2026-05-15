@@ -83,16 +83,18 @@ class Order:
     def __post_init__(self) -> None:
         if self.quantity <= 0:
             raise ValueError("quantity must be positive")
-        if self.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT):
-            if self.limit_price is None or self.limit_price <= 0:
-                raise ValueError(
-                    f"{self.order_type.value} order requires positive limit_price"
-                )
-        if self.order_type in (OrderType.STOP, OrderType.STOP_LIMIT):
-            if self.stop_price is None or self.stop_price <= 0:
-                raise ValueError(
-                    f"{self.order_type.value} order requires positive stop_price"
-                )
+        if self.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT) and (
+            self.limit_price is None or self.limit_price <= 0
+        ):
+            raise ValueError(
+                f"{self.order_type.value} order requires positive limit_price"
+            )
+        if self.order_type in (OrderType.STOP, OrderType.STOP_LIMIT) and (
+            self.stop_price is None or self.stop_price <= 0
+        ):
+            raise ValueError(
+                f"{self.order_type.value} order requires positive stop_price"
+            )
 
     # ------------------------------------------------------------------
     # Properties

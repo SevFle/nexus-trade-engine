@@ -45,7 +45,6 @@ class ConnectionManager:
     """Tracks open WebSocket connections per user + their topic subs."""
 
     def __init__(self) -> None:
-        # {user_id: {ws: {topic, ...}}}
         self._conns: dict[uuid.UUID, dict[WebSocket, set[str]]] = {}
         self._lock = asyncio.Lock()
 
@@ -162,7 +161,7 @@ _MANAGER: ConnectionManager | None = None
 
 
 def get_manager() -> ConnectionManager:
-    global _MANAGER  # noqa: PLW0603 - process-wide singleton
+    global _MANAGER
     if _MANAGER is None:
         _MANAGER = ConnectionManager()
     return _MANAGER

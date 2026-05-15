@@ -128,7 +128,7 @@ class Resolver:
             return None
         return self._resolve_string(normalized.strip())
 
-    def _resolve_dict(self, q: dict[str, Any]) -> RefInstrument | None:  # noqa: PLR0911 - one return per id type
+    def _resolve_dict(self, q: dict[str, Any]) -> RefInstrument | None:
         if "isin" in q:
             return self._by_isin.get(q["isin"])
         if "cusip" in q:

@@ -96,7 +96,7 @@ class Study:
                 )
                 trials.append(Trial(index=index, params=params, error=str(exc)[:200]))
                 continue
-            if score != score:  # NaN check
+            if score != score:  # noqa: PLR0124
                 logger.warning(
                     "optimization.trial_nan",
                     sampler=sampler,
