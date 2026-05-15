@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import ipaddress
 import socket as _socket_module
 from typing import TYPE_CHECKING, Any
 
@@ -11,6 +13,14 @@ if TYPE_CHECKING:
 from engine.plugins.sandbox.core.violation import NetworkViolation
 
 
+def _parse_cidr_networks(cidrs: list[str]) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for cidr in cidrs:
+        with contextlib.suppress(ValueError):
+            networks.append(ipaddress.ip_network(cidr, strict=False))
+    return networks
+
+
 class NetworkGuard:
     def __init__(self, policy: NetworkPolicy, plugin_id: str | None = None) -> None:
         self._policy = policy
@@ -20,10 +30,20 @@ class NetworkGuard:
         self._original_socket_create_connection: Any = None
         self._original_getaddrinfo: Any = None
         self._installed = False
+        self._cidr_networks = _parse_cidr_networks(policy.allowed_cidrs)
+
+    def _is_host_in_cidr(self, host: str) -> bool:
+        try:
+            addr = ipaddress.ip_address(host)
+        except ValueError:
+            return False
+        return any(addr in net for net in self._cidr_networks)
+
+    def _is_host_allowed(self, host: str) -> bool:
+        return self._policy.is_host_allowed(host) or self._is_host_in_cidr(host)
 
     def _make_restricted_send(self, original_send: Any) -> Any:
-        policy = self._policy
-        plugin_id = self._plugin_id
+        guard_ref = self
 
         async def restricted_send(
             client: Any,
@@ -33,9 +53,9 @@ class NetworkGuard:
             **kwargs: Any,
         ) -> Any:
             host = request.url.host
-            if not policy.is_host_allowed(host):
-                violation = NetworkViolation(host, plugin_id=plugin_id)
-                self._violation_log.append(violation)
+            if not guard_ref._is_host_allowed(host):
+                violation = NetworkViolation(host, plugin_id=guard_ref._plugin_id)
+                guard_ref._violation_log.append(violation)
                 raise PermissionError(violation.detail)
             return await original_send(client, request, stream=stream, **kwargs)
 
@@ -49,7 +69,7 @@ class NetworkGuard:
     ) -> Any:
         host = address[0]
         port = address[1]
-        if not self._policy.is_host_allowed(host):
+        if not self._is_host_allowed(host):
             violation = NetworkViolation(host, port=port, plugin_id=self._plugin_id)
             self._violation_log.append(violation)
             raise PermissionError(violation.detail)
@@ -62,7 +82,7 @@ class NetworkGuard:
         *args: Any,
         **kwargs: Any,
     ) -> list[tuple[Any, ...]]:
-        if self._policy.block_dns and not self._policy.is_host_allowed(host):
+        if self._policy.block_dns and not self._is_host_allowed(host):
             violation = NetworkViolation(host, port=port, plugin_id=self._plugin_id)
             self._violation_log.append(violation)
             raise PermissionError(f"DNS lookup for {host} is not allowed")

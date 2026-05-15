@@ -47,6 +47,7 @@ class PluginSandboxExecutor:
         class _Placeholder:
             name = "_placeholder"
             version = "0.0.0"
+
             def on_bar(self, _s: Any, _p: Any) -> list[Any]:
                 return []
 
@@ -84,7 +85,10 @@ class PluginSandboxExecutor:
             elapsed_ms = (time.monotonic() - start) * 1000
             error_msg = f"Timeout after {self.policy.resource_policy.max_cpu_seconds}s"
             self._metrics.record_evaluation(
-                self.policy.plugin_id, elapsed_ms, 0, error=error_msg,
+                self.policy.plugin_id,
+                elapsed_ms,
+                0,
+                error=error_msg,
             )
             logger.exception(
                 "sandbox.timeout",
@@ -95,7 +99,10 @@ class PluginSandboxExecutor:
         except Exception as e:
             elapsed_ms = (time.monotonic() - start) * 1000
             self._metrics.record_evaluation(
-                self.policy.plugin_id, elapsed_ms, 0, error=str(e),
+                self.policy.plugin_id,
+                elapsed_ms,
+                0,
+                error=str(e),
             )
             logger.exception(
                 "sandbox.evaluation_error",
@@ -110,7 +117,9 @@ class PluginSandboxExecutor:
         elapsed_ms = (time.monotonic() - start) * 1000
         signals = self._convert_signals(raw_signals)
         self._metrics.record_evaluation(
-            self.policy.plugin_id, elapsed_ms, len(signals),
+            self.policy.plugin_id,
+            elapsed_ms,
+            len(signals),
         )
         return signals
 

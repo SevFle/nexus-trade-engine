@@ -57,7 +57,7 @@ class MarketState(BaseModel):
         variance = sum((c - mean) ** 2 for c in closes) / period
         return variance ** 0.5
 
-    def get_news(self, _hours: int = 24) -> list[dict]:
+    def get_news(self, hours: int = 24) -> list[dict]:  # noqa: ARG002
         return self.news
 
     def get_macro_indicators(self) -> dict[str, Any]:

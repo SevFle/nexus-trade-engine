@@ -35,6 +35,7 @@ def __getattr__(name: str):
     }
     if name in lazy_exports:
         import importlib  # noqa: PLC0415
+
         mod = importlib.import_module(lazy_exports[name])
         value = getattr(mod, name)
         globals()[name] = value

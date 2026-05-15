@@ -29,10 +29,7 @@ class NetworkPolicy:
     def is_host_allowed(self, host: str) -> bool:
         if not self.allowed_endpoints:
             return False
-        return any(
-            host == ep or host.endswith(f".{ep}")
-            for ep in self.allowed_endpoints
-        )
+        return any(host == ep or host.endswith(f".{ep}") for ep in self.allowed_endpoints)
 
 
 @dataclass
@@ -55,15 +52,30 @@ class FilesystemPolicy:
 
 @dataclass
 class IntrospectionPolicy:
-    blocked_builtins: set[str] = field(default_factory=lambda: {
-        "eval", "exec", "compile",
-        "breakpoint", "credits", "license", "quit", "exit",
-    })
-    blocked_attributes: set[str] = field(default_factory=lambda: {
-        "__subclasses__", "__bases__", "__mro__",
-        "__globals__", "__closure__", "__code__",
-        "__dict__", "__class__",
-    })
+    blocked_builtins: set[str] = field(
+        default_factory=lambda: {
+            "eval",
+            "exec",
+            "compile",
+            "breakpoint",
+            "credits",
+            "license",
+            "quit",
+            "exit",
+        }
+    )
+    blocked_attributes: set[str] = field(
+        default_factory=lambda: {
+            "__subclasses__",
+            "__bases__",
+            "__mro__",
+            "__globals__",
+            "__closure__",
+            "__code__",
+            "__dict__",
+            "__class__",
+        }
+    )
     blocked_dunder_access: bool = True
     block_gc: bool = True
     block_inspect: bool = True
@@ -89,18 +101,49 @@ class SandboxPolicy:
 
         try:
             from engine.plugins.restricted_importer import BLOCKED_MODULES  # noqa: PLC0415
+
             import_blocked = set(BLOCKED_MODULES)
         except ImportError:
             import_blocked = {
-                "os", "subprocess", "shutil", "pathlib", "io", "_io",
-                "socket", "_socket", "http", "urllib", "ftplib", "smtplib",
-                "ctypes", "_ctypes", "multiprocessing", "signal", "sys",
-                "importlib", "threading", "_thread", "concurrent",
-                "gc", "inspect", "code", "codeop", "ast", "dis",
-                "pkgutil", "zipimport", "runpy",
-                "pickle", "shelve", "marshal",
-                "atexit", "sched",
-                "pty", "tty", "pdb", "bdb",
+                "os",
+                "subprocess",
+                "shutil",
+                "pathlib",
+                "io",
+                "_io",
+                "socket",
+                "_socket",
+                "http",
+                "urllib",
+                "ftplib",
+                "smtplib",
+                "ctypes",
+                "_ctypes",
+                "multiprocessing",
+                "signal",
+                "sys",
+                "importlib",
+                "threading",
+                "_thread",
+                "concurrent",
+                "gc",
+                "inspect",
+                "code",
+                "codeop",
+                "ast",
+                "dis",
+                "pkgutil",
+                "zipimport",
+                "runpy",
+                "pickle",
+                "shelve",
+                "marshal",
+                "atexit",
+                "sched",
+                "pty",
+                "tty",
+                "pdb",
+                "bdb",
                 "site",
             }
 
