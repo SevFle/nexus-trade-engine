@@ -65,13 +65,11 @@ class TestImportlibBypassGuard:
             importer.uninstall()
 
     def test_importlib_import_module_not_blocked_when_not_installed(self) -> None:
-        RestrictedImporter(blocked={"os"}, plugin_id="p1")  # noqa: F841
+        RestrictedImporter(blocked={"os"}, plugin_id="p1")
         import importlib
 
-            mod = importlib.import_module("json")
-            assert mod is not None
-        finally:
-            importer.uninstall()
+        mod = importlib.import_module("json")
+        assert mod is not None
 
     def test_importlib_import_module_logs_violation(self) -> None:
         importer = RestrictedImporter(blocked={"os"}, plugin_id="p1")
@@ -292,7 +290,7 @@ class TestCrossLayerAdversarial:
                     tb = e.__traceback__
                     frame = getattr(tb, "tb_frame", None)
                     if frame is not None:
-                        _ = frame.f_globals  # noqa: B018
+                        _ = frame.f_globals
 
             def on_bar(self, s, p):
                 self._try_escape()
