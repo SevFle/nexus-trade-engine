@@ -11,6 +11,12 @@ This conftest provides:
 - ``_bypass_auth``: an autouse fixture that patches ``FastAPI.__init__`` so every
   new app instance gets a dependency override for ``get_current_user``.  Files
   matching ``test_auth*`` or ``*_requires_auth`` opt out to exercise real auth.
+
+Note: session-scoped asyncio loop configuration is intentionally absent from this
+file because it is handled declaratively in ``pyproject.toml`` via the
+``asyncio_mode``, ``asyncio_default_fixture_loop_scope``, and
+``asyncio_default_test_loop_scope`` settings under ``[tool.pytest.ini_options]``.
+No manual ``event_loop`` or ``event_loop_policy`` fixture is needed here.
 """
 from __future__ import annotations
 
