@@ -59,10 +59,6 @@ class FilesystemIsolation:
             for p in rw_paths
             if p
         )
-            self._violation_log.append(violation)
-            raise PermissionError(violation.detail)
-
-        return resolved
 
     def _restricted_open(
         self,
