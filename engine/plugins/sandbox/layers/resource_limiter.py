@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import signal
 import threading
 import time
 from typing import TYPE_CHECKING, Any
@@ -19,9 +20,12 @@ except ImportError:
     _resource = None
     HAS_RESOURCE_MODULE = False
 
+_HAS_SIGVTALRM = hasattr(signal, "SIGVTALRM") and hasattr(signal, "ITIMER_VIRTUAL")
+
 
 class _CPUTimer:
     _POLL_INTERVAL = 0.05
+    _force_poll = False
 
     def __init__(self, seconds: float, plugin_id: str | None = None) -> None:
         self._seconds = seconds
@@ -31,14 +35,23 @@ class _CPUTimer:
         self._start_cpu: float = 0.0
         self._wall_start: float = 0.0
         self._thread: threading.Thread | None = None
+        self._use_signal = False
+        self._old_handler: Any = None
 
     @property
     def expired(self) -> bool:
         return self._expired.is_set()
 
+    @property
+    def mode(self) -> str:
+        return "signal" if self._use_signal else "poll"
+
     def _cpu_time(self) -> float:
         t = os.times()
         return t[0] + t[1]
+
+    def _signal_handler(self, _signum: int, _frame: Any) -> None:
+        self._expired.set()
 
     def _poll(self) -> None:
         while not self._cancelled.wait(timeout=self._POLL_INTERVAL):
@@ -48,11 +61,40 @@ class _CPUTimer:
                 self._expired.set()
                 return
 
+    def _try_start_signal(self) -> bool:
+        if self._force_poll:
+            return False
+        if not _HAS_SIGVTALRM:
+            return False
+        if threading.current_thread() is not threading.main_thread():
+            return False
+        try:
+            self._old_handler = signal.signal(signal.SIGVTALRM, self._signal_handler)
+            signal.setitimer(signal.ITIMER_VIRTUAL, self._seconds)
+            self._use_signal = True
+        except (ValueError, OSError):
+            return False
+        else:
+            return True
+
+    def _stop_signal(self) -> None:
+        with contextlib.suppress(ValueError, OSError):
+            signal.setitimer(signal.ITIMER_VIRTUAL, 0)
+        if self._old_handler is not None:
+            with contextlib.suppress(ValueError, OSError):
+                signal.signal(signal.SIGVTALRM, self._old_handler)
+            self._old_handler = None
+        self._use_signal = False
+
     def start(self) -> None:
         self._start_cpu = self._cpu_time()
         self._wall_start = time.monotonic()
         self._cancelled.clear()
         self._expired.clear()
+        self._use_signal = False
+        self._old_handler = None
+        if self._try_start_signal():
+            return
         self._thread = threading.Thread(target=self._poll, daemon=True)
         self._thread.start()
 
@@ -61,6 +103,8 @@ class _CPUTimer:
 
     def cancel(self) -> None:
         self._cancelled.set()
+        if self._use_signal:
+            self._stop_signal()
         if self._thread is not None:
             self._thread.join(timeout=1.0)
             self._thread = None
@@ -107,11 +151,16 @@ class _CPUTimer:
     def _on_timeout(self) -> None:
         self._expired.set()
 
+    def __enter__(self) -> _CPUTimer:
+        self.start()
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.cancel()
+
     def __del__(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self.cancel()
-        except Exception:
-            pass
 
 
 class _WallTimer:
@@ -168,11 +217,16 @@ class _WallTimer:
             return 0.0
         return time.monotonic() - self._start_time
 
+    def __enter__(self) -> _WallTimer:
+        self.start()
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.cancel()
+
     def __del__(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self.cancel()
-        except Exception:
-            pass
 
 
 class ResourceLimiter:

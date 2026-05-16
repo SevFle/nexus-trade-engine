@@ -562,14 +562,14 @@ class TestCPUTimer:
     def test_expired_after_timeout(self) -> None:
         timer = _CPUTimer(0.01)
         timer.start()
-        time.sleep(0.05)
+        _burn_cpu(0.05)
         assert timer.expired is True
         timer.stop()
 
     def test_check_raises_when_expired(self) -> None:
         timer = _CPUTimer(0.01, plugin_id="test")
         timer.start()
-        time.sleep(0.05)
+        _burn_cpu(0.05)
         with pytest.raises(ResourceExhausted, match="cpu_time"):
             timer.check()
         timer.stop()
@@ -1085,3 +1085,10 @@ class TestBacktestRunnerRealizedPnL:
         buys = [t for t in result.trades if t["side"] == "buy"]
         for buy in buys:
             assert buy["realized_pnl"] == 0.0
+
+
+def _burn_cpu(duration: float) -> None:
+    end = time.monotonic() + duration
+    total = 0.0
+    while time.monotonic() < end:
+        total += 1.0

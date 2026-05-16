@@ -57,7 +57,10 @@ def load_strategy_class(module_path: str) -> Any:
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load strategy from {module_path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except FileNotFoundError as exc:
+        raise ImportError(f"Cannot load strategy from {module_path}") from exc
     strategy_cls = getattr(module, "Strategy", None)
     if strategy_cls is None:
         logger.warning("strategy_class_not_found_in_module", path=module_path)

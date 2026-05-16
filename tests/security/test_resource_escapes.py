@@ -71,7 +71,7 @@ class TestCPUExhaustion:
         timer = _CPUTimer(0.05, plugin_id="test")
         assert not timer.expired
         timer.start()
-        time.sleep(0.1)
+        _burn_cpu(0.15)
         assert timer.expired
         timer.stop()
 
@@ -550,3 +550,10 @@ class TestTrustLevelResourceEscalation:
         )
         ctx = SandboxContext(policy)
         assert not ctx.validate_trust_level()
+
+
+def _burn_cpu(duration: float) -> None:
+    end = time.monotonic() + duration
+    total = 0.0
+    while time.monotonic() < end:
+        total += 1.0
