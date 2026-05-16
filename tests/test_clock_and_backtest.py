@@ -285,7 +285,7 @@ class TestBacktestBackendExecute:
     @pytest.mark.asyncio
     async def test_seed_outcomes_are_deterministic(self):
         outcomes = []
-        for trial in range(3):
+        for _trial in range(3):
             trial_results = []
             for seed in range(5):
                 backend = BacktestBackend(fill_probability=0.5, random_seed=seed)
