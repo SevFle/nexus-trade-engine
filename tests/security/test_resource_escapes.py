@@ -14,12 +14,7 @@ Tests resource exhaustion attack vectors including:
 
 from __future__ import annotations
 
-import builtins
-import os
-import sys
-import tempfile
 import time
-from typing import Any
 
 import pytest
 
@@ -27,8 +22,6 @@ from engine.plugins.sandbox.core.context import SandboxContext
 from engine.plugins.sandbox.core.policy import (
     FilesystemPolicy,
     ImportPolicy,
-    IntrospectionPolicy,
-    NetworkPolicy,
     ResourcePolicy,
     SandboxPolicy,
 )
@@ -170,7 +163,7 @@ class TestMemoryExhaustion:
         limiter = ResourceLimiter(policy, plugin_id="test")
         limiter.install()
         try:
-            soft, hard = _resource.getrlimit(_resource.RLIMIT_AS)
+            soft, _hard = _resource.getrlimit(_resource.RLIMIT_AS)
             assert soft <= 100 * 1024 * 1024
         finally:
             limiter.uninstall()
@@ -212,7 +205,7 @@ class TestFileDescriptorExhaustion:
         limiter = ResourceLimiter(policy, plugin_id="test")
         limiter.install()
         try:
-            soft, hard = _resource.getrlimit(_resource.RLIMIT_NOFILE)
+            soft, _hard = _resource.getrlimit(_resource.RLIMIT_NOFILE)
             assert soft <= 32
         finally:
             limiter.uninstall()
@@ -228,12 +221,12 @@ class TestFileDescriptorExhaustion:
         if not has_resource:
             pytest.skip("resource module not available")
 
-        original_soft, original_hard = _resource.getrlimit(_resource.RLIMIT_NOFILE)
+        original_soft, _original_hard = _resource.getrlimit(_resource.RLIMIT_NOFILE)
         policy = ResourcePolicy(max_file_descriptors=32)
         limiter = ResourceLimiter(policy, plugin_id="test")
         limiter.install()
         limiter.uninstall()
-        restored_soft, restored_hard = _resource.getrlimit(_resource.RLIMIT_NOFILE)
+        restored_soft, _restored_hard = _resource.getrlimit(_resource.RLIMIT_NOFILE)
         assert restored_soft == original_soft
 
     def test_fd_limit_default(self) -> None:
@@ -553,7 +546,7 @@ class TestTrustLevelResourceEscalation:
             trust_level="untrusted",
             import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
             resource_policy=ResourcePolicy(max_cpu_seconds=30),
-            filesystem_policy=FilesystemPolicy(read_write_paths=["/tmp"]),
+            filesystem_policy=FilesystemPolicy(read_write_paths=["/tmp"]),  # noqa: S108
         )
         ctx = SandboxContext(policy)
         assert not ctx.validate_trust_level()

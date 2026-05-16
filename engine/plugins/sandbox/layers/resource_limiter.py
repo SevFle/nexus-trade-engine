@@ -181,7 +181,11 @@ class ResourceLimiter:
 
     def check_cpu_timer(self) -> None:
         if self._cpu_timer is not None:
-            self._cpu_timer.check()
+            try:
+                self._cpu_timer.check()
+            except ResourceExhausted as exc:
+                self._violation_log.append(exc)
+                raise
 
     def _start_wall_timer(self) -> None:
         self._wall_timer = _WallTimer(
@@ -197,7 +201,11 @@ class ResourceLimiter:
 
     def check_wall_timer(self) -> None:
         if self._wall_timer is not None:
-            self._wall_timer.check()
+            try:
+                self._wall_timer.check()
+            except ResourceExhausted as exc:
+                self._violation_log.append(exc)
+                raise
 
     @property
     def cpu_elapsed(self) -> float:

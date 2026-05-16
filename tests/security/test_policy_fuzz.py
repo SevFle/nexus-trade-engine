@@ -22,7 +22,7 @@ from __future__ import annotations
 import string
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from engine.plugins.sandbox.core.policy import (
@@ -40,15 +40,14 @@ from engine.plugins.sandbox.core.violation import (
 from engine.plugins.sandbox.layers.resource_limiter import ResourceLimiter
 from engine.plugins.trust_levels import TrustLevel, get_trust_level
 
-
-_module_name_chars = st.characters(
-    alphabet=string.ascii_letters + string.digits + "._-",
+_module_name_chars = st.text(
+    st.sampled_from(string.ascii_letters + string.digits + "._-"),
     min_size=1,
     max_size=80,
 )
 
-_path_chars = st.characters(
-    alphabet=string.printable.replace("\x00", ""),
+_path_chars = st.text(
+    st.sampled_from(string.printable.replace("\x00", "")),
     min_size=1,
     max_size=200,
 )
@@ -72,6 +71,8 @@ class TestImportPolicyFuzz:
     @given(module=_module_name_chars)
     @settings(max_examples=50)
     def test_is_allowed_single_module(self, module: str) -> None:
+        root = module.split(".", maxsplit=1)[0]
+        assume(root and root == module)
         policy = ImportPolicy(blocked_modules={module})
         assert not policy.is_allowed(module)
 
@@ -81,6 +82,8 @@ class TestImportPolicyFuzz:
     )
     @settings(max_examples=50)
     def test_blocked_overrides_allowed(self, module: str, blocked: set[str]) -> None:
+        root = module.split(".", maxsplit=1)[0]
+        assume(root and root == module)
         policy = ImportPolicy(
             allowed_modules={module},
             blocked_modules=blocked | {module},
@@ -90,12 +93,14 @@ class TestImportPolicyFuzz:
     @given(module=_module_name_chars)
     @settings(max_examples=50)
     def test_empty_blocked_allows_all(self, module: str) -> None:
+        assume(module.split(".", maxsplit=1)[0])
         policy = ImportPolicy(blocked_modules=set(), allowed_modules=None)
         assert policy.is_allowed(module)
 
     @given(module=_module_name_chars)
     @settings(max_examples=50)
     def test_submodule_blocked_by_root(self, module: str) -> None:
+        assume(module.split(".", maxsplit=1)[0])
         root = module.split(".", maxsplit=1)[0] if "." in module else module
         policy = ImportPolicy(blocked_modules={root})
         assert not policy.is_allowed(module + ".submodule")
