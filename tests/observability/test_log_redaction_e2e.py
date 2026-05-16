@@ -21,9 +21,17 @@ def stream_buf(monkeypatch) -> io.StringIO:
     monkeypatch.setattr(_settings, "log_format", "json")
     setup_logging()
     buf = io.StringIO()
+    handler = logging.StreamHandler(buf)
+    handler.setFormatter(
+        structlog.stdlib.ProcessorFormatter(
+            processors=[
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                structlog.processors.JSONRenderer(),
+            ],
+        )
+    )
     root = logging.getLogger()
-    if root.handlers:
-        root.handlers[0].stream = buf  # type: ignore[attr-defined]
+    root.handlers = [handler]
     return buf
 
 

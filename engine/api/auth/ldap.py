@@ -13,6 +13,13 @@ from engine.db.models import User
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+try:
+    import ldap
+    from ldap.filter import escape_filter_chars
+except ImportError:
+    ldap = None  # type: ignore[assignment]
+    escape_filter_chars = None  # type: ignore[assignment]
+
 logger = structlog.get_logger()
 
 
@@ -29,10 +36,10 @@ class LDAPAuthProvider(IAuthProvider):
         if not username or not password or db is None:
             return AuthResult(success=False, error="Username, password, and db session required")
 
-        try:
-            import ldap
-            from ldap.filter import escape_filter_chars
+        if ldap is None or escape_filter_chars is None:
+            return AuthResult(success=False, error="LDAP support is not installed")
 
+        try:
             conn = ldap.initialize(settings.ldap_server_url)
             conn.set_option(ldap.OPT_NETWORK_TIMEOUT, 10)
             conn.set_option(ldap.OPT_TIMEOUT, 10)

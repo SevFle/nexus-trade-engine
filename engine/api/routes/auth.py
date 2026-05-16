@@ -319,9 +319,9 @@ async def authorize_provider(
 async def provider_callback(
     provider: str,
     code: str,
-    state: str,
     request: Request,
     response: Response,
+    state: str = "",
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     if not state:
