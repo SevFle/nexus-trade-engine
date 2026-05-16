@@ -1,10 +1,10 @@
 {
   "closed_trades": 0,
-  "equity_curve_checksum": "b7af7e01aa9becba",
+  "equity_curve_checksum": "de506d34c9e3dd85",
   "equity_points": 196,
-  "final_capital": 102615.21,
+  "final_capital": 102615.15,
   "realized_pnl": 0.0,
-  "total_return_pct": 2.6152,
+  "total_return_pct": 2.6151,
   "total_trades": 1,
-  "trades_signature": "c7dca9935d0b193e"
+  "trades_signature": "59eeb5de40598987"
 }

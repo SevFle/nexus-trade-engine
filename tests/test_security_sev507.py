@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 from http import HTTPStatus
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import Depends, FastAPI
@@ -43,33 +43,39 @@ class TestC2ConsentWiring:
     async def test_require_legal_acceptance_wired_on_backtest_routes(
         self, db_session: AsyncSession
     ):
-        app = FastAPI()
+        mock_store = AsyncMock()
+        with (
+            patch("engine.tasks.result_store.get_result_store", return_value=mock_store),
+            patch("engine.tasks.worker.run_backtest_task") as mock_task,
+        ):
+            mock_task.kiq = AsyncMock()
+            app = FastAPI()
 
-        app.include_router(
-            bt_router,
-            prefix="/api/v1/backtest",
-            dependencies=[Depends(require_legal_acceptance)],
-        )
-
-        async def override_get_db():
-            yield db_session
-
-        app.dependency_overrides[get_db] = override_get_db
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            response = await ac.post(
-                "/api/v1/backtest/run",
-                json={
-                    "strategy_name": "mean_reversion_basic",
-                    "symbol": "AAPL",
-                    "start_date": "2024-01-01",
-                    "end_date": "2024-12-31",
-                },
+            app.include_router(
+                bt_router,
+                prefix="/api/v1/backtest",
+                dependencies=[Depends(require_legal_acceptance)],
             )
-            assert response.status_code in (
-                HTTPStatus.OK,
-                HTTPStatus.UNAVAILABLE_FOR_LEGAL_REASONS,
-            )
+
+            async def override_get_db():
+                yield db_session
+
+            app.dependency_overrides[get_db] = override_get_db
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                response = await ac.post(
+                    "/api/v1/backtest/run",
+                    json={
+                        "strategy_name": "mean_reversion_basic",
+                        "symbol": "AAPL",
+                        "start_date": "2024-01-01",
+                        "end_date": "2024-12-31",
+                    },
+                )
+                assert response.status_code in (
+                    HTTPStatus.OK,
+                    HTTPStatus.UNAVAILABLE_FOR_LEGAL_REASONS,
+                )
 
     async def test_legal_routes_do_not_require_consent(self, db_session: AsyncSession):
         app = create_app()
