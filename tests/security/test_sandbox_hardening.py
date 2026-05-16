@@ -53,7 +53,7 @@ class TestSSRFProtection:
         assert _is_private_ip("169.254.1.1") is True
 
     def test_zero_network_blocked(self) -> None:
-        assert _is_private_ip("0.0.0.0") is True
+        assert _is_private_ip("0.0.0.0") is True  # noqa: S104
 
     def test_ipv6_loopback_blocked(self) -> None:
         assert _is_private_ip("::1") is True
@@ -229,8 +229,8 @@ class TestPickleEscapeVectorsBlocked:
         guard = IntrospectionGuard(policy, plugin_id="test_plugin")
         guard.install()
         try:
-            with pytest.raises(PermissionError):
-                object().__reduce__
+            with pytest.raises(PermissionError, match="not accessible"):
+                builtins.getattr(object(), "__reduce__")  # noqa: B009
         finally:
             guard.uninstall()
         violations = guard.get_violations()
@@ -288,7 +288,7 @@ class TestTrustLevelEnforcement:
             plugin_id="test",
             trust_level="untrusted",
             import_policy=ImportPolicy(blocked_modules=set(range(20))),
-            filesystem_policy=FilesystemPolicy(read_write_paths=["/tmp"]),
+            filesystem_policy=FilesystemPolicy(read_write_paths=["/tmp"]),  # noqa: S108
         )
         ctx = SandboxContext(policy)
         assert ctx.validate_trust_level() is False

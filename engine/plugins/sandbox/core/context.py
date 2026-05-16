@@ -15,7 +15,6 @@ from engine.plugins.sandbox.layers import (
     RestrictedImporter,
 )
 from engine.plugins.sandbox.monitoring.event_logger import SecurityEventLogger
-from engine.plugins.sandbox.core.violation import SandboxViolationCategory
 from engine.plugins.trust_levels import TrustLevel
 
 _MIN_BLOCKED_MODULES_UNTRUSTED = 10
