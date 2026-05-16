@@ -87,6 +87,7 @@ ignore = ["S101", "TRY003", "PLR0913"]
 "engine/reference/seed.py" = ["E501"]
 "sdk/nexus_sdk/scoring.py" = ["UP042"]
 "tests/*" = ["PLR2004", "S105", "S106", "PT019", "PLC0415", "ARG001", "ARG002", "ARG005", "PT011", "PT018", "E501", "SLF001", "TC002", "TC003"]
+"tests/test_sandbox_5layer_gaps.py" = ["SIM115", "S108", "B009", "B010", "UP003", "UP020", "S307", "S102", "T201", "N806"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["engine", "nexus_sdk"]
