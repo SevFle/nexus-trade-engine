@@ -157,7 +157,7 @@ class TestPaperBackend:
         await backend.connect()
         order = _FakeOrder(quantity=0)
         result = await backend.execute(order, 100.0, _make_cost(10.0))
-        assert result.success is True
+        assert result.success is False
 
     @pytest.mark.asyncio
     async def test_execute_buy_slippage_increases_price(self):

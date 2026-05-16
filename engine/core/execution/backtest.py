@@ -48,7 +48,9 @@ class BacktestBackend(ExecutionBackend):
         pass
 
     async def execute(self, order: Order, market_price: float, costs: CostBreakdown) -> FillResult:
-        # Simulate fill probability
+        if order.quantity <= 0:
+            return FillResult(success=False, reason="Order quantity must be positive")
+
         if self._rng.random() > self.fill_probability:
             return FillResult(success=False, reason="Simulated fill failure (market conditions)")
 

@@ -161,6 +161,9 @@ class PaperBackend(ExecutionBackend):
         if not self._connected:
             return FillResult(success=False, reason="Paper backend not connected")
 
+        if order.quantity <= 0:
+            return FillResult(success=False, reason="Order quantity must be positive")
+
         start = time.monotonic()
 
         refreshed_price = await self._maybe_refresh_price(order.symbol, market_price)

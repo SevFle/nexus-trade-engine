@@ -349,6 +349,9 @@ class PaperTradeExecutionBackend(ExecutionBackend):
         side_str = side.value if hasattr(side, "value") else str(side)
         quantity = getattr(order, "quantity", 0)
 
+        if quantity <= 0:
+            return FillResult(success=False, reason=OrderRejectReason.INVALID_ORDER)
+
         self.update_market_price(symbol, market_price)
 
         risk_result = self._check_risk(symbol, side_str, quantity, market_price)

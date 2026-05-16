@@ -193,8 +193,8 @@ class TestBacktestBackendExecute:
         order = _FakeOrder(quantity=0, side="buy")
         costs = _make_costs(slippage_amount=10.0)
         result = await backend.execute(order, 100.0, costs)
-        assert result.success is True
-        assert result.quantity == 0
+        assert result.success is False
+        assert "quantity must be positive" in result.reason.lower()
 
     @pytest.mark.asyncio
     async def test_fill_failure(self):
@@ -263,10 +263,8 @@ class TestBacktestBackendExecute:
         costs = _make_costs(slippage_amount=0.003)
         result = await backend.execute(order, 100.0, costs)
         assert result.success is True
-        price_str = str(result.price)
-        if "." in price_str:
-            decimals = len(price_str.split(".")[1])
-            assert decimals <= 4
+        expected_price = round(100.0 + 0.003 / 3, 4)
+        assert result.price == pytest.approx(expected_price)
 
     @pytest.mark.asyncio
     async def test_multiple_executions_different_seeds(self):
@@ -277,4 +275,4 @@ class TestBacktestBackendExecute:
             costs = _make_costs(slippage_amount=10.0)
             result = await backend.execute(order, 100.0, costs)
             results.append(result.success)
-        assert True in results or False in results
+        assert len(set(results)) > 1, "Different seeds should produce varied outcomes"
