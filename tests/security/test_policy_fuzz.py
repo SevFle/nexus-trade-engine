@@ -40,7 +40,6 @@ from engine.plugins.sandbox.core.violation import (
 from engine.plugins.sandbox.layers.resource_limiter import ResourceLimiter
 from engine.plugins.trust_levels import TrustLevel, get_trust_level
 
-
 _module_name_chars = st.characters(
     alphabet=string.ascii_letters + string.digits + "._-",
     min_size=1,
