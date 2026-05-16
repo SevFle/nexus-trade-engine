@@ -9,11 +9,14 @@ of the BacktestBackend's fixed bps approach.
 from __future__ import annotations
 
 import math
+import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
-from engine.core.cost_model import CostBreakdown
+if TYPE_CHECKING:
+    from engine.core.cost_model import CostBreakdown
 
 
 class SlippageModelType(StrEnum):
@@ -93,11 +96,9 @@ class RandomWalkSlippage(SlippageModel):
         volatility_factor: float = 0.5,
         rng: object | None = None,
     ) -> None:
-        import random
-
         self.base_bps = base_bps
         self.volatility_factor = volatility_factor
-        self._rng = rng if rng is not None else random.Random()
+        self._rng = rng if rng is not None else random.Random()  # noqa: S311
 
     def compute(self, ctx: SlippageContext) -> float:
         base = ctx.market_price * (self.base_bps / 10_000)

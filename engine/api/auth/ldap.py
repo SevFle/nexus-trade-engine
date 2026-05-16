@@ -33,11 +33,15 @@ class LDAPAuthProvider(IAuthProvider):
         password = kwargs.get("password", "")
         db: AsyncSession | None = kwargs.get("db")
 
-        if not username or not password or db is None:
-            return AuthResult(success=False, error="Username, password, and db session required")
-
-        if ldap is None or escape_filter_chars is None:
-            return AuthResult(success=False, error="LDAP support is not installed")
+        validation_error = (
+            "Username, password, and db session required"
+            if not username or not password or db is None
+            else "LDAP support is not installed"
+            if ldap is None or escape_filter_chars is None
+            else None
+        )
+        if validation_error:
+            return AuthResult(success=False, error=validation_error)
 
         try:
             conn = ldap.initialize(settings.ldap_server_url)

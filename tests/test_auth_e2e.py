@@ -504,7 +504,6 @@ class TestRouteProtection:
 # ─── OAuth Flow (mocked) ─────────────────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="OAuth callback tests pre-date the state-cookie requirement; rewrite needed to plumb state + cookie through the mock client")
 class TestOAuthFlowMocked:
     async def test_authorize_returns_url_for_configured_provider(self, e2e_db: AsyncSession):
         from engine.api.auth.google import GoogleAuthProvider
@@ -576,7 +575,13 @@ class TestOAuthFlowMocked:
             ),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/v1/auth/google/callback?code=mock-auth-code")
+                auth_resp = await client.get("/api/v1/auth/google/authorize")
+                assert auth_resp.status_code == 200
+                state = auth_resp.json()["state"]
+
+                resp = await client.get(
+                    f"/api/v1/auth/google/callback?code=mock-auth-code&state={state}"
+                )
                 assert resp.status_code == 200
                 data = resp.json()
                 assert "access_token" in data
@@ -630,7 +635,13 @@ class TestOAuthFlowMocked:
             return_value=AuthResult(success=False, error="Invalid authorization code"),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/v1/auth/google/callback?code=bad-code")
+                auth_resp = await client.get("/api/v1/auth/google/authorize")
+                assert auth_resp.status_code == 200
+                state = auth_resp.json()["state"]
+
+                resp = await client.get(
+                    f"/api/v1/auth/google/callback?code=bad-code&state={state}"
+                )
                 assert resp.status_code == 401
         app.dependency_overrides.clear()
 
@@ -682,7 +693,13 @@ class TestOAuthFlowMocked:
             ),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/v1/auth/google/callback?code=first-code")
+                auth_resp = await client.get("/api/v1/auth/google/authorize")
+                assert auth_resp.status_code == 200
+                state = auth_resp.json()["state"]
+
+                resp = await client.get(
+                    f"/api/v1/auth/google/callback?code=first-code&state={state}"
+                )
                 assert resp.status_code == 200
 
         from sqlalchemy import select
@@ -751,11 +768,23 @@ class TestOAuthFlowMocked:
             return_value=auth_result,
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                first = await client.get("/api/v1/auth/google/callback?code=first-code")
+                auth_resp1 = await client.get("/api/v1/auth/google/authorize")
+                assert auth_resp1.status_code == 200
+                state1 = auth_resp1.json()["state"]
+
+                first = await client.get(
+                    f"/api/v1/auth/google/callback?code=first-code&state={state1}"
+                )
                 assert first.status_code == 200
                 first_data = first.json()
 
-                second = await client.get("/api/v1/auth/google/callback?code=second-code")
+                auth_resp2 = await client.get("/api/v1/auth/google/authorize")
+                assert auth_resp2.status_code == 200
+                state2 = auth_resp2.json()["state"]
+
+                second = await client.get(
+                    f"/api/v1/auth/google/callback?code=second-code&state={state2}"
+                )
                 assert second.status_code == 200
                 second_data = second.json()
 

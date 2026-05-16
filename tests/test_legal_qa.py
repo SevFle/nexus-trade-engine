@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, date, datetime
 from http import HTTPStatus
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 from fastapi import Depends, FastAPI, HTTPException
@@ -150,13 +151,13 @@ class TestConsentEnforcementIntegration:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             yield client
 
-    @pytest.mark.skip(
-        reason="require_legal_acceptance is a no-op until the auth dependency "
-        "is wired (tracked separately as consent-enforcement follow-up)."
-    )
     async def test_require_legal_acceptance_raises_451_when_pending(
         self, db_session: AsyncSession
     ):
+        user = make_user(email=f"consent-user-{uuid.uuid4()}@example.com")
+        db_session.add(user)
+        await db_session.flush()
+
         doc = LegalDocument(
             slug=f"consent-test-{uuid.uuid4().hex[:8]}",
             title="Consent Enforcement Doc",
@@ -170,7 +171,8 @@ class TestConsentEnforcementIntegration:
         db_session.add(doc)
         await db_session.flush()
 
-        with pytest.raises(HTTPException) as exc_info:
+        with patch("engine.legal.dependencies._placeholder_user_id", user.id), \
+             pytest.raises(HTTPException) as exc_info:
             await require_legal_acceptance(db_session)
         assert exc_info.value.status_code == 451
         detail = exc_info.value.detail
@@ -207,11 +209,11 @@ class TestConsentEnforcementIntegration:
         db_session.add(acceptance)
         await db_session.flush()
 
-    @pytest.mark.skip(
-        reason="require_legal_acceptance is a no-op until the auth dependency "
-        "is wired (tracked separately as consent-enforcement follow-up)."
-    )
     async def test_451_response_contains_pending_document_slugs(self, db_session: AsyncSession):
+        user = make_user(email=f"pending-user-{uuid.uuid4()}@example.com")
+        db_session.add(user)
+        await db_session.flush()
+
         slugs = [f"pending-{uuid.uuid4().hex[:8]}" for _ in range(3)]
         for i, slug in enumerate(slugs):
             doc = LegalDocument(
@@ -227,7 +229,8 @@ class TestConsentEnforcementIntegration:
             db_session.add(doc)
         await db_session.flush()
 
-        with pytest.raises(HTTPException) as exc_info:
+        with patch("engine.legal.dependencies._placeholder_user_id", user.id), \
+             pytest.raises(HTTPException) as exc_info:
             await require_legal_acceptance(db_session)
         assert exc_info.value.status_code == 451
         pending_slugs = exc_info.value.detail["documents"]

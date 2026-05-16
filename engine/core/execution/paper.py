@@ -27,7 +27,6 @@ import structlog
 
 from engine.core.execution.base import ExecutionBackend, FillResult
 from engine.core.execution.slippage import (
-    FixedBpsSlippage,
     SlippageContext,
     SlippageModel,
     SlippageModelType,
