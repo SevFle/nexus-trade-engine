@@ -23,6 +23,8 @@ _EXPLICITLY_BLOCKED_ATTRS: frozenset[str] = frozenset(
         "__subclasscheck__",
         "__reduce__",
         "__reduce_ex__",
+        "__getstate__",
+        "__setstate__",
     }
 )
 
