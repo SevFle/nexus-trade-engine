@@ -49,6 +49,7 @@ class NetworkGuard:
         self._original_httpx_send: Any = None
         self._original_socket_create_connection: Any = None
         self._original_getaddrinfo: Any = None
+        self._original_socket_class: type | None = None
         self._installed = False
         self._cidr_networks = _parse_cidr_networks(policy.allowed_cidrs)
 
