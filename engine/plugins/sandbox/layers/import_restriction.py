@@ -76,8 +76,8 @@ class RestrictedImporter(MetaPathFinder):
             if "importlib" in sys.modules:
                 importlib_mod = sys.modules["importlib"]
                 if hasattr(importlib_mod, "import_module"):
-                    self._original_importlib_import_module = importlib_mod.import_module
-                    importlib_mod.import_module = self._restricted_importlib_import_module
+                    self._original_importlib_import_module = importlib_mod.import_module  # type: ignore[attr-defined]
+                    importlib_mod.import_module = self._restricted_importlib_import_module  # type: ignore[attr-defined]
             self._installed = True
 
     def uninstall(self) -> None:
@@ -87,7 +87,7 @@ class RestrictedImporter(MetaPathFinder):
                 sys.meta_path.remove(self)
             if self._original_importlib_import_module is not None:
                 if "importlib" in sys.modules:
-                    sys.modules["importlib"].import_module = self._original_importlib_import_module
+                    sys.modules["importlib"].import_module = self._original_importlib_import_module  # type: ignore[attr-defined]
                 self._original_importlib_import_module = None
             self._installed = False
 
