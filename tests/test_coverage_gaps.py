@@ -418,3 +418,38 @@ def _burn_cpu(duration: float) -> None:
     total = 0.0
     while time.monotonic() < end:
         total += 1.0
+
+
+class TestSearchTickerContainsTier:
+    def test_ticker_substring_not_prefix(self) -> None:
+        idx = SearchIndex()
+        idx.add(
+            RefInstrument(
+                primary_ticker="XNXP",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Something Else Corp.",
+            )
+        )
+        results = idx.search("nxp")
+        assert any(r.primary_ticker == "XNXP" for r in results)
+
+
+class TestModelTickerWhitespaceValidator:
+    def test_ticker_with_tab_fails(self) -> None:
+        with pytest.raises((ValueError, TypeError)):
+            RefInstrument(
+                primary_ticker="\tAAPL",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Apple",
+            )
+
+    def test_ticker_with_newline_fails(self) -> None:
+        with pytest.raises((ValueError, TypeError)):
+            RefInstrument(
+                primary_ticker="AAP\nL",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Apple",
+            )

@@ -94,24 +94,26 @@ class TestCPUTimerSignalMode:
         remaining = signal.getitimer(signal.ITIMER_VIRTUAL)
         assert remaining[0] == 0.0
 
-    def test_signal_no_thread_created(self) -> None:
+    def test_signal_mode_also_creates_poll_thread(self) -> None:
         if not _HAS_SIGVTALRM:
             pytest.skip("SIGVTALRM not available")
         t = _CPUTimer(10.0)
         t.start()
         try:
-            assert t._thread is None
+            assert t._use_signal is True
+            assert t._thread is not None
         finally:
             t.cancel()
 
-    def test_signal_mode_thread_is_none_after_start(self) -> None:
+    def test_signal_mode_thread_is_not_none_after_start(self) -> None:
         if not _HAS_SIGVTALRM:
             pytest.skip("SIGVTALRM not available")
         t = _CPUTimer(10.0)
         assert t._thread is None
         t.start()
         try:
-            assert t._thread is None
+            assert t._thread is not None
+            assert t._thread.is_alive()
         finally:
             t.cancel()
 

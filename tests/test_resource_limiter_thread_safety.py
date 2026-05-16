@@ -921,7 +921,7 @@ class TestContextManagerCancel:
 
     def test_nested_context_managers(self) -> None:
         with _CPUTimer(60.0) as cpu_t, _WallTimer(60.0) as wall_t:
-            assert cpu_t._thread is not None or cpu_t._use_signal
+            assert cpu_t._thread is not None
             assert wall_t._timer is not None
         cpu_t.cancel()
         wall_t.cancel()

@@ -7,10 +7,14 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any
 
+import structlog
+
 if TYPE_CHECKING:
     from engine.plugins.sandbox.core.policy import ResourcePolicy
 
 from engine.plugins.sandbox.core.violation import ResourceExhausted
+
+logger = structlog.get_logger()
 
 try:
     import resource as _resource
@@ -21,6 +25,7 @@ except ImportError:
     HAS_RESOURCE_MODULE = False
 
 _HAS_SIGVTALRM = hasattr(signal, "SIGVTALRM") and hasattr(signal, "ITIMER_VIRTUAL")
+_signal_lock = threading.Lock()
 
 
 class _CPUTimer:
@@ -68,22 +73,37 @@ class _CPUTimer:
             return False
         if threading.current_thread() is not threading.main_thread():
             return False
-        try:
-            self._old_handler = signal.signal(signal.SIGVTALRM, self._signal_handler)
-            signal.setitimer(signal.ITIMER_VIRTUAL, self._seconds)
-            self._use_signal = True
-        except (ValueError, OSError):
-            return False
-        else:
-            return True
+        with _signal_lock:
+            try:
+                self._old_handler = signal.signal(signal.SIGVTALRM, self._signal_handler)
+                signal.setitimer(signal.ITIMER_VIRTUAL, self._seconds)
+                self._use_signal = True
+            except (ValueError, OSError):
+                return False
+            else:
+                return True
 
     def _stop_signal(self) -> None:
+        if threading.current_thread() is not threading.main_thread():
+            logger.warning(
+                "sandbox.stop_signal_not_main_thread",
+                plugin_id=self._plugin_id,
+            )
+            self._use_signal = False
+            return
         with contextlib.suppress(ValueError, OSError):
             signal.setitimer(signal.ITIMER_VIRTUAL, 0)
         if self._old_handler is not None:
-            with contextlib.suppress(ValueError, OSError):
-                signal.signal(signal.SIGVTALRM, self._old_handler)
-            self._old_handler = None
+            with _signal_lock:
+                try:
+                    signal.signal(signal.SIGVTALRM, self._old_handler)
+                except (ValueError, OSError):
+                    logger.warning(
+                        "sandbox.signal_restore_failed",
+                        plugin_id=self._plugin_id,
+                    )
+                else:
+                    self._old_handler = None
         self._use_signal = False
 
     def start(self) -> None:
@@ -93,8 +113,7 @@ class _CPUTimer:
         self._expired.clear()
         self._use_signal = False
         self._old_handler = None
-        if self._try_start_signal():
-            return
+        self._try_start_signal()
         self._thread = threading.Thread(target=self._poll, daemon=True)
         self._thread.start()
 
