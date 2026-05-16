@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import threading
 import time
 from typing import TYPE_CHECKING, Any
@@ -20,54 +21,97 @@ except ImportError:
 
 
 class _CPUTimer:
+    _POLL_INTERVAL = 0.05
+
     def __init__(self, seconds: float, plugin_id: str | None = None) -> None:
         self._seconds = seconds
         self._plugin_id = plugin_id
-        self._timer: threading.Timer | None = None
-        self._expired = False
-        self._start_time = 0.0
+        self._expired = threading.Event()
+        self._cancelled = threading.Event()
+        self._start_cpu: float = 0.0
+        self._wall_start: float = 0.0
+        self._thread: threading.Thread | None = None
 
     @property
     def expired(self) -> bool:
-        return self._expired
+        return self._expired.is_set()
 
-    def _on_timeout(self) -> None:
-        self._expired = True
+    def _cpu_time(self) -> float:
+        t = os.times()
+        return t[0] + t[1]
+
+    def _poll(self) -> None:
+        while not self._cancelled.wait(timeout=self._POLL_INTERVAL):
+            cpu_elapsed = self._cpu_time() - self._start_cpu
+            wall_elapsed = time.monotonic() - self._wall_start
+            if cpu_elapsed >= self._seconds or wall_elapsed >= self._seconds:
+                self._expired.set()
+                return
 
     def start(self) -> None:
-        self._start_time = time.monotonic()
-        self._timer = threading.Timer(self._seconds, self._on_timeout)
-        self._timer.daemon = True
-        self._timer.start()
+        self._start_cpu = self._cpu_time()
+        self._wall_start = time.monotonic()
+        self._cancelled.clear()
+        self._expired.clear()
+        self._thread = threading.Thread(target=self._poll, daemon=True)
+        self._thread.start()
 
     def stop(self) -> None:
-        if self._timer is not None:
-            self._timer.cancel()
-            self._timer = None
+        self.cancel()
+
+    def cancel(self) -> None:
+        self._cancelled.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+            self._thread = None
 
     def check(self) -> None:
-        if self._expired:
+        if self._expired.is_set():
             raise ResourceExhausted(
                 resource_type="cpu_time",
                 limit=self._seconds,
-                current=time.monotonic() - self._start_time,
+                current=time.monotonic() - self._wall_start,
                 plugin_id=self._plugin_id,
             )
-        elapsed = time.monotonic() - self._start_time
-        if elapsed > self._seconds:
-            self._expired = True
+        cpu_elapsed = self._cpu_time() - self._start_cpu
+        wall_elapsed = time.monotonic() - self._wall_start
+        if cpu_elapsed > self._seconds or wall_elapsed > self._seconds:
+            self._expired.set()
             raise ResourceExhausted(
                 resource_type="cpu_time",
                 limit=self._seconds,
-                current=elapsed,
+                current=time.monotonic() - self._wall_start,
                 plugin_id=self._plugin_id,
             )
 
     @property
     def elapsed(self) -> float:
-        if self._start_time == 0.0:
+        if self._wall_start == 0.0:
             return 0.0
-        return time.monotonic() - self._start_time
+        return time.monotonic() - self._wall_start
+
+    @property
+    def _start_time(self) -> float:
+        return self._wall_start
+
+    @_start_time.setter
+    def _start_time(self, value: float) -> None:
+        delta = time.monotonic() - value
+        self._start_cpu = self._cpu_time() - delta
+        self._wall_start = value
+
+    @property
+    def _timer(self) -> None:
+        return None
+
+    def _on_timeout(self) -> None:
+        self._expired.set()
+
+    def __del__(self) -> None:
+        try:
+            self.cancel()
+        except Exception:
+            pass
 
 
 class _WallTimer:
@@ -75,29 +119,33 @@ class _WallTimer:
         self._seconds = seconds
         self._plugin_id = plugin_id
         self._timer: threading.Timer | None = None
-        self._expired = False
+        self._expired = threading.Event()
         self._start_time = 0.0
 
     @property
     def expired(self) -> bool:
-        return self._expired
+        return self._expired.is_set()
 
     def _on_timeout(self) -> None:
-        self._expired = True
+        self._expired.set()
 
     def start(self) -> None:
         self._start_time = time.monotonic()
+        self._expired.clear()
         self._timer = threading.Timer(self._seconds, self._on_timeout)
         self._timer.daemon = True
         self._timer.start()
 
     def stop(self) -> None:
+        self.cancel()
+
+    def cancel(self) -> None:
         if self._timer is not None:
             self._timer.cancel()
             self._timer = None
 
     def check(self) -> None:
-        if self._expired:
+        if self._expired.is_set():
             raise ResourceExhausted(
                 resource_type="wall_time",
                 limit=self._seconds,
@@ -106,7 +154,7 @@ class _WallTimer:
             )
         elapsed = time.monotonic() - self._start_time
         if elapsed > self._seconds:
-            self._expired = True
+            self._expired.set()
             raise ResourceExhausted(
                 resource_type="wall_time",
                 limit=self._seconds,
@@ -119,6 +167,12 @@ class _WallTimer:
         if self._start_time == 0.0:
             return 0.0
         return time.monotonic() - self._start_time
+
+    def __del__(self) -> None:
+        try:
+            self.cancel()
+        except Exception:
+            pass
 
 
 class ResourceLimiter:
@@ -145,8 +199,10 @@ class ResourceLimiter:
     def uninstall(self) -> None:
         if not self._installed:
             return
-        self._stop_wall_timer()
-        self._stop_cpu_timer()
+        try:
+            self._stop_wall_timer()
+        finally:
+            self._stop_cpu_timer()
         self._restore_resource_limits()
         self._installed = False
 
@@ -180,7 +236,7 @@ class ResourceLimiter:
 
     def _stop_cpu_timer(self) -> None:
         if self._cpu_timer is not None:
-            self._cpu_timer.stop()
+            self._cpu_timer.cancel()
             self._cpu_timer = None
 
     def check_cpu_timer(self) -> None:
@@ -200,7 +256,7 @@ class ResourceLimiter:
 
     def _stop_wall_timer(self) -> None:
         if self._wall_timer is not None:
-            self._wall_timer.stop()
+            self._wall_timer.cancel()
             self._wall_timer = None
 
     def check_wall_timer(self) -> None:
