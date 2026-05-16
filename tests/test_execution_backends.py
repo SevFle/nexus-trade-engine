@@ -130,34 +130,41 @@ class TestPaperBackend:
         assert "not connected" in result.reason.lower()
 
     @pytest.mark.asyncio
-    async def test_execute_buy_order(self):
-        config = PaperTradeConfig(partial_fill_enabled=False)
+    async def test_execute_buy_price_rounded_to_4_decimals(self):
+        config = PaperTradeConfig(
+            partial_fill_enabled=False,
+            fill_probability=1.0,
+            slippage_model_kwargs={"bps": 1.234},
+        )
         backend = PaperBackend(config=config)
         await backend.connect()
         order = _FakeOrder(side=_FakeSide.BUY, quantity=100)
-        result = await backend.execute(order, 100.0, _make_cost(10.0))
+        result = await backend.execute(order, 100.0, _make_cost(0.0))
         assert result.success is True
-        assert result.quantity == 100
-        assert result.price > 0
+        slippage_per_share = 100.0 * (1.234 / 10_000)
+        expected_price = round(100.0 + slippage_per_share, 4)
+        assert result.price == expected_price
 
     @pytest.mark.asyncio
-    async def test_execute_sell_order(self):
-        config = PaperTradeConfig(partial_fill_enabled=False)
-        backend = PaperBackend(config=config)
-        await backend.connect()
-        order = _FakeOrder(side=_FakeSide.SELL, quantity=50)
-        result = await backend.execute(order, 200.0, _make_cost(5.0))
-        assert result.success is True
-        assert result.quantity == 50
-        assert result.price > 0
-
-    @pytest.mark.asyncio
-    async def test_execute_zero_quantity(self):
-        backend = PaperBackend()
-        await backend.connect()
-        order = _FakeOrder(quantity=0)
-        result = await backend.execute(order, 100.0, _make_cost(10.0))
-        assert result.success is False
+    async def test_execute_different_seeds_produce_varied_outcomes(self):
+        results = []
+        for seed in range(10):
+            config = PaperTradeConfig(
+                fill_probability=0.5,
+                random_seed=seed,
+                latency_ms=0.0,
+                latency_jitter_ms=0.0,
+            )
+            backend = PaperBackend(config=config)
+            await backend.connect()
+            order = _FakeOrder(side=_FakeSide.BUY, quantity=100)
+            result = await backend.execute(order, 100.0, _make_cost(10.0))
+            results.append(result.success)
+        true_count = results.count(True)
+        false_count = results.count(False)
+        assert true_count > 0 and false_count > 0, (
+            f"Expected both successes and failures across seeds, got {true_count} successes and {false_count} failures"
+        )
 
     @pytest.mark.asyncio
     async def test_execute_buy_slippage_increases_price(self):

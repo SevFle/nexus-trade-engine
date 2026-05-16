@@ -490,7 +490,7 @@ class TestCPUTimer:
 
     def test_elapsed_before_start(self):
         t = _CPUTimer(10.0)
-        assert t.elapsed == 0.0 or t.elapsed > 0
+        assert t.elapsed == 0.0
 
     def test_on_timeout_sets_expired(self):
         t = _CPUTimer(10.0, plugin_id="p1")
@@ -1139,7 +1139,7 @@ class TestRestrictedImporterEdgeCases:
 
     def test_relative_import_not_blocked(self):
         ri = RestrictedImporter(blocked={"os"})
-        assert not ri._is_module_blocked("os.sub") or True
+        assert not ri._is_module_blocked("os.sub")
 
 
 # ─── SecurityEventLogger edge cases ────────────────────────────────────

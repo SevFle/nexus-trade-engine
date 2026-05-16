@@ -470,7 +470,7 @@ class TestWebhookRoutesExtended:
             )
             assert resp.status_code == 201
             data = resp.json()
-            assert "token" not in data or data.get("signing_secret") is not None or True
+            assert "token" not in data or data.get("signing_secret") is not None
             assert data["url"] == "https://example.com/webhook"
 
     @pytest.mark.asyncio

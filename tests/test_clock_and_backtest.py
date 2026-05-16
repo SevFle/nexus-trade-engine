@@ -263,16 +263,37 @@ class TestBacktestBackendExecute:
         costs = _make_costs(slippage_amount=0.003)
         result = await backend.execute(order, 100.0, costs)
         assert result.success is True
-        expected_price = round(100.0 + 0.003 / 3, 4)
-        assert result.price == pytest.approx(expected_price)
+        expected_raw_price = 100.0 + 0.003 / 3
+        assert result.price == round(expected_raw_price, 4)
 
     @pytest.mark.asyncio
     async def test_multiple_executions_different_seeds(self):
         results = []
-        for seed in range(5):
+        for seed in range(30):
             backend = BacktestBackend(fill_probability=0.5, random_seed=seed)
             order = _FakeOrder(quantity=100, side="buy")
             costs = _make_costs(slippage_amount=10.0)
             result = await backend.execute(order, 100.0, costs)
             results.append(result.success)
-        assert len(set(results)) > 1, "Different seeds should produce varied outcomes"
+        successes = results.count(True)
+        failures = results.count(False)
+        assert successes > 0 and failures > 0, (
+            f"Expected both successes and failures across 30 seeds with p=0.5, "
+            f"got {successes} successes and {failures} failures"
+        )
+
+    @pytest.mark.asyncio
+    async def test_seed_outcomes_are_deterministic(self):
+        outcomes = []
+        for trial in range(3):
+            trial_results = []
+            for seed in range(5):
+                backend = BacktestBackend(fill_probability=0.5, random_seed=seed)
+                order = _FakeOrder(quantity=100, side="buy")
+                costs = _make_costs(slippage_amount=10.0)
+                result = await backend.execute(order, 100.0, costs)
+                trial_results.append(result.success)
+            outcomes.append(tuple(trial_results))
+        assert outcomes[0] == outcomes[1] == outcomes[2], (
+            "Same seeds must produce identical results across trials"
+        )
