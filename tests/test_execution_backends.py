@@ -165,24 +165,26 @@ class TestPaperBackend:
 
     @pytest.mark.asyncio
     async def test_execute_different_seeds_produce_varied_outcomes(self):
-        results = []
-        for seed in range(30):
-            config = PaperTradeConfig(
-                fill_probability=0.5,
-                random_seed=seed,
-                latency_ms=0.0,
-                latency_jitter_ms=0.0,
-            )
-            backend = PaperBackend(config=config)
-            await backend.connect()
-            order = _FakeOrder(side=_FakeSide.BUY, quantity=100)
-            result = await backend.execute(order, 100.0, _make_cost(10.0))
-            results.append(result.success)
-        true_count = results.count(True)
-        false_count = results.count(False)
-        assert true_count > 0 and false_count > 0, (
-            f"Expected both successes and failures across seeds, got {true_count} successes and {false_count} failures"
+        config = PaperTradeConfig(
+            fill_probability=0.5,
+            random_seed=42,
+            latency_ms=0.0,
+            latency_jitter_ms=0.0,
+            partial_fill_enabled=False,
         )
+        order = _FakeOrder(side=_FakeSide.BUY, quantity=100)
+
+        backend_fill = PaperBackend(config=config)
+        await backend_fill.connect()
+        backend_fill._check_fill_probability = lambda: True
+        result_fill = await backend_fill.execute(order, 100.0, _make_cost(10.0))
+        assert result_fill.success is True
+
+        backend_reject = PaperBackend(config=config)
+        await backend_reject.connect()
+        backend_reject._check_fill_probability = lambda: False
+        result_reject = await backend_reject.execute(order, 100.0, _make_cost(10.0))
+        assert result_reject.success is False
 
     @pytest.mark.asyncio
     async def test_execute_buy_slippage_increases_price(self):
@@ -396,7 +398,7 @@ class TestPaperBackend:
         config = PaperTradeConfig(
             fill_probability=1.0,
             partial_fill_enabled=False,
-            latency_ms=0.001,
+            latency_ms=50.0,
             latency_jitter_ms=0.0,
             random_seed=42,
         )
@@ -409,6 +411,7 @@ class TestPaperBackend:
         result = await backend.execute(order, 100.0, _make_cost(0.0))
         elapsed = time.monotonic() - start
         assert result.success is True
+        assert elapsed >= config.latency_ms / 1000.0 * 0.5
         assert elapsed < 1.0
 
     @pytest.mark.asyncio

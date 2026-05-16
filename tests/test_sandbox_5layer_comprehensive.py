@@ -1139,7 +1139,7 @@ class TestRestrictedImporterEdgeCases:
 
     def test_relative_import_not_blocked(self):
         ri = RestrictedImporter(blocked={"os"})
-        assert not ri._is_module_blocked("os.sub")
+        assert not ri._is_module_blocked("oss")
 
 
 # ─── SecurityEventLogger edge cases ────────────────────────────────────

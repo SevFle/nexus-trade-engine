@@ -65,6 +65,8 @@ class _CPUTimer:
 
     @property
     def elapsed(self) -> float:
+        if self._start_time == 0.0:
+            return 0.0
         return time.monotonic() - self._start_time
 
 
@@ -114,6 +116,8 @@ class _WallTimer:
 
     @property
     def elapsed(self) -> float:
+        if self._start_time == 0.0:
+            return 0.0
         return time.monotonic() - self._start_time
 
 
