@@ -32,8 +32,11 @@ def __getattr__(name: str):
         "SecurityEvent": "engine.plugins.sandbox.monitoring.event_logger",
         "SecurityEventLogger": "engine.plugins.sandbox.monitoring.event_logger",
         "RestrictedImporter": "engine.plugins.sandbox.layers.import_restriction",
-        "ViolationReport": "engine.plugins.sandbox.monitoring.violation_report",
-    }
+    "ViolationReport": "engine.plugins.sandbox.monitoring.violation_report",
+    "SandboxAdminAPI": "engine.plugins.sandbox.monitoring.admin_api",
+    "PolicyUpdate": "engine.plugins.sandbox.monitoring.admin_api",
+    "PolicySnapshot": "engine.plugins.sandbox.monitoring.admin_api",
+}
     if name in lazy_exports:
         import importlib  # noqa: PLC0415
 
