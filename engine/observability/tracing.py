@@ -5,6 +5,12 @@ from opentelemetry.sdk.trace import TracerProvider
 
 from engine.config import settings
 
+_TRACER_NAME = "nexus.engine"
+
+
+def get_tracer(name: str = _TRACER_NAME) -> trace.Tracer:
+    return trace.get_tracer(name)
+
 
 def setup_tracing() -> None:
     provider = TracerProvider()

@@ -13,12 +13,14 @@ from typing import TYPE_CHECKING
 import structlog
 
 from engine.core.execution.base import ExecutionBackend, FillResult
+from engine.observability.tracing import get_tracer
 
 if TYPE_CHECKING:
     from engine.core.cost_model import CostBreakdown
     from engine.core.order_manager import Order
 
 logger = structlog.get_logger()
+_tracer = get_tracer(__name__)
 
 _PARTIAL_FILL_QUANTITY_THRESHOLD = 1000
 
@@ -48,28 +50,53 @@ class BacktestBackend(ExecutionBackend):
         pass
 
     async def execute(self, order: Order, market_price: float, costs: CostBreakdown) -> FillResult:
-        if order.quantity <= 0:
-            return FillResult(success=False, reason="Order quantity must be positive")
+        with _tracer.start_as_current_span("backtest.execute") as span:
+            span.set_attribute("order.symbol", order.symbol)
+            span.set_attribute("order.side", order.side.value)
+            span.set_attribute("order.quantity", order.quantity)
+            span.set_attribute("order.market_price", market_price)
 
-        if self._rng.random() > self.fill_probability:
-            return FillResult(success=False, reason="Simulated fill failure (market conditions)")
+            if order.quantity <= 0:
+                span.set_attribute("execution.success", False)
+                span.set_attribute(
+                    "execution.reject_reason",
+                    "Order quantity must be positive",
+                )
+                return FillResult(
+                    success=False, reason="Order quantity must be positive"
+                )
 
-        # Apply slippage to get realistic fill price
-        slippage_per_share = costs.slippage.amount / order.quantity if order.quantity > 0 else 0
+            if self._rng.random() > self.fill_probability:
+                span.set_attribute("execution.success", False)
+                span.set_attribute(
+                    "execution.reject_reason", "Simulated fill failure"
+                )
+                return FillResult(
+                    success=False,
+                    reason="Simulated fill failure (market conditions)",
+                )
 
-        if order.side.value == "buy":
-            fill_price = market_price + slippage_per_share  # Pay more
-        else:
-            fill_price = market_price - slippage_per_share  # Receive less
+            slippage_per_share = (
+                costs.slippage.amount / order.quantity if order.quantity > 0 else 0
+            )
 
-        # Simulate partial fills
-        fill_quantity = order.quantity
-        if self.partial_fill_enabled and order.quantity > _PARTIAL_FILL_QUANTITY_THRESHOLD:
-            fill_ratio = self._rng.uniform(0.85, 1.0)
-            fill_quantity = max(1, int(order.quantity * fill_ratio))
+            if order.side.value == "buy":
+                fill_price = market_price + slippage_per_share
+            else:
+                fill_price = market_price - slippage_per_share
 
-        return FillResult(
-            success=True,
-            price=round(fill_price, 4),
-            quantity=fill_quantity,
-        )
+            fill_quantity = order.quantity
+            if self.partial_fill_enabled and order.quantity > _PARTIAL_FILL_QUANTITY_THRESHOLD:
+                fill_ratio = self._rng.uniform(0.85, 1.0)
+                fill_quantity = max(1, int(order.quantity * fill_ratio))
+
+            span.set_attribute("execution.success", True)
+            span.set_attribute("execution.fill_price", round(fill_price, 4))
+            span.set_attribute("execution.fill_quantity", fill_quantity)
+            span.set_attribute("execution.slippage_per_share", round(slippage_per_share, 4))
+
+            return FillResult(
+                success=True,
+                price=round(fill_price, 4),
+                quantity=fill_quantity,
+            )

@@ -56,11 +56,13 @@ from engine.core.execution.slippage import (
     create_slippage_model,
 )
 from engine.events.bus import EventType as _EventType
+from engine.observability.tracing import get_tracer
 
 if TYPE_CHECKING:
     from engine.events.bus import EventBus
 
 logger = structlog.get_logger()
+_tracer = get_tracer(__name__)
 
 _PARTIAL_FILL_MAX_RATIO = 1.0
 
@@ -340,130 +342,159 @@ class PaperTradeExecutionBackend(ExecutionBackend):
             total_pnl=round(self._tracker.total_pnl, 2),
         )
 
-    async def execute(self, order: Any, market_price: float, costs: Any) -> FillResult:
-        if not self._connected:
-            return FillResult(success=False, reason="Paper backend not connected")
+    async def execute(self, order: Any, market_price: float, costs: Any) -> FillResult:  # noqa: PLR0915
+        with _tracer.start_as_current_span("paper_trade_backend.execute") as span:
+            symbol = getattr(order, "symbol", "")
+            side = getattr(order, "side", "")
+            side_str = side.value if hasattr(side, "value") else str(side)
+            quantity = getattr(order, "quantity", 0)
 
-        symbol = getattr(order, "symbol", "")
-        side = getattr(order, "side", "")
-        side_str = side.value if hasattr(side, "value") else str(side)
-        quantity = getattr(order, "quantity", 0)
+            span.set_attribute("order.symbol", symbol)
+            span.set_attribute("order.side", side_str)
+            span.set_attribute("order.quantity", quantity)
+            span.set_attribute("order.market_price", market_price)
 
-        if quantity <= 0:
-            return FillResult(success=False, reason=OrderRejectReason.INVALID_ORDER)
+            if not self._connected:
+                span.set_attribute("execution.success", False)
+                span.set_attribute("execution.reject_reason", "Not connected")
+                return FillResult(success=False, reason="Paper backend not connected")
 
-        self.update_market_price(symbol, market_price)
+            if quantity <= 0:
+                span.set_attribute("execution.success", False)
+                span.set_attribute("execution.reject_reason", "Invalid quantity")
+                return FillResult(success=False, reason=OrderRejectReason.INVALID_ORDER)
 
-        risk_result = self._check_risk(symbol, side_str, quantity, market_price)
-        if not risk_result.approved:
-            self._record_rejection(symbol)
-            self._emit_event("paper.order.rejected", {
+            self.update_market_price(symbol, market_price)
+
+            risk_result = self._check_risk(symbol, side_str, quantity, market_price)
+            if not risk_result.approved:
+                self._record_rejection(symbol)
+                self._emit_event("paper.order.rejected", {
+                    "symbol": symbol,
+                    "side": side_str,
+                    "quantity": quantity,
+                    "reason": risk_result.reason,
+                })
+                self._emit_metric_counter("paper_backend.orders_rejected", tags={"symbol": symbol})
+                span.set_attribute("execution.success", False)
+                span.set_attribute("execution.reject_reason", risk_result.reason)
+                return FillResult(success=False, reason=risk_result.reason)
+
+            refreshed = await self._maybe_refresh_price(symbol, market_price)
+
+            if not self._check_fill_probability():
+                self._record_rejection(symbol)
+                self._emit_event("paper.order.rejected", {
+                    "symbol": symbol,
+                    "side": side_str,
+                    "quantity": quantity,
+                    "reason": "Simulated fill rejection (market conditions)",
+                })
+                self._emit_metric_counter("paper_backend.orders_rejected", tags={"symbol": symbol})
+                span.set_attribute("execution.success", False)
+                span.set_attribute(
+                    "execution.reject_reason", "Simulated fill rejection"
+                )
+                return FillResult(
+                    success=False,
+                    reason="Simulated fill rejection (market conditions)",
+                )
+
+            start_mono = self._clock.monotonic()
+
+            slippage = self._compute_slippage(symbol, side_str, quantity, refreshed, costs)
+            fill_price = self._apply_slippage(side_str, refreshed, slippage)
+
+            fill_quantity = self._compute_fill_quantity(quantity)
+
+            commission_quote = self._commission.calculate(fill_quantity, fill_price, side_str)
+
+            latency = self._simulate_latency()
+            if latency > 0:
+                await asyncio.sleep(latency / 1000.0)
+
+            self._apply_fill(symbol, side_str, fill_quantity, fill_price, commission_quote.total)
+
+            elapsed_ms = (self._clock.monotonic() - start_mono) * 1000.0
+            is_partial = fill_quantity < quantity
+            slippage_bps = (
+                (abs(fill_price - refreshed) / refreshed) * 10_000 if refreshed > 0 else 0.0
+            )
+            self._record_fill(
+                symbol, fill_quantity, fill_price,
+                elapsed_ms, slippage_bps, is_partial,
+            )
+
+            fill_id = str(uuid.uuid4())
+            fill_record = PaperTradeFill(
+                fill_id=fill_id,
+                order_id=getattr(order, "id", "unknown"),
+                symbol=symbol,
+                side=side_str,
+                quantity=fill_quantity,
+                price=fill_price,
+                commission=commission_quote.total,
+                timestamp=self._now_iso(),
+                slippage_bps=slippage_bps,
+            )
+            self._fills.append(fill_record)
+
+            event_name = "paper.order.filled"
+            event_data: dict[str, Any] = {
+                "fill_id": fill_id,
+                "order_id": getattr(order, "id", "unknown"),
                 "symbol": symbol,
                 "side": side_str,
-                "quantity": quantity,
-                "reason": risk_result.reason,
-            })
-            self._emit_metric_counter("paper_backend.orders_rejected", tags={"symbol": symbol})
-            return FillResult(success=False, reason=risk_result.reason)
+                "fill_quantity": fill_quantity,
+                "fill_price": round(fill_price, 4),
+                "commission": commission_quote.total,
+                "slippage_bps": round(slippage_bps, 4),
+                "is_partial": is_partial,
+            }
+            self._emit_event(event_name, event_data)
+            self._emit_metric_counter(
+                "paper_backend.orders_filled",
+                tags={"symbol": symbol, "side": side_str},
+            )
+            self._emit_metric_histogram(
+                "paper_backend.fill_latency_ms",
+                elapsed_ms, tags={"symbol": symbol},
+            )
+            self._emit_metric_histogram(
+                "paper_backend.slippage_bps",
+                slippage_bps, tags={"symbol": symbol},
+            )
 
-        refreshed = await self._maybe_refresh_price(symbol, market_price)
+            if is_partial:
+                self._emit_event("paper.order.partial_fill", event_data)
 
-        if not self._check_fill_probability():
-            self._record_rejection(symbol)
-            self._emit_event("paper.order.rejected", {
-                "symbol": symbol,
-                "side": side_str,
-                "quantity": quantity,
-                "reason": "Simulated fill rejection (market conditions)",
-            })
-            self._emit_metric_counter("paper_backend.orders_rejected", tags={"symbol": symbol})
-            return FillResult(success=False, reason="Simulated fill rejection (market conditions)")
+            self._emit_portfolio_update()
 
-        start_mono = self._clock.monotonic()
+            span.set_attribute("execution.success", True)
+            span.set_attribute("execution.fill_price", round(fill_price, 4))
+            span.set_attribute("execution.fill_quantity", fill_quantity)
+            span.set_attribute("execution.slippage_bps", round(slippage_bps, 4))
+            span.set_attribute("execution.commission", commission_quote.total)
+            span.set_attribute("execution.is_partial", is_partial)
 
-        slippage = self._compute_slippage(symbol, side_str, quantity, refreshed, costs)
-        fill_price = self._apply_slippage(side_str, refreshed, slippage)
+            logger.info(
+                "paper_backend.fill",
+                symbol=symbol,
+                side=side_str,
+                requested_qty=quantity,
+                fill_qty=fill_quantity,
+                market_price=refreshed,
+                fill_price=round(fill_price, 4),
+                commission=commission_quote.total,
+                latency_ms=round(elapsed_ms, 2),
+                is_partial=is_partial,
+            )
 
-        fill_quantity = self._compute_fill_quantity(quantity)
-
-        commission_quote = self._commission.calculate(fill_quantity, fill_price, side_str)
-
-        latency = self._simulate_latency()
-        if latency > 0:
-            await asyncio.sleep(latency / 1000.0)
-
-        self._apply_fill(symbol, side_str, fill_quantity, fill_price, commission_quote.total)
-
-        elapsed_ms = (self._clock.monotonic() - start_mono) * 1000.0
-        is_partial = fill_quantity < quantity
-        slippage_bps = (
-            (abs(fill_price - refreshed) / refreshed) * 10_000 if refreshed > 0 else 0.0
-        )
-        self._record_fill(symbol, fill_quantity, fill_price, elapsed_ms, slippage_bps, is_partial)
-
-        fill_id = str(uuid.uuid4())
-        fill_record = PaperTradeFill(
-            fill_id=fill_id,
-            order_id=getattr(order, "id", "unknown"),
-            symbol=symbol,
-            side=side_str,
-            quantity=fill_quantity,
-            price=fill_price,
-            commission=commission_quote.total,
-            timestamp=self._now_iso(),
-            slippage_bps=slippage_bps,
-        )
-        self._fills.append(fill_record)
-
-        event_name = "paper.order.filled"
-        event_data: dict[str, Any] = {
-            "fill_id": fill_id,
-            "order_id": getattr(order, "id", "unknown"),
-            "symbol": symbol,
-            "side": side_str,
-            "fill_quantity": fill_quantity,
-            "fill_price": round(fill_price, 4),
-            "commission": commission_quote.total,
-            "slippage_bps": round(slippage_bps, 4),
-            "is_partial": is_partial,
-        }
-        self._emit_event(event_name, event_data)
-        self._emit_metric_counter(
-            "paper_backend.orders_filled",
-            tags={"symbol": symbol, "side": side_str},
-        )
-        self._emit_metric_histogram(
-            "paper_backend.fill_latency_ms",
-            elapsed_ms, tags={"symbol": symbol},
-        )
-        self._emit_metric_histogram(
-            "paper_backend.slippage_bps",
-            slippage_bps, tags={"symbol": symbol},
-        )
-
-        if is_partial:
-            self._emit_event("paper.order.partial_fill", event_data)
-
-        self._emit_portfolio_update()
-
-        logger.info(
-            "paper_backend.fill",
-            symbol=symbol,
-            side=side_str,
-            requested_qty=quantity,
-            fill_qty=fill_quantity,
-            market_price=refreshed,
-            fill_price=round(fill_price, 4),
-            commission=commission_quote.total,
-            latency_ms=round(elapsed_ms, 2),
-            is_partial=is_partial,
-        )
-
-        return FillResult(
-            success=True,
-            price=round(fill_price, 4),
-            quantity=fill_quantity,
-        )
+            return FillResult(
+                success=True,
+                price=round(fill_price, 4),
+                quantity=fill_quantity,
+            )
 
     async def submit_order(  # noqa: PLR0911
         self,

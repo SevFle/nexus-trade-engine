@@ -12,8 +12,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
+from engine.observability.tracing import get_tracer
+
 _NUMERICAL_TOLERANCE = 1e-10
 _DAYS_PER_YEAR = 365
+_tracer = get_tracer(__name__)
 
 
 class TaxMethod(StrEnum):
@@ -235,12 +238,20 @@ class DefaultCostModel(ICostModel):
     def estimate_total(
         self, symbol: str, quantity: int, price: float, side: str, avg_volume: int = 0
     ) -> CostBreakdown:
-        return CostBreakdown(
-            commission=self.estimate_commission(symbol, quantity, price),
-            spread=self.estimate_spread(symbol, price, side),
-            slippage=self.estimate_slippage(symbol, quantity, price, avg_volume),
-            exchange_fee=Money(amount=self.exchange_fee_per_share * quantity),
-        )
+        with _tracer.start_as_current_span("cost_model.estimate_total") as span:
+            span.set_attribute("cost.symbol", symbol)
+            span.set_attribute("cost.quantity", quantity)
+            span.set_attribute("cost.price", price)
+            span.set_attribute("cost.side", side)
+            span.set_attribute("cost.avg_volume", avg_volume)
+            breakdown = CostBreakdown(
+                commission=self.estimate_commission(symbol, quantity, price),
+                spread=self.estimate_spread(symbol, price, side),
+                slippage=self.estimate_slippage(symbol, quantity, price, avg_volume),
+                exchange_fee=Money(amount=self.exchange_fee_per_share * quantity),
+            )
+            span.set_attribute("cost.total", breakdown.total.amount)
+            return breakdown
 
     def estimate_pct(self, _symbol: str, price: float, _side: str = "buy") -> float:
         """Round-trip cost estimate as percentage of trade value."""

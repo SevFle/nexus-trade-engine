@@ -32,12 +32,14 @@ from engine.core.execution.slippage import (
     SlippageModelType,
     create_slippage_model,
 )
+from engine.observability.tracing import get_tracer
 
 if TYPE_CHECKING:
     from engine.core.cost_model import CostBreakdown
     from engine.core.order_manager import Order
 
 logger = structlog.get_logger()
+_tracer = get_tracer(__name__)
 
 _PARTIAL_FILL_MIN_RATIO = 0.5
 _PARTIAL_FILL_MAX_RATIO = 1.0
@@ -158,59 +160,83 @@ class PaperBackend(ExecutionBackend):
         )
 
     async def execute(self, order: Order, market_price: float, costs: CostBreakdown) -> FillResult:
-        if not self._connected:
-            return FillResult(success=False, reason="Paper backend not connected")
+        with _tracer.start_as_current_span("paper.execute") as span:
+            span.set_attribute("order.symbol", order.symbol)
+            span.set_attribute("order.side", order.side.value)
+            span.set_attribute("order.quantity", order.quantity)
+            span.set_attribute("order.market_price", market_price)
 
-        if order.quantity <= 0:
-            return FillResult(success=False, reason="Order quantity must be positive")
+            if not self._connected:
+                span.set_attribute("execution.success", False)
+                span.set_attribute("execution.reject_reason", "Paper backend not connected")
+                return FillResult(success=False, reason="Paper backend not connected")
 
-        start = time.monotonic()
+            if order.quantity <= 0:
+                span.set_attribute("execution.success", False)
+                span.set_attribute("execution.reject_reason", "Order quantity must be positive")
+                return FillResult(success=False, reason="Order quantity must be positive")
 
-        refreshed_price = await self._maybe_refresh_price(order.symbol, market_price)
-        effective_price = refreshed_price
+            start = time.monotonic()
 
-        if not self._check_fill_probability():
-            self._record_rejection(order.symbol)
-            return FillResult(success=False, reason="Simulated fill rejection (market conditions)")
+            refreshed_price = await self._maybe_refresh_price(order.symbol, market_price)
+            effective_price = refreshed_price
 
-        slippage_per_share = self._compute_slippage(order, effective_price, costs)
-        fill_price = self._apply_slippage_to_price(order, effective_price, slippage_per_share)
+            if not self._check_fill_probability():
+                self._record_rejection(order.symbol)
+                span.set_attribute("execution.success", False)
+                span.set_attribute(
+                    "execution.reject_reason", "Simulated fill rejection"
+                )
+                return FillResult(
+                    success=False,
+                    reason="Simulated fill rejection (market conditions)",
+                )
 
-        fill_quantity = self._compute_fill_quantity(order)
-        is_partial = fill_quantity < order.quantity
+            slippage_per_share = self._compute_slippage(order, effective_price, costs)
+            fill_price = self._apply_slippage_to_price(order, effective_price, slippage_per_share)
 
-        latency = self._simulate_latency()
-        await asyncio.sleep(latency / 1000.0)
+            fill_quantity = self._compute_fill_quantity(order)
+            is_partial = fill_quantity < order.quantity
 
-        elapsed_ms = (time.monotonic() - start) * 1000.0
-        slippage_bps = (
-            (abs(fill_price - effective_price) / effective_price) * 10_000
-            if effective_price > 0
-            else 0.0
-        )
+            latency = self._simulate_latency()
+            await asyncio.sleep(latency / 1000.0)
 
-        self._record_fill(
-            order.symbol, fill_quantity, fill_price, elapsed_ms, slippage_bps, is_partial
-        )
+            elapsed_ms = (time.monotonic() - start) * 1000.0
+            slippage_bps = (
+                (abs(fill_price - effective_price) / effective_price) * 10_000
+                if effective_price > 0
+                else 0.0
+            )
 
-        logger.info(
-            "paper.fill",
-            symbol=order.symbol,
-            side=order.side.value,
-            requested_qty=order.quantity,
-            fill_qty=fill_quantity,
-            market_price=effective_price,
-            fill_price=round(fill_price, 4),
-            slippage_per_share=round(slippage_per_share, 4),
-            latency_ms=round(elapsed_ms, 2),
-            is_partial=is_partial,
-        )
+            self._record_fill(
+                order.symbol, fill_quantity, fill_price, elapsed_ms, slippage_bps, is_partial
+            )
 
-        return FillResult(
-            success=True,
-            price=round(fill_price, 4),
-            quantity=fill_quantity,
-        )
+            span.set_attribute("execution.success", True)
+            span.set_attribute("execution.fill_price", round(fill_price, 4))
+            span.set_attribute("execution.fill_quantity", fill_quantity)
+            span.set_attribute("execution.slippage_bps", round(slippage_bps, 4))
+            span.set_attribute("execution.latency_ms", round(elapsed_ms, 2))
+            span.set_attribute("execution.is_partial", is_partial)
+
+            logger.info(
+                "paper.fill",
+                symbol=order.symbol,
+                side=order.side.value,
+                requested_qty=order.quantity,
+                fill_qty=fill_quantity,
+                market_price=effective_price,
+                fill_price=round(fill_price, 4),
+                slippage_per_share=round(slippage_per_share, 4),
+                latency_ms=round(elapsed_ms, 2),
+                is_partial=is_partial,
+            )
+
+            return FillResult(
+                success=True,
+                price=round(fill_price, 4),
+                quantity=fill_quantity,
+            )
 
     async def _maybe_refresh_price(self, symbol: str, fallback_price: float) -> float:
         if not self._config.refresh_price_from_provider or self._data_provider is None:
