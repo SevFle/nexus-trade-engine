@@ -9,8 +9,13 @@ if TYPE_CHECKING:
 
 
 class ViolationReport:
-    def __init__(self, plugin_id: str | None = None) -> None:
+    def __init__(
+        self,
+        plugin_id: str | None = None,
+        trust_level: str | None = None,
+    ) -> None:
         self.plugin_id = plugin_id
+        self.trust_level = trust_level
         self.generated_at: float = time.time()
         self.total_violations: int = 0
         self.by_category: dict[str, int] = {}
@@ -27,8 +32,9 @@ class ViolationReport:
         cls,
         events: list[SecurityEvent],
         plugin_id: str | None = None,
+        trust_level: str | None = None,
     ) -> ViolationReport:
-        report = cls(plugin_id=plugin_id)
+        report = cls(plugin_id=plugin_id, trust_level=trust_level)
         report.total_violations = len(events)
         for event in events:
             cat = event.category.value
@@ -45,6 +51,7 @@ class ViolationReport:
     def to_dict(self) -> dict[str, Any]:
         return {
             "plugin_id": self.plugin_id,
+            "trust_level": self.trust_level,
             "generated_at": self.generated_at,
             "total_violations": self.total_violations,
             "by_category": self.by_category,
@@ -57,6 +64,7 @@ class ViolationReport:
     def summary(self) -> str:
         lines = [
             f"Violation Report for plugin: {self.plugin_id or 'all'}",
+            f"Trust level: {self.trust_level or 'unknown'}",
             "Generated at: "
             f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.generated_at))}",
             f"Total violations: {self.total_violations}",

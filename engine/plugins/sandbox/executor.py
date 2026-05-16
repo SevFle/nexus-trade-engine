@@ -35,7 +35,7 @@ class PluginSandboxExecutor:
         self.policy = policy
         self._metrics = metrics_collector or _metrics_collector
         self._event_logger = SecurityEventLogger(plugin_id=policy.plugin_id)
-        self._context = SandboxContext(policy)
+        self._context = SandboxContext(policy, metrics_collector=self._metrics)
 
     @classmethod
     def from_factory(
@@ -113,6 +113,7 @@ class PluginSandboxExecutor:
             return []
         finally:
             self._context.deactivate()
+            self._report_violations_to_metrics()
 
         elapsed_ms = (time.monotonic() - start) * 1000
         signals = self._convert_signals(raw_signals)
@@ -147,6 +148,12 @@ class PluginSandboxExecutor:
                     signal_type=type(s).__name__,
                 )
         return validated
+
+    def _report_violations_to_metrics(self) -> None:
+        events = self._context.event_logger.get_events()
+        if events:
+            for _ in events:
+                self._metrics.record_violation(self.policy.plugin_id)
 
     def get_health(self) -> dict[str, Any]:
         metrics = self._metrics.get_plugin_metrics(self.policy.plugin_id) or {}

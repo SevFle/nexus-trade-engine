@@ -20,6 +20,7 @@ class StrategyConfig(BaseModel):
     strategy_id: str
     params: dict[str, Any] = Field(default_factory=dict)
     secrets: dict[str, str] = Field(default_factory=dict)
+    trust_level: str = "untrusted"
 
 
 class DataFeed(BaseModel):

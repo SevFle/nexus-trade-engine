@@ -25,7 +25,7 @@ class TestBlockedBuiltinFunctions:
     def test_eval_blocked(self, guard: IntrospectionGuard) -> None:
         guard.install()
         try:
-            with pytest.raises(PermissionError, match="not available"):
+            with pytest.raises(PermissionError, match="not accessible"):
                 builtins.eval("1+1")  # noqa: S307
         finally:
             guard.uninstall()
@@ -33,7 +33,7 @@ class TestBlockedBuiltinFunctions:
     def test_exec_blocked(self, guard: IntrospectionGuard) -> None:
         guard.install()
         try:
-            with pytest.raises(PermissionError, match="not available"):
+            with pytest.raises(PermissionError, match="not accessible"):
                 builtins.exec("x = 1")  # noqa: S102
         finally:
             guard.uninstall()
@@ -41,7 +41,7 @@ class TestBlockedBuiltinFunctions:
     def test_compile_blocked(self, guard: IntrospectionGuard) -> None:
         guard.install()
         try:
-            with pytest.raises(PermissionError, match="not available"):
+            with pytest.raises(PermissionError, match="not accessible"):
                 builtins.compile("1+1", "<test>", "eval")
         finally:
             guard.uninstall()
@@ -49,7 +49,7 @@ class TestBlockedBuiltinFunctions:
     def test_breakpoint_blocked(self, guard: IntrospectionGuard) -> None:
         guard.install()
         try:
-            with pytest.raises(PermissionError, match="not available"):
+            with pytest.raises(PermissionError, match="not accessible"):
                 builtins.breakpoint()
         finally:
             guard.uninstall()

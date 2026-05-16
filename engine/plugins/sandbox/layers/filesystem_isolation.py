@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 
 from engine.plugins.sandbox.core.violation import FilesystemViolation
 
+_BLOCKED_SYSTEM_PREFIXES = ("/proc", "/sys", "/dev")
+
 
 class FilesystemIsolation:
     def __init__(
@@ -59,6 +61,28 @@ class FilesystemIsolation:
             for p in rw_paths
             if p
         )
+
+    def _validate_path(self, path: str) -> str:
+        parts = path.replace("\\", "/").split("/")
+        if ".." in parts:
+            violation = FilesystemViolation(path, "path_traversal", plugin_id=self._plugin_id)
+            self._violation_log.append(violation)
+            raise PermissionError(violation.detail)
+
+        resolved = os.path.realpath(path)
+
+        if self._policy.block_symlinks and os.path.islink(path):
+            violation = FilesystemViolation(path, "symlink", plugin_id=self._plugin_id)
+            self._violation_log.append(violation)
+            raise PermissionError(violation.detail)
+
+        for prefix in _BLOCKED_SYSTEM_PREFIXES:
+            if resolved.startswith(prefix):
+                violation = FilesystemViolation(path, "system_path", plugin_id=self._plugin_id)
+                self._violation_log.append(violation)
+                raise PermissionError(violation.detail)
+
+        return resolved
 
     def _restricted_open(
         self,

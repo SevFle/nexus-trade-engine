@@ -30,6 +30,7 @@ import structlog
 from engine.core.signal import Signal
 from engine.plugins.sandbox.core.context import SandboxContext
 from engine.plugins.sandbox.core.policy import SandboxPolicy
+from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -42,6 +43,7 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 _eval_lock: asyncio.Lock = asyncio.Lock()
+_metrics_collector = SandboxMetricsCollector()
 
 
 @dataclass
@@ -72,7 +74,7 @@ class StrategySandbox:
         self._max_eval_seconds = manifest.resources.max_cpu_seconds
 
         self._policy = SandboxPolicy.from_manifest(manifest)
-        self._context = SandboxContext(self._policy)
+        self._context = SandboxContext(self._policy, metrics_collector=_metrics_collector)
 
         endpoints = self._policy.network_policy.allowed_endpoints
         if endpoints:
@@ -181,6 +183,15 @@ class StrategySandbox:
         self.metrics.avg_evaluation_ms = (
             self.metrics.total_cpu_time_ms / self.metrics.total_evaluations
         )
+        _metrics_collector.record_evaluation(
+            self._policy.plugin_id,
+            elapsed_ms,
+            signal_count,
+        )
+
+    @property
+    def event_logger(self):
+        return self._context.event_logger
 
     @property
     def _work_dir(self) -> str | None:
@@ -190,6 +201,7 @@ class StrategySandbox:
         self._context.cleanup()
 
     def get_health(self) -> dict:
+        plugin_metrics = _metrics_collector.get_plugin_metrics(self._policy.plugin_id)
         return {
             "strategy_name": self.strategy.name,
             "version": self.strategy.version,
@@ -198,6 +210,11 @@ class StrategySandbox:
             "avg_eval_ms": round(self.metrics.avg_evaluation_ms, 2),
             "errors": self.metrics.errors,
             "last_error": self.metrics.last_error,
+            "security_violations": (
+                plugin_metrics.get("security_violations", 0)
+                if plugin_metrics
+                else 0
+            ),
         }
 
     @staticmethod

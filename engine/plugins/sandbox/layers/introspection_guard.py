@@ -21,6 +21,8 @@ _EXPLICITLY_BLOCKED_ATTRS: frozenset[str] = frozenset(
         "__init_subclass__",
         "__instancecheck__",
         "__subclasscheck__",
+        "__reduce__",
+        "__reduce_ex__",
     }
 )
 
@@ -96,9 +98,12 @@ class IntrospectionGuard:
             return True
         if name in self._policy.blocked_attributes:
             return True
-        if name in _FRAME_ATTRS:
-            return True
-        return name in _TRACEBACK_ATTRS
+        if self._policy.block_frame_access:
+            if name in _FRAME_ATTRS:
+                return True
+            if name in _TRACEBACK_ATTRS:
+                return True
+        return False
 
     def _restricted_getattr(self, obj: Any, name: str, *default: Any) -> Any:
         if self._is_blocked_attr(name):
@@ -129,6 +134,7 @@ class IntrospectionGuard:
             return
 
         all_blocked = self._policy.blocked_builtins | _BLOCKED_BUILTINS_DEFAULT
+
         for name in all_blocked:
             if name in builtins.__dict__:
                 self._original_builtins[name] = builtins.__dict__[name]
