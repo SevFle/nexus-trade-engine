@@ -11,7 +11,7 @@ import pytest
 
 from engine.core.execution.base import FillResult
 from engine.core.execution.live import LiveBackend
-from engine.core.execution.paper import PaperBackend
+from engine.core.execution.paper import PaperBackend, PaperTradeConfig
 
 
 @dataclass
@@ -131,7 +131,8 @@ class TestPaperBackend:
 
     @pytest.mark.asyncio
     async def test_execute_buy_order(self):
-        backend = PaperBackend()
+        config = PaperTradeConfig(partial_fill_enabled=False)
+        backend = PaperBackend(config=config)
         await backend.connect()
         order = _FakeOrder(side=_FakeSide.BUY, quantity=100)
         result = await backend.execute(order, 100.0, _make_cost(10.0))
@@ -141,7 +142,8 @@ class TestPaperBackend:
 
     @pytest.mark.asyncio
     async def test_execute_sell_order(self):
-        backend = PaperBackend()
+        config = PaperTradeConfig(partial_fill_enabled=False)
+        backend = PaperBackend(config=config)
         await backend.connect()
         order = _FakeOrder(side=_FakeSide.SELL, quantity=50)
         result = await backend.execute(order, 200.0, _make_cost(5.0))

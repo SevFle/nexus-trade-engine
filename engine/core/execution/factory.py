@@ -113,18 +113,20 @@ class ExecutionBackendFactory:
 
         config = config or {}
 
-        if mode == ExecutionMode.BACKTEST:
+        backend_cls = self._registry[mode]
+
+        if backend_cls is BacktestBackend:
             _validate_backtest_config(config)
             return self._create_backtest(config, **kwargs)
 
-        if mode == ExecutionMode.PAPER_TRADE:
+        if backend_cls is PaperBackend:
             _validate_paper_config(config)
             use_full = config.get("use_full_backend", kwargs.get("use_full_backend", False))
             if use_full:
                 return self._create_paper_trade_backend(config, **kwargs)
             return self._create_paper(config, **kwargs)
 
-        raise ConfigurationError(f"Unhandled mode: {mode}")
+        return backend_cls(**config, **kwargs)
 
     def _create_backtest(
         self, config: dict[str, Any], **_kwargs: Any
