@@ -89,7 +89,6 @@ class _CPUTimer:
                 "sandbox.stop_signal_not_main_thread",
                 plugin_id=self._plugin_id,
             )
-            self._use_signal = False
             return
         with contextlib.suppress(ValueError, OSError):
             signal.setitimer(signal.ITIMER_VIRTUAL, 0)
@@ -113,7 +112,8 @@ class _CPUTimer:
         self._expired.clear()
         self._use_signal = False
         self._old_handler = None
-        self._try_start_signal()
+        if self._try_start_signal():
+            return
         self._thread = threading.Thread(target=self._poll, daemon=True)
         self._thread.start()
 
