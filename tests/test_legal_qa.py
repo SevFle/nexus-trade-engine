@@ -171,8 +171,10 @@ class TestConsentEnforcementIntegration:
         db_session.add(doc)
         await db_session.flush()
 
-        with patch("engine.legal.dependencies._placeholder_user_id", user.id), \
-             pytest.raises(HTTPException) as exc_info:
+        with (
+            patch("engine.legal.dependencies._placeholder_user_id", user.id),
+            pytest.raises(HTTPException) as exc_info,
+        ):
             await require_legal_acceptance(db_session)
         assert exc_info.value.status_code == 451
         detail = exc_info.value.detail
@@ -229,8 +231,10 @@ class TestConsentEnforcementIntegration:
             db_session.add(doc)
         await db_session.flush()
 
-        with patch("engine.legal.dependencies._placeholder_user_id", user.id), \
-             pytest.raises(HTTPException) as exc_info:
+        with (
+            patch("engine.legal.dependencies._placeholder_user_id", user.id),
+            pytest.raises(HTTPException) as exc_info,
+        ):
             await require_legal_acceptance(db_session)
         assert exc_info.value.status_code == 451
         pending_slugs = exc_info.value.detail["documents"]
