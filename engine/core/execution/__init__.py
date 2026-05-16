@@ -1,4 +1,5 @@
 from engine.core.execution.base import ExecutionBackend, FillResult
+from engine.core.execution.clock import IClock, SimulatedClock, SystemClock
 from engine.core.execution.factory import (
     BackendNotAvailableError,
     ConfigurationError,
@@ -17,6 +18,7 @@ from engine.core.execution.paper_broker_interface import (
     PaperTradeFill,
     PaperTradeRiskConfig,
 )
+from engine.core.execution.paper_trade_backend import PaperTradeExecutionBackend
 from engine.core.execution.paper_trade_broker import PaperTradeBroker
 
 __all__ = [
@@ -27,14 +29,19 @@ __all__ = [
     "ExecutionMode",
     "FillPriority",
     "FillResult",
+    "IClock",
     "IPaperTradeBroker",
     "OrderRejectReason",
     "PaperOrderStatus",
     "PaperPortfolioSnapshot",
     "PaperPosition",
+    "PaperTradeBackend",
     "PaperTradeBroker",
     "PaperTradeBrokerConfig",
+    "PaperTradeExecutionBackend",
     "PaperTradeFill",
     "PaperTradeRiskConfig",
+    "SimulatedClock",
+    "SystemClock",
     "create_execution_backend",
 ]

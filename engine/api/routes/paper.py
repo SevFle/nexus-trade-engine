@@ -312,3 +312,179 @@ async def get_session_equity(
         raise HTTPException(status_code=403, detail="Access denied")
 
     return active.get_equity_curve()
+
+
+class SubmitOrderRequest(BaseModel):
+    symbol: str
+    side: str
+    quantity: int
+    order_type: str = "market"
+    limit_price: float | None = None
+    stop_price: float | None = None
+
+
+class ModifyOrderRequest(BaseModel):
+    quantity: int | None = None
+    limit_price: float | None = None
+    stop_price: float | None = None
+
+
+class OrderResponse(BaseModel):
+    success: bool
+    price: float = 0.0
+    quantity: int = 0
+    reason: str = ""
+
+
+class CancelResponse(BaseModel):
+    cancelled: bool
+
+
+class PositionsResponse(BaseModel):
+    positions: dict[str, Any]
+
+
+class PortfolioResponse(BaseModel):
+    portfolio: dict[str, Any]
+
+
+class OpenOrdersResponse(BaseModel):
+    orders: list[dict[str, Any]]
+
+
+@router.post("/sessions/{session_id}/orders", response_model=OrderResponse)
+async def submit_order(
+    session_id: str,
+    request: SubmitOrderRequest,
+    user: User = Depends(get_current_user),
+) -> OrderResponse:
+    backend = _get_session_backend(session_id, user)
+    result = await backend.submit_order(
+        symbol=request.symbol,
+        side=request.side,
+        quantity=request.quantity,
+        order_type=request.order_type,
+        limit_price=request.limit_price,
+        stop_price=request.stop_price,
+    )
+    return OrderResponse(
+        success=result.success,
+        price=result.price,
+        quantity=result.quantity,
+        reason=result.reason,
+    )
+
+
+@router.delete("/sessions/{session_id}/orders/{order_id}", response_model=CancelResponse)
+async def cancel_order(
+    session_id: str,
+    order_id: str,
+    user: User = Depends(get_current_user),
+) -> CancelResponse:
+    backend = _get_session_backend(session_id, user)
+    cancelled = await backend.cancel_order(order_id)
+    return CancelResponse(cancelled=cancelled)
+
+
+@router.patch("/sessions/{session_id}/orders/{order_id}")
+async def modify_order(
+    session_id: str,
+    order_id: str,
+    request: ModifyOrderRequest,
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    backend = _get_session_backend(session_id, user)
+    modified = await backend.modify_order(
+        order_id,
+        quantity=request.quantity,
+        limit_price=request.limit_price,
+        stop_price=request.stop_price,
+    )
+    if not modified:
+        raise HTTPException(status_code=404, detail=f"Order {order_id} not found or cannot be modified")
+    return {"order_id": order_id, "modified": True}
+
+
+@router.get("/sessions/{session_id}/positions", response_model=PositionsResponse)
+async def get_positions(
+    session_id: str,
+    user: User = Depends(get_current_user),
+) -> PositionsResponse:
+    backend = _get_session_backend(session_id, user)
+    positions = await backend.get_positions()
+    return PositionsResponse(
+        positions={sym: _position_to_dict(pos) for sym, pos in positions.items()},
+    )
+
+
+@router.get("/sessions/{session_id}/portfolio", response_model=PortfolioResponse)
+async def get_portfolio(
+    session_id: str,
+    user: User = Depends(get_current_user),
+) -> PortfolioResponse:
+    backend = _get_session_backend(session_id, user)
+    portfolio = await backend.get_portfolio()
+    return PortfolioResponse(
+        portfolio={
+            "total_equity": portfolio.total_equity,
+            "cash": portfolio.cash,
+            "unrealized_pnl": portfolio.unrealized_pnl,
+            "realized_pnl": portfolio.realized_pnl,
+            "total_pnl": portfolio.total_pnl,
+            "buying_power": portfolio.buying_power,
+            "timestamp": portfolio.timestamp,
+        },
+    )
+
+
+@router.get("/sessions/{session_id}/open-orders", response_model=OpenOrdersResponse)
+async def get_open_orders(
+    session_id: str,
+    user: User = Depends(get_current_user),
+) -> OpenOrdersResponse:
+    backend = _get_session_backend(session_id, user)
+    orders = await backend.get_open_orders()
+    return OpenOrdersResponse(orders=orders)
+
+
+@router.post("/sessions/{session_id}/prices")
+async def update_market_prices(
+    session_id: str,
+    prices: dict[str, float],
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    backend = _get_session_backend(session_id, user)
+    backend.update_market_prices(prices)
+    return {"updated": list(prices.keys())}
+
+
+def _get_session_backend(
+    session_id: str,
+    user: User,
+) -> PaperTradeExecutionBackend:
+    from engine.core.execution.paper_trade_backend import PaperTradeExecutionBackend
+
+    active = get_active_session(session_id)
+    if active is None:
+        raise HTTPException(status_code=404, detail=f"Active session {session_id} not found")
+    if active.state.user_id != str(user.id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    backend = active.backend
+    if not isinstance(backend, PaperTradeExecutionBackend):
+        raise HTTPException(
+            status_code=400,
+            detail="Session does not support direct order management. Start with use_full_backend=True.",
+        )
+    return backend
+
+
+def _position_to_dict(pos: Any) -> dict[str, Any]:
+    return {
+        "symbol": pos.symbol,
+        "quantity": pos.quantity,
+        "avg_entry_price": pos.avg_entry_price,
+        "current_price": pos.current_price,
+        "unrealized_pnl": pos.unrealized_pnl,
+        "realized_pnl": pos.realized_pnl,
+        "market_value": pos.market_value,
+    }

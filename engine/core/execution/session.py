@@ -15,7 +15,11 @@ from typing import Any
 
 import structlog
 
+from engine.core.execution.base import ExecutionBackend as _ExecutionBackend
+from engine.core.execution.clock import SystemClock
 from engine.core.execution.paper import PaperBackend, PaperTradeConfig
+from engine.core.execution.paper_broker_interface import PaperTradeBrokerConfig
+from engine.core.execution.paper_trade_backend import PaperTradeExecutionBackend
 from engine.core.execution.slippage import SlippageModelType
 
 logger = structlog.get_logger()
@@ -105,15 +109,46 @@ class PaperTradeSession:
     ) -> None:
         self.state = state
         self._data_provider = data_provider
-        self._backend: PaperBackend | None = None
+        self._backend: _ExecutionBackend | None = None
         self._portfolio: Any = None
         self._order_manager: Any = None
         self._strategy: Any = None
         self._equity_curve: list[dict[str, Any]] = []
         self._trades: list[dict[str, Any]] = []
 
-    def create_backend(self) -> PaperBackend:
+    def create_backend(
+        self,
+        *,
+        use_full_backend: bool = False,
+        event_bus: Any = None,
+        metrics: Any = None,
+    ) -> ExecutionBackend:
         config = self.state.config
+
+        if use_full_backend:
+            from engine.core.execution.clock import SystemClock
+
+            broker_config = PaperTradeBrokerConfig(
+                fill_probability=config.fill_probability,
+                partial_fill_enabled=config.partial_fill_enabled,
+                partial_fill_min_ratio=config.partial_fill_min_ratio,
+                latency_ms=config.latency_ms,
+                latency_jitter_ms=config.latency_jitter_ms,
+                slippage_model_type=config.slippage_model_type,
+                slippage_model_kwargs=config.slippage_model_kwargs,
+                refresh_price_from_provider=config.refresh_price_from_provider,
+                random_seed=config.random_seed,
+            )
+            self._backend = PaperTradeExecutionBackend(
+                config=broker_config,
+                initial_cash=config.initial_capital,
+                data_provider=self._data_provider,
+                event_bus=event_bus,
+                clock=SystemClock(),
+                metrics=metrics,
+            )
+            return self._backend
+
         paper_config = PaperTradeConfig(
             fill_probability=config.fill_probability,
             partial_fill_enabled=config.partial_fill_enabled,
@@ -129,7 +164,7 @@ class PaperTradeSession:
         return self._backend
 
     @property
-    def backend(self) -> PaperBackend | None:
+    def backend(self) -> ExecutionBackend | None:
         return self._backend
 
     @property
@@ -177,15 +212,27 @@ class PaperTradeSession:
     def get_fill_stats(self) -> dict[str, Any]:
         if self._backend is None:
             return {}
-        global_stats = self._backend.stats.as_dict()
-        per_symbol = {
-            sym: self._backend.get_symbol_stats(sym).as_dict()
-            for sym in self.state.config.symbols
-        }
-        return {
-            "global": global_stats,
-            "per_symbol": per_symbol,
-        }
+        if isinstance(self._backend, PaperTradeExecutionBackend):
+            import asyncio
+
+            try:
+                loop = asyncio.get_running_loop()
+                stats_future = loop.create_task(self._backend.get_fill_stats())
+                return {}
+            except RuntimeError:
+                pass
+            return {}
+        if isinstance(self._backend, PaperBackend):
+            global_stats = self._backend.stats.as_dict()
+            per_symbol = {
+                sym: self._backend.get_symbol_stats(sym).as_dict()
+                for sym in self.state.config.symbols
+            }
+            return {
+                "global": global_stats,
+                "per_symbol": per_symbol,
+            }
+        return {}
 
     def mark_started(self) -> None:
         self.state.status = SessionStatus.RUNNING

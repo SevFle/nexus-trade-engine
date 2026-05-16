@@ -14,6 +14,11 @@ import structlog
 
 from engine.core.execution.backtest import BacktestBackend
 from engine.core.execution.paper import PaperBackend, PaperTradeConfig
+from engine.core.execution.paper_broker_interface import (
+    PaperTradeBrokerConfig,
+    PaperTradeRiskConfig,
+)
+from engine.core.execution.paper_trade_backend import PaperTradeExecutionBackend
 from engine.core.execution.slippage import SlippageModelType
 
 if TYPE_CHECKING:
@@ -114,6 +119,9 @@ class ExecutionBackendFactory:
 
         if mode == ExecutionMode.PAPER_TRADE:
             _validate_paper_config(config)
+            use_full = config.get("use_full_backend", kwargs.get("use_full_backend", False))
+            if use_full:
+                return self._create_paper_trade_backend(config, **kwargs)
             return self._create_paper(config, **kwargs)
 
         raise ConfigurationError(f"Unhandled mode: {mode}")
@@ -148,6 +156,43 @@ class ExecutionBackendFactory:
         return PaperBackend(
             config=paper_config,
             data_provider=kwargs.get("data_provider"),
+        )
+
+    def _create_paper_trade_backend(
+        self, config: dict[str, Any], **kwargs: Any
+    ) -> PaperTradeExecutionBackend:
+        slippage_type = config.get("slippage_model_type", SlippageModelType.FIXED_BPS)
+        if isinstance(slippage_type, str):
+            slippage_type = SlippageModelType(slippage_type)
+
+        risk_config = None
+        if "risk_config" in config:
+            rc = config["risk_config"]
+            risk_config = PaperTradeRiskConfig(**rc)
+
+        broker_config = PaperTradeBrokerConfig(
+            fill_probability=config.get("fill_probability", 0.95),
+            partial_fill_enabled=config.get("partial_fill_enabled", True),
+            partial_fill_min_ratio=config.get("partial_fill_min_ratio", 0.5),
+            latency_ms=config.get("latency_ms", 50.0),
+            latency_jitter_ms=config.get("latency_jitter_ms", 20.0),
+            random_seed=config.get("random_seed"),
+            slippage_model_type=slippage_type,
+            slippage_model_kwargs=config.get("slippage_model_kwargs", {}),
+            commission_per_share=config.get("commission_per_share", 0.005),
+            min_commission=config.get("min_commission", 1.0),
+            refresh_price_from_provider=config.get("refresh_price_from_provider", True),
+            risk_config=risk_config,
+        )
+
+        return PaperTradeExecutionBackend(
+            config=broker_config,
+            initial_cash=config.get("initial_cash", 100_000.0),
+            data_provider=kwargs.get("data_provider"),
+            commission_calculator=kwargs.get("commission_calculator"),
+            event_bus=kwargs.get("event_bus"),
+            clock=kwargs.get("clock"),
+            metrics=kwargs.get("metrics"),
         )
 
     def register_backend(
