@@ -127,6 +127,8 @@ class ResourceLimiter:
         self._violation_log: list[ResourceExhausted] = []
         self._thread_count = 0
         self._original_thread_init: Any = None
+        self._original_thread_start: Any = None
+        self._original_thread_join: Any = None
         self._cpu_timer: _CPUTimer | None = None
         self._wall_timer: _WallTimer | None = None
 
@@ -136,15 +138,52 @@ class ResourceLimiter:
         self._apply_resource_limits()
         self._start_cpu_timer()
         self._start_wall_timer()
+        self._install_thread_guard()
         self._installed = True
 
     def uninstall(self) -> None:
         if not self._installed:
             return
+        self._uninstall_thread_guard()
         self._stop_wall_timer()
         self._stop_cpu_timer()
         self._restore_resource_limits()
         self._installed = False
+
+    def _install_thread_guard(self) -> None:
+        limiter = self
+
+        original_start = threading.Thread.start
+
+        def _restricted_start(t: threading.Thread) -> None:
+            limiter.check_thread_limit()
+            limiter._thread_count += 1
+            try:
+                original_start(t)
+            except Exception:
+                limiter._thread_count = max(0, limiter._thread_count - 1)
+                raise
+
+        original_join = threading.Thread.join
+
+        def _restricted_join(t: threading.Thread, timeout: float | None = None) -> None:
+            try:
+                original_join(t, timeout=timeout)
+            finally:
+                limiter._thread_count = max(0, limiter._thread_count - 1)
+
+        self._original_thread_start = original_start
+        self._original_thread_join = original_join
+        threading.Thread.start = _restricted_start
+        threading.Thread.join = _restricted_join
+
+    def _uninstall_thread_guard(self) -> None:
+        if self._original_thread_start is not None:
+            threading.Thread.start = self._original_thread_start
+            self._original_thread_start = None
+        if self._original_thread_join is not None:
+            threading.Thread.join = self._original_thread_join
+            self._original_thread_join = None
 
     def _apply_resource_limits(self) -> None:
         if not HAS_RESOURCE_MODULE:

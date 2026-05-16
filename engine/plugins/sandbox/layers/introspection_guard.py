@@ -23,6 +23,8 @@ _EXPLICITLY_BLOCKED_ATTRS: frozenset[str] = frozenset(
         "__subclasscheck__",
         "__reduce__",
         "__reduce_ex__",
+        "__getstate__",
+        "__setstate__",
     }
 )
 
@@ -63,11 +65,30 @@ _BLOCKED_BUILTINS_DEFAULT: frozenset[str] = frozenset(
 
 _SAFE_DIR_ATTRS: frozenset[str] = _EXPLICITLY_BLOCKED_ATTRS | _FRAME_ATTRS | _TRACEBACK_ATTRS
 
+_original_object_getattribute = object.__getattribute__
 
-class _RestrictedObject:
-    @classmethod
-    def __subclasses__(cls) -> list[type]:
-        raise RuntimeError("__subclasses__() is not allowed in strategy sandbox")
+
+def _make_restricted_object_class(
+    violation_log: list[IntrospectionViolation],
+    plugin_id: str | None,
+) -> type:
+    class RestrictedObject:
+        @classmethod
+        def __subclasses__(cls) -> list[type]:
+            violation = IntrospectionViolation("__subclasses__", plugin_id=plugin_id)
+            violation_log.append(violation)
+            raise RuntimeError("__subclasses__() is not allowed in strategy sandbox")
+
+        def __getattribute__(self, name: str) -> Any:
+            if name in _EXPLICITLY_BLOCKED_ATTRS:
+                violation = IntrospectionViolation(name, plugin_id=plugin_id)
+                violation_log.append(violation)
+                raise PermissionError(
+                    f"Attribute '{name}' is not accessible in strategy sandbox"
+                )
+            return _original_object_getattribute(self, name)
+
+    return RestrictedObject
 
 
 def _make_safe_dir(original_dir: Any, guard: IntrospectionGuard) -> Any:
@@ -88,10 +109,12 @@ class IntrospectionGuard:
         self._plugin_id = plugin_id
         self._original_getattr: Any = None
         self._original_setattr: Any = None
+        self._original_delattr: Any = None
         self._original_object: Any = None
         self._original_builtins: dict[str, Any] = {}
         self._installed = False
         self._violation_log: list[IntrospectionViolation] = []
+        self._restricted_object_class: type | None = None
 
     def _is_blocked_attr(self, name: str) -> bool:
         if name in _EXPLICITLY_BLOCKED_ATTRS:
@@ -117,7 +140,18 @@ class IntrospectionGuard:
             violation = IntrospectionViolation(name, plugin_id=self._plugin_id)
             self._violation_log.append(violation)
             raise PermissionError(violation.detail)
+        if self._is_blocked_attr(name):
+            violation = IntrospectionViolation(name, plugin_id=self._plugin_id)
+            self._violation_log.append(violation)
+            raise PermissionError(violation.detail)
         self._original_setattr(obj, name, value)
+
+    def _restricted_delattr(self, obj: Any, name: str) -> None:
+        if self._is_blocked_attr(name):
+            violation = IntrospectionViolation(name, plugin_id=self._plugin_id)
+            self._violation_log.append(violation)
+            raise PermissionError(violation.detail)
+        self._original_delattr(obj, name)
 
     def _make_blocked_builtin(self, name: str) -> Any:
         guard = self
@@ -139,14 +173,20 @@ class IntrospectionGuard:
             if name in builtins.__dict__:
                 self._original_builtins[name] = builtins.__dict__[name]
 
+        self._restricted_object_class = _make_restricted_object_class(
+            self._violation_log, self._plugin_id,
+        )
         self._original_object = builtins.object
-        builtins.object = _RestrictedObject
+        builtins.object = self._restricted_object_class
 
         self._original_getattr = builtins.getattr
         builtins.getattr = self._restricted_getattr
 
         self._original_setattr = builtins.setattr
         builtins.setattr = self._restricted_setattr
+
+        self._original_delattr = builtins.delattr
+        builtins.delattr = self._restricted_delattr
 
         for name in all_blocked:
             if name in self._original_builtins:
@@ -174,10 +214,15 @@ class IntrospectionGuard:
             builtins.setattr = self._original_setattr
             self._original_setattr = None
 
+        if self._original_delattr is not None:
+            builtins.delattr = self._original_delattr
+            self._original_delattr = None
+
         for name, original in self._original_builtins.items():
             setattr(builtins, name, original)
         self._original_builtins.clear()
 
+        self._restricted_object_class = None
         self._installed = False
 
     def get_violations(self) -> list[IntrospectionViolation]:
