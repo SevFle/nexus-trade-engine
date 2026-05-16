@@ -919,7 +919,7 @@ class TestContextManagerCancel:
                 raise ValueError("test")
         assert t._timer is None
 
-    def test_nested_context_managers(self) -> None:
+    def test_nested_context_managers(self, force_poll: None) -> None:
         with _CPUTimer(60.0) as cpu_t, _WallTimer(60.0) as wall_t:
             assert cpu_t._thread is not None
             assert wall_t._timer is not None
