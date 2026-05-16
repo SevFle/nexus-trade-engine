@@ -681,7 +681,8 @@ class TestContextViolationCollection:
         }
 
     def test_deactivate_collects_violations(self) -> None:
-        ctx = SandboxContext(SandboxPolicy(plugin_id="test"))
+        policy = SandboxPolicy.from_trust_level(TrustLevel.TRUSTED_FULL, "test")
+        ctx = SandboxContext(policy)
         ctx.activate()
         ctx._import_layer._violation_log.append(
             ImportViolation("subprocess", plugin_id="test"),
@@ -691,7 +692,7 @@ class TestContextViolationCollection:
         assert len(events) == 1
 
     def test_context_manager_collects_violations(self) -> None:
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.TRUSTED_FULL, "test")
         with SandboxContext(policy) as ctx:
             ctx._network_layer._violation_log.append(
                 NetworkViolation("evil.com", plugin_id="test"),
