@@ -254,7 +254,7 @@ class TestCancelOrder:
         broker = PaperTradeBroker(config=_make_config(), initial_cash=100_000.0)
         await broker.connect()
         broker.update_market_price("AAPL", 155.0)
-        result = await broker.submit_order("AAPL", "buy", 100, order_type="limit", limit_price=150.0)
+        await broker.submit_order("AAPL", "buy", 100, order_type="limit", limit_price=150.0)
         open_orders = await broker.get_open_orders()
         assert len(open_orders) == 1
         cancelled = await broker.cancel_order(open_orders[0]["order_id"])

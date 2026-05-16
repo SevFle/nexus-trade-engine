@@ -8,6 +8,7 @@ from engine.plugins.sandbox.core.lifecycle import LifecycleManager, SandboxLifec
 from engine.plugins.sandbox.core.policy import SandboxPolicy
 from engine.plugins.sandbox.core.state import SandboxTLS, get_default_tls
 from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
+from engine.plugins.trust_levels import TrustLevel
 
 if TYPE_CHECKING:
     from engine.plugins.sandbox.core.context import SandboxContext
@@ -86,8 +87,6 @@ class SandboxIntegration:
         trust_level: str = "untrusted",
         **overrides: Any,
     ) -> SandboxPolicy:
-        from engine.plugins.trust_levels import TrustLevel
-
         try:
             tl = TrustLevel(trust_level)
         except ValueError:

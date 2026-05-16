@@ -66,7 +66,11 @@ class SandboxLifecycle:
             raise
 
     def deactivate(self) -> None:
-        if self.phase in (SandboxPhase.DEACTIVATED, SandboxPhase.DEACTIVATING, SandboxPhase.CREATED):
+        if self.phase in (
+            SandboxPhase.DEACTIVATED,
+            SandboxPhase.DEACTIVATING,
+            SandboxPhase.CREATED,
+        ):
             return
         previous = self.phase
         self._record(SandboxPhase.DEACTIVATING, previous)
@@ -101,7 +105,12 @@ class SandboxLifecycle:
     def events(self) -> list[LifecycleEvent]:
         return list(self._events)
 
-    def _record(self, phase: SandboxPhase, previous: SandboxPhase | None, detail: str | None = None) -> None:
+    def _record(
+        self,
+        phase: SandboxPhase,
+        previous: SandboxPhase | None,
+        detail: str | None = None,
+    ) -> None:
         self.phase = phase
         event = LifecycleEvent(
             timestamp=time.monotonic(),

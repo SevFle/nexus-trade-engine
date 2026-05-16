@@ -16,6 +16,8 @@ from engine.core.execution.paper_broker_interface import PaperPosition
 
 logger = structlog.get_logger()
 
+_CENTS_MULTIPLIER = 10_000
+
 
 @dataclass
 class _PositionEntry:
@@ -25,36 +27,34 @@ class _PositionEntry:
     realized_pnl_cents: int = 0
     current_price_cents: int = 0
 
-    _CENTS_MULTIPLIER = 10_000
-
     @property
     def entry_price(self) -> float:
-        return self.entry_price_cents / self._CENTS_MULTIPLIER
+        return self.entry_price_cents / _CENTS_MULTIPLIER
 
     @property
     def current_price(self) -> float:
-        return self.current_price_cents / self._CENTS_MULTIPLIER
+        return self.current_price_cents / _CENTS_MULTIPLIER
 
     @current_price.setter
     def current_price(self, value: float) -> None:
-        self.current_price_cents = int(value * self._CENTS_MULTIPLIER)
+        self.current_price_cents = int(value * _CENTS_MULTIPLIER)
 
     @property
     def unrealized_pnl(self) -> float:
         if self.quantity == 0:
             return 0.0
         pnl_cents = (self.current_price_cents - self.entry_price_cents) * self.quantity
-        return pnl_cents / self._CENTS_MULTIPLIER
+        return pnl_cents / _CENTS_MULTIPLIER
 
     @property
     def realized_pnl(self) -> float:
-        return self.realized_pnl_cents / self._CENTS_MULTIPLIER
+        return self.realized_pnl_cents / _CENTS_MULTIPLIER
 
     @property
     def market_value(self) -> float:
         if self.quantity == 0:
             return 0.0
-        return (self.current_price_cents * abs(self.quantity)) / self._CENTS_MULTIPLIER
+        return (self.current_price_cents * abs(self.quantity)) / _CENTS_MULTIPLIER
 
     def to_paper_position(self) -> PaperPosition:
         return PaperPosition(
@@ -90,7 +90,7 @@ class PositionTrackerSnapshot:
 
 class PaperPositionTracker:
     def __init__(self, initial_cash: float = 100_000.0) -> None:
-        self._M = _PositionEntry._CENTS_MULTIPLIER
+        self._M = _CENTS_MULTIPLIER
         self._initial_cash_cents = int(initial_cash * self._M)
         self._cash_cents = self._initial_cash_cents
         self._positions: dict[str, _PositionEntry] = {}
@@ -156,7 +156,10 @@ class PaperPositionTracker:
             new_qty = existing_qty + quantity
 
             if (existing_qty > 0 and quantity > 0) or (existing_qty < 0 and quantity < 0):
-                total_cost = abs(existing_qty) * pos.entry_price_cents + abs(quantity) * price_cents
+                total_cost = (
+                    abs(existing_qty) * pos.entry_price_cents
+                    + abs(quantity) * price_cents
+                )
                 pos.entry_price_cents = total_cost // abs(new_qty) if new_qty != 0 else 0
                 pos.quantity = new_qty
             elif new_qty == 0:
@@ -197,7 +200,9 @@ class PaperPositionTracker:
             )
 
         self._update_drawdown()
-        return self._positions[symbol].to_paper_position() if symbol in self._positions else PaperPosition(
+        if symbol in self._positions:
+            return self._positions[symbol].to_paper_position()
+        return PaperPosition(
             symbol=symbol, quantity=0, avg_entry_price=0.0,
             current_price=price, unrealized_pnl=0.0, realized_pnl=0.0, market_value=0.0,
         )

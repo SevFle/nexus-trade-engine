@@ -538,7 +538,10 @@ class PaperTradeBroker(ExecutionBackend):
         if trade_value > risk.max_single_order_value:
             return _RiskCheck(
                 approved=False,
-                reason=f"Order value ${trade_value:,.0f} exceeds max ${risk.max_single_order_value:,.0f}",
+                reason=(
+                    f"Order value ${trade_value:,.0f} exceeds"
+                    f" max ${risk.max_single_order_value:,.0f}"
+                ),
                 reject_reason=OrderRejectReason.RISK_LIMIT_EXCEEDED,
             )
 
@@ -584,7 +587,11 @@ class PaperTradeBroker(ExecutionBackend):
             )
 
         open_positions = len(self._tracker.get_positions())
-        if side == "buy" and symbol not in self._tracker.get_positions() and open_positions >= risk.max_open_positions:
+        if (
+            side == "buy"
+            and symbol not in self._tracker.get_positions()
+            and open_positions >= risk.max_open_positions
+        ):
             return _RiskCheck(
                 approved=False,
                 reason=f"Max open positions reached: {risk.max_open_positions}",
@@ -603,7 +610,11 @@ class PaperTradeBroker(ExecutionBackend):
         cost_slippage = 0.0
         if costs is not None and hasattr(costs, "slippage"):
             slippage_obj = costs.slippage
-            cost_slippage = slippage_obj.amount if hasattr(slippage_obj, "amount") else float(slippage_obj)
+            cost_slippage = (
+                slippage_obj.amount
+                if hasattr(slippage_obj, "amount")
+                else float(slippage_obj)
+            )
 
         if cost_slippage > 0:
             return cost_slippage / quantity if quantity > 0 else 0.0
@@ -681,7 +692,7 @@ class PaperTradeBroker(ExecutionBackend):
         symbol: str,
         quantity: int,
         price: float,
-        elapsed_ms: float,
+        _elapsed_ms: float,
         slippage_bps: float,
         is_partial: bool,
     ) -> None:
