@@ -711,20 +711,17 @@ class TestResourceLimiterResourceLimits:
     def test_apply_resource_limits_handles_no_resource_module(self) -> None:
         policy = ResourcePolicy(max_memory_bytes=1024 * 1024, max_file_descriptors=32)
         limiter = ResourceLimiter(policy, plugin_id="no-res-mod")
-        with patch(
-            "engine.plugins.sandbox.layers.resource_limiter.HAS_RESOURCE_MODULE", False
-        ):
+        with patch("engine.plugins.sandbox.layers.resource_limiter.HAS_RESOURCE_MODULE", False):
             limiter._apply_resource_limits()
         assert len(limiter._saved_limits) == 0
 
     def test_apply_resource_limits_handles_setrlimit_error(self) -> None:
         policy = ResourcePolicy(max_memory_bytes=1024 * 1024, max_file_descriptors=32)
         limiter = ResourceLimiter(policy, plugin_id="setrlimit-err")
-        with patch(
-            "engine.plugins.sandbox.layers.resource_limiter.HAS_RESOURCE_MODULE", True
-        ), patch(
-            "engine.plugins.sandbox.layers.resource_limiter._resource"
-        ) as mock_res:
+        with (
+            patch("engine.plugins.sandbox.layers.resource_limiter.HAS_RESOURCE_MODULE", True),
+            patch("engine.plugins.sandbox.layers.resource_limiter._resource") as mock_res,
+        ):
             mock_res.getrlimit.side_effect = OSError("no limits")
             limiter._apply_resource_limits()
         assert len(limiter._saved_limits) == 0
@@ -733,9 +730,7 @@ class TestResourceLimiterResourceLimits:
         policy = ResourcePolicy()
         limiter = ResourceLimiter(policy)
         limiter._saved_limits["RLIMIT_AS"] = (100, 200)
-        with patch(
-            "engine.plugins.sandbox.layers.resource_limiter.HAS_RESOURCE_MODULE", False
-        ):
+        with patch("engine.plugins.sandbox.layers.resource_limiter.HAS_RESOURCE_MODULE", False):
             limiter._restore_resource_limits()
         assert len(limiter._saved_limits) == 1
 
@@ -743,11 +738,10 @@ class TestResourceLimiterResourceLimits:
         policy = ResourcePolicy()
         limiter = ResourceLimiter(policy)
         limiter._saved_limits["fake"] = (1, 2)
-        with patch(
-            "engine.plugins.sandbox.layers.resource_limiter.HAS_RESOURCE_MODULE", True
-        ), patch(
-            "engine.plugins.sandbox.layers.resource_limiter._resource"
-        ) as mock_res:
+        with (
+            patch("engine.plugins.sandbox.layers.resource_limiter.HAS_RESOURCE_MODULE", True),
+            patch("engine.plugins.sandbox.layers.resource_limiter._resource") as mock_res,
+        ):
             mock_res.setrlimit = MagicMock()
             limiter._restore_resource_limits()
         assert len(limiter._saved_limits) == 0
@@ -921,7 +915,8 @@ class TestContextManagerCancel:
 
     def test_nested_context_managers(self) -> None:
         with _CPUTimer(60.0) as cpu_t, _WallTimer(60.0) as wall_t:
-            assert cpu_t._thread is not None
+            if not cpu_t._use_signal:
+                assert cpu_t._thread is not None
             assert wall_t._timer is not None
         cpu_t.cancel()
         wall_t.cancel()

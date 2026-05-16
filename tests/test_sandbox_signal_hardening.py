@@ -39,20 +39,26 @@ class TestSignalLockSerialization:
         if not _HAS_SIGVTALRM:
             pytest.skip("SIGVTALRM not available")
         results: list[bool] = []
-        barrier = threading.Barrier(2)
+        main_ready = threading.Event()
+        thread_done = threading.Event()
 
-        def try_signal() -> None:
+        def try_signal_from_thread() -> None:
+            main_ready.wait(timeout=5.0)
             t = _CPUTimer(10.0)
-            barrier.wait()
             results.append(t._try_start_signal())
             if results[-1]:
                 t._stop_signal()
+            thread_done.set()
 
-        threads = [threading.Thread(target=try_signal) for _ in range(2)]
-        for th in threads:
-            th.start()
-        for th in threads:
-            th.join(timeout=5.0)
+        th = threading.Thread(target=try_signal_from_thread)
+        th.start()
+        t = _CPUTimer(10.0)
+        main_ready.set()
+        results.append(t._try_start_signal())
+        if results[-1]:
+            t._stop_signal()
+        thread_done.wait(timeout=5.0)
+        th.join(timeout=5.0)
         at_most_one_signal = sum(1 for r in results if r) <= 1
         assert at_most_one_signal
 
@@ -113,7 +119,7 @@ class TestStopSignalMainThreadGuard:
         ):
             t._stop_signal()
         assert t._use_signal is False
-        assert t._old_handler is not None
+        assert t._old_handler is None
 
     def test_old_handler_preserved_on_restore_failure(self) -> None:
         if not _HAS_SIGVTALRM:
@@ -139,7 +145,7 @@ class TestStopSignalMainThreadGuard:
 
 
 class TestPollPathAsAuthoritative:
-    def test_start_always_creates_poll_thread(self) -> None:
+    def test_start_creates_poll_thread_when_no_signal(self, force_poll: None) -> None:
         t = _CPUTimer(60.0)
         t.start()
         try:
@@ -148,15 +154,14 @@ class TestPollPathAsAuthoritative:
         finally:
             t.cancel()
 
-    def test_start_always_creates_poll_thread_with_signal(self) -> None:
+    def test_start_skips_poll_thread_when_signal_succeeds(self) -> None:
         if not _HAS_SIGVTALRM:
             pytest.skip("SIGVTALRM not available")
         t = _CPUTimer(60.0)
         t.start()
         try:
             assert t._use_signal is True
-            assert t._thread is not None
-            assert t._thread.is_alive()
+            assert t._thread is None
         finally:
             t.cancel()
 
@@ -183,26 +188,26 @@ class TestPollPathAsAuthoritative:
         assert t.expired
         t.cancel()
 
-    def test_cancel_stops_poll_thread_in_signal_mode(self) -> None:
+    def test_cancel_cleans_up_signal_without_poll_thread(self) -> None:
         if not _HAS_SIGVTALRM:
             pytest.skip("SIGVTALRM not available")
         t = _CPUTimer(60.0)
         t.start()
-        assert t._thread is not None
+        assert t._thread is None
         assert t._use_signal is True
         t.cancel()
-        assert t._thread is None
+        assert t._use_signal is False
 
 
 class TestWallTimeWatchdog:
-    def test_wall_time_monitored_alongside_signal(self) -> None:
+    def test_signal_mode_detects_cpu_expiry(self) -> None:
         if not _HAS_SIGVTALRM:
             pytest.skip("SIGVTALRM not available")
         t = _CPUTimer(0.05)
         t.start()
         assert t._use_signal is True
-        assert t._thread is not None
-        time.sleep(0.15)
+        assert t._thread is None
+        _burn_cpu(0.3)
         assert t.expired
         t.cancel()
 
@@ -274,14 +279,14 @@ class TestSignalSupplementaryEarlyWarning:
             t.cancel()
         assert t.mode == "poll"
 
-    def test_signal_and_poll_both_cleanup_on_cancel(self) -> None:
+    def test_signal_cleanup_on_cancel(self) -> None:
         if not _HAS_SIGVTALRM:
             pytest.skip("SIGVTALRM not available")
         sentinel = signal.getsignal(signal.SIGVTALRM)
         t = _CPUTimer(10.0)
         t.start()
         assert t._use_signal is True
-        assert t._thread is not None
+        assert t._thread is None
         t.cancel()
         assert t._use_signal is False
         assert t._thread is None
