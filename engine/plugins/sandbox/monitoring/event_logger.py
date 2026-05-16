@@ -34,7 +34,7 @@ class SecurityEventLogger:
             detail=violation.detail,
             plugin_id=violation.plugin_id or self._plugin_id,
             attempted_action=violation.attempted_action,
-            stack_trace=traceback.format_stack(),
+            stack_trace="".join(traceback.format_stack()),
         )
         self._events.append(event)
 
@@ -50,7 +50,7 @@ class SecurityEventLogger:
             detail=detail,
             plugin_id=self._plugin_id,
             attempted_action=attempted_action,
-            stack_trace=traceback.format_stack(),
+            stack_trace="".join(traceback.format_stack()),
         )
         self._events.append(event)
 

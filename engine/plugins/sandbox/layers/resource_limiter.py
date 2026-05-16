@@ -147,7 +147,7 @@ class ResourceLimiter:
         self._installed = False
 
     def _apply_resource_limits(self) -> None:
-        if not HAS_RESOURCE_MODULE:
+        if not HAS_RESOURCE_MODULE or _resource is None:
             return
 
         try:
@@ -214,7 +214,7 @@ class ResourceLimiter:
         return 0.0
 
     def _restore_resource_limits(self) -> None:
-        if not HAS_RESOURCE_MODULE:
+        if not HAS_RESOURCE_MODULE or _resource is None:
             return
         for name, (soft, hard) in self._saved_limits.items():
             with contextlib.suppress(ValueError, OSError, AttributeError):
