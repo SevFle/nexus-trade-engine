@@ -28,6 +28,59 @@ _HAS_SIGVTALRM = hasattr(signal, "SIGVTALRM") and hasattr(signal, "ITIMER_VIRTUA
 _signal_lock = threading.Lock()
 
 
+class _SignalManager:
+    _instance: _SignalManager | None = None
+
+    def __new__(cls) -> _SignalManager:
+        if cls._instance is None:
+            inst = super().__new__(cls)
+            inst._owner: Any = None
+            inst._lock = threading.Lock()
+            inst._ref_count: int = 0
+            cls._instance = inst
+        return cls._instance
+
+    def try_acquire(self, timer: Any) -> bool:
+        if not _HAS_SIGVTALRM:
+            return False
+        if timer.force_poll:
+            return False
+        if threading.current_thread() is not threading.main_thread():
+            return False
+        with self._lock:
+            if self._owner is not None:
+                return False
+            if timer.try_setup_signal():
+                self._owner = timer
+                self._ref_count += 1
+                return True
+            return False
+
+    def release(self, timer: Any) -> None:
+        with self._lock:
+            if self._owner is timer:
+                self._owner = None
+                self._ref_count = max(0, self._ref_count - 1)
+
+    @property
+    def owner(self) -> Any:
+        with self._lock:
+            return self._owner
+
+    @property
+    def ref_count(self) -> int:
+        with self._lock:
+            return self._ref_count
+
+    def reset(self) -> None:
+        with self._lock:
+            self._owner = None
+            self._ref_count = 0
+
+
+_signal_mgr = _SignalManager()
+
+
 class _CPUTimer:
     _POLL_INTERVAL = 0.05
     _force_poll = False
@@ -51,6 +104,27 @@ class _CPUTimer:
     def mode(self) -> str:
         return "signal" if self._use_signal else "poll"
 
+    @property
+    def force_poll(self) -> bool:
+        return self._force_poll
+
+    def try_setup_signal(self) -> bool:
+        if not _HAS_SIGVTALRM:
+            return False
+        if self._force_poll:
+            return False
+        if threading.current_thread() is not threading.main_thread():
+            return False
+        try:
+            old = signal.signal(signal.SIGVTALRM, self._signal_handler)
+            signal.setitimer(signal.ITIMER_VIRTUAL, self._seconds)
+            self._old_handler = old
+            self._use_signal = True
+        except (ValueError, OSError):
+            return False
+        else:
+            return True
+
     def _cpu_time(self) -> float:
         t = os.times()
         return t[0] + t[1]
@@ -67,28 +141,20 @@ class _CPUTimer:
                 return
 
     def _try_start_signal(self) -> bool:
-        if self._force_poll:
-            return False
-        if not _HAS_SIGVTALRM:
-            return False
-        if threading.current_thread() is not threading.main_thread():
-            return False
-        with _signal_lock:
-            try:
-                self._old_handler = signal.signal(signal.SIGVTALRM, self._signal_handler)
-                signal.setitimer(signal.ITIMER_VIRTUAL, self._seconds)
-                self._use_signal = True
-            except (ValueError, OSError):
-                return False
-            else:
-                return True
+        return _signal_mgr.try_acquire(self)
 
     def _stop_signal(self) -> None:
+        _signal_mgr.release(self)
         if threading.current_thread() is not threading.main_thread():
             logger.warning(
                 "sandbox.stop_signal_not_main_thread",
                 plugin_id=self._plugin_id,
             )
+            with contextlib.suppress(ValueError, OSError):
+                signal.setitimer(signal.ITIMER_VIRTUAL, 0)
+            if self._old_handler is not None:
+                with contextlib.suppress(ValueError, OSError):
+                    signal.signal(signal.SIGVTALRM, self._old_handler)
             self._use_signal = False
             return
         with contextlib.suppress(ValueError, OSError):
