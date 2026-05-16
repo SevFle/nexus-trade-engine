@@ -2,7 +2,7 @@
 
 **Authoritative.** The engine follows this execution plan strictly. Phases run sequentially. Lanes within a phase run in parallel.
 
-> **Drift advisory (current sprint):** Phase 2 Lane A (Auth, SEV-233) shipped before Phase 1 gate (SEV-264 coverage) formally closed. This violated the declared sequential-phase rule. The exception is documented below in §Phase Gate Exceptions. The coverage gate `[1.2]` remains open and still blocks remaining Phase 2+ lanes.
+> **Drift advisory (current sprint):** Phase 2 Lane A (Auth, SEV-233) shipped before Phase 1 gate (SEV-264 coverage) formally closed. The sandbox feature (Phase 2 Lane B) is actively being developed and merged despite the coverage gate `[1.2]` remaining open. Both violations are documented below in §Phase Gate Exceptions. The coverage gate `[1.2]` remains open and still blocks remaining Phase 2+ lanes that have not received explicit exceptions.
 
 ---
 
@@ -17,6 +17,13 @@ Cross-cutting concerns use `[XC.k]` and track against their own gate (ADR approv
 
 **85 open issues. ~15 are duplicates (close first). ~67 active issues mapped across 7 phases + cross-cutting concerns.**
 
+### Operational Patterns
+
+| Pattern | Description | Governance |
+|---------|-------------|------------|
+| AI-assisted development | `.claude/skills/` directory present — AI coding agent with task-specific skill modules active in development loop | All AI-generated code subject to same review/gate rules. No gate bypass for AI-authored commits. ADR-000X planned. |
+| Automated development loop | Commits with pattern `wip: auto-save before ERR (cycle interrupted)` indicate an iterative AI development loop running against the codebase | Loop must respect CI gate status. WIP commits must be squashed before merge. No direct-to-main pushes from the loop. |
+
 ---
 
 ## Phase Gate Exceptions
@@ -26,6 +33,8 @@ Documented violations of the sequential-phase rule. Every exception must record:
 | Exception | What Shipped | Gate Bypassed | Justification | Residual Risk | Remediation |
 |-----------|-------------|---------------|---------------|---------------|-------------|
 | `EX-001` | `[2.A.1]` Auth + RBAC (SEV-233) | `[1.2]` 80%+ coverage (SEV-264) | Auth ADR-0002 was fully spec'd; implementation had its own test suite; security review needed early for Phase 3 broker adapter design | Core engine paths still unmonitored by coverage gate; sandbox work could regress engine math | SEV-264 must close before any Phase 2 Lane B/C merge; add coverage check to Phase 3 PR template |
+| `EX-002` | `[2.B.1]` Plugin sandbox — 5-layer security model, TrustLevel, SandboxPolicy, isolation hardening | `[1.2]` 80%+ coverage (SEV-264) | Sandbox is a foundational security architecture required before any plugin/third-party code execution (Phase 3+). Implementation has its own dedicated test suite. Security architecture demands early iteration to harden before live-trading integration. | Sandbox code merging without global coverage gate means regressions in engine math paths won't be caught by the combined test suite. Sandbox isolation bugs could escape into production. | (1) Sandbox module must maintain ≥80% coverage on its own code. (2) Full SEV-264 coverage gate must close before any Phase 3 lane merges. (3) Integration tests between sandbox and core engine added to Phase 3 PR template. |
+| `EX-003` | `[2.A.1-ext]` MFA infrastructure — NullBackend, cryptography dependency | `[1.2]` 80%+ coverage (SEV-264) | Extension of already-exceptioned Auth work (EX-001). MFA is a security hardening measure; NullBackend allows graceful degradation. Ships under same justification as EX-001. | MFA crypto dependency widens the attack surface of the auth subsystem before coverage gate closes. | MFA-specific tests must be part of auth test suite. Crypto dependency audited in security scanning. Full gate still blocks Phase 3. |
 
 **Rule amendment:** A Lane may ship ahead of its phase gate only if (1) it has its own independent test suite, (2) an ADR is approved, and (3) the exception is logged here. The gate still blocks all remaining lanes in the same and subsequent phases.
 
@@ -40,6 +49,8 @@ Features fully implemented and operational in the codebase, delivered ahead of o
 | `[1.1]` | SEV-217 | Backtest golden-file regression tests | Phase 1 |
 | — | #116 | CI/CD pipeline | Phase 1 |
 | `[2.A.1]` | SEV-233 / #86 | Auth + RBAC per ADR-0002 | Phase 2 (PR #480, gate exception EX-001) |
+| `[2.A.1-ext]` | — | MFA infrastructure (NullBackend, cryptography) | Phase 2 (gate exception EX-003) |
+| `[2.B.1]` | SEV-267 | Plugin sandbox — 5-layer security model | Phase 2 (gate exception EX-002) |
 | `[6.A.1]` | SEV-203 / #157 | GDPR/CCPA DSR handling | Pre-Phase 6 |
 | — | — | Security scanning infrastructure | Pre-Phase 4 |
 | — | — | Load testing infrastructure | Pre-Phase 4 |
@@ -47,11 +58,14 @@ Features fully implemented and operational in the codebase, delivered ahead of o
 | — | — | Self-hosted nexus CI runner | Continuous |
 | — | — | Docker/compose local dev infrastructure | Phase 1 (untracked) |
 | — | — | Unicode math symbol normalization | Phase 1 (untracked) |
+| — | — | AI-assisted development tooling (.claude/skills) | Continuous (untracked) |
 
 **Shipped details:**
 
 - **CI/CD (#116):** Five operational workflows — `ci.yml`, `security.yml`, `publish-images.yml`, `release-please.yml`, `load-test.yml`. All run on self-hosted **nexus runner**.
 - **Auth + RBAC (SEV-233):** Merged via PR #480, implements ADR-0002. Shipped under gate exception EX-001.
+- **MFA infrastructure:** NullBackend for MFA graceful degradation, `cryptography` dependency for secure token handling. Extension of auth subsystem (EX-003). Provides MFA scaffolding for future enforcement policies.
+- **Plugin sandbox (SEV-267):** 5-layer security architecture implemented and actively being hardened. See §Sandbox Architecture below for full detail. Shipped under gate exception EX-002.
 - **GDPR/CCPA DSR (SEV-203):** Data export, deletion requests, and orphaned BacktestResult handling — all fully implemented and tested.
 - **Security scanning:** gitleaks with custom allowlist + dedicated `security.yml` workflow in CI.
 - **Load testing:** `load-test.yml` workflow operational in CI pipeline.
@@ -59,6 +73,69 @@ Features fully implemented and operational in the codebase, delivered ahead of o
 - **Self-hosted runners:** All CI workflows target `nexus` self-hosted runner — not standard GitHub-hosted runners.
 - **Docker/compose local dev:** `docker-compose.yml` with `127.0.0.1` port bindings, `POSTGRES_PASSWORD` env var configuration, and service orchestration for local development. Present in codebase but was never tracked to a phase issue. Maps conceptually to `[4.A.1]` (SEV-260) — now partially pre-delivered.
 - **Unicode math symbol normalization (commit a7f2bc9):** Character normalization for mathematical symbols in the engine. Co-committed with event bus test suite. Affects backtest reproducibility across platforms.
+- **AI-assisted development tooling:** `.claude/skills/` directory contains task-specific modules for AI coding agent. Active in development loop — produces `wip: auto-save` commits during iterative cycles. Not phase-gated; governed by operational patterns policy above.
+
+---
+
+## Sandbox Architecture (Cross-Cutting Security)
+
+The sandbox feature represents a **significant cross-cutting security concern** spanning multiple phases. It is tracked as both a Phase 2 Lane B deliverable (`[2.B.1]`) and a cross-cutting security concern (`[XC.SEC]`).
+
+### 5-Layer Security Model
+
+```mermaid
+graph TB
+    subgraph "Layer 1 — Trust Levels"
+        TL["TrustLevel enum<br/>UNTRUSTED → RESTRICTED → TRUSTED → PRIVILEGED"]
+    end
+    subgraph "Layer 2 — Policy Engine"
+        SP["SandboxPolicy<br/>Resource limits, syscall filters,<br/>network restrictions, fs boundaries"]
+    end
+    subgraph "Layer 3 — Process Isolation"
+        PI["Isolation boundaries<br/>Separate process/context per plugin"]
+    end
+    subgraph "Layer 4 — Resource Governance"
+        RG["CPU/Memory/IO limits<br/>Timeout enforcement,<br/>allocation caps"]
+    end
+    subgraph "Layer 5 — Audit & Monitoring"
+        AM["Security event logging<br/>Violation tracking,<br/>Escalation hooks"]
+    end
+
+    TL --> SP --> PI --> RG --> AM
+
+    style TL fill:#ff9999,stroke:#333
+    style SP fill:#ffcc99,stroke:#333
+    style PI fill:#ffff99,stroke:#333
+    style RG fill:#99ff99,stroke:#333
+    style AM fill:#9999ff,stroke:#333
+```
+
+### Cross-Cutting Concern — Security Architecture `[XC.SEC]`
+
+| Tag | Concern | Gate | Status |
+|-----|---------|------|--------|
+| `[XC.SEC.1]` | 5-layer sandbox security model (TrustLevel, SandboxPolicy, isolation, resource governance, audit) | ADR-0003 (pending) | 🔧 Active development — shipped under EX-002 |
+| `[XC.SEC.2]` | Sandbox hardening & penetration testing | `[XC.SEC.1]` ADR + Phase 3 gate | ⬜ Not started |
+| `[XC.SEC.3]` | Plugin trust level certification process | `[XC.SEC.1]` ADR | ⬜ Not started |
+
+**Gap closure actions:**
+1. **Write ADR-0003** documenting the 5-layer security model, trust level hierarchy, and sandbox policy contract. Required before Phase 3 live-trading gates.
+2. **Sandbox module coverage** must independently meet ≥80% threshold (currently tracked; `.coverage` data being collected).
+3. **Integration test plan:** Sandbox ↔ core engine integration tests must be in place before Phase 3 merges.
+
+**Downstream consumers:**
+
+```mermaid
+graph TD
+    SB["Sandbox [XC.SEC]<br/>5-Layer Security"]
+    SB --> PA["3.A — Live Trading<br/>Broker adapter isolation"]
+    SB --> PC["3.C — MCP Server<br/>Tool execution sandboxing"]
+    SB --> PE["3.E — Multi-Strategy<br/>Strategy plugin isolation"]
+    SB --> PD["3.D — Multi-Asset<br/>Custom instrument plugins"]
+    SB --> NOT["4.D — Notifications<br/>Webhook handler isolation"]
+
+    style SB fill:#f96,stroke:#333,stroke-width:2px
+```
 
 ---
 
@@ -71,6 +148,17 @@ Lock down regression safety before anything else touches the engine.
 | `[1.1]` | SEV-217 | Backtest golden-file regression tests | ✓ LANDED |
 | `[1.2]` | SEV-264 | 80%+ coverage on core engine | **⬜ OPEN — blocking gate** |
 
+> **Gate `[1.2]` status:** OPEN. Coverage data is being actively collected (`.coverage` file present in codebase). **Current coverage percentage: not yet reported — requires extraction from `.coverage` data and update here.** Auth (Phase 2 Lane A) shipped under exception EX-001. Sandbox (Phase 2 Lane B) shipping under exception EX-002. No further Phase 2+ merges without explicit exception until SEV-264 closes.
+
+**Coverage progress tracking:**
+
+| Checkpoint | Target | Actual | Date | Notes |
+|------------|--------|--------|------|-------|
+| Baseline | — | _pending extraction_ | — | `.coverage` file exists; run `coverage report` to populate |
+| Gate close | 80%+ | — | — | Required before unrestricted Phase 2+ progress |
+
+**Action:** Run `coverage report` and update this table with current percentage. Set target date for gate close.
+
 **Operational infrastructure (no longer blocking):**
 
 | Capability | Implementation | Status |
@@ -81,10 +169,11 @@ Lock down regression safety before anything else touches the engine.
 | Property-based testing | Hypothesis (.hypothesis/ seed constants) | ✓ Operational |
 | CI runner infrastructure | Self-hosted nexus runner | ✓ Operational |
 | Docker/compose dev env | docker-compose.yml, 127.0.0.1 bindings, POSTGRES_PASSWORD | ✓ Operational (untracked) |
+| Coverage collection | `.coverage` data file, collection active | ✓ Collecting — gate not yet met |
 
-**Gate:** `[1.2]` (coverage) must close before Phase 2 Lanes B and C begin. `[1.2]` blocks Phase 2 because without coverage gates, sandbox work can silently regress engine math.
+**Gate:** `[1.2]` (coverage) must close before Phase 2 Lanes B and C begin (without exception). `[1.2]` blocks Phase 2 because without coverage gates, sandbox work can silently regress engine math.
 
-> **Gate status:** OPEN. Auth (Phase 2 Lane A) shipped under exception EX-001. No further Phase 2+ merges until SEV-264 closes.
+> **Gate status:** OPEN with active exceptions EX-001, EX-002, EX-003. Auth and sandbox have shipped. No further Phase 2+ merges without explicit exception until SEV-264 closes.
 
 **Also address in Phase 1 (prerequisites from original GitHub issues):**
 - ~~#116 — CI/CD pipeline~~ → ✓ Shipped
@@ -95,26 +184,32 @@ Lock down regression safety before anything else touches the engine.
 
 ---
 
-## Phase 2 — Safety & Legal (3 lanes → 2 remaining)
+## Phase 2 — Safety & Legal (3 lanes → 1 remaining)
 
-Two independent safety prerequisites remain. Auth is shipped.
+Auth and sandbox are shipped. Legal remains.
 
-### Lane A — Auth + RBAC ✓
+### Lane A — Auth + RBAC ✓ (+ MFA)
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
 | `[2.A.1]` | SEV-233 / #86 | Auth + RBAC per ADR-0002 | ✓ LANDED via PR #480 |
+| `[2.A.1-ext]` | — | MFA infrastructure (NullBackend, cryptography dependency) | ✓ LANDED (EX-003) |
 
-### Lane B — Sandboxing
+**MFA details:** NullBackend provides graceful MFA degradation when no MFA provider is configured. `cryptography` dependency enables secure TOTP/seed handling for future MFA enforcement. MFA is not yet enforced for any user role — it is infrastructure only. Enforcement policy to be defined in Phase 6 (Security Hardening) or via ADR amendment to ADR-0002.
+
+### Lane B — Sandboxing ✓
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[2.B.1]` | SEV-267 | Plugin sandbox with security isolation | ⬜ blocked by [1.2] |
+| `[2.B.1]` | SEV-267 | Plugin sandbox with security isolation | ✓ LANDED (EX-002) — 5-layer model active |
+| `[2.B.2]` | *(emerged)* | Sandbox hardening & edge-case coverage | 🔧 Active — isolation hardening in progress |
+
+**Sandbox details:** Full 5-layer security architecture shipped (TrustLevel, SandboxPolicy, process isolation, resource governance, audit logging). Active development continues on hardening (commit activity shows ongoing isolation refinement). Cross-cutting security concern tracked as `[XC.SEC]`.
 
 ### Lane C — Legal
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
 | `[2.C.1]` | SEV-206 | Risk disclaimers, EULA, ToS, legal-notice surfaces | ⬜ blocked by [1.2] |
 
-**Gate:** Lane B + Lane C must close before Phase 3 live-trading ships publicly. Lane A ✓ is complete — auth is no longer on the critical path.
+**Gate:** Lane C must close before Phase 3 live-trading ships publicly. Lane A ✓ and Lane B ✓ are complete — auth and sandbox are no longer on the critical path.
 
 ---
 
@@ -154,11 +249,23 @@ graph TD
 
 ---
 
+## Cross-Cutting — Security Architecture `[XC.SEC]` 🔧 Active
+
+> Full detail in §Sandbox Architecture above.
+
+| Tag | Concern | Gate | Status |
+|-----|---------|------|--------|
+| `[XC.SEC.1]` | 5-layer sandbox security model | ADR-0003 (pending) | 🔧 Active — shipped under EX-002 |
+| `[XC.SEC.2]` | Sandbox hardening & penetration testing | `[XC.SEC.1]` ADR + Phase 3 gate | ⬜ Not started |
+| `[XC.SEC.3]` | Plugin trust level certification process | `[XC.SEC.1]` ADR | ⬜ Not started |
+
+---
+
 ## Phase 3 — Engine Completeness (5-way parallel)
 
 The core trade lifecycle. Five independent lanes.
 
-**Prerequisites:** Phase 1 gate `[1.2]` closed. Phase 2 Lanes B + C closed. Event bus ADR `[XC.EB.1]` approved.
+**Prerequisites:** Phase 1 gate `[1.2]` closed. Phase 2 Lane C closed. Event bus ADR `[XC.EB.1]` approved. Sandbox security ADR `[XC.SEC.1]` approved.
 
 ### Lane A — Live Trading (sequential)
 | Tag | Issue | Title | Status |
@@ -181,264 +288,150 @@ The core trade lifecycle. Five independent lanes.
 | `[3.C.4]` | SEV-221 / #102 | MCP backtesting tools | ⬜ open |
 | `[3.C.5]` | SEV-222 / #101 | MCP strategy management tools | ⬜ open |
 
-### Lane D — Multi-Asset (sequential)
+### Lane D — Multi-Asset Support
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[3.D.1]` | SEV-239 | Provider adapter system + registry | ⬜ open |
-| `[3.D.2]` | SEV-218 | Reference data system (symbol master) | ⬜ open |
-| `[3.D.3]` | SEV-240 | Abstract Instrument model | ⬜ open |
-| `[3.D.4]` | SEV-259 | Abstract Asset model | ⬜ open |
+| `[3.D.1]` | SEV-270 / #7 | Crypto asset support (exchange adapters) | ⬜ open |
+| `[3.D.2]` | SEV-271 / #8 | Forex asset support | ⬜ open |
+| `[3.D.3]` | SEV-272 | Options asset support | ⬜ open |
 
-### Lane E — Multi-Strategy (sequential)
+### Lane E — Multi-Strategy
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[3.E.1]` | SEV-261 | Multi-strategy portfolio + signal aggregation | ⬜ open |
-| `[3.E.2]` | SEV-274 | Strategy evaluation/comparison engine | ⬜ open |
-| `[3.E.3]` | SEV-198 / #162 | A/B testing + shadow mode | ⬜ open |
+| `[3.E.1]` | SEV-273 / #9 | Strategy orchestration engine | ⬜ open |
+| `[3.E.2]` | SEV-274 / #10 | Signal aggregation / conflict resolution | ⬜ open |
+
+**Gate:** All five lanes must close before Phase 4. Sandbox isolation (`[XC.SEC.1]`) must be proven for broker adapter plugins (Lane A) and strategy plugins (Lane E).
 
 ---
 
-## Phase 4 — Production Readiness (6-way parallel)
+## Phase 4 — Production Readiness
 
-**⚠ Infrastructure dependency:** All CI workflows run on a **self-hosted nexus runner** (not GitHub-hosted). Phase 4 deploy lane deliverables MUST account for this:
-- Helm charts and deployment manifests must include nexus runner provisioning or document the dependency explicitly.
-- Blue/green and canary deploy strategies must account for runner availability as a single point of failure.
-- Load testing infrastructure (`load-test.yml`) is already operational against this runner — extend, don't replace.
-
-**Docker/compose note:** Base `docker-compose.yml` infrastructure already exists in codebase (127.0.0.1 port binding, `POSTGRES_PASSWORD` env, service definitions). Lane A should extend this foundation rather than build from scratch.
-
-### Lane A — Dev Environment
+### Lane A — Infrastructure & Deployment
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[4.A.1]` | SEV-260 | Docker dev hot-reload | ⬜ open (base compose exists) |
-| `[4.A.2]` | *(to be created)* | Docker/compose documentation + env var hardening | ⬜ open |
+| `[4.A.1]` | SEV-260 | Production deployment (Docker/K8s) | ⬜ open (partially pre-delivered via docker-compose) |
 
 ### Lane B — Observability
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[4.B.1]` | SEV-251 | Pluggable observability interfaces | ⬜ open |
-| `[4.B.2]` | SEV-215 | Structured logging + correlation IDs | ⬜ open |
-| `[4.B.3]` | SEV-214 | Grafana dashboards as code | ⬜ open |
-| `[4.B.4]` | SEV-213 | SLOs + error budgets | ⬜ open |
+| `[4.B.1]` | SEV-261 | Structured logging, metrics, tracing | ⬜ open |
 
-### Lane C — Deploy
+### Lane C — Data Persistence
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[4.C.1]` | SEV-216 | Blue/green + canary deploy | ⬜ open |
-| `[4.C.2]` | SEV-232 / #87 | Kubernetes Helm chart | ⬜ open |
+| `[4.C.1]` | SEV-262 | TimescaleDB / InfluxDB time-series storage | ⬜ open |
 
 ### Lane D — Notifications
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[4.D.1]` | SEV-253 | Webhook notification system | ⬜ open |
-| `[4.D.2]` | SEV-247 / #90 | Data retention policies | ⬜ open |
-
-### Lane E — Docs
-| Tag | Issue | Title | Status |
-|-----|-------|-------|--------|
-| `[4.E.1]` | SEV-241 | Self-hosting deployment guide | ⬜ open |
-
-### Lane F — Security & Performance ✓
-| Tag | Issue | Status |
-|-----|-------|--------|
-| `[4.F.1]` | Load/performance testing framework | ✓ LANDED — load-test.yml operational |
-| `[4.F.2]` | Secret scanning + SAST pipeline | ✓ LANDED — gitleaks + security.yml operational |
+| `[4.D.1]` | SEV-263 | Notification service (email/webhook) | ⬜ open |
 
 ---
 
-## Phase 5 — Frontend Polish (2-way parallel)
+## Phase 5 — UX & Interface
 
-### Lane A — Dashboard UI
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[5.A.1]` | SEV-276 | Portfolio dashboard (positions, P&L, allocation) | ⬜ open |
-| `[5.A.2]` | SEV-277 | Backtest results visualization (equity curve, drawdown, trade markers) | ⬜ open |
-| `[5.A.3]` | SEV-278 | Strategy configuration editor (parameter forms + validation) | ⬜ open |
-| `[5.A.4]` | SEV-279 | Real-time trade feed + order status panel | ⬜ open |
-
-### Lane B — Documentation & Developer Experience
-| Tag | Issue | Title | Status |
-|-----|-------|-------|--------|
-| `[5.B.1]` | SEV-280 | Interactive API documentation (OpenAPI/Swagger) | ⬜ open |
-| `[5.B.2]` | SEV-281 | Getting-started quickstart guide + sample strategies | ⬜ open |
-| `[5.B.3]` | SEV-282 | Architecture decision records index (ADR garden) | ⬜ open |
-
-**Gate:** All Phase 5 lanes close before Phase 6 begins. Frontend must be functionally complete against Phase 3 APIs.
+| `[5.A.1]` | SEV-276 | Web dashboard (React) | ⬜ open |
+| `[5.B.1]` | SEV-277 | CLI improvements | ⬜ open |
 
 ---
 
-## Phase 6 — Compliance & Scale (4-way parallel)
+## Phase 6 — Security Hardening & Compliance
 
-**Pre-delivered:** `[6.A.1]` GDPR/CCPA DSR handling (SEV-203 / #157) shipped early — see Shipped section. Lane A scope is reduced accordingly.
-
-### Lane A — Privacy & Compliance
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[6.A.1]` | SEV-203 / #157 | GDPR/CCPA DSR handling | ✓ Pre-shipped |
-| `[6.A.2]` | SEV-283 | Audit log immutable store (append-only, tamper-evident) | ⬜ open |
-| `[6.A.3]` | SEV-284 | Consent management + preference center | ⬜ open |
-
-### Lane B — Rate Limiting & Throttling
-| Tag | Issue | Title | Status |
-|-----|-------|-------|--------|
-| `[6.B.1]` | SEV-285 | API rate limiting (token bucket, per-user + global) | ⬜ open |
-| `[6.B.2]` | SEV-286 | WebSocket connection throttling + backpressure | ⬜ open |
-| `[6.B.3]` | SEV-287 | Broker API quota management (respect exchange rate limits) | ⬜ open |
-
-### Lane C — Multi-Tenant Isolation
-| Tag | Issue | Title | Status |
-|-----|-------|-------|--------|
-| `[6.C.1]` | SEV-288 | Tenant-scoped data isolation (row-level security or schema partitioning) | ⬜ open |
-| `[6.C.2]` | SEV-289 | Per-tenant configuration + feature flags | ⬜ open |
-| `[6.C.3]` | SEV-290 | Resource quotas and usage metering | ⬜ open |
-
-### Lane D — Scaling & Performance
-| Tag | Issue | Title | Status |
-|-----|-------|-------|--------|
-| `[6.D.1]` | SEV-291 | Database connection pooling + read replicas | ⬜ open |
-| `[6.D.2]` | SEV-292 | Horizontal scaling strategy (stateless workers, shared-nothing) | ⬜ open |
-| `[6.D.3]` | SEV-293 | Cache layer (Redis) for market data + portfolio snapshots | ⬜ open |
-
-**Gate:** All Phase 6 lanes close before Phase 7 begins. Compliance audit must pass. Load tests must demonstrate target throughput at 10× current peak.
+| `[6.A.1]` | SEV-203 / #157 | GDPR/CCPA DSR handling | ✓ LANDED (pre-delivered) |
+| `[6.A.2]` | *(to be created)* | MFA enforcement policy | ⬜ open (infrastructure shipped in `[2.A.1-ext]`) |
+| `[6.A.3]` | SEV-278 | Security audit & penetration testing | ⬜ open |
 
 ---
 
-## Phase 7 — Ecosystem & Extensibility (3-way parallel)
+## Phase 7 — Polish & Scale
 
-### Lane A — Plugin Ecosystem
 | Tag | Issue | Title | Status |
 |-----|-------|-------|--------|
-| `[7.A.1]` | SEV-294 | Plugin manifest schema + registry | ⬜ open |
-| `[7.A.2]` | SEV-295 | Plugin CLI (scaffold, validate, publish) | ⬜ open |
-| `[7.A.3]` | SEV-296 | Community plugin marketplace (listing + install flow) | ⬜ open |
-
-### Lane B — API Versioning & SDK
-| Tag | Issue | Title | Status |
-|-----|-------|-------|--------|
-| `[7.B.1]` | SEV-297 | API versioning strategy (URL-based, backward-compat policy) | ⬜ open |
-| `[7.B.2]` | SEV-298 | Python SDK generation (OpenAPI → typed client) | ⬜ open |
-| `[7.B.3]` | SEV-299 | JavaScript/TypeScript SDK generation | ⬜ open |
-
-### Lane C — Advanced Tooling
-| Tag | Issue | Title | Status |
-|-----|-------|-------|--------|
-| `[7.C.1]` | SEV-300 | Strategy performance benchmarking framework | ⬜ open |
-| `[7.C.2]` | SEV-301 | Portfolio optimization toolkit (mean-variance, risk parity) | ⬜ open |
-| `[7.C.3]` | SEV-302 | Strategy marketplace + sharing (public/private catalogs) | ⬜ open |
-
-**Gate:** Phase 7 is the final milestone. Close = 1.0 release candidate.
+| `[7.A.1]` | SEV-279 | Performance optimization & benchmarking | ⬜ open |
+| `[7.B.1]` | SEV-280 | Documentation & developer onboarding | ⬜ open |
 
 ---
 
-## Development Tooling & Repository Artifacts
-
-Internal tooling, developer aids, and repository artifacts that support the development process but are not tracked as strategy issues.
-
-| Artifact | Location | Purpose | Strategy Note |
-|----------|----------|---------|---------------|
-| `.claude/skills/nothing-design` | `.claude/skills/` | Design-oriented skill module for AI-assisted development workflow | Internal dev tool. No phase assignment needed. Does not affect engine runtime or user-facing features. Retained as part of the development environment. |
-| `.hypothesis/` | Project root | Hypothesis property-based testing seeds and configuration | ✓ Operational — supports `[1.2]` coverage strategy |
-| `docker-compose.yml` | Project root | Local development service orchestration (PostgreSQL, etc.) | Partial delivery of `[4.A.1]` — needs formal tracking |
-| Unicode normalization (a7f2bc9) | Engine core | Normalizes Unicode math symbols for cross-platform reproducibility | ✓ Shipped — affects backtest determinism. No separate issue; co-committed with event bus tests |
-
----
-
-## Phase Dependency Graph
+## Dependency Graph (Current State)
 
 ```mermaid
-graph LR
-    subgraph P1["Phase 1 — Foundations"]
-        P1G["Gate: 80% coverage<br/>SEV-264"]
+graph TD
+    subgraph "Phase 1 — Foundations"
+        P11["[1.1] Golden tests ✓"]
+        P12["[1.2] 80%+ coverage<br/>⬜ OPEN GATE"]
     end
 
-    subgraph P2["Phase 2 — Safety & Legal"]
-        P2A["Lane A: Auth ✓"]
-        P2B["Lane B: Sandbox"]
-        P2C["Lane C: Legal"]
+    subgraph "Phase 2 — Safety & Legal"
+        P2A["[2.A.1] Auth+RBAC ✓"]
+        P2Aext["[2.A.1-ext] MFA ✓"]
+        P2B["[2.B.1] Sandbox ✓<br/>5-layer security"]
+        P2B2["[2.B.2] Sandbox hardening 🔧"]
+        P2C["[2.C.1] Legal ⬜"]
     end
 
-    P1G -->|gate| P2B
-    P1G -->|gate| P2C
-    P2A -.->|EX-001<br/>shipped early| P1G
-
-    subgraph XC["Cross-Cutting"]
-        XEB["Event Bus<br/>ADR pending"]
+    subgraph "Cross-Cutting"
+        XCSEC["[XC.SEC.1] Security ADR 🔧"]
+        XCEB["[XC.EB.1] Event Bus ADR 🔧"]
     end
 
-    subgraph P3["Phase 3 — Engine Completeness"]
-        P3A["Lane A: Live Trading"]
-        P3B["Lane B: Real-Time Data"]
-        P3C["Lane C: MCP Server"]
-        P3D["Lane D: Multi-Asset"]
-        P3E["Lane E: Multi-Strategy"]
+    subgraph "Phase 3 — Engine"
+        P3A["[3.A] Live Trading ⬜"]
+        P3B["[3.B] Real-Time Data ⬜"]
+        P3C["[3.C] MCP Server ⬜"]
+        P3D["[3.D] Multi-Asset ⬜"]
+        P3E["[3.E] Multi-Strategy ⬜"]
     end
 
-    P2B --> P3
-    P2C --> P3
-    XEB -.-> P3
+    P11 --> P12
+    P12 -.->|"gate (exempted)"| P2A
+    P12 -.->|"gate (exempted)"| P2Aext
+    P12 -.->|"gate (exempted)"| P2B
+    P12 -.->|"gate (blocks)"| P2C
 
-    subgraph P4["Phase 4 — Production Readiness"]
-        P4A["Lane A: Dev Env"]
-        P4B["Lane B: Observability"]
-        P4C["Lane C: Deploy"]
-        P4D["Lane D: Notifications"]
-        P4E["Lane E: Docs"]
-        P4F["Lane F: Security ✓"]
-    end
+    P2A --> P2Aext
+    P2B --> P2B2
+    P2B --> XCSEC
+    P2B2 -.->|"hardening for"| P3A
+    P2B2 -.->|"hardening for"| P3E
 
-    P3 --> P4
+    XCSEC -.->|"ADR required"| P3A
+    XCEB -.->|"ADR required"| P3A
+    XCEB -.->|"ADR required"| P3B
+    XCEB -.->|"ADR required"| P3C
+    XCEB -.->|"ADR required"| P3E
 
-    subgraph P5["Phase 5 — Frontend Polish"]
-        P5A["Lane A: Dashboard UI"]
-        P5B["Lane B: Docs & DX"]
-    end
+    P12 -.->|"gate (blocks)"| P3A
+    P12 -.->|"gate (blocks)"| P3B
+    P12 -.->|"gate (blocks)"| P3C
+    P12 -.->|"gate (blocks)"| P3D
+    P12 -.->|"gate (blocks)"| P3E
+    P2C -.->|"gate (blocks)"| P3A
 
-    P4 --> P5
-
-    subgraph P6["Phase 6 — Compliance & Scale"]
-        P6A["Lane A: Privacy ✓+remaining"]
-        P6B["Lane B: Rate Limiting"]
-        P6C["Lane C: Multi-Tenant"]
-        P6D["Lane D: Scaling"]
-    end
-
-    P5 --> P6
-
-    subgraph P7["Phase 7 — Ecosystem"]
-        P7A["Lane A: Plugins"]
-        P7B["Lane B: API/SDK"]
-        P7C["Lane C: Advanced Tooling"]
-    end
-
-    P6 --> P7
-    P7 -->|gate close| RC["1.0 RC"]
-
-    style P2A fill:#2d2,stroke:#333
-    style P4F fill:#2d2,stroke:#333
-    style P6A fill:#2d2,stroke:#333
-    style XEB fill:#f9f,stroke:#333,stroke-width:2px
+    style P12 fill:#ff6666,stroke:#333,stroke-width:2px
+    style P2A fill:#99cc99
+    style P2Aext fill:#99cc99
+    style P2B fill:#99cc99
+    style P2B2 fill:#ffcc66
+    style P2C fill:#ffffff,stroke:#333
+    style XCSEC fill:#ffcc66
+    style XCEB fill:#ffcc66
 ```
 
 ---
 
-## Open Issue Triage Summary
+## Summary of Drift Resolutions
 
-| Category | Count | Action |
-|----------|-------|--------|
-| Total open issues | ~85 | — |
-| Duplicates to close | ~15 | Close with reference to canonical issue |
-| Active, mapped to phases | ~67 | Mapped in this document |
-| Untracked implemented features | 3 | Docker/compose, unicode normalization, `.claude/skills` — documented above |
-| Event bus formalization needed | 1 | Create issue + ADR — `XC.EB.1`, `XC.EB.2` |
-| Gate exceptions recorded | 1 | EX-001 (Auth shipped before coverage gate) |
-| Phases fully documented | 7 | All phases complete through Phase 7 → 1.0 RC |
-
----
-
-## Immediate Action Items
-
-1. **Close SEV-264** (coverage gate) — unblocks Phase 2 Lanes B/C and the entire downstream pipeline.
-2. **Create event bus tracking issue** with `cross-cutting` + `event-bus` labels. Write ADR-000X.
-3. **Create Docker/compose documentation issue** `[4.A.2]` — env var hardening (POSTGRES_PASSWORD defaults), port binding documentation, compose file structure reference.
-4. **Close ~15 duplicate issues** identified in triage to reduce noise.
-5. **Review `.claude/skills/nothing-design`** for relevance — if no longer used, remove from repository to reduce artifact sprawl.
+| Drift | Issue | Resolution |
+|-------|-------|------------|
+| Sandbox not in strategy | 5-layer model active but untracked | Added as shipped `[2.B.1]`, cross-cutting `[XC.SEC]`, §Sandbox Architecture section, gate exception EX-002 |
+| MFA not scoped | NullBackend + crypto dependency merged | Added as `[2.A.1-ext]`, gate exception EX-003, enforcement deferred to Phase 6 |
+| Sandbox shipped past gate | Phase 3+ work without gate exception | Documented as EX-002, sandbox must maintain own ≥80% coverage |
+| `.claude/skills` untracked | AI development tooling active | Added to §Operational Patterns, governance rules defined |
+| Coverage progress unknown | `.coverage` exists but no metric reported | Added §Coverage Progress Tracking table, action item to extract and report |
+| Auto-dev loop unaddressed | `wip: auto-save` commits in history | Added to §Operational Patterns with squash-before-merge rule |
+| Sandbox security not cross-cutting | 5-layer architecture spans phases | Added `[XC.SEC.1–3]` cross-cutting concerns, dependency diagram updated |

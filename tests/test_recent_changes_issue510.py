@@ -681,23 +681,28 @@ class TestContextViolationCollection:
         }
 
     def test_deactivate_collects_violations(self) -> None:
-        ctx = SandboxContext(SandboxPolicy(plugin_id="test"))
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
+        ctx = SandboxContext(policy)
         ctx.activate()
         ctx._import_layer._violation_log.append(
             ImportViolation("subprocess", plugin_id="test"),
         )
         ctx.deactivate()
         events = ctx.event_logger.get_events()
-        assert len(events) == 1
+        import_events = [e for e in events if e.category == SandboxViolationCategory.IMPORT]
+        assert len(import_events) == 1
+        assert "subprocess" in import_events[0].detail
 
     def test_context_manager_collects_violations(self) -> None:
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         with SandboxContext(policy) as ctx:
             ctx._network_layer._violation_log.append(
                 NetworkViolation("evil.com", plugin_id="test"),
             )
         events = ctx.event_logger.get_events()
-        assert len(events) == 1
+        network_events = [e for e in events if e.category == SandboxViolationCategory.NETWORK]
+        assert len(network_events) == 1
+        assert "evil.com" in network_events[0].detail
 
 
 # ─── Policy edge cases ────────────────────────────────────────────────────
