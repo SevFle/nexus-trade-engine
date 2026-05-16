@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from .violation_report import ViolationReport
+
 if TYPE_CHECKING:
     from engine.plugins.sandbox.core.context import SandboxContext
     from engine.plugins.sandbox.core.policy import SandboxPolicy
@@ -13,7 +15,6 @@ if TYPE_CHECKING:
 
     from .event_logger import SecurityEvent
     from .metrics import SandboxMetricsCollector
-    from .violation_report import ViolationReport
 
 logger = structlog.get_logger()
 
@@ -234,8 +235,6 @@ class SandboxAdminAPI:
         self,
         plugin_id: str | None = None,
     ) -> ViolationReport:
-        from engine.plugins.sandbox.monitoring.violation_report import ViolationReport
-
         all_events: list[SecurityEvent] = []
         contexts = (
             {plugin_id: self._contexts[plugin_id]}
