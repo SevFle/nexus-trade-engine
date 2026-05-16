@@ -7,7 +7,6 @@ import structlog
 from engine.plugins.sandbox.core.lifecycle import LifecycleManager, SandboxLifecycle
 from engine.plugins.sandbox.core.policy import SandboxPolicy
 from engine.plugins.sandbox.core.state import SandboxTLS, get_default_tls
-from engine.plugins.sandbox.monitoring.event_logger import SecurityEventLogger
 from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
 
 if TYPE_CHECKING:

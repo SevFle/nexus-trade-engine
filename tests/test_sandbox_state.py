@@ -3,6 +3,8 @@ from __future__ import annotations
 import threading
 import time
 
+from engine.plugins.sandbox.core.context import SandboxContext
+from engine.plugins.sandbox.core.policy import SandboxPolicy
 from engine.plugins.sandbox.core.state import (
     SandboxTLS,
     get_active_plugin_id,
@@ -12,8 +14,6 @@ from engine.plugins.sandbox.core.state import (
     is_sandbox_active,
     set_current_context,
 )
-from engine.plugins.sandbox.core.context import SandboxContext
-from engine.plugins.sandbox.core.policy import SandboxPolicy
 
 
 class TestModuleLevelFunctions:

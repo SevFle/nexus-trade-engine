@@ -11,7 +11,6 @@ from engine.plugins.sandbox.core.state import SandboxTLS, get_default_tls
 
 if TYPE_CHECKING:
     from engine.plugins.sandbox.core.context import SandboxContext
-    from engine.plugins.sandbox.core.policy import SandboxPolicy
 
 logger = structlog.get_logger()
 

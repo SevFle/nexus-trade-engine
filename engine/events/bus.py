@@ -58,6 +58,20 @@ class EventType(StrEnum):
     RISK_WARNING = "risk.warning"
     CIRCUIT_BREAKER = "risk.circuit_breaker"
 
+    # Paper trade events
+    PAPER_SESSION_STARTED = "paper.session.started"
+    PAPER_SESSION_STOPPED = "paper.session.stopped"
+    PAPER_SESSION_TICK = "paper.session.tick"
+    PAPER_SESSION_FAILED = "paper.session.failed"
+    PAPER_ORDER_ACCEPTED = "paper.order.accepted"
+    PAPER_ORDER_REJECTED = "paper.order.rejected"
+    PAPER_ORDER_FILLED = "paper.order.filled"
+    PAPER_ORDER_CANCELLED = "paper.order.cancelled"
+    PAPER_POSITION_OPENED = "paper.position.opened"
+    PAPER_POSITION_CLOSED = "paper.position.closed"
+    PAPER_POSITION_MODIFIED = "paper.position.modified"
+    PAPER_PORTFOLIO_UPDATED = "paper.portfolio.updated"
+
     # System events
     ENGINE_STARTED = "engine.started"
     ENGINE_STOPPED = "engine.stopped"

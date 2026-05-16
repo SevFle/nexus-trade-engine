@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from engine.plugins.sandbox.core.context import SandboxContext
 from engine.plugins.sandbox.core.lifecycle import (
     LifecycleEvent,

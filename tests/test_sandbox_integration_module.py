@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from engine.plugins.sandbox.core.integration import SandboxIntegration
 from engine.plugins.sandbox.core.context import SandboxContext
+from engine.plugins.sandbox.core.integration import SandboxIntegration
 from engine.plugins.sandbox.core.policy import SandboxPolicy
 from engine.plugins.sandbox.core.state import SandboxTLS
 from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
-from engine.plugins.trust_levels import TrustLevel
 
 
 class TestSandboxIntegration:
