@@ -434,6 +434,24 @@ class TestNetworkGuardHttpx:
         await restricted(None, request, stream=True)
         assert received_kwargs.get("stream") is True
 
+    async def test_restricted_send_blocks_non_whitelisted_port(self) -> None:
+        policy = NetworkPolicy(
+            allowed_endpoints=["safe.com"],
+            allowed_ports={443},
+        )
+        guard = NetworkGuard(policy, plugin_id="p1")
+
+        async def fake_send(client: Any, request: Any, **kw: Any) -> None:
+            pass
+
+        restricted = guard._make_restricted_send(fake_send)
+        request = httpx.Request("GET", "https://safe.com:8080/api")
+        with pytest.raises(PermissionError, match="port not whitelisted"):
+            await restricted(None, request)
+        violations = guard.get_violations()
+        assert len(violations) == 1
+        assert violations[0].port == 8080
+
 
 # ─── Layer 3: Resource Limits ────────────────────────────────────────
 

@@ -96,16 +96,17 @@ class FilesystemIsolation:
             self._violation_log.append(violation)
             raise PermissionError(violation.detail)
 
-        resolved = os.path.realpath(str(file))
+        path_str = str(file)
+        resolved = self._validate_path(path_str)
 
         if not self._is_path_allowed(resolved):
-            violation = FilesystemViolation(str(file), "read", plugin_id=self._plugin_id)
+            violation = FilesystemViolation(path_str, "read", plugin_id=self._plugin_id)
             self._violation_log.append(violation)
             raise PermissionError(violation.detail)
 
         is_write = any(c in mode for c in ("w", "a", "+"))
         if is_write and not self._is_write_allowed(resolved):
-            violation = FilesystemViolation(str(file), "write", plugin_id=self._plugin_id)
+            violation = FilesystemViolation(path_str, "write", plugin_id=self._plugin_id)
             self._violation_log.append(violation)
             raise PermissionError(violation.detail)
 

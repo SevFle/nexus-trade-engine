@@ -36,6 +36,11 @@ def __getattr__(name: str):
     "SandboxAdminAPI": "engine.plugins.sandbox.monitoring.admin_api",
     "PolicyUpdate": "engine.plugins.sandbox.monitoring.admin_api",
     "PolicySnapshot": "engine.plugins.sandbox.monitoring.admin_api",
+    "SandboxTLS": "engine.plugins.sandbox.core.state",
+    "SandboxLifecycle": "engine.plugins.sandbox.core.lifecycle",
+    "SandboxPhase": "engine.plugins.sandbox.core.lifecycle",
+    "LifecycleManager": "engine.plugins.sandbox.core.lifecycle",
+    "SandboxIntegration": "engine.plugins.sandbox.core.integration",
 }
     if name in lazy_exports:
         import importlib  # noqa: PLC0415
