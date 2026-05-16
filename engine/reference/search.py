@@ -21,8 +21,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from opentelemetry import trace
+
 if TYPE_CHECKING:
     from engine.reference.model import AssetClassLiteral, RefInstrument
+
+_tracer = trace.get_tracer(__name__)
 
 
 @dataclass(frozen=True)
@@ -53,24 +57,29 @@ class SearchIndex:
         asset_class: AssetClassLiteral | None = None,
         limit: int = 25,
     ) -> list[RefInstrument]:
-        if not query or not query.strip():
-            return []
-        if len(query) > self.MAX_QUERY_LEN:
-            return []
-        q = query.strip().lower()
-        scored: list[tuple[int, RefInstrument]] = []
-        for rec in self._records:
-            if asset_class is not None and rec.asset_class != asset_class:
-                continue
-            score = self._score(rec, q)
-            if score > 0:
-                scored.append((score, rec))
-        # Use heap-based top-k so 100k records with many partial matches
-        # stay O(n log limit) rather than O(n log n).
-        import heapq  # noqa: PLC0415 - local import keeps cold-path stdlib out of hot path
+        with _tracer.start_as_current_span("search.index_search") as span:
+            span.set_attribute("query", query)
+            try:
+                if not query or not query.strip():
+                    return []
+                if len(query) > self.MAX_QUERY_LEN:
+                    return []
+                q = query.strip().lower()
+                scored: list[tuple[int, RefInstrument]] = []
+                for rec in self._records:
+                    if asset_class is not None and rec.asset_class != asset_class:
+                        continue
+                    score = self._score(rec, q)
+                    if score > 0:
+                        scored.append((score, rec))
+                import heapq  # noqa: PLC0415 - local import keeps cold-path stdlib out of hot path
 
-        top = heapq.nlargest(limit, scored, key=lambda t: t[0])
-        return [rec for _, rec in top]
+                top = heapq.nlargest(limit, scored, key=lambda t: t[0])
+                return [rec for _, rec in top]
+            except Exception as exc:
+                span.set_status(trace.StatusCode.ERROR, str(exc))
+                span.record_exception(exc)
+                raise
 
     def suggest(
         self,
@@ -79,46 +88,37 @@ class SearchIndex:
         asset_class: AssetClassLiteral | None = None,
         limit: int | None = None,
     ) -> list[Suggestion]:
-        """Typeahead suggestions: prefix-first, fuzzy as fallback.
-
-        Tiers (high → low):
-
-        - 100 ticker exact
-        - 90  name exact
-        - 80  ticker prefix
-        - 70  name token prefix (any whitespace-separated word in name)
-        - 60  ticker contains
-        - 25  name contains
-        - 15  fuzzy (Levenshtein distance 1) on a name token or ticker
-
-        Fuzzy is computed only if no record hit a higher tier, so a
-        clean prefix never gets diluted by typo candidates.
-        """
-        if not query or not query.strip():
-            return []
-        if len(query) > self.MAX_QUERY_LEN:
-            return []
-        q = query.strip().lower()
-        cap = limit if limit is not None else self.DEFAULT_SUGGEST_LIMIT
-        primary: list[Suggestion] = []
-        for rec in self._records:
-            if asset_class is not None and rec.asset_class != asset_class:
-                continue
-            score, completion = self._suggest_score(rec, q)
-            if score > 0:
-                primary.append(Suggestion(record=rec, completion=completion, score=score))
-        if primary:
-            primary.sort(key=lambda s: -s.score)
-            return primary[:cap]
-        # No prefix or substring hits — try fuzzy on tokens.
-        fuzzy: list[Suggestion] = []
-        for rec in self._records:
-            if asset_class is not None and rec.asset_class != asset_class:
-                continue
-            completion = self._fuzzy_match(rec, q)
-            if completion is not None:
-                fuzzy.append(Suggestion(record=rec, completion=completion, score=15))
-        return fuzzy[:cap]
+        with _tracer.start_as_current_span("search.index_suggest") as span:
+            span.set_attribute("query", query)
+            try:
+                if not query or not query.strip():
+                    return []
+                if len(query) > self.MAX_QUERY_LEN:
+                    return []
+                q = query.strip().lower()
+                cap = limit if limit is not None else self.DEFAULT_SUGGEST_LIMIT
+                primary: list[Suggestion] = []
+                for rec in self._records:
+                    if asset_class is not None and rec.asset_class != asset_class:
+                        continue
+                    score, completion = self._suggest_score(rec, q)
+                    if score > 0:
+                        primary.append(Suggestion(record=rec, completion=completion, score=score))
+                if primary:
+                    primary.sort(key=lambda s: -s.score)
+                    return primary[:cap]
+                fuzzy: list[Suggestion] = []
+                for rec in self._records:
+                    if asset_class is not None and rec.asset_class != asset_class:
+                        continue
+                    completion = self._fuzzy_match(rec, q)
+                    if completion is not None:
+                        fuzzy.append(Suggestion(record=rec, completion=completion, score=15))
+                return fuzzy[:cap]
+            except Exception as exc:
+                span.set_status(trace.StatusCode.ERROR, str(exc))
+                span.record_exception(exc)
+                raise
 
     @staticmethod
     def _suggest_score(rec: RefInstrument, q: str) -> tuple[int, str]:  # noqa: PLR0911 - one return per scoring tier

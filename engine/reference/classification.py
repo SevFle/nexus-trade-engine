@@ -9,6 +9,10 @@ Includes:
 
 from __future__ import annotations
 
+from opentelemetry import trace
+
+_tracer = trace.get_tracer(__name__)
+
 # Representative GICS subset — enough for meaningful rejection. The
 # ingestion job will load the canonical table from MSCI's published
 # codebook in the follow-up issue.
@@ -55,17 +59,24 @@ def is_valid_gics_path(
     industry: str,
     sub_industry: str,
 ) -> bool:
-    """Return True iff the four-level GICS path rolls up cleanly."""
-    igs = _GICS_HIERARCHY.get(sector)
-    if igs is None:
-        return False
-    inds = igs.get(industry_group)
-    if inds is None:
-        return False
-    subs = inds.get(industry)
-    if subs is None:
-        return False
-    return sub_industry in subs
+    with _tracer.start_as_current_span("classification.is_valid_gics_path") as span:
+        span.set_attribute("sector", sector)
+        try:
+            igs = _GICS_HIERARCHY.get(sector)
+            if igs is None:
+                return False
+            inds = igs.get(industry_group)
+            if inds is None:
+                return False
+            subs = inds.get(industry)
+            if subs is None:
+                return False
+        except Exception as exc:
+            span.set_status(trace.StatusCode.ERROR, str(exc))
+            span.record_exception(exc)
+            raise
+        else:
+            return sub_industry in subs
 
 
 _CRYPTO_TAXONOMY: dict[str, str] = {

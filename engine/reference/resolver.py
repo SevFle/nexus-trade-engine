@@ -21,6 +21,8 @@ import unicodedata
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
+from opentelemetry import trace
+
 from engine.reference.exceptions import AmbiguousSymbolError
 
 if TYPE_CHECKING:
@@ -50,6 +52,8 @@ _SUFFIX_TO_MIC: dict[str, str] = {
 
 _MAX_QUERY_LEN = 64
 _SUSPICIOUS = frozenset({"<", ">", "&", "'", '"', "`", ";", "\x00"})
+
+_tracer = trace.get_tracer(__name__)
 
 
 def _looks_garbage(raw: str) -> bool:
@@ -117,34 +121,51 @@ class Resolver:
             self._by_cik[inst.ids.cik] = inst
 
     def resolve(self, query: str | dict[str, Any]) -> RefInstrument | None:
-        """Look up an instrument by ticker, dotted suffix, or ID dict."""
-        if isinstance(query, dict):
-            return self._resolve_dict(query)
-        if not isinstance(query, str):
-            msg = f"resolve query must be str or dict, got {type(query).__name__}"
-            raise TypeError(msg)
-        normalized = _normalize(query)
-        if _looks_garbage(normalized):
-            return None
-        return self._resolve_string(normalized.strip())
+        with _tracer.start_as_current_span("resolver.resolve") as span:
+            span.set_attribute("query_type", type(query).__name__)
+            def _raise_bad_type(q: Any) -> None:
+                raise TypeError(
+                    f"resolve query must be str or dict, got {type(q).__name__}"
+                )
+
+            try:
+                if isinstance(query, dict):
+                    return self._resolve_dict(query)
+                if not isinstance(query, str):
+                    _raise_bad_type(query)
+                normalized = _normalize(query)
+                if _looks_garbage(normalized):
+                    return None
+                return self._resolve_string(normalized.strip())
+            except Exception as exc:
+                span.set_status(trace.StatusCode.ERROR, str(exc))
+                span.record_exception(exc)
+                raise
 
     def _resolve_dict(self, q: dict[str, Any]) -> RefInstrument | None:  # noqa: PLR0911 - one return per id type
-        if "isin" in q:
-            return self._by_isin.get(q["isin"])
-        if "cusip" in q:
-            return self._by_cusip.get(q["cusip"])
-        if "figi" in q:
-            return self._by_figi.get(q["figi"])
-        if "cik" in q:
-            return self._by_cik.get(q["cik"])
-        if "ticker" in q and "venue" in q:
-            ticker = _normalize(str(q["ticker"]))
-            if _looks_garbage(ticker):
+        with _tracer.start_as_current_span("resolver.resolve_dict") as span:
+            try:
+                if "isin" in q:
+                    return self._by_isin.get(q["isin"])
+                if "cusip" in q:
+                    return self._by_cusip.get(q["cusip"])
+                if "figi" in q:
+                    return self._by_figi.get(q["figi"])
+                if "cik" in q:
+                    return self._by_cik.get(q["cik"])
+                if "ticker" in q and "venue" in q:
+                    ticker = _normalize(str(q["ticker"]))
+                    if _looks_garbage(ticker):
+                        return None
+                    return self._by_ticker_venue.get((ticker.upper(), q["venue"]))
+                if "ticker" in q:
+                    return self.resolve(str(q["ticker"]))
+            except Exception as exc:
+                span.set_status(trace.StatusCode.ERROR, str(exc))
+                span.record_exception(exc)
+                raise
+            else:
                 return None
-            return self._by_ticker_venue.get((ticker.upper(), q["venue"]))
-        if "ticker" in q:
-            return self.resolve(str(q["ticker"]))
-        return None
 
     def _resolve_string(self, raw: str) -> RefInstrument | None:
         if "." in raw:

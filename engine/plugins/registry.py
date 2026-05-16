@@ -6,21 +6,28 @@ from typing import Any
 
 import structlog
 import yaml
+from opentelemetry import trace
 
 from engine.plugins.plugin_signing import PluginSigner
 
 logger = structlog.get_logger()
+_tracer = trace.get_tracer(__name__)
 
 STRATEGIES_DIR = Path(__file__).resolve().parent.parent.parent / "strategies"
 
 
 def is_scoring_strategy(instance: Any) -> bool:
-    try:
-        from nexus_sdk.scoring import IScoringStrategy
+    with _tracer.start_as_current_span("registry.is_scoring_strategy") as span:
+        try:
+            from nexus_sdk.scoring import IScoringStrategy
 
-        return isinstance(instance, IScoringStrategy)
-    except ImportError:
-        return False
+            return isinstance(instance, IScoringStrategy)
+        except ImportError:
+            return False
+        except Exception as exc:
+            span.set_status(trace.StatusCode.ERROR, str(exc))
+            span.record_exception(exc)
+            raise
 
 
 def discover_strategies(base_dir: Path | None = None) -> dict[str, dict[str, Any]]:
@@ -53,19 +60,36 @@ def discover_strategies(base_dir: Path | None = None) -> dict[str, dict[str, Any
 
 
 def load_strategy_class(module_path: str) -> Any:
-    spec = importlib.util.spec_from_file_location("strategy", module_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load strategy from {module_path}")
-    module = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(module)
-    except FileNotFoundError as exc:
-        raise ImportError(f"Cannot load strategy from {module_path}") from exc
-    strategy_cls = getattr(module, "Strategy", None)
-    if strategy_cls is None:
-        logger.warning("strategy_class_not_found_in_module", path=module_path)
-        raise AttributeError(f"Module {module_path} does not define a 'Strategy' class")
-    return strategy_cls
+    with _tracer.start_as_current_span("registry.load_strategy_class") as span:
+        span.set_attribute("module_path", module_path)
+
+        def _cannot_load() -> None:
+            raise ImportError(f"Cannot load strategy from {module_path}")
+
+        def _no_strategy_class() -> None:
+            raise AttributeError(
+                f"Module {module_path} does not define a 'Strategy' class"
+            )
+
+        try:
+            spec = importlib.util.spec_from_file_location("strategy", module_path)
+            if spec is None or spec.loader is None:
+                _cannot_load()
+            module = importlib.util.module_from_spec(spec)
+            try:
+                spec.loader.exec_module(module)
+            except FileNotFoundError as exc:
+                raise ImportError(f"Cannot load strategy from {module_path}") from exc
+            strategy_cls = getattr(module, "Strategy", None)
+            if strategy_cls is None:
+                logger.warning("strategy_class_not_found_in_module", path=module_path)
+                _no_strategy_class()
+        except Exception as exc:
+            span.set_status(trace.StatusCode.ERROR, str(exc))
+            span.record_exception(exc)
+            raise
+        else:
+            return strategy_cls
 
 
 class PluginRegistry:
@@ -74,29 +98,40 @@ class PluginRegistry:
         self._use_sandbox = use_sandbox
 
     def load_strategy(self, strategy_name: str) -> Any | None:
-        entry = self._strategies.get(strategy_name)
-        if entry is None:
-            logger.warning("strategy_not_found", strategy=strategy_name)
-            return None
-        try:
-            cls = load_strategy_class(entry["module_path"])
-        except (ImportError, AttributeError) as exc:
-            logger.exception("strategy_load_failed", strategy=strategy_name, error=str(exc))
-            return None
+        with _tracer.start_as_current_span("registry.load_strategy") as span:
+            span.set_attribute("strategy_name", strategy_name)
+            try:
+                entry = self._strategies.get(strategy_name)
+                if entry is None:
+                    logger.warning("strategy_not_found", strategy=strategy_name)
+                    return None
+                try:
+                    cls = load_strategy_class(entry["module_path"])
+                except (ImportError, AttributeError) as exc:
+                    logger.exception(
+                        "strategy_load_failed",
+                        strategy=strategy_name,
+                        error=str(exc),
+                    )
+                    return None
 
-        if self._use_sandbox:
-            return self._load_sandboxed(strategy_name, cls, entry)
+                if self._use_sandbox:
+                    return self._load_sandboxed(strategy_name, cls, entry)
 
-        try:
-            return cls()
-        except Exception as exc:
-            logger.exception(
-                "strategy_instantiation_failed",
-                strategy=strategy_name,
-                cls=cls.__name__,
-                error=str(exc),
-            )
-            return None
+                try:
+                    return cls()
+                except Exception as exc:
+                    logger.exception(
+                        "strategy_instantiation_failed",
+                        strategy=strategy_name,
+                        cls=cls.__name__,
+                        error=str(exc),
+                    )
+                    return None
+            except Exception as exc:
+                span.set_status(trace.StatusCode.ERROR, str(exc))
+                span.record_exception(exc)
+                raise
 
     def _verify_integrity(self, strategy_name: str, entry: dict[str, Any]) -> bool:
         manifest_data = entry.get("manifest", {})

@@ -22,6 +22,7 @@ from datetime import date  # noqa: TC003 - pydantic needs runtime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
+from opentelemetry import trace
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 AssetClassLiteral = Literal[
@@ -54,6 +55,8 @@ _TICKER = Annotated[
     StringConstraints(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9.\-_:+=]+$"),
 ]
 _CLASSIFICATION_FIELD = Annotated[str, StringConstraints(max_length=128)]
+
+_tracer = trace.get_tracer(__name__)
 
 
 class InstrumentIds(BaseModel):
@@ -142,10 +145,20 @@ class RefInstrument(BaseModel):
     @field_validator("primary_ticker")
     @classmethod
     def _ticker_no_whitespace(cls, v: str) -> str:
-        if not v.strip() or v.strip() != v:
-            msg = "primary_ticker must be non-empty and trimmed"
-            raise ValueError(msg)
-        return v
+        with _tracer.start_as_current_span("model.ticker_no_whitespace") as span:
+
+            def _raise_untrimmed() -> None:
+                raise ValueError("primary_ticker must be non-empty and trimmed")
+
+            try:
+                if not v.strip() or v.strip() != v:
+                    _raise_untrimmed()
+            except Exception as exc:
+                span.set_status(trace.StatusCode.ERROR, str(exc))
+                span.record_exception(exc)
+                raise
+            else:
+                return v
 
 
 __all__ = [

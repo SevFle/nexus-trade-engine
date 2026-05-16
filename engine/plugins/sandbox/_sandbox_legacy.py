@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx as _httpx_module
 import structlog
+from opentelemetry import trace
 
 from engine.core.signal import Signal
 from engine.plugins.restricted_importer import RestrictedImporter
@@ -50,6 +51,7 @@ except ImportError:
     HAS_RESOURCE_MODULE = False
 
 logger = structlog.get_logger()
+_tracer = trace.get_tracer(__name__)
 
 _BLOCKED_ATTRS: frozenset[str] = frozenset(
     {
@@ -137,19 +139,21 @@ class StrategySandbox:
         strategy_factory: Callable[[], Any],
         manifest: StrategyManifest,
     ) -> StrategySandbox:
-        """
-        Create a sandbox with restrictions active during strategy instantiation.
-
-        Use this instead of the regular constructor to prevent C-2 bypass
-        (strategy stashing module references in ``__init__``).
-        """
-        sandbox = cls(_PlaceholderStrategy(), manifest)
-        sandbox._activate_restrictions()
-        try:
-            sandbox.strategy = strategy_factory()
-        finally:
-            sandbox._deactivate_restrictions()
-        return sandbox
+        with _tracer.start_as_current_span("sandbox_legacy.from_factory") as span:
+            span.set_attribute("manifest.id", manifest.id)
+            try:
+                sandbox = cls(_PlaceholderStrategy(), manifest)
+                sandbox._activate_restrictions()
+                try:
+                    sandbox.strategy = strategy_factory()
+                finally:
+                    sandbox._deactivate_restrictions()
+            except Exception as exc:
+                span.set_status(trace.StatusCode.ERROR, str(exc))
+                span.record_exception(exc)
+                raise
+            else:
+                return sandbox
 
     def _create_sandboxed_http_client(self) -> None:
         if self.manifest.requires_network():
@@ -172,37 +176,49 @@ class StrategySandbox:
         return int(val)
 
     def _apply_resource_limits(self) -> None:
-        if not HAS_RESOURCE_MODULE:
-            return
+        with _tracer.start_as_current_span("sandbox_legacy.apply_resource_limits") as span:
+            try:
+                if not HAS_RESOURCE_MODULE:
+                    return
 
-        try:
-            max_bytes = self._parse_memory(self.manifest.resources.max_memory)
-            soft, hard = _resource.getrlimit(_resource.RLIMIT_AS)  # type: ignore[union-attr]
-            new_soft = min(max_bytes, hard)
-            _resource.setrlimit(_resource.RLIMIT_AS, (new_soft, hard))  # type: ignore[union-attr]
-            self._saved_resource_limits["RLIMIT_AS"] = (soft, hard)
-        except (ValueError, OSError, AttributeError):
-            pass
+                try:
+                    max_bytes = self._parse_memory(self.manifest.resources.max_memory)
+                    soft, hard = _resource.getrlimit(_resource.RLIMIT_AS)  # type: ignore[union-attr]
+                    new_soft = min(max_bytes, hard)
+                    _resource.setrlimit(_resource.RLIMIT_AS, (new_soft, hard))  # type: ignore[union-attr]
+                    self._saved_resource_limits["RLIMIT_AS"] = (soft, hard)
+                except (ValueError, OSError, AttributeError):
+                    pass
 
-        try:
-            soft, hard = _resource.getrlimit(_resource.RLIMIT_NOFILE)  # type: ignore[union-attr]
-            new_soft = min(64, hard)
-            _resource.setrlimit(_resource.RLIMIT_NOFILE, (new_soft, hard))  # type: ignore[union-attr]
-            self._saved_resource_limits["RLIMIT_NOFILE"] = (soft, hard)
-        except (ValueError, OSError, AttributeError):
-            pass
+                try:
+                    soft, hard = _resource.getrlimit(_resource.RLIMIT_NOFILE)  # type: ignore[union-attr]
+                    new_soft = min(64, hard)
+                    _resource.setrlimit(_resource.RLIMIT_NOFILE, (new_soft, hard))  # type: ignore[union-attr]
+                    self._saved_resource_limits["RLIMIT_NOFILE"] = (soft, hard)
+                except (ValueError, OSError, AttributeError):
+                    pass
+            except Exception as exc:
+                span.set_status(trace.StatusCode.ERROR, str(exc))
+                span.record_exception(exc)
+                raise
 
     def _restore_resource_limits(self) -> None:
-        if not HAS_RESOURCE_MODULE:
-            return
+        with _tracer.start_as_current_span("sandbox_legacy.restore_resource_limits") as span:
+            try:
+                if not HAS_RESOURCE_MODULE:
+                    return
 
-        for name, (soft, hard) in self._saved_resource_limits.items():
-            with contextlib.suppress(ValueError, OSError, AttributeError):
-                _resource.setrlimit(  # type: ignore[union-attr]
-                    getattr(_resource, name),  # type: ignore[union-attr]
-                    (soft, hard),
-                )
-        self._saved_resource_limits.clear()
+                for name, (soft, hard) in self._saved_resource_limits.items():
+                    with contextlib.suppress(ValueError, OSError, AttributeError):
+                        _resource.setrlimit(  # type: ignore[union-attr]
+                            getattr(_resource, name),  # type: ignore[union-attr]
+                            (soft, hard),
+                        )
+                self._saved_resource_limits.clear()
+            except Exception as exc:
+                span.set_status(trace.StatusCode.ERROR, str(exc))
+                span.record_exception(exc)
+                raise
 
     def _setup_filesystem_isolation(self) -> None:
         self._work_dir = tempfile.mkdtemp(prefix="strategy_sandbox_")
@@ -214,23 +230,45 @@ class StrategySandbox:
         *args: Any,
         **kwargs: Any,
     ) -> Any:
-        if isinstance(file, int):
-            raise PermissionError("File descriptor access is not allowed in strategy sandbox")
+        with _tracer.start_as_current_span("sandbox_legacy.restricted_open") as span:
+            span.set_attribute("file", str(file))
+            def _raise_fd_denied() -> None:
+                raise PermissionError(
+                    "File descriptor access is not allowed in strategy sandbox"
+                )
 
-        resolved = os.path.realpath(str(file))
-        work_dir = os.path.realpath(self._work_dir or "")
+            def _raise_path_denied(f: Any) -> None:
+                raise PermissionError(
+                    f"File access to {f} is not allowed in strategy sandbox"
+                )
 
-        allowed = [work_dir]
-        allowed.extend(os.path.realpath(a) + os.sep for a in self.manifest.artifacts)
-        allowed.extend(os.path.realpath(a) for a in self.manifest.artifacts)
+            def _raise_write_denied() -> None:
+                raise PermissionError(
+                    "Write access is not allowed in strategy sandbox"
+                )
 
-        if not any(resolved == p or resolved.startswith(p + os.sep) for p in allowed if p):
-            raise PermissionError(f"File access to {file} is not allowed in strategy sandbox")
+            try:
+                if isinstance(file, int):
+                    _raise_fd_denied()
 
-        if any(c in mode for c in ("w", "a", "+")):
-            raise PermissionError("Write access is not allowed in strategy sandbox")
+                resolved = os.path.realpath(str(file))
+                work_dir = os.path.realpath(self._work_dir or "")
 
-        return self._original_open(file, mode, *args, **kwargs)
+                allowed = [work_dir]
+                allowed.extend(os.path.realpath(a) + os.sep for a in self.manifest.artifacts)
+                allowed.extend(os.path.realpath(a) for a in self.manifest.artifacts)
+
+                if not any(resolved == p or resolved.startswith(p + os.sep) for p in allowed if p):
+                    _raise_path_denied(file)
+
+                if any(c in mode for c in ("w", "a", "+")):
+                    _raise_write_denied()
+
+                return self._original_open(file, mode, *args, **kwargs)
+            except Exception as exc:
+                span.set_status(trace.StatusCode.ERROR, str(exc))
+                span.record_exception(exc)
+                raise
 
     def _restricted_getattr(self, obj: Any, name: str, *default: Any) -> Any:
         if name in _BLOCKED_ATTRS:
@@ -238,22 +276,42 @@ class StrategySandbox:
         return self._original_getattr(obj, name, *default)  # type: ignore[misc]
 
     def _make_restricted_send(self) -> Any:
-        allowed = self.manifest.network.allowed_endpoints
-        original_send = self._original_httpx_send
+        with _tracer.start_as_current_span("sandbox_legacy.make_restricted_send") as span:
 
-        async def restricted_send(
-            client: Any,
-            request: Any,
-            *,
-            stream: bool = False,
-            **kwargs: Any,
-        ) -> Any:
-            host = request.url.host
-            if not any(host == ep or host.endswith(f".{ep}") for ep in allowed):
-                raise PermissionError(f"Network access to {host} is not allowed")
-            return await original_send(client, request, stream=stream, **kwargs)
+            def _raise_network_denied(h: Any) -> None:
+                raise PermissionError(
+                    f"Network access to {h} is not allowed"
+                )
 
-        return restricted_send
+            try:
+                allowed = self.manifest.network.allowed_endpoints
+                original_send = self._original_httpx_send
+
+                async def restricted_send(
+                    client: Any,
+                    request: Any,
+                    *,
+                    stream: bool = False,
+                    **kwargs: Any,
+                ) -> Any:
+                    with _tracer.start_as_current_span(
+                        "sandbox_legacy.restricted_send"
+                    ) as send_span:
+                        try:
+                            host = request.url.host
+                            if not any(host == ep or host.endswith(f".{ep}") for ep in allowed):
+                                _raise_network_denied(host)
+                            return await original_send(client, request, stream=stream, **kwargs)
+                        except Exception as exc:
+                            send_span.set_status(trace.StatusCode.ERROR, str(exc))
+                            send_span.record_exception(exc)
+                            raise
+            except Exception as exc:
+                span.set_status(trace.StatusCode.ERROR, str(exc))
+                span.record_exception(exc)
+                raise
+            else:
+                return restricted_send
 
     def _activate_restrictions(self) -> None:
         self._importer.install()
@@ -294,15 +352,15 @@ class StrategySandbox:
         market: Any,
         costs: ICostModel,  # noqa: ARG002
     ) -> list[Signal]:
-        """
-        Execute strategy.on_bar() with timeout and error handling.
-
-        Serialised via ``_eval_lock`` to prevent concurrent sandboxes
-        from corrupting each other's global builtin patches (C-4).
-        Returns empty list on failure - never crashes the engine.
-        """
-        async with _eval_lock:
-            return await self._evaluate_inner(portfolio, market)
+        with _tracer.start_as_current_span("sandbox_legacy.safe_evaluate") as span:
+            span.set_attribute("strategy_name", self.strategy.name)
+            try:
+                async with _eval_lock:
+                    return await self._evaluate_inner(portfolio, market)
+            except Exception as exc:
+                span.set_status(trace.StatusCode.ERROR, str(exc))
+                span.record_exception(exc)
+                raise
 
     async def _evaluate_inner(
         self,
@@ -380,14 +438,19 @@ class StrategySandbox:
         )
 
     def cleanup(self) -> None:
-        """Release all sandbox resources (temp dir, hooks, HTTP client)."""
-        self._importer.uninstall()
-        if self._original_open is not None:
-            builtins.open = self._original_open
-            self._original_open = None
-        if self._work_dir and os.path.isdir(self._work_dir):
-            shutil.rmtree(self._work_dir, ignore_errors=True)
-            self._work_dir = None
+        with _tracer.start_as_current_span("sandbox_legacy.cleanup") as span:
+            try:
+                self._importer.uninstall()
+                if self._original_open is not None:
+                    builtins.open = self._original_open
+                    self._original_open = None
+                if self._work_dir and os.path.isdir(self._work_dir):
+                    shutil.rmtree(self._work_dir, ignore_errors=True)
+                    self._work_dir = None
+            except Exception as exc:
+                span.set_status(trace.StatusCode.ERROR, str(exc))
+                span.record_exception(exc)
+                raise
 
     def get_health(self) -> dict:
         return {
