@@ -48,7 +48,7 @@ class PerShareCommission(ICommissionCalculator):
         self._exchange_fee = exchange_fee_per_share
         self._regulatory_rate = regulatory_fee_rate
 
-    def calculate(self, quantity: int, _price: float, side: str) -> CommissionQuote:
+    def calculate(self, quantity: int, price: float, side: str) -> CommissionQuote:  # noqa: ARG002
         commission = max(self._rate * quantity, self._min)
         exchange_fee = self._exchange_fee * quantity
         regulatory_fee = self._regulatory_rate * quantity if side == "sell" else 0.0
@@ -69,7 +69,7 @@ class FlatRateCommission(ICommissionCalculator):
         self._rate = flat_rate
         self._exchange_fee = exchange_fee
 
-    def calculate(self, _quantity: int, _price: float, _side: str) -> CommissionQuote:
+    def calculate(self, quantity: int, price: float, side: str) -> CommissionQuote:  # noqa: ARG002
         return CommissionQuote(
             estimated_commission=self._rate,
             exchange_fee=self._exchange_fee,
@@ -115,7 +115,7 @@ class TieredCommission(ICommissionCalculator):
         ]
         self._min = min_commission
 
-    def calculate(self, quantity: int, _price: float, _side: str) -> CommissionQuote:
+    def calculate(self, quantity: int, price: float, side: str) -> CommissionQuote:  # noqa: ARG002
         rate = self._tiers[-1][1]
         for threshold, tier_rate in self._tiers:
             if quantity >= threshold:
@@ -130,7 +130,7 @@ class TieredCommission(ICommissionCalculator):
 
 
 class ZeroCommission(ICommissionCalculator):
-    def calculate(self, _quantity: int, _price: float, _side: str) -> CommissionQuote:
+    def calculate(self, quantity: int, price: float, side: str) -> CommissionQuote:  # noqa: ARG002
         return CommissionQuote(
             estimated_commission=0.0,
             exchange_fee=0.0,

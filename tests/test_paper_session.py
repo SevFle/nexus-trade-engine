@@ -21,6 +21,7 @@ from engine.core.execution.paper_runner import (
     get_active_session,
     get_active_sessions,
 )
+from engine.core.execution.paper_trade_backend import PaperTradeExecutionBackend
 from engine.core.execution.session import (
     PaperSessionConfig,
     PaperSessionState,
@@ -552,3 +553,25 @@ class TestSessionStatusTransitions:
         session.mark_stopped(error="market data unavailable")
         assert session.state.status == SessionStatus.FAILED
         assert session.state.error == "market data unavailable"
+
+
+class TestGetFillStatsWithFullBackend:
+    def test_fill_stats_with_full_backend_no_running_loop(self):
+        state = _make_state()
+        session = PaperTradeSession(state=state)
+        session.create_backend(use_full_backend=True)
+        assert isinstance(session.backend, PaperTradeExecutionBackend)
+        result = session.get_fill_stats()
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_fill_stats_with_full_backend_in_async_context(self):
+        state = _make_state()
+        session = PaperTradeSession(state=state)
+        session.create_backend(use_full_backend=True)
+        assert isinstance(session.backend, PaperTradeExecutionBackend)
+        result = session.get_fill_stats()
+        assert result == {}
+        assert len(session._background_tasks) == 1
+        await asyncio.sleep(0.05)
+        assert len(session._background_tasks) == 0

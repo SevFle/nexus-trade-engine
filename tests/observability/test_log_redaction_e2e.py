@@ -32,6 +32,7 @@ def stream_buf(monkeypatch) -> io.StringIO:
     )
     root = logging.getLogger()
     root.handlers = [handler]
+    root.setLevel(logging.DEBUG)
     return buf
 
 

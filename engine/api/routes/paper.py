@@ -17,6 +17,7 @@ from engine.core.execution.paper_runner import (
     create_and_start_session,
     get_active_session,
 )
+from engine.core.execution.paper_trade_backend import PaperTradeExecutionBackend
 from engine.core.execution.session import (
     PaperSessionConfig,
     PaperSessionState,
@@ -401,7 +402,10 @@ async def modify_order(
         stop_price=request.stop_price,
     )
     if not modified:
-        raise HTTPException(status_code=404, detail=f"Order {order_id} not found or cannot be modified")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Order {order_id} not found or cannot be modified",
+        )
     return {"order_id": order_id, "modified": True}
 
 
@@ -462,7 +466,6 @@ def _get_session_backend(
     session_id: str,
     user: User,
 ) -> PaperTradeExecutionBackend:
-    from engine.core.execution.paper_trade_backend import PaperTradeExecutionBackend
 
     active = get_active_session(session_id)
     if active is None:
@@ -473,7 +476,10 @@ def _get_session_backend(
     if not isinstance(backend, PaperTradeExecutionBackend):
         raise HTTPException(
             status_code=400,
-            detail="Session does not support direct order management. Start with use_full_backend=True.",
+            detail=(
+                "Session does not support direct order management. "
+                "Start with use_full_backend=True."
+            ),
         )
     return backend
 

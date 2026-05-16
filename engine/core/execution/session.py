@@ -7,20 +7,23 @@ state tracking, and in-memory session registry.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from engine.core.execution.base import ExecutionBackend as _ExecutionBackend
 from engine.core.execution.clock import SystemClock
 from engine.core.execution.paper import PaperBackend, PaperTradeConfig
 from engine.core.execution.paper_broker_interface import PaperTradeBrokerConfig
 from engine.core.execution.paper_trade_backend import PaperTradeExecutionBackend
 from engine.core.execution.slippage import SlippageModelType
+
+if TYPE_CHECKING:
+    from engine.core.execution.base import ExecutionBackend
 
 logger = structlog.get_logger()
 
@@ -109,7 +112,8 @@ class PaperTradeSession:
     ) -> None:
         self.state = state
         self._data_provider = data_provider
-        self._backend: _ExecutionBackend | None = None
+        self._backend: ExecutionBackend | None = None
+        self._background_tasks: set[asyncio.Task[object]] = set()
         self._portfolio: Any = None
         self._order_manager: Any = None
         self._strategy: Any = None
@@ -126,8 +130,6 @@ class PaperTradeSession:
         config = self.state.config
 
         if use_full_backend:
-            from engine.core.execution.clock import SystemClock
-
             broker_config = PaperTradeBrokerConfig(
                 fill_probability=config.fill_probability,
                 partial_fill_enabled=config.partial_fill_enabled,
@@ -213,14 +215,15 @@ class PaperTradeSession:
         if self._backend is None:
             return {}
         if isinstance(self._backend, PaperTradeExecutionBackend):
-            import asyncio
-
             try:
                 loop = asyncio.get_running_loop()
-                stats_future = loop.create_task(self._backend.get_fill_stats())
-                return {}
             except RuntimeError:
                 pass
+            else:
+                task = loop.create_task(self._backend.get_fill_stats())
+                self._background_tasks.add(task)
+                task.add_done_callback(self._background_tasks.discard)
+                return {}
             return {}
         if isinstance(self._backend, PaperBackend):
             global_stats = self._backend.stats.as_dict()
