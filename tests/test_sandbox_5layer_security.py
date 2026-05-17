@@ -48,7 +48,6 @@ from engine.plugins.sandbox.core.violation import (
     SandboxViolation,
     SandboxViolationCategory,
 )
-from engine.plugins.trust_levels import TrustLevel
 from engine.plugins.sandbox.layers.filesystem_isolation import FilesystemIsolation
 from engine.plugins.sandbox.layers.import_restriction import RestrictedImporter
 from engine.plugins.sandbox.layers.introspection_guard import (
