@@ -113,7 +113,7 @@ class TestStopSignalMainThreadGuard:
         ):
             t._stop_signal()
         assert t._use_signal is False
-        assert t._old_handler is not None
+        assert t._old_handler is None
 
     def test_old_handler_preserved_on_restore_failure(self) -> None:
         if not _HAS_SIGVTALRM:
@@ -139,24 +139,26 @@ class TestStopSignalMainThreadGuard:
 
 
 class TestPollPathAsAuthoritative:
-    def test_start_always_creates_poll_thread(self) -> None:
+    def test_start_creates_poll_thread_only_in_poll_mode(self) -> None:
         t = _CPUTimer(60.0)
         t.start()
         try:
-            assert t._thread is not None
-            assert t._thread.is_alive()
+            if t._use_signal:
+                assert t._thread is None
+            else:
+                assert t._thread is not None
+                assert t._thread.is_alive()
         finally:
             t.cancel()
 
-    def test_start_always_creates_poll_thread_with_signal(self) -> None:
+    def test_start_skips_poll_thread_when_signal_succeeds(self) -> None:
         if not _HAS_SIGVTALRM:
             pytest.skip("SIGVTALRM not available")
         t = _CPUTimer(60.0)
         t.start()
         try:
             assert t._use_signal is True
-            assert t._thread is not None
-            assert t._thread.is_alive()
+            assert t._thread is None
         finally:
             t.cancel()
 
@@ -183,26 +185,25 @@ class TestPollPathAsAuthoritative:
         assert t.expired
         t.cancel()
 
-    def test_cancel_stops_poll_thread_in_signal_mode(self) -> None:
+    def test_cancel_cleans_up_signal_mode(self) -> None:
         if not _HAS_SIGVTALRM:
             pytest.skip("SIGVTALRM not available")
         t = _CPUTimer(60.0)
         t.start()
-        assert t._thread is not None
         assert t._use_signal is True
         t.cancel()
         assert t._thread is None
 
 
 class TestWallTimeWatchdog:
-    def test_wall_time_monitored_alongside_signal(self) -> None:
+    def test_signal_mode_no_poll_thread_for_wall_time(self) -> None:
         if not _HAS_SIGVTALRM:
             pytest.skip("SIGVTALRM not available")
         t = _CPUTimer(0.05)
         t.start()
         assert t._use_signal is True
-        assert t._thread is not None
-        time.sleep(0.15)
+        assert t._thread is None
+        _burn_cpu(0.3)
         assert t.expired
         t.cancel()
 
@@ -274,14 +275,14 @@ class TestSignalSupplementaryEarlyWarning:
             t.cancel()
         assert t.mode == "poll"
 
-    def test_signal_and_poll_both_cleanup_on_cancel(self) -> None:
+    def test_signal_cleanup_on_cancel(self) -> None:
         if not _HAS_SIGVTALRM:
             pytest.skip("SIGVTALRM not available")
         sentinel = signal.getsignal(signal.SIGVTALRM)
         t = _CPUTimer(10.0)
         t.start()
         assert t._use_signal is True
-        assert t._thread is not None
+        assert t._thread is None
         t.cancel()
         assert t._use_signal is False
         assert t._thread is None
