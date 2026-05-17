@@ -377,9 +377,10 @@ class TestSandboxContextTrustValidation:
         )
         ctx = SandboxContext(policy)
         try:
-            ctx.activate()
+            with pytest.raises(SandboxViolation):
+                ctx.activate()
             events = ctx.event_logger.get_events(
-                category=SandboxViolationCategory.INTROSPECTION
+                category=SandboxViolationCategory.POLICY
             )
             assert any("validation failed" in e.detail for e in events)
         finally:

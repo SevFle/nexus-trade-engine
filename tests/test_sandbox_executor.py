@@ -13,7 +13,7 @@ from engine.plugins.sandbox.core.policy import (
     ResourcePolicy,
     SandboxPolicy,
 )
-from engine.plugins.sandbox.core.violation import SandboxViolation
+from engine.plugins.sandbox.core.violation import SandboxViolation, SandboxViolationCategory
 from engine.plugins.sandbox.executor import PluginSandboxExecutor
 from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
 from engine.plugins.trust_levels import TrustLevel
@@ -322,3 +322,89 @@ class TestSandboxPolicyIntegrity:
         policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "valid_hard")
         violations = policy.enforce_hard_limits(TrustLevel.UNTRUSTED)
         assert violations == []
+
+
+class TestSandboxContextViolationCategories:
+    def test_hard_limits_use_resource_category(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="cat_resource",
+            trust_level="untrusted",
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
+            resource_policy=ResourcePolicy(max_cpu_seconds=30, max_memory_bytes=2 * 1024**3),
+        )
+        context = SandboxContext(policy)
+        try:
+            with pytest.raises(SandboxViolation) as exc_info:
+                context.activate()
+            assert exc_info.value.category is SandboxViolationCategory.RESOURCE
+            assert context.is_active is False
+        finally:
+            context.cleanup()
+
+    def test_trust_level_validation_uses_policy_category(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="cat_policy",
+            trust_level="untrusted",
+            import_policy=ImportPolicy(blocked_modules=set()),
+        )
+        context = SandboxContext(policy)
+        try:
+            with pytest.raises(SandboxViolation) as exc_info:
+                context.activate()
+            assert exc_info.value.category is SandboxViolationCategory.POLICY
+            assert context.is_active is False
+        finally:
+            context.cleanup()
+
+    def test_trust_validation_logs_policy_event(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="cat_policy_log",
+            trust_level="untrusted",
+            import_policy=ImportPolicy(blocked_modules=set()),
+        )
+        context = SandboxContext(policy)
+        try:
+            with pytest.raises(SandboxViolation):
+                context.activate()
+            events = context.event_logger.get_events(category=SandboxViolationCategory.POLICY)
+            assert len(events) >= 1
+            assert any("validation failed" in e.detail for e in events)
+        finally:
+            context.cleanup()
+
+    def test_hard_limits_log_resource_event(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="cat_resource_log",
+            trust_level="untrusted",
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
+            resource_policy=ResourcePolicy(max_cpu_seconds=30, max_memory_bytes=2 * 1024**3),
+        )
+        context = SandboxContext(policy)
+        try:
+            with pytest.raises(SandboxViolation):
+                context.activate()
+            events = context.event_logger.get_events(category=SandboxViolationCategory.RESOURCE)
+            assert len(events) >= 1
+            assert any("Hard limit" in e.detail for e in events)
+        finally:
+            context.cleanup()
+
+
+class TestExecutorActivationCleanup:
+    async def test_executor_calls_cleanup_on_activation_violation(self) -> None:
+        policy = SandboxPolicy(plugin_id="cleanup_exec")
+        executor = PluginSandboxExecutor(_EmptyStrategy(), policy)
+        assert executor._context.is_active is False
+        signals = await executor.safe_evaluate(None, None, None)
+        assert signals == []
+        assert executor._context.is_active is False
+
+    async def test_executor_work_dir_cleaned_up_after_activation_violation(self) -> None:
+        import os
+
+        policy = SandboxPolicy(plugin_id="cleanup_dir_exec")
+        executor = PluginSandboxExecutor(_EmptyStrategy(), policy)
+        work_dir = executor._context._filesystem_layer.work_dir
+        signals = await executor.safe_evaluate(None, None, None)
+        assert signals == []
+        assert not os.path.exists(work_dir)

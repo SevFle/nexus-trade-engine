@@ -1368,7 +1368,9 @@ class TestPluginMetrics:
 
 class TestPluginSandboxExecutorEdgeCases:
     def test_from_factory_creates_placeholder(self):
-        policy = SandboxPolicy(plugin_id="exec-test")
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED, "exec-test", max_cpu_seconds=2,
+        )
 
         def factory():
             return SimpleNamespace(name="real", version="1.0", on_bar=lambda s, p: [])

@@ -104,13 +104,13 @@ class SandboxContext:
         if violations:
             detail = "; ".join(violations)
             self._event_logger.log_event(
-                category=SandboxViolationCategory.INTROSPECTION,
+                category=SandboxViolationCategory.RESOURCE,
                 detail=f"Hard limit violations: {detail}",
                 attempted_action="trust_level_hard_limit_check",
             )
             raise SandboxViolation(
                 f"Hard limit violations: {detail}",
-                category=SandboxViolationCategory.INTROSPECTION,
+                category=SandboxViolationCategory.RESOURCE,
                 plugin_id=self._policy.plugin_id,
                 attempted_action="trust_level_hard_limit_check",
             )
@@ -120,13 +120,13 @@ class SandboxContext:
             return
         if not self.validate_trust_level():
             self._event_logger.log_event(
-                category=SandboxViolationCategory.INTROSPECTION,
+                category=SandboxViolationCategory.POLICY,
                 detail=f"Trust level policy validation failed for {self._policy.trust_level}",
                 attempted_action="trust_level_validation",
             )
             raise SandboxViolation(
                 f"Trust level policy validation failed for {self._policy.trust_level}",
-                category=SandboxViolationCategory.INTROSPECTION,
+                category=SandboxViolationCategory.POLICY,
                 plugin_id=self._policy.plugin_id,
                 attempted_action="trust_level_validation",
             )

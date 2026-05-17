@@ -10,6 +10,7 @@ class SandboxViolationCategory(Enum):
     RESOURCE = "resource"
     FILESYSTEM = "filesystem"
     INTROSPECTION = "introspection"
+    POLICY = "policy"
 
 
 class SandboxViolation(Exception):  # noqa: N818
