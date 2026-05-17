@@ -42,6 +42,7 @@ class _CPUTimer:
         self._thread: threading.Thread | None = None
         self._use_signal = False
         self._old_handler: Any = None
+        self._pending_signal_cleanup = False
 
     @property
     def expired(self) -> bool:
@@ -67,6 +68,7 @@ class _CPUTimer:
                 return
 
     def _try_start_signal(self) -> bool:
+        self._try_deferred_cleanup()
         if self._force_poll:
             return False
         if not _HAS_SIGVTALRM:
@@ -83,12 +85,37 @@ class _CPUTimer:
             else:
                 return True
 
+    def _try_deferred_cleanup(self) -> None:
+        if not self._pending_signal_cleanup:
+            return
+        if threading.current_thread() is not threading.main_thread():
+            return
+        with _signal_lock:
+            if not self._pending_signal_cleanup:
+                return
+            with contextlib.suppress(ValueError, OSError):
+                signal.setitimer(signal.ITIMER_VIRTUAL, 0)
+            if self._old_handler is not None:
+                try:
+                    signal.signal(signal.SIGVTALRM, self._old_handler)
+                except (ValueError, OSError):
+                    logger.warning(
+                        "sandbox.signal_restore_failed",
+                        plugin_id=self._plugin_id,
+                    )
+                else:
+                    self._old_handler = None
+            self._pending_signal_cleanup = False
+
     def _stop_signal(self) -> None:
         if threading.current_thread() is not threading.main_thread():
             logger.warning(
                 "sandbox.stop_signal_not_main_thread",
                 plugin_id=self._plugin_id,
             )
+            if self._use_signal or self._old_handler is not None:
+                with _signal_lock:
+                    self._pending_signal_cleanup = True
             self._use_signal = False
             return
         with contextlib.suppress(ValueError, OSError):
@@ -113,6 +140,7 @@ class _CPUTimer:
         self._expired.clear()
         self._use_signal = False
         self._old_handler = None
+        self._pending_signal_cleanup = False
         self._try_start_signal()
         self._thread = threading.Thread(target=self._poll, daemon=True)
         self._thread.start()
