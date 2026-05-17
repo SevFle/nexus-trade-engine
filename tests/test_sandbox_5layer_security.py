@@ -48,7 +48,6 @@ from engine.plugins.sandbox.core.violation import (
     SandboxViolation,
     SandboxViolationCategory,
 )
-from engine.plugins.trust_levels import TrustLevel
 from engine.plugins.sandbox.layers.filesystem_isolation import FilesystemIsolation
 from engine.plugins.sandbox.layers.import_restriction import RestrictedImporter
 from engine.plugins.sandbox.layers.introspection_guard import (
@@ -765,9 +764,16 @@ class TestIntrospectionLayerBlocking:
 # ─── Layer Composition ─────────────────────────────────────────────────
 
 
+def _enough_blocked() -> set[str]:
+    return {f"m{i}" for i in range(15)}
+
+
 class TestLayerComposition:
     def test_all_five_layers_install_and_uninstall(self) -> None:
-        policy = SandboxPolicy(plugin_id="comp")
+        policy = SandboxPolicy(
+            plugin_id="comp",
+            import_policy=ImportPolicy(blocked_modules=_enough_blocked()),
+        )
         ctx = SandboxContext(policy)
         orig_import = builtins.__import__
         orig_open = builtins.open
@@ -788,7 +794,10 @@ class TestLayerComposition:
         assert builtins.object is orig_object
 
     def test_context_manager_activates_and_deactivates(self) -> None:
-        policy = SandboxPolicy(plugin_id="ctx_mgr")
+        policy = SandboxPolicy(
+            plugin_id="ctx_mgr",
+            import_policy=ImportPolicy(blocked_modules=_enough_blocked()),
+        )
         ctx = SandboxContext(policy)
         orig_import = builtins.__import__
         with ctx:
@@ -801,7 +810,9 @@ class TestLayerComposition:
     def test_violations_from_all_layers_collected_on_deactivate(self) -> None:
         policy = SandboxPolicy(
             plugin_id="multi_violation",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(
+                blocked_modules=_enough_blocked() | {"os"},
+            ),
         )
         ctx = SandboxContext(policy)
         ctx.activate()
@@ -819,7 +830,10 @@ class TestLayerComposition:
         assert len(intro_events) >= 1
 
     def test_work_dir_accessible_during_activation(self) -> None:
-        policy = SandboxPolicy(plugin_id="workdir_test")
+        policy = SandboxPolicy(
+            plugin_id="workdir_test",
+            import_policy=ImportPolicy(blocked_modules=_enough_blocked()),
+        )
         ctx = SandboxContext(policy)
         ctx.activate()
         try:
@@ -830,7 +844,10 @@ class TestLayerComposition:
         ctx.cleanup()
 
     def test_cleanup_removes_work_dir_after_activation(self) -> None:
-        policy = SandboxPolicy(plugin_id="cleanup_test")
+        policy = SandboxPolicy(
+            plugin_id="cleanup_test",
+            import_policy=ImportPolicy(blocked_modules=_enough_blocked()),
+        )
         ctx = SandboxContext(policy)
         work_dir = ctx.work_dir
         ctx.activate()
@@ -838,7 +855,10 @@ class TestLayerComposition:
         assert not os.path.isdir(work_dir)
 
     def test_activate_idempotent(self) -> None:
-        policy = SandboxPolicy(plugin_id="idempotent")
+        policy = SandboxPolicy(
+            plugin_id="idempotent",
+            import_policy=ImportPolicy(blocked_modules=_enough_blocked()),
+        )
         ctx = SandboxContext(policy)
         try:
             ctx.activate()
@@ -867,6 +887,7 @@ class TestLayerComposition:
 
         policy = SandboxPolicy(
             plugin_id="dual_violation",
+            import_policy=ImportPolicy(blocked_modules=_enough_blocked()),
             resource_policy=ResourcePolicy(max_cpu_seconds=5),
         )
 
@@ -1068,7 +1089,7 @@ class TestSecurityEventLogging:
     def test_context_collects_violations_from_all_layers(self) -> None:
         policy = SandboxPolicy(
             plugin_id="event_test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(blocked_modules=_enough_blocked() | {"os"}),
         )
         ctx = SandboxContext(policy)
         ctx.activate()
