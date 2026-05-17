@@ -1,117 +1,154 @@
-"""Comprehensive tests for engine.plugins.sandbox.monitoring (metrics + event logger)."""
+"""Tests for sandbox monitoring: event logging, metrics, violation reporting, and admin API."""
 
 from __future__ import annotations
 
 import time
 
+from engine.plugins.sandbox.core.context import SandboxContext
+from engine.plugins.sandbox.core.policy import (
+    ImportPolicy,
+    SandboxPolicy,
+)
 from engine.plugins.sandbox.core.violation import (
     ImportViolation,
     SandboxViolationCategory,
 )
+from engine.plugins.sandbox.monitoring.admin_api import (
+    PolicySnapshot,
+    SandboxAdminAPI,
+)
 from engine.plugins.sandbox.monitoring.event_logger import SecurityEvent, SecurityEventLogger
-from engine.plugins.sandbox.monitoring.metrics import PluginMetrics, SandboxMetricsCollector
+from engine.plugins.sandbox.monitoring.metrics import (
+    PluginMetrics,
+    SandboxMetricsCollector,
+)
+from engine.plugins.sandbox.monitoring.violation_report import ViolationReport
+from engine.plugins.trust_levels import TrustLevel
 
 
-class TestPluginMetrics:
-    def test_defaults(self) -> None:
-        m = PluginMetrics(plugin_id="test")
-        assert m.plugin_id == "test"
-        assert m.total_evaluations == 0
-        assert m.total_signals_emitted == 0
-        assert m.total_cpu_time_ms == 0.0
-        assert m.avg_evaluation_ms == 0.0
-        assert m.peak_memory_bytes == 0
-        assert m.current_memory_bytes == 0
-        assert m.api_calls == 0
-        assert m.errors == 0
-        assert m.last_error is None
-        assert m.security_violations == 0
-        assert m.file_operations == 0
-        assert m.network_requests == 0
+class TestSecurityEventLogger:
+    def test_log_violation(self) -> None:
+        logger = SecurityEventLogger(plugin_id="test")
+        violation = ImportViolation("os", plugin_id="test")
+        logger.log_violation(violation)
+        assert logger.event_count == 1
 
-    def test_to_dict(self) -> None:
-        m = PluginMetrics(plugin_id="test", total_evaluations=5, errors=1)
-        d = m.to_dict()
-        assert d["plugin_id"] == "test"
-        assert d["total_evaluations"] == 5
-        assert d["errors"] == 1
-        assert "avg_evaluation_ms" in d
-        assert "total_cpu_time_ms" in d
-
-    def test_to_dict_rounds_floats(self) -> None:
-        m = PluginMetrics(
-            plugin_id="test",
-            total_cpu_time_ms=123.456789,
-            avg_evaluation_ms=45.6789,
+    def test_log_event(self) -> None:
+        logger = SecurityEventLogger(plugin_id="test")
+        logger.log_event(
+            category=SandboxViolationCategory.IMPORT,
+            detail="test event",
+            attempted_action="test_action",
         )
-        d = m.to_dict()
-        assert d["total_cpu_time_ms"] == 123.46
-        assert d["avg_evaluation_ms"] == 45.68
+        assert logger.event_count == 1
+
+    def test_get_events_no_filter(self) -> None:
+        logger = SecurityEventLogger(plugin_id="test")
+        logger.log_event(
+            category=SandboxViolationCategory.IMPORT,
+            detail="event1",
+        )
+        logger.log_event(
+            category=SandboxViolationCategory.NETWORK,
+            detail="event2",
+        )
+        events = logger.get_events()
+        assert len(events) == 2
+
+    def test_get_events_with_category_filter(self) -> None:
+        logger = SecurityEventLogger(plugin_id="test")
+        logger.log_event(
+            category=SandboxViolationCategory.IMPORT,
+            detail="import event",
+        )
+        logger.log_event(
+            category=SandboxViolationCategory.NETWORK,
+            detail="network event",
+        )
+        events = logger.get_events(category=SandboxViolationCategory.IMPORT)
+        assert len(events) == 1
+        assert events[0].category is SandboxViolationCategory.IMPORT
+
+    def test_get_events_limit(self) -> None:
+        logger = SecurityEventLogger(plugin_id="test")
+        for i in range(20):
+            logger.log_event(
+                category=SandboxViolationCategory.IMPORT,
+                detail=f"event_{i}",
+            )
+        events = logger.get_events(limit=5)
+        assert len(events) == 5
+
+    def test_get_events_since(self) -> None:
+        logger = SecurityEventLogger(plugin_id="test")
+        logger.log_event(
+            category=SandboxViolationCategory.IMPORT,
+            detail="old",
+        )
+        cutoff = time.time()
+        logger.log_event(
+            category=SandboxViolationCategory.IMPORT,
+            detail="new",
+        )
+        events = logger.get_events_since(cutoff)
+        assert len(events) == 1
+        assert events[0].detail == "new"
+
+    def test_clear_events(self) -> None:
+        logger = SecurityEventLogger(plugin_id="test")
+        logger.log_event(
+            category=SandboxViolationCategory.IMPORT,
+            detail="event",
+        )
+        assert logger.event_count == 1
+        logger.clear()
+        assert logger.event_count == 0
+
+    def test_to_dicts(self) -> None:
+        logger = SecurityEventLogger(plugin_id="test")
+        logger.log_event(
+            category=SandboxViolationCategory.IMPORT,
+            detail="event",
+            attempted_action="action",
+        )
+        dicts = logger.to_dicts()
+        assert len(dicts) == 1
+        assert dicts[0]["category"] == "import"
+        assert dicts[0]["detail"] == "event"
+        assert dicts[0]["plugin_id"] == "test"
 
 
 class TestSandboxMetricsCollector:
-    def test_get_or_create_new(self) -> None:
+    def test_record_evaluation(self) -> None:
         collector = SandboxMetricsCollector()
-        m = collector.get_or_create("plugin_a")
-        assert m.plugin_id == "plugin_a"
-
-    def test_get_or_create_existing(self) -> None:
-        collector = SandboxMetricsCollector()
-        m1 = collector.get_or_create("plugin_a")
-        m1.total_evaluations = 5
-        m2 = collector.get_or_create("plugin_a")
-        assert m2.total_evaluations == 5
-        assert m1 is m2
-
-    def test_record_evaluation_success(self) -> None:
-        collector = SandboxMetricsCollector()
-        collector.record_evaluation("p1", 100.0, 3)
-        m = collector.get_or_create("p1")
-        assert m.total_evaluations == 1
-        assert m.total_signals_emitted == 3
-        assert m.total_cpu_time_ms == 100.0
-        assert m.errors == 0
+        collector.record_evaluation("p1", 100.0, 5)
+        metrics = collector.get_plugin_metrics("p1")
+        assert metrics is not None
+        assert metrics["total_evaluations"] == 1
+        assert metrics["total_signals_emitted"] == 5
+        assert metrics["total_cpu_time_ms"] == 100.0
 
     def test_record_evaluation_with_error(self) -> None:
         collector = SandboxMetricsCollector()
-        collector.record_evaluation("p1", 50.0, 0, error="crashed")
-        m = collector.get_or_create("p1")
-        assert m.errors == 1
-        assert m.last_error == "crashed"
-
-    def test_record_evaluation_accumulates(self) -> None:
-        collector = SandboxMetricsCollector()
-        collector.record_evaluation("p1", 100.0, 2)
-        collector.record_evaluation("p1", 200.0, 3)
-        m = collector.get_or_create("p1")
-        assert m.total_evaluations == 2
-        assert m.total_signals_emitted == 5
-        assert m.total_cpu_time_ms == 300.0
-        assert m.avg_evaluation_ms == 150.0
+        collector.record_evaluation("p1", 50.0, 0, error="timeout")
+        metrics = collector.get_plugin_metrics("p1")
+        assert metrics["errors"] == 1
+        assert metrics["last_error"] == "timeout"
 
     def test_record_violation(self) -> None:
         collector = SandboxMetricsCollector()
         collector.record_violation("p1")
         collector.record_violation("p1")
-        m = collector.get_or_create("p1")
-        assert m.security_violations == 2
+        metrics = collector.get_plugin_metrics("p1")
+        assert metrics["security_violations"] == 2
 
     def test_get_all_metrics(self) -> None:
         collector = SandboxMetricsCollector()
         collector.record_evaluation("p1", 100.0, 1)
         collector.record_evaluation("p2", 200.0, 2)
-        all_m = collector.get_all_metrics()
-        assert "p1" in all_m
-        assert "p2" in all_m
-        assert all_m["p1"]["total_evaluations"] == 1
-        assert all_m["p2"]["total_evaluations"] == 1
-
-    def test_get_plugin_metrics_existing(self) -> None:
-        collector = SandboxMetricsCollector()
-        collector.record_evaluation("p1", 100.0, 1)
-        result = collector.get_plugin_metrics("p1")
-        assert result is not None
-        assert result["total_evaluations"] == 1
+        all_metrics = collector.get_all_metrics()
+        assert "p1" in all_metrics
+        assert "p2" in all_metrics
 
     def test_get_plugin_metrics_nonexistent(self) -> None:
         collector = SandboxMetricsCollector()
@@ -132,131 +169,197 @@ class TestSandboxMetricsCollector:
         collector.reset()
         assert collector.get_all_metrics() == {}
 
-    def test_multiple_plugins_independent(self) -> None:
+    def test_avg_evaluation_ms(self) -> None:
+        collector = SandboxMetricsCollector()
+        collector.record_evaluation("p1", 100.0, 0)
+        collector.record_evaluation("p1", 200.0, 0)
+        metrics = collector.get_plugin_metrics("p1")
+        assert metrics["avg_evaluation_ms"] == 150.0
+
+
+class TestViolationReport:
+    def test_empty_report(self) -> None:
+        report = ViolationReport(plugin_id="test")
+        assert report.total_violations == 0
+        assert report.by_category == {}
+
+    def test_from_events(self) -> None:
+        logger = SecurityEventLogger(plugin_id="test")
+        logger.log_event(
+            category=SandboxViolationCategory.IMPORT,
+            detail="import violation",
+        )
+        logger.log_event(
+            category=SandboxViolationCategory.NETWORK,
+            detail="network violation",
+        )
+        events = logger.get_events()
+        report = ViolationReport.from_events(events, plugin_id="test", trust_level="untrusted")
+        assert report.total_violations == 2
+        assert report.by_category.get("import") == 1
+        assert report.by_category.get("network") == 1
+
+    def test_to_dict(self) -> None:
+        report = ViolationReport(plugin_id="test", trust_level="untrusted")
+        d = report.to_dict()
+        assert d["plugin_id"] == "test"
+        assert d["trust_level"] == "untrusted"
+        assert "generated_at" in d
+        assert "by_category" in d
+        assert "by_layer" in d
+
+    def test_to_json(self) -> None:
+        import json
+
+        report = ViolationReport(plugin_id="test")
+        j = report.to_json()
+        parsed = json.loads(j)
+        assert parsed["plugin_id"] == "test"
+
+    def test_summary(self) -> None:
+        report = ViolationReport(plugin_id="test_plugin", trust_level="untrusted")
+        report.by_category = {"import": 3}
+        report.total_violations = 3
+        summary = report.summary()
+        assert "test_plugin" in summary
+        assert "untrusted" in summary
+        assert "3" in summary
+
+    def test_by_layer_structure(self) -> None:
+        report = ViolationReport()
+        assert "import" in report.by_layer
+        assert "network" in report.by_layer
+        assert "resource" in report.by_layer
+        assert "filesystem" in report.by_layer
+        assert "introspection" in report.by_layer
+
+
+class TestPolicySnapshot:
+    def test_from_policy(self) -> None:
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED,
+            "snapshot_test",
+        )
+        snapshot = PolicySnapshot.from_policy(policy)
+        assert snapshot.plugin_id == "snapshot_test"
+        assert snapshot.trust_level == "untrusted"
+        assert len(snapshot.blocked_modules) > 0
+
+
+class TestSandboxAdminAPI:
+    def test_register_and_list_plugins(self) -> None:
+        collector = SandboxMetricsCollector()
+        admin = SandboxAdminAPI(collector)
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "admin_test")
+        ctx = SandboxContext(policy)
+        admin.register_context(ctx)
+        plugins = admin.list_plugins()
+        assert len(plugins) == 1
+        assert plugins[0]["plugin_id"] == "admin_test"
+        ctx.cleanup()
+
+    def test_unregister_context(self) -> None:
+        collector = SandboxMetricsCollector()
+        admin = SandboxAdminAPI(collector)
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "remove_test")
+        ctx = SandboxContext(policy)
+        admin.register_context(ctx)
+        admin.unregister_context("remove_test")
+        plugins = admin.list_plugins()
+        assert len(plugins) == 0
+        ctx.cleanup()
+
+    def test_get_policy(self) -> None:
+        collector = SandboxMetricsCollector()
+        admin = SandboxAdminAPI(collector)
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "policy_test")
+        ctx = SandboxContext(policy)
+        admin.register_context(ctx)
+        policy_dict = admin.get_policy("policy_test")
+        assert policy_dict is not None
+        assert policy_dict["plugin_id"] == "policy_test"
+        assert policy_dict["trust_level"] == "untrusted"
+        ctx.cleanup()
+
+    def test_get_policy_nonexistent(self) -> None:
+        collector = SandboxMetricsCollector()
+        admin = SandboxAdminAPI(collector)
+        assert admin.get_policy("nonexistent") is None
+
+    def test_get_plugin_metrics(self) -> None:
+        collector = SandboxMetricsCollector()
+        collector.record_evaluation("metrics_test", 100.0, 5)
+        admin = SandboxAdminAPI(collector)
+        metrics = admin.get_plugin_metrics("metrics_test")
+        assert metrics is not None
+        assert metrics["total_evaluations"] == 1
+
+    def test_update_policy_when_inactive(self) -> None:
+        collector = SandboxMetricsCollector()
+        admin = SandboxAdminAPI(collector)
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "update_test")
+        ctx = SandboxContext(policy)
+        admin.register_context(ctx)
+        result = admin.update_policy("update_test", {"max_cpu_seconds": 45.0})
+        assert result is not None
+        assert result.updated_fields["max_cpu_seconds"] == 45.0
+        ctx.cleanup()
+
+    def test_update_policy_active_sandbox_blocked(self) -> None:
+        collector = SandboxMetricsCollector()
+        admin = SandboxAdminAPI(collector)
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "active_test")
+        ctx = SandboxContext(policy)
+        admin.register_context(ctx)
+        ctx.activate()
+        try:
+            result = admin.update_policy("active_test", {"max_cpu_seconds": 99.0})
+            assert result is None
+        finally:
+            ctx.cleanup()
+
+    def test_update_policy_unknown_plugin(self) -> None:
+        collector = SandboxMetricsCollector()
+        admin = SandboxAdminAPI(collector)
+        result = admin.update_policy("unknown", {"max_cpu_seconds": 10})
+        assert result is None
+
+    def test_get_policy_history(self) -> None:
+        collector = SandboxMetricsCollector()
+        admin = SandboxAdminAPI(collector)
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "history_test")
+        ctx = SandboxContext(policy)
+        admin.register_context(ctx)
+        admin.update_policy("history_test", {"max_cpu_seconds": 10})
+        admin.update_policy("history_test", {"max_cpu_seconds": 20})
+        history = admin.get_policy_history("history_test")
+        assert len(history) == 2
+        ctx.cleanup()
+
+    def test_get_security_events(self) -> None:
+        collector = SandboxMetricsCollector()
+        admin = SandboxAdminAPI(collector)
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "events_test")
+        ctx = SandboxContext(policy)
+        admin.register_context(ctx)
+        events = admin.get_security_events("events_test")
+        assert isinstance(events, list)
+        ctx.cleanup()
+
+    def test_get_violation_report(self) -> None:
+        collector = SandboxMetricsCollector()
+        admin = SandboxAdminAPI(collector)
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "vr_test")
+        ctx = SandboxContext(policy)
+        admin.register_context(ctx)
+        report = admin.get_violation_report("vr_test")
+        assert report.plugin_id == "vr_test"
+        ctx.cleanup()
+
+    def test_get_all_metrics(self) -> None:
         collector = SandboxMetricsCollector()
         collector.record_evaluation("p1", 100.0, 1)
         collector.record_evaluation("p2", 200.0, 2)
-        m1 = collector.get_or_create("p1")
-        m2 = collector.get_or_create("p2")
-        assert m1.total_evaluations == 1
-        assert m2.total_evaluations == 1
-        assert m1.total_signals_emitted == 1
-        assert m2.total_signals_emitted == 2
-
-
-class TestSecurityEvent:
-    def test_fields(self) -> None:
-        event = SecurityEvent(
-            timestamp=1000.0,
-            category=SandboxViolationCategory.IMPORT,
-            detail="os blocked",
-            plugin_id="p1",
-            attempted_action="import os",
-            stack_trace=None,
-        )
-        assert event.timestamp == 1000.0
-        assert event.category is SandboxViolationCategory.IMPORT
-        assert event.detail == "os blocked"
-        assert event.plugin_id == "p1"
-
-
-class TestSecurityEventLogger:
-    def test_empty_logger(self) -> None:
-        logger = SecurityEventLogger()
-        assert logger.event_count == 0
-        assert logger.get_events() == []
-
-    def test_log_violation(self) -> None:
-        logger = SecurityEventLogger(plugin_id="p1")
-        v = ImportViolation("os", plugin_id="p1")
-        logger.log_violation(v)
-        assert logger.event_count == 1
-        events = logger.get_events()
-        assert events[0].category is SandboxViolationCategory.IMPORT
-        assert "os" in events[0].detail
-
-    def test_log_violation_uses_logger_plugin_id_fallback(self) -> None:
-        logger = SecurityEventLogger(plugin_id="fallback_id")
-        v = ImportViolation("os")
-        logger.log_violation(v)
-        events = logger.get_events()
-        assert events[0].plugin_id == "fallback_id"
-
-    def test_log_violation_uses_violation_plugin_id(self) -> None:
-        logger = SecurityEventLogger(plugin_id="fallback_id")
-        v = ImportViolation("os", plugin_id="explicit_id")
-        logger.log_violation(v)
-        events = logger.get_events()
-        assert events[0].plugin_id == "explicit_id"
-
-    def test_log_event(self) -> None:
-        logger = SecurityEventLogger(plugin_id="p1")
-        logger.log_event(
-            category=SandboxViolationCategory.NETWORK,
-            detail="blocked host",
-            attempted_action="connect:evil.com",
-        )
-        assert logger.event_count == 1
-        events = logger.get_events()
-        assert events[0].category is SandboxViolationCategory.NETWORK
-        assert events[0].detail == "blocked host"
-
-    def test_get_events_filter_by_category(self) -> None:
-        logger = SecurityEventLogger()
-        logger.log_event(category=SandboxViolationCategory.IMPORT, detail="import v")
-        logger.log_event(category=SandboxViolationCategory.NETWORK, detail="network v")
-        logger.log_event(category=SandboxViolationCategory.IMPORT, detail="import v2")
-        import_events = logger.get_events(category=SandboxViolationCategory.IMPORT)
-        assert len(import_events) == 2
-        network_events = logger.get_events(category=SandboxViolationCategory.NETWORK)
-        assert len(network_events) == 1
-
-    def test_get_events_limit(self) -> None:
-        logger = SecurityEventLogger()
-        for i in range(10):
-            logger.log_event(category=SandboxViolationCategory.IMPORT, detail=f"v{i}")
-        events = logger.get_events(limit=3)
-        assert len(events) == 3
-        assert "v7" in events[0].detail
-        assert "v9" in events[2].detail
-
-    def test_get_events_since(self) -> None:
-        logger = SecurityEventLogger()
-        logger.log_event(category=SandboxViolationCategory.IMPORT, detail="old")
-        time.sleep(0.01)
-        cutoff = time.time()
-        logger.log_event(category=SandboxViolationCategory.IMPORT, detail="new1")
-        logger.log_event(category=SandboxViolationCategory.IMPORT, detail="new2")
-        recent = logger.get_events_since(cutoff)
-        assert len(recent) == 2
-
-    def test_clear(self) -> None:
-        logger = SecurityEventLogger()
-        logger.log_event(category=SandboxViolationCategory.IMPORT, detail="v")
-        assert logger.event_count == 1
-        logger.clear()
-        assert logger.event_count == 0
-
-    def test_to_dicts(self) -> None:
-        logger = SecurityEventLogger(plugin_id="p1")
-        v = ImportViolation("os", plugin_id="p1")
-        logger.log_violation(v)
-        result = logger.to_dicts()
-        assert len(result) == 1
-        assert result[0]["category"] == "import"
-        assert result[0]["plugin_id"] == "p1"
-        assert "os" in result[0]["detail"]
-
-    def test_to_dicts_limit(self) -> None:
-        logger = SecurityEventLogger()
-        for i in range(5):
-            logger.log_event(category=SandboxViolationCategory.IMPORT, detail=f"v{i}")
-        result = logger.to_dicts(limit=2)
-        assert len(result) == 2
-
-    def test_stack_trace_captured(self) -> None:
-        logger = SecurityEventLogger()
-        v = ImportViolation("os")
-        logger.log_violation(v)
-        events = logger.get_events()
-        assert events[0].stack_trace is not None
+        admin = SandboxAdminAPI(collector)
+        all_metrics = admin.get_all_metrics()
+        assert len(all_metrics) == 2

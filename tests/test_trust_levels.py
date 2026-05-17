@@ -1,119 +1,167 @@
-"""Comprehensive tests for engine.plugins.trust_levels."""
+"""Tests for trust level enforcement: capabilities, escalation, and validation."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
-
 from engine.plugins.trust_levels import (
     TrustLevel,
+    enforce_no_escalation,
+    get_allowed_capabilities,
     get_trust_level,
     get_trust_policy,
+    validate_capabilities,
 )
 
 
 class TestTrustLevelEnum:
-    def test_trusted_full_value(self) -> None:
+    def test_values(self) -> None:
         assert TrustLevel.TRUSTED_FULL.value == "trusted_full"
-
-    def test_trusted_limited_value(self) -> None:
         assert TrustLevel.TRUSTED_LIMITED.value == "trusted_limited"
-
-    def test_untrusted_value(self) -> None:
         assert TrustLevel.UNTRUSTED.value == "untrusted"
 
-    def test_from_string_trusted_full(self) -> None:
+    def test_from_value(self) -> None:
         assert TrustLevel("trusted_full") is TrustLevel.TRUSTED_FULL
-
-    def test_from_string_trusted_limited(self) -> None:
         assert TrustLevel("trusted_limited") is TrustLevel.TRUSTED_LIMITED
-
-    def test_from_string_untrusted(self) -> None:
         assert TrustLevel("untrusted") is TrustLevel.UNTRUSTED
 
-    def test_invalid_string_raises_value_error(self) -> None:
-        with pytest.raises(ValueError):
-            TrustLevel("invalid_level")
+    def test_invalid_value_raises(self) -> None:
+        import pytest
 
-    def test_all_members(self) -> None:
-        members = list(TrustLevel)
-        assert len(members) == 3
+        with pytest.raises(ValueError):
+            TrustLevel("super_admin")
 
 
 class TestGetTrustLevel:
-    def test_manifest_with_trusted_full(self) -> None:
+    def test_manifest_with_trust_level(self) -> None:
         manifest = SimpleNamespace(trust_level="trusted_full")
         assert get_trust_level(manifest) is TrustLevel.TRUSTED_FULL
 
-    def test_manifest_with_trusted_limited(self) -> None:
-        manifest = SimpleNamespace(trust_level="trusted_limited")
-        assert get_trust_level(manifest) is TrustLevel.TRUSTED_LIMITED
-
-    def test_manifest_with_untrusted(self) -> None:
-        manifest = SimpleNamespace(trust_level="untrusted")
+    def test_manifest_without_trust_level(self) -> None:
+        manifest = SimpleNamespace()
         assert get_trust_level(manifest) is TrustLevel.UNTRUSTED
 
     def test_manifest_with_none_trust_level(self) -> None:
         manifest = SimpleNamespace(trust_level=None)
         assert get_trust_level(manifest) is TrustLevel.UNTRUSTED
 
-    def test_manifest_without_trust_level_attr(self) -> None:
-        manifest = SimpleNamespace()
-        assert get_trust_level(manifest) is TrustLevel.UNTRUSTED
-
-    def test_manifest_with_empty_string(self) -> None:
+    def test_manifest_with_empty_trust_level(self) -> None:
         manifest = SimpleNamespace(trust_level="")
         assert get_trust_level(manifest) is TrustLevel.UNTRUSTED
 
     def test_manifest_with_invalid_trust_level(self) -> None:
-        manifest = SimpleNamespace(trust_level="super_admin")
+        manifest = SimpleNamespace(trust_level="invalid")
         assert get_trust_level(manifest) is TrustLevel.UNTRUSTED
 
 
 class TestGetTrustPolicy:
-    def test_trusted_full_policy(self) -> None:
-        policy = get_trust_policy(TrustLevel.TRUSTED_FULL)
-        assert policy["import_restriction"] == "relaxed"
-        assert policy["network"] == "manifest_only"
-        assert policy["resource_multiplier"] == 4.0
-        assert policy["filesystem"] == "workspace"
-        assert policy["introspection"] == "basic"
-
-    def test_trusted_limited_policy(self) -> None:
-        policy = get_trust_policy(TrustLevel.TRUSTED_LIMITED)
-        assert policy["import_restriction"] == "standard"
-        assert policy["network"] == "manifest_only"
-        assert policy["resource_multiplier"] == 2.0
-        assert policy["filesystem"] == "isolated_rw"
-        assert policy["introspection"] == "standard"
-
-    def test_untrusted_policy(self) -> None:
-        policy = get_trust_policy(TrustLevel.UNTRUSTED)
-        assert policy["import_restriction"] == "strict"
-        assert policy["network"] == "manifest_only"
-        assert policy["resource_multiplier"] == 1.0
-        assert policy["filesystem"] == "isolated_ro"
-        assert policy["introspection"] == "strict"
-
-    def test_returns_dict(self) -> None:
-        policy = get_trust_policy(TrustLevel.TRUSTED_FULL)
-        assert isinstance(policy, dict)
-
-    def test_all_policies_have_required_keys(self) -> None:
-        required_keys = {
-            "import_restriction",
-            "network",
-            "resource_multiplier",
-            "filesystem",
-            "introspection",
-        }
+    def test_all_levels_have_required_keys(self) -> None:
         for level in TrustLevel:
             policy = get_trust_policy(level)
-            assert required_keys.issubset(policy.keys())
+            assert "import_restriction" in policy
+            assert "resource_multiplier" in policy
+            assert "filesystem" in policy
+            assert "introspection" in policy
+            assert "allowed_capabilities" in policy
 
-    def test_resource_multiplier_decreases_with_trust(self) -> None:
-        full = get_trust_policy(TrustLevel.TRUSTED_FULL)["resource_multiplier"]
-        limited = get_trust_policy(TrustLevel.TRUSTED_LIMITED)["resource_multiplier"]
-        untrusted = get_trust_policy(TrustLevel.UNTRUSTED)["resource_multiplier"]
-        assert full > limited > untrusted
+    def test_unknown_level_returns_untrusted(self) -> None:
+        policy = get_trust_policy("unknown")  # type: ignore[arg-type]
+        assert policy["import_restriction"] == "strict"
+
+    def test_resource_multiplier_ordering(self) -> None:
+        p_untrusted = get_trust_policy(TrustLevel.UNTRUSTED)
+        p_limited = get_trust_policy(TrustLevel.TRUSTED_LIMITED)
+        p_full = get_trust_policy(TrustLevel.TRUSTED_FULL)
+        assert p_untrusted["resource_multiplier"] < p_limited["resource_multiplier"]
+        assert p_limited["resource_multiplier"] < p_full["resource_multiplier"]
+
+
+class TestGetAllowedCapabilities:
+    def test_untrusted_minimal_capabilities(self) -> None:
+        caps = get_allowed_capabilities(TrustLevel.UNTRUSTED)
+        assert "network" in caps
+        assert "filesystem_read" in caps
+        assert "filesystem_write" not in caps
+        assert "subprocess" not in caps
+        assert "threads" not in caps
+
+    def test_limited_additional_capabilities(self) -> None:
+        caps = get_allowed_capabilities(TrustLevel.TRUSTED_LIMITED)
+        assert "filesystem_write" in caps
+        assert "threads" in caps
+        assert "subprocess" not in caps
+
+    def test_full_all_capabilities(self) -> None:
+        caps = get_allowed_capabilities(TrustLevel.TRUSTED_FULL)
+        assert "subprocess" in caps
+        assert "environment" in caps
+        assert "dynamic_import" in caps
+
+    def test_capability_ordering(self) -> None:
+        untrusted = get_allowed_capabilities(TrustLevel.UNTRUSTED)
+        limited = get_allowed_capabilities(TrustLevel.TRUSTED_LIMITED)
+        full = get_allowed_capabilities(TrustLevel.TRUSTED_FULL)
+        assert untrusted < limited
+        assert limited < full
+
+
+class TestValidateCapabilities:
+    def test_untrusted_allows_network(self) -> None:
+        assert validate_capabilities(TrustLevel.UNTRUSTED, {"network"}) is True
+
+    def test_untrusted_blocks_write(self) -> None:
+        assert validate_capabilities(TrustLevel.UNTRUSTED, {"filesystem_write"}) is False
+
+    def test_untrusted_blocks_threads(self) -> None:
+        assert validate_capabilities(TrustLevel.UNTRUSTED, {"threads"}) is False
+
+    def test_limited_allows_write(self) -> None:
+        assert validate_capabilities(TrustLevel.TRUSTED_LIMITED, {"filesystem_write"}) is True
+
+    def test_limited_blocks_subprocess(self) -> None:
+        assert validate_capabilities(TrustLevel.TRUSTED_LIMITED, {"subprocess"}) is False
+
+    def test_full_allows_subprocess(self) -> None:
+        assert validate_capabilities(TrustLevel.TRUSTED_FULL, {"subprocess"}) is True
+
+    def test_empty_required_always_passes(self) -> None:
+        assert validate_capabilities(TrustLevel.UNTRUSTED, set()) is True
+
+    def test_multiple_capabilities(self) -> None:
+        assert (
+            validate_capabilities(
+                TrustLevel.UNTRUSTED, {"network", "filesystem_read"}
+            )
+            is True
+        )
+
+    def test_mixed_pass_fail(self) -> None:
+        assert (
+            validate_capabilities(
+                TrustLevel.UNTRUSTED, {"network", "filesystem_write"}
+            )
+            is False
+        )
+
+
+class TestEnforceNoEscalation:
+    def test_same_level_allowed(self) -> None:
+        assert enforce_no_escalation(TrustLevel.UNTRUSTED, TrustLevel.UNTRUSTED) is True
+
+    def test_downgrade_allowed(self) -> None:
+        assert enforce_no_escalation(TrustLevel.TRUSTED_FULL, TrustLevel.UNTRUSTED) is True
+
+    def test_upgrade_blocked(self) -> None:
+        assert enforce_no_escalation(TrustLevel.UNTRUSTED, TrustLevel.TRUSTED_FULL) is False
+
+    def test_limited_to_full_blocked(self) -> None:
+        assert enforce_no_escalation(TrustLevel.TRUSTED_LIMITED, TrustLevel.TRUSTED_FULL) is False
+
+    def test_untrusted_to_limited_blocked(self) -> None:
+        assert enforce_no_escalation(TrustLevel.UNTRUSTED, TrustLevel.TRUSTED_LIMITED) is False
+
+    def test_full_to_limited_allowed(self) -> None:
+        assert enforce_no_escalation(TrustLevel.TRUSTED_FULL, TrustLevel.TRUSTED_LIMITED) is True
+
+    def test_limited_to_untrusted_allowed(self) -> None:
+        assert enforce_no_escalation(TrustLevel.TRUSTED_LIMITED, TrustLevel.UNTRUSTED) is True

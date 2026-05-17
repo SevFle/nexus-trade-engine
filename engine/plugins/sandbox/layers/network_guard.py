@@ -24,6 +24,12 @@ _PRIVATE_NETWORKS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
     ipaddress.IPv6Network("fe80::/10"),
 ]
 
+_METADATA_ENDPOINTS: frozenset[str] = frozenset({
+    "169.254.169.254",
+    "metadata.google.internal",
+    "metadata.azure.com",
+})
+
 
 def _is_private_ip(host: str) -> bool:
     try:
@@ -52,6 +58,7 @@ class NetworkGuard:
         self._original_socket_class: type | None = None
         self._installed = False
         self._cidr_networks = _parse_cidr_networks(policy.allowed_cidrs)
+        self._connection_counts: dict[str, int] = {}
 
     def _is_host_in_cidr(self, host: str) -> bool:
         try:
@@ -60,7 +67,12 @@ class NetworkGuard:
             return False
         return any(addr in net for net in self._cidr_networks)
 
+    def _is_metadata_endpoint(self, host: str) -> bool:
+        return host in _METADATA_ENDPOINTS
+
     def _is_host_allowed(self, host: str) -> bool:
+        if self._policy.block_metadata_endpoints and self._is_metadata_endpoint(host):
+            return False
         if self._policy.is_host_allowed(host):
             return True
         if _is_private_ip(host) and not self._is_host_in_cidr(host):

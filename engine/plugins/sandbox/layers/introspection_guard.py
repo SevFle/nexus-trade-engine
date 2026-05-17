@@ -25,6 +25,11 @@ _EXPLICITLY_BLOCKED_ATTRS: frozenset[str] = frozenset(
         "__reduce_ex__",
         "__getstate__",
         "__setstate__",
+        "__builtins__",
+        "__func__",
+        "__self__",
+        "__module__",
+        "__weakref__",
     }
 )
 

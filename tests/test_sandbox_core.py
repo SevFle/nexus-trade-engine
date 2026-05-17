@@ -5,12 +5,16 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from engine.plugins.sandbox.core.policy import (
+    EnvironmentPolicy,
     FilesystemPolicy,
     ImportPolicy,
     IntrospectionPolicy,
     NetworkPolicy,
     ResourcePolicy,
     SandboxPolicy,
+    _TRUST_ENVIRONMENT_PRESETS,
+    _TRUST_MAX_CPU_HARD_LIMITS,
+    _TRUST_MAX_MEMORY_HARD_LIMITS,
     _parse_memory,
 )
 from engine.plugins.sandbox.core.violation import (
@@ -21,6 +25,7 @@ from engine.plugins.sandbox.core.violation import (
     ResourceExhausted,
     SandboxViolationCategory,
 )
+from engine.plugins.trust_levels import TrustLevel
 
 
 class TestImportPolicy:
@@ -201,7 +206,7 @@ class TestSandboxPolicyTrustedPolicy:
     def test_trusted_policy_relaxed_import(self) -> None:
         policy = SandboxPolicy.trusted_policy("my_plugin")
         assert policy.plugin_id == "my_plugin"
-        assert policy.trust_level == "trusted"
+        assert policy.trust_level == "trusted_full"
         assert "subprocess" in policy.import_policy.blocked_modules
         assert "ctypes" in policy.import_policy.blocked_modules
 
@@ -365,3 +370,190 @@ class TestViolationToDict:
         assert "detail" in d
         assert "plugin_id" in d
         assert "attempted_action" in d
+
+
+class TestEnvironmentPolicy:
+    def test_defaults(self) -> None:
+        policy = EnvironmentPolicy()
+        assert policy.allowed_env_vars == set()
+        assert policy.block_os_environ is True
+        assert policy.sanitized_env == {}
+
+    def test_custom_allowed_vars(self) -> None:
+        policy = EnvironmentPolicy(allowed_env_vars={"HOME", "PATH"})
+        assert "HOME" in policy.allowed_env_vars
+        assert "PATH" in policy.allowed_env_vars
+
+    def test_trusted_full_allows_env(self) -> None:
+        policy = _TRUST_ENVIRONMENT_PRESETS[TrustLevel.TRUSTED_FULL]
+        assert policy.block_os_environ is False
+        assert len(policy.allowed_env_vars) > 0
+
+    def test_untrusted_blocks_env(self) -> None:
+        policy = _TRUST_ENVIRONMENT_PRESETS[TrustLevel.UNTRUSTED]
+        assert policy.block_os_environ is True
+        assert len(policy.allowed_env_vars) == 0
+
+    def test_limited_partial_env(self) -> None:
+        policy = _TRUST_ENVIRONMENT_PRESETS[TrustLevel.TRUSTED_LIMITED]
+        assert policy.block_os_environ is True
+        assert "HOME" in policy.allowed_env_vars
+
+
+class TestNetworkPolicyEnhanced:
+    def test_block_metadata_endpoints_default(self) -> None:
+        policy = NetworkPolicy()
+        assert policy.block_metadata_endpoints is True
+
+    def test_max_connections_default(self) -> None:
+        policy = NetworkPolicy()
+        assert policy.max_connections_per_host == 100
+
+    def test_custom_max_connections(self) -> None:
+        policy = NetworkPolicy(max_connections_per_host=10)
+        assert policy.max_connections_per_host == 10
+
+
+class TestFilesystemPolicyEnhanced:
+    def test_block_env_access_default(self) -> None:
+        policy = FilesystemPolicy()
+        assert policy.block_env_access is True
+
+
+class TestIntrospectionPolicyEnhanced:
+    def test_block_type_abuse_default(self) -> None:
+        policy = IntrospectionPolicy()
+        assert policy.block_type_abuse is True
+
+    def test_import_not_in_blocked_builtins(self) -> None:
+        policy = IntrospectionPolicy()
+        assert "__import__" not in policy.blocked_builtins
+
+    def test_builtins_access_in_blocked_attrs(self) -> None:
+        policy = IntrospectionPolicy()
+        assert "__builtins__" in policy.blocked_attributes
+
+    def test_func_self_in_blocked_attrs(self) -> None:
+        policy = IntrospectionPolicy()
+        assert "__func__" in policy.blocked_attributes
+        assert "__self__" in policy.blocked_attributes
+
+
+class TestSandboxPolicyIntegrity:
+    def test_compute_integrity_hash_deterministic(self) -> None:
+        policy = SandboxPolicy(plugin_id="test", trust_level="untrusted")
+        h1 = policy.compute_integrity_hash()
+        h2 = policy.compute_integrity_hash()
+        assert h1 == h2
+
+    def test_integrity_hash_changes_on_modification(self) -> None:
+        policy = SandboxPolicy(plugin_id="test", trust_level="untrusted")
+        policy.set_integrity_hash()
+        original_hash = policy._integrity_hash
+        policy.resource_policy.max_cpu_seconds = 999
+        assert policy.verify_integrity() is False
+
+    def test_set_and_verify_integrity(self) -> None:
+        policy = SandboxPolicy(plugin_id="test", trust_level="untrusted")
+        policy.set_integrity_hash()
+        assert policy.verify_integrity() is True
+
+    def test_verify_integrity_without_hash(self) -> None:
+        policy = SandboxPolicy(plugin_id="test")
+        assert policy.verify_integrity() is True
+
+
+class TestSandboxPolicyHardLimits:
+    def test_untrusted_cpu_hard_limit(self) -> None:
+        assert _TRUST_MAX_CPU_HARD_LIMITS[TrustLevel.UNTRUSTED] == 120.0
+
+    def test_untrusted_memory_hard_limit(self) -> None:
+        assert _TRUST_MAX_MEMORY_HARD_LIMITS[TrustLevel.UNTRUSTED] == 1024**3
+
+    def test_trusted_full_cpu_hard_limit(self) -> None:
+        assert _TRUST_MAX_CPU_HARD_LIMITS[TrustLevel.TRUSTED_FULL] == 600.0
+
+    def test_trusted_full_memory_hard_limit(self) -> None:
+        assert _TRUST_MAX_MEMORY_HARD_LIMITS[TrustLevel.TRUSTED_FULL] == 4 * 1024**3
+
+    def test_enforce_hard_limits_no_violations(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
+        violations = policy.enforce_hard_limits(TrustLevel.UNTRUSTED)
+        assert violations == []
+
+    def test_enforce_hard_limits_cpu_exceeded(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="test",
+            trust_level="untrusted",
+            resource_policy=ResourcePolicy(max_cpu_seconds=999),
+        )
+        violations = policy.enforce_hard_limits(TrustLevel.UNTRUSTED)
+        assert any("max_cpu_seconds" in v for v in violations)
+
+    def test_enforce_hard_limits_memory_exceeded(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="test",
+            trust_level="untrusted",
+            resource_policy=ResourcePolicy(max_memory_bytes=10 * 1024**3),
+        )
+        violations = policy.enforce_hard_limits(TrustLevel.UNTRUSTED)
+        assert any("max_memory_bytes" in v for v in violations)
+
+    def test_enforce_hard_limits_untrusted_with_rw(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="test",
+            trust_level="untrusted",
+            filesystem_policy=FilesystemPolicy(read_write_paths=["/tmp"]),  # noqa: S108
+        )
+        violations = policy.enforce_hard_limits(TrustLevel.UNTRUSTED)
+        assert any("write paths" in v for v in violations)
+
+    def test_enforce_hard_limits_untrusted_with_threads(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="test",
+            trust_level="untrusted",
+            resource_policy=ResourcePolicy(max_threads=4),
+        )
+        violations = policy.enforce_hard_limits(TrustLevel.UNTRUSTED)
+        assert any("threads" in v for v in violations)
+
+    def test_enforce_hard_limits_untrusted_no_metadata_block(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="test",
+            trust_level="untrusted",
+            network_policy=NetworkPolicy(block_metadata_endpoints=False),
+        )
+        violations = policy.enforce_hard_limits(TrustLevel.UNTRUSTED)
+        assert any("metadata" in v for v in violations)
+
+    def test_from_manifest_clamps_cpu(self) -> None:
+        manifest = SimpleNamespace(
+            id="clamp_test",
+            resources=SimpleNamespace(max_cpu_seconds=1000, max_memory="10GB"),
+        )
+        policy = SandboxPolicy.from_manifest(manifest)
+        assert policy.resource_policy.max_cpu_seconds <= _TRUST_MAX_CPU_HARD_LIMITS[TrustLevel.UNTRUSTED]
+
+    def test_from_trust_level_clamps_memory(self) -> None:
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED,
+            "test",
+            max_memory_bytes=10 * 1024**3,
+        )
+        assert policy.resource_policy.max_memory_bytes <= _TRUST_MAX_MEMORY_HARD_LIMITS[TrustLevel.UNTRUSTED]
+
+    def test_trusted_policy_has_integrity_hash(self) -> None:
+        policy = SandboxPolicy.trusted_policy("test")
+        assert policy._integrity_hash is not None
+
+    def test_from_manifest_sets_integrity_hash(self) -> None:
+        manifest = SimpleNamespace(
+            id="hash_test",
+            resources=SimpleNamespace(max_cpu_seconds=30, max_memory="512MB"),
+        )
+        policy = SandboxPolicy.from_manifest(manifest)
+        assert policy._integrity_hash is not None
+
+    def test_from_trust_level_sets_integrity_hash(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
+        assert policy._integrity_hash is not None

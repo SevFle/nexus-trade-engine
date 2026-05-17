@@ -278,7 +278,7 @@ class TestTrustedPolicy:
     def test_trusted_policy_fields(self):
         p = SandboxPolicy.trusted_policy("my-plugin")
         assert p.plugin_id == "my-plugin"
-        assert p.trust_level == "trusted"
+        assert p.trust_level == "trusted_full"
         assert p.resource_policy.max_cpu_seconds == 300
         assert "subprocess" in p.import_policy.blocked_modules
 

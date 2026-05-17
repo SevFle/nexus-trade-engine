@@ -1138,7 +1138,7 @@ class TestTrustLevelEnforcement:
 
     def test_trusted_policy_relaxed(self) -> None:
         policy = SandboxPolicy.trusted_policy("my_plugin")
-        assert policy.trust_level == "trusted"
+        assert policy.trust_level == "trusted_full"
         assert policy.plugin_id == "my_plugin"
         assert "os" not in policy.import_policy.blocked_modules
         assert "subprocess" in policy.import_policy.blocked_modules

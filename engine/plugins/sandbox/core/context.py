@@ -22,11 +22,6 @@ _MIN_BLOCKED_MODULES_LIMITED = 5
 _MAX_CPU_SECONDS_UNTRUSTED = 60
 _MAX_CPU_SECONDS_LIMITED = 120
 
-_UNTRUSTED_MIN_BLOCKED_MODULES = 10
-_UNTRUSTED_MAX_CPU_SECONDS = 60
-_LIMITED_MIN_BLOCKED_MODULES = 5
-_LIMITED_MAX_CPU_SECONDS = 120
-
 
 class SandboxContext:
     def __init__(
@@ -97,16 +92,37 @@ class SandboxContext:
                 return False
             if policy.filesystem_policy.read_write_paths:
                 return False
+            if policy.resource_policy.max_threads > 1:
+                return False
         elif trust == TrustLevel.TRUSTED_LIMITED:
             if len(policy.import_policy.blocked_modules) < _MIN_BLOCKED_MODULES_LIMITED:
                 return False
             if policy.resource_policy.max_cpu_seconds > _MAX_CPU_SECONDS_LIMITED:
                 return False
+        if not policy.verify_integrity():
+            return False
         return True
+
+    def _enforce_hard_limits(self) -> None:
+        violations = self._policy.enforce_hard_limits(self._trust_level)
+        if violations:
+            detail = "; ".join(violations)
+            self._event_logger.log_event(
+                category=SandboxViolationCategory.INTROSPECTION,
+                detail=f"Hard limit violations: {detail}",
+                attempted_action="trust_level_hard_limit_check",
+            )
 
     def activate(self) -> None:
         if self._active:
             return
+        if not self.validate_trust_level():
+            self._event_logger.log_event(
+                category=SandboxViolationCategory.INTROSPECTION,
+                detail=f"Trust level policy validation failed for {self._policy.trust_level}",
+                attempted_action="trust_level_validation",
+            )
+        self._enforce_hard_limits()
         try:
             self._network_layer.install()
             self._resource_layer.install()
@@ -114,12 +130,6 @@ class SandboxContext:
             self._introspection_layer.install()
             self._import_layer.install()
             self._active = True
-            if not self.validate_trust_level():
-                self._event_logger.log_event(
-                    category=SandboxViolationCategory.INTROSPECTION,
-                    detail=f"Trust level policy validation failed for {self._policy.trust_level}",
-                    attempted_action="trust_level_validation",
-                )
         except Exception:
             self._force_deactivate()
             raise

@@ -905,7 +905,7 @@ class TestTrustLevels:
         assert len(untrusted_policy.import_policy.blocked_modules) > 0
 
     def test_trusted_relaxed_resources(self, trusted_policy: SandboxPolicy) -> None:
-        assert trusted_policy.trust_level == "trusted"
+        assert trusted_policy.trust_level == "trusted_full"
         assert trusted_policy.resource_policy.max_cpu_seconds == 300
         assert trusted_policy.resource_policy.max_memory_bytes == 2 * 1024**3
 
@@ -965,7 +965,7 @@ class TestTrustLevels:
     def test_trusted_policy_factory(self) -> None:
         policy = SandboxPolicy.trusted_policy("my_plugin")
         assert policy.plugin_id == "my_plugin"
-        assert policy.trust_level == "trusted"
+        assert policy.trust_level == "trusted_full"
 
     async def test_trusted_plugin_can_use_more_resources(self) -> None:
         from engine.plugins.sandbox.executor import PluginSandboxExecutor

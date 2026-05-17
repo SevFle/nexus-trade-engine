@@ -8,6 +8,7 @@ __all__ = [
 
 def __getattr__(name: str):
     lazy_exports = {
+        "EnvironmentPolicy": "engine.plugins.sandbox.core.policy",
         "FilesystemIsolation": "engine.plugins.sandbox.layers.filesystem_isolation",
         "FilesystemPolicy": "engine.plugins.sandbox.core.policy",
         "FilesystemViolation": "engine.plugins.sandbox.core.violation",
@@ -41,7 +42,7 @@ def __getattr__(name: str):
     "SandboxPhase": "engine.plugins.sandbox.core.lifecycle",
     "LifecycleManager": "engine.plugins.sandbox.core.lifecycle",
     "SandboxIntegration": "engine.plugins.sandbox.core.integration",
-}
+    }
     if name in lazy_exports:
         import importlib  # noqa: PLC0415
 

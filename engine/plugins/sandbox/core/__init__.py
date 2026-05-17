@@ -1,7 +1,10 @@
 from engine.plugins.sandbox.core.context import SandboxContext
 from engine.plugins.sandbox.core.integration import SandboxIntegration
 from engine.plugins.sandbox.core.lifecycle import LifecycleManager, SandboxLifecycle, SandboxPhase
-from engine.plugins.sandbox.core.policy import SandboxPolicy
+from engine.plugins.sandbox.core.policy import (
+    EnvironmentPolicy,
+    SandboxPolicy,
+)
 from engine.plugins.sandbox.core.state import SandboxTLS, get_default_tls
 from engine.plugins.sandbox.core.violation import (
     ResourceExhausted,
@@ -10,6 +13,7 @@ from engine.plugins.sandbox.core.violation import (
 )
 
 __all__ = [
+    "EnvironmentPolicy",
     "LifecycleManager",
     "ResourceExhausted",
     "SandboxContext",

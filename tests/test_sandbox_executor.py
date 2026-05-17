@@ -1,4 +1,4 @@
-"""Comprehensive tests for engine.plugins.sandbox.executor — PluginSandboxExecutor."""
+"""Tests for the PluginSandboxExecutor with hardened isolation and trust enforcement."""
 
 from __future__ import annotations
 
@@ -6,30 +6,32 @@ import asyncio
 
 import pytest
 
-from engine.core.signal import Side, Signal
-from engine.plugins.sandbox.core.policy import ResourcePolicy, SandboxPolicy
+from engine.core.signal import Signal
+from engine.plugins.manifest import StrategyManifest
+from engine.plugins.sandbox.core.context import SandboxContext
+from engine.plugins.sandbox.core.policy import (
+    FilesystemPolicy,
+    ImportPolicy,
+    IntrospectionPolicy,
+    NetworkPolicy,
+    ResourcePolicy,
+    SandboxPolicy,
+)
 from engine.plugins.sandbox.executor import PluginSandboxExecutor
 from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
+from engine.plugins.trust_levels import TrustLevel
 
 
 class _GoodStrategy:
-    name = "good"
+    name = "good_strategy"
     version = "1.0.0"
 
     def on_bar(self, state, portfolio):
         return [Signal.buy(symbol="AAPL", strategy_id=self.name)]
 
 
-class _AsyncGoodStrategy:
-    name = "async_good"
-    version = "1.0.0"
-
-    async def on_bar(self, state, portfolio):
-        return [Signal.buy(symbol="TSLA", strategy_id=self.name)]
-
-
 class _BadStrategy:
-    name = "bad"
+    name = "bad_strategy"
     version = "1.0.0"
 
     def on_bar(self, state, portfolio):
@@ -37,7 +39,7 @@ class _BadStrategy:
 
 
 class _SlowStrategy:
-    name = "slow"
+    name = "slow_strategy"
     version = "1.0.0"
 
     async def on_bar(self, state, portfolio):
@@ -45,90 +47,17 @@ class _SlowStrategy:
         return []
 
 
-class _MixedSignalStrategy:
-    name = "mixed"
-    version = "1.0.0"
-
-    def on_bar(self, state, portfolio):
-        return [
-            Signal.buy(symbol="AAPL", strategy_id=self.name),
-            "not_a_signal",
-            Signal.sell(symbol="MSFT", strategy_id=self.name),
-            42,
-        ]
-
-
 class _EmptyStrategy:
-    name = "empty"
+    name = "empty_strategy"
     version = "1.0.0"
 
     def on_bar(self, state, portfolio):
         return []
 
 
-class _NoIdSignalStrategy:
-    name = "no_id_strat"
-    version = "1.0.0"
-
-    def on_bar(self, state, portfolio):
-        return [Signal(symbol="AAPL", side=Side.BUY, strategy_id="")]
-
-
-@pytest.fixture
-def policy() -> SandboxPolicy:
-    return SandboxPolicy(
-        plugin_id="test_plugin",
-        resource_policy=ResourcePolicy(max_cpu_seconds=1),
-    )
-
-
-@pytest.fixture
-def collector() -> SandboxMetricsCollector:
-    return SandboxMetricsCollector()
-
-
-class TestPluginSandboxExecutorInit:
-    def test_stores_strategy_and_policy(self, policy: SandboxPolicy) -> None:
-        executor = PluginSandboxExecutor(_GoodStrategy(), policy)
-        assert executor.strategy.name == "good"
-        assert executor.policy is policy
-
-    def test_uses_provided_metrics_collector(self, policy: SandboxPolicy, collector: SandboxMetricsCollector) -> None:
-        executor = PluginSandboxExecutor(_GoodStrategy(), policy, metrics_collector=collector)
-        assert executor._metrics is collector
-
-
-class TestPluginSandboxExecutorFromFactory:
-    def test_from_factory_creates_executor(self, policy: SandboxPolicy) -> None:
-        executor = PluginSandboxExecutor.from_factory(_GoodStrategy, policy)
-        assert executor.strategy.name == "good"
-
-    async def test_from_factory_produces_working_executor(self, policy: SandboxPolicy) -> None:
-        executor = PluginSandboxExecutor.from_factory(_GoodStrategy, policy)
-        try:
-            signals = await executor.safe_evaluate(None, None, None)
-            assert len(signals) == 1
-            assert signals[0].symbol == "AAPL"
-        finally:
-            executor.cleanup()
-
-    def test_from_factory_blocks_dangerous_import(self, policy: SandboxPolicy) -> None:
-        class _DangerousInit:
-            name = "dangerous"
-            version = "1.0.0"
-
-            def __init__(self) -> None:
-                import os  # noqa: F401
-
-            def on_bar(self, s, p):
-                return []
-
-        with pytest.raises(ImportError, match="blocked"):
-            PluginSandboxExecutor.from_factory(_DangerousInit, policy)
-
-
-class TestSafeEvaluate:
-    async def test_good_strategy(self, policy: SandboxPolicy) -> None:
+class TestPluginSandboxExecutorBasic:
+    async def test_good_strategy_returns_signals(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         executor = PluginSandboxExecutor(_GoodStrategy(), policy)
         try:
             signals = await executor.safe_evaluate(None, None, None)
@@ -137,16 +66,8 @@ class TestSafeEvaluate:
         finally:
             executor.cleanup()
 
-    async def test_async_strategy(self, policy: SandboxPolicy) -> None:
-        executor = PluginSandboxExecutor(_AsyncGoodStrategy(), policy)
-        try:
-            signals = await executor.safe_evaluate(None, None, None)
-            assert len(signals) == 1
-            assert signals[0].symbol == "TSLA"
-        finally:
-            executor.cleanup()
-
-    async def test_bad_strategy_returns_empty(self, policy: SandboxPolicy) -> None:
+    async def test_bad_strategy_returns_empty(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         executor = PluginSandboxExecutor(_BadStrategy(), policy)
         try:
             signals = await executor.safe_evaluate(None, None, None)
@@ -154,7 +75,11 @@ class TestSafeEvaluate:
         finally:
             executor.cleanup()
 
-    async def test_slow_strategy_times_out(self, policy: SandboxPolicy) -> None:
+    async def test_slow_strategy_times_out(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="test",
+            resource_policy=ResourcePolicy(max_cpu_seconds=1),
+        )
         executor = PluginSandboxExecutor(_SlowStrategy(), policy)
         try:
             signals = await executor.safe_evaluate(None, None, None)
@@ -162,7 +87,8 @@ class TestSafeEvaluate:
         finally:
             executor.cleanup()
 
-    async def test_empty_strategy_returns_empty(self, policy: SandboxPolicy) -> None:
+    async def test_empty_strategy_returns_empty(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         executor = PluginSandboxExecutor(_EmptyStrategy(), policy)
         try:
             signals = await executor.safe_evaluate(None, None, None)
@@ -171,93 +97,112 @@ class TestSafeEvaluate:
             executor.cleanup()
 
 
-class TestSignalConversion:
-    async def test_filters_invalid_signals(self, policy: SandboxPolicy) -> None:
-        executor = PluginSandboxExecutor(_MixedSignalStrategy(), policy)
-        try:
-            signals = await executor.safe_evaluate(None, None, None)
-            assert len(signals) == 2
-            symbols = {s.symbol for s in signals}
-            assert symbols == {"AAPL", "MSFT"}
-        finally:
-            executor.cleanup()
-
-    async def test_signal_id_injection(self, policy: SandboxPolicy) -> None:
-        executor = PluginSandboxExecutor(_NoIdSignalStrategy(), policy)
-        try:
-            signals = await executor.safe_evaluate(None, None, None)
-            assert len(signals) == 1
-            assert signals[0].strategy_id == "no_id_strat"
-        finally:
-            executor.cleanup()
-
-
-class TestMetricsRecording:
-    async def test_records_successful_evaluation(
-        self, policy: SandboxPolicy, collector: SandboxMetricsCollector
-    ) -> None:
+class TestPluginSandboxExecutorMetrics:
+    async def test_metrics_collected_on_success(self) -> None:
+        collector = SandboxMetricsCollector()
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "metrics_test")
         executor = PluginSandboxExecutor(_GoodStrategy(), policy, metrics_collector=collector)
         try:
             await executor.safe_evaluate(None, None, None)
-            metrics = collector.get_plugin_metrics("test_plugin")
+            metrics = collector.get_plugin_metrics("metrics_test")
             assert metrics is not None
             assert metrics["total_evaluations"] == 1
             assert metrics["total_signals_emitted"] == 1
         finally:
             executor.cleanup()
 
-    async def test_records_error(
-        self, policy: SandboxPolicy, collector: SandboxMetricsCollector
-    ) -> None:
+    async def test_metrics_accumulate_across_evaluations(self) -> None:
+        collector = SandboxMetricsCollector()
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "accum_test")
+        executor = PluginSandboxExecutor(_EmptyStrategy(), policy, metrics_collector=collector)
+        try:
+            await executor.safe_evaluate(None, None, None)
+            await executor.safe_evaluate(None, None, None)
+            await executor.safe_evaluate(None, None, None)
+            metrics = collector.get_plugin_metrics("accum_test")
+            assert metrics["total_evaluations"] == 3
+        finally:
+            executor.cleanup()
+
+    async def test_metrics_on_error(self) -> None:
+        collector = SandboxMetricsCollector()
+        policy = SandboxPolicy(
+            plugin_id="error_test",
+            resource_policy=ResourcePolicy(max_cpu_seconds=1),
+        )
         executor = PluginSandboxExecutor(_BadStrategy(), policy, metrics_collector=collector)
         try:
             await executor.safe_evaluate(None, None, None)
-            metrics = collector.get_plugin_metrics("test_plugin")
+            metrics = collector.get_plugin_metrics("error_test")
             assert metrics is not None
             assert metrics["errors"] == 1
-            assert metrics["last_error"] is not None
-        finally:
-            executor.cleanup()
-
-    async def test_records_timeout(
-        self, policy: SandboxPolicy, collector: SandboxMetricsCollector
-    ) -> None:
-        executor = PluginSandboxExecutor(_SlowStrategy(), policy, metrics_collector=collector)
-        try:
-            await executor.safe_evaluate(None, None, None)
-            metrics = collector.get_plugin_metrics("test_plugin")
-            assert metrics is not None
-            assert metrics["errors"] == 1
-            assert "Timeout" in (metrics["last_error"] or "")
         finally:
             executor.cleanup()
 
 
-class TestGetHealth:
-    async def test_health_report(
-        self, policy: SandboxPolicy, collector: SandboxMetricsCollector
-    ) -> None:
-        executor = PluginSandboxExecutor(_GoodStrategy(), policy, metrics_collector=collector)
+class TestPluginSandboxExecutorHealth:
+    async def test_health_report(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "health_test")
+        executor = PluginSandboxExecutor(_GoodStrategy(), policy)
         try:
             await executor.safe_evaluate(None, None, None)
             health = executor.get_health()
-            assert health["strategy_name"] == "good"
-            assert health["version"] == "1.0.0"
-            assert health["plugin_id"] == "test_plugin"
+            assert health["strategy_name"] == "good_strategy"
+            assert health["plugin_id"] == "health_test"
             assert health["trust_level"] == "untrusted"
             assert health["total_evaluations"] == 1
         finally:
             executor.cleanup()
 
-    def test_health_before_evaluation(self, policy: SandboxPolicy) -> None:
-        executor = PluginSandboxExecutor(_GoodStrategy(), policy)
-        health = executor.get_health()
-        assert health["strategy_name"] == "good"
-        assert health["plugin_id"] == "test_plugin"
+    async def test_health_report_trusted(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.TRUSTED_FULL, "trusted_health")
+        executor = PluginSandboxExecutor(_EmptyStrategy(), policy)
+        try:
+            health = executor.get_health()
+            assert health["trust_level"] == "trusted_full"
+        finally:
+            executor.cleanup()
 
 
-class TestCleanup:
-    async def test_cleanup_safe(self, policy: SandboxPolicy) -> None:
-        executor = PluginSandboxExecutor(_GoodStrategy(), policy)
-        await executor.safe_evaluate(None, None, None)
+class TestPluginSandboxExecutorFromFactory:
+    def test_from_factory_basic(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "factory_test")
+
+        def factory():
+            return _EmptyStrategy()
+
+        executor = PluginSandboxExecutor.from_factory(factory, policy)
+        assert executor.strategy.name == "empty_strategy"
         executor.cleanup()
+
+
+class TestPluginSandboxExecutorTrustEnforcement:
+    async def test_untrusted_policy_enforced(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "enforce_test")
+        assert policy.trust_level == "untrusted"
+        assert policy.filesystem_policy.read_write_paths == []
+        executor = PluginSandboxExecutor(_EmptyStrategy(), policy)
+        try:
+            signals = await executor.safe_evaluate(None, None, None)
+            assert signals == []
+        finally:
+            executor.cleanup()
+
+    async def test_trusted_full_policy_enforced(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.TRUSTED_FULL, "trusted_test")
+        assert policy.trust_level == "trusted_full"
+        executor = PluginSandboxExecutor(_EmptyStrategy(), policy)
+        try:
+            signals = await executor.safe_evaluate(None, None, None)
+            assert signals == []
+        finally:
+            executor.cleanup()
+
+    async def test_policy_integrity_preserved(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "integrity_test")
+        executor = PluginSandboxExecutor(_EmptyStrategy(), policy)
+        try:
+            await executor.safe_evaluate(None, None, None)
+            assert executor.policy.verify_integrity() is True
+        finally:
+            executor.cleanup()

@@ -21,6 +21,11 @@ class StrategyConfig(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     secrets: dict[str, str] = Field(default_factory=dict)
     trust_level: str = "untrusted"
+    required_capabilities: list[str] = Field(default_factory=list)
+
+    def validate_trust_level(self) -> bool:
+        valid_levels = {"untrusted", "trusted_limited", "trusted_full"}
+        return self.trust_level in valid_levels
 
 
 class DataFeed(BaseModel):

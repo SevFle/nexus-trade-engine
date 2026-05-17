@@ -12,7 +12,21 @@ if TYPE_CHECKING:
 
 from engine.plugins.sandbox.core.violation import FilesystemViolation
 
-_BLOCKED_SYSTEM_PREFIXES = ("/proc", "/sys", "/dev")
+_BLOCKED_SYSTEM_PREFIXES = (
+    "/proc",
+    "/sys",
+    "/dev",
+    "/etc",
+    "/var",
+    "/root",
+    "/run",
+    "/boot",
+    "/lib",
+    "/lib64",
+    "/usr/lib",
+    "/sbin",
+    "/bin",
+)
 
 
 class FilesystemIsolation:
