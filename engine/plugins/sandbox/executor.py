@@ -90,7 +90,7 @@ class PluginSandboxExecutor:
                 strategy_name=self.strategy.name,
                 error=str(exc),
             )
-            return []
+            raise
 
         try:
             raw_signals = await asyncio.wait_for(

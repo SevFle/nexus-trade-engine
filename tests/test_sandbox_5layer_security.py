@@ -48,7 +48,6 @@ from engine.plugins.sandbox.core.violation import (
     SandboxViolation,
     SandboxViolationCategory,
 )
-from engine.plugins.trust_levels import TrustLevel
 from engine.plugins.sandbox.layers.filesystem_isolation import FilesystemIsolation
 from engine.plugins.sandbox.layers.import_restriction import RestrictedImporter
 from engine.plugins.sandbox.layers.introspection_guard import (
@@ -66,6 +65,7 @@ from engine.plugins.sandbox.monitoring.metrics import (
     PluginMetrics,
     SandboxMetricsCollector,
 )
+from engine.plugins.trust_levels import TrustLevel
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -865,10 +865,7 @@ class TestLayerComposition:
     async def test_import_and_filesystem_violation_in_same_eval(self) -> None:
         from engine.plugins.sandbox.executor import PluginSandboxExecutor
 
-        policy = SandboxPolicy(
-            plugin_id="dual_violation",
-            resource_policy=ResourcePolicy(max_cpu_seconds=5),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "dual_violation")
 
         class DualViolationStrat:
             name = "dual"
@@ -972,10 +969,7 @@ class TestTrustLevels:
         from engine.plugins.sandbox.executor import PluginSandboxExecutor
 
         trusted = SandboxPolicy.trusted_policy("trusted_e2e")
-        untrusted = SandboxPolicy(
-            plugin_id="untrusted_e2e",
-            resource_policy=ResourcePolicy(max_cpu_seconds=1),
-        )
+        untrusted = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "untrusted_e2e", max_cpu_seconds=1)
 
         class SlowishStrat:
             name = "slowish"

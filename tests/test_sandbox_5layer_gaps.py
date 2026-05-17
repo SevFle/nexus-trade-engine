@@ -34,7 +34,6 @@ from engine.plugins.sandbox.core.context import (
     _MIN_BLOCKED_MODULES_UNTRUSTED,
     SandboxContext,
 )
-from engine.plugins.trust_levels import TrustLevel
 from engine.plugins.sandbox.core.policy import (
     FilesystemPolicy,
     ImportPolicy,
@@ -67,6 +66,7 @@ from engine.plugins.sandbox.layers.resource_limiter import (
     ResourceLimiter,
     _WallTimer,
 )
+from engine.plugins.trust_levels import TrustLevel
 
 # ═══════════════════════════════════════════════════════════════════════
 # Layer 4: Filesystem Isolation — Gap Tests

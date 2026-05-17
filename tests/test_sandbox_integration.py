@@ -31,7 +31,6 @@ from engine.plugins.sandbox.core.context import SandboxContext
 from engine.plugins.sandbox.core.policy import (
     ImportPolicy,
     IntrospectionPolicy,
-    ResourcePolicy,
     SandboxPolicy,
 )
 from engine.plugins.sandbox.executor import PluginSandboxExecutor
@@ -571,10 +570,7 @@ class TestViolationReportIntegration:
 class TestMetricsWithExecutor:
     async def test_metrics_collected_across_evaluations(self) -> None:
         collector = SandboxMetricsCollector()
-        policy = SandboxPolicy(
-            plugin_id="metrics_test",
-            resource_policy=ResourcePolicy(max_cpu_seconds=5),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "metrics_test")
 
         class Strat:
             name = "metrics_test"

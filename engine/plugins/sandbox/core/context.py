@@ -103,33 +103,26 @@ class SandboxContext:
         violations = self._policy.enforce_hard_limits(self._trust_level)
         if violations:
             detail = "; ".join(violations)
-            self._event_logger.log_event(
-                category=SandboxViolationCategory.INTROSPECTION,
-                detail=f"Hard limit violations: {detail}",
-                attempted_action="trust_level_hard_limit_check",
-            )
-            raise SandboxViolation(
+            exc = SandboxViolation(
                 f"Hard limit violations: {detail}",
-                category=SandboxViolationCategory.INTROSPECTION,
+                category=SandboxViolationCategory.RESOURCE,
                 plugin_id=self._policy.plugin_id,
                 attempted_action="trust_level_hard_limit_check",
             )
+            self._event_logger.log_violation(exc)
+            raise exc
 
     def activate(self) -> None:
         if self._active:
             return
         if not self.validate_trust_level():
-            self._event_logger.log_event(
-                category=SandboxViolationCategory.INTROSPECTION,
-                detail=f"Trust level policy validation failed for {self._policy.trust_level}",
-                attempted_action="trust_level_validation",
-            )
-            raise SandboxViolation(
+            exc = SandboxViolation(
                 f"Trust level policy validation failed for {self._policy.trust_level}",
-                category=SandboxViolationCategory.INTROSPECTION,
+                category=SandboxViolationCategory.RESOURCE,
                 plugin_id=self._policy.plugin_id,
                 attempted_action="trust_level_validation",
             )
+            raise exc
         self._enforce_hard_limits()
         try:
             self._network_layer.install()

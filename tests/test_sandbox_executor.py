@@ -288,12 +288,12 @@ class TestSandboxContextHardLimits:
 
 
 class TestExecutorActivationViolation:
-    async def test_executor_returns_empty_on_activation_violation(self) -> None:
+    async def test_executor_raises_on_activation_violation(self) -> None:
         policy = SandboxPolicy(plugin_id="bad_exec")
         executor = PluginSandboxExecutor(_EmptyStrategy(), policy)
         try:
-            signals = await executor.safe_evaluate(None, None, None)
-            assert signals == []
+            with pytest.raises(SandboxViolation):
+                await executor.safe_evaluate(None, None, None)
         finally:
             executor.cleanup()
 
