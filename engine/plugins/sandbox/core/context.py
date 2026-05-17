@@ -100,6 +100,14 @@ class SandboxContext:
         return policy.verify_integrity()
 
     def _enforce_hard_limits(self) -> None:
+        """Enforce hard resource and trust-level limits, raising SandboxViolation on breach.
+
+        This is an intentional hardening from the earlier soft-log behaviour:
+        violations were previously only logged, which allowed a misconfigured or
+        malicious policy to escape resource caps silently.  We now raise
+        ``SandboxViolation`` so that the caller (and lifecycle manager) cannot
+        proceed with an unsafe configuration.
+        """
         violations = self._policy.enforce_hard_limits(self._trust_level)
         if violations:
             detail = "; ".join(violations)
@@ -121,11 +129,11 @@ class SandboxContext:
         if not self.validate_trust_level():
             self._event_logger.log_event(
                 category=SandboxViolationCategory.INTROSPECTION,
-                detail=f"Trust level policy validation failed for {self._policy.trust_level}",
+                detail=f"Trust level policy validation failed for {self._trust_level}",
                 attempted_action="trust_level_validation",
             )
             raise SandboxViolation(
-                f"Trust level policy validation failed for {self._policy.trust_level}",
+                f"Trust level policy validation failed for {self._trust_level}",
                 category=SandboxViolationCategory.INTROSPECTION,
                 plugin_id=self._policy.plugin_id,
                 attempted_action="trust_level_validation",
