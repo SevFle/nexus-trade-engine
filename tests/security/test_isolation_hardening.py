@@ -176,16 +176,21 @@ class TestContextTrustEnforcement:
         ctx.cleanup()
 
     def test_context_validates_integrity(self) -> None:
+        # from_trust_level() internally calls set_integrity_hash(), so an
+        # explicit call here is redundant but kept for clarity.
         policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "integrity_test")
-        policy.set_integrity_hash()
         ctx = SandboxContext(policy)
         assert ctx.validate_trust_level() is True
         ctx.cleanup()
 
     def test_context_detects_tampered_integrity(self) -> None:
+        # SandboxPolicy constructed directly (not via from_trust_level) requires
+        # an explicit set_integrity_hash() call before tampering can be detected.
+        # Tampering with introspection_policy.blocked_dunder_access is caught
+        # because compute_integrity_hash() now includes introspection fields.
         policy = SandboxPolicy(plugin_id="tamper_test", trust_level="untrusted")
         policy.set_integrity_hash()
-        policy.resource_policy.max_cpu_seconds = 9999
+        policy.introspection_policy.blocked_dunder_access = False
         ctx = SandboxContext(policy)
         assert ctx.validate_trust_level() is False
         ctx.cleanup()
@@ -201,9 +206,16 @@ class TestContextTrustEnforcement:
         ctx.cleanup()
 
     def test_activate_rejects_tampered_integrity(self) -> None:
+        # from_trust_level() already calls set_integrity_hash() internally
+        # (see policy.py:350), so the explicit call below is technically
+        # redundant. We keep it to document the dependency: activate()
+        # delegates to validate_trust_level() → verify_integrity(), which
+        # relies on _integrity_hash being set before tampering occurs.
+        # Tampering with introspection_policy.blocked_builtins is
+        # detected because compute_integrity_hash() includes it.
         policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "tamper_activate")
         policy.set_integrity_hash()
-        policy.resource_policy.max_cpu_seconds = 9999
+        policy.introspection_policy.blocked_builtins.add("__fake_tampered__")
         ctx = SandboxContext(policy)
         with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
             ctx.activate()
@@ -279,3 +291,21 @@ class TestPolicyIntegrityHash:
             resource_policy=ResourcePolicy(max_cpu_seconds=30),
         )
         assert policy1.compute_integrity_hash() == policy2.compute_integrity_hash()
+
+    def test_hash_changes_on_introspection_blocked_dunder_change(self) -> None:
+        # compute_integrity_hash() includes introspection_policy.blocked_dunder_access,
+        # so flipping it must produce a different hash.
+        policy = SandboxPolicy(plugin_id="introspect_hash", trust_level="untrusted")
+        h1 = policy.compute_integrity_hash()
+        policy.introspection_policy.blocked_dunder_access = not policy.introspection_policy.blocked_dunder_access
+        h2 = policy.compute_integrity_hash()
+        assert h1 != h2
+
+    def test_hash_changes_on_blocked_builtins_change(self) -> None:
+        # compute_integrity_hash() includes introspection_policy.blocked_builtins,
+        # so mutating the set must produce a different hash.
+        policy = SandboxPolicy(plugin_id="builtins_hash", trust_level="untrusted")
+        h1 = policy.compute_integrity_hash()
+        policy.introspection_policy.blocked_builtins.add("__test_new__")
+        h2 = policy.compute_integrity_hash()
+        assert h1 != h2
