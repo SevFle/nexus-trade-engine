@@ -315,7 +315,7 @@ class TestExecutorActivationViolation:
             assert metrics["total_evaluations"] == 1
             assert metrics["errors"] == 1
             assert metrics["last_error"] is not None
-            assert "metrics_violation" in metrics["last_error"]
+            assert "Trust level policy validation failed" in metrics["last_error"]
         finally:
             executor.cleanup()
 
