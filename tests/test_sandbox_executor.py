@@ -245,7 +245,7 @@ class TestSandboxContextTrustValidation:
 
     def test_activate_raises_on_tampered_integrity(self) -> None:
         policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "tamper_test")
-        policy.resource_policy.max_cpu_seconds = 9999
+        policy.resource_policy.wall_time_seconds = 9999
         context = SandboxContext(policy)
         try:
             with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
