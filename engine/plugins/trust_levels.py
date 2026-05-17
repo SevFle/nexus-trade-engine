@@ -84,9 +84,9 @@ def validate_capabilities(trust_level: TrustLevel, required: set[str]) -> bool:
 
 
 def enforce_no_escalation(current: TrustLevel, requested: TrustLevel) -> bool:
-    _ORDER = {
+    _order = {
         TrustLevel.UNTRUSTED: 0,
         TrustLevel.TRUSTED_LIMITED: 1,
         TrustLevel.TRUSTED_FULL: 2,
     }
-    return _ORDER.get(requested, 0) <= _ORDER.get(current, 0)
+    return _order.get(requested, 0) <= _order.get(current, 0)

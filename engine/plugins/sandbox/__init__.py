@@ -23,6 +23,7 @@ def __getattr__(name: str):
         "PluginMetrics": "engine.plugins.sandbox.monitoring.metrics",
         "PluginSandboxExecutor": "engine.plugins.sandbox.executor",
         "ResourceExhausted": "engine.plugins.sandbox.core.violation",
+        "SandboxBlockedError": "engine.plugins.sandbox.core.violation",
         "ResourceLimiter": "engine.plugins.sandbox.layers.resource_limiter",
         "ResourcePolicy": "engine.plugins.sandbox.core.policy",
         "SandboxContext": "engine.plugins.sandbox.core.context",

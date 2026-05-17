@@ -13,7 +13,11 @@ from engine.plugins.sandbox.core.policy import (
     ResourcePolicy,
     SandboxPolicy,
 )
-from engine.plugins.sandbox.core.violation import SandboxViolation
+from engine.plugins.sandbox.core.violation import (
+    SandboxBlockedError,
+    SandboxViolation,
+    SandboxViolationCategory,
+)
 from engine.plugins.sandbox.executor import PluginSandboxExecutor
 from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
 from engine.plugins.trust_levels import TrustLevel
@@ -288,12 +292,12 @@ class TestSandboxContextHardLimits:
 
 
 class TestExecutorActivationViolation:
-    async def test_executor_returns_empty_on_activation_violation(self) -> None:
+    async def test_executor_propagates_activation_violation(self) -> None:
         policy = SandboxPolicy(plugin_id="bad_exec")
         executor = PluginSandboxExecutor(_EmptyStrategy(), policy)
         try:
-            signals = await executor.safe_evaluate(None, None, None)
-            assert signals == []
+            with pytest.raises(SandboxBlockedError):
+                await executor.safe_evaluate(None, None, None)
         finally:
             executor.cleanup()
 
@@ -322,3 +326,69 @@ class TestSandboxPolicyIntegrity:
         policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "valid_hard")
         violations = policy.enforce_hard_limits(TrustLevel.UNTRUSTED)
         assert violations == []
+
+
+class TestContextViolationReuse:
+    def test_hard_limits_logs_and_raises_same_violation(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="reuse_test",
+            trust_level="untrusted",
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
+            resource_policy=ResourcePolicy(max_cpu_seconds=30, max_memory_bytes=2 * 1024**3),
+        )
+        context = SandboxContext(policy)
+        with pytest.raises(SandboxViolation, match="Hard limit violations") as exc_info:
+            context.activate()
+        raised = exc_info.value
+        assert raised.category is SandboxViolationCategory.RESOURCE
+        events = context.event_logger.get_events(category=SandboxViolationCategory.RESOURCE)
+        assert len(events) >= 1
+        assert events[0].detail == raised.detail
+        context.cleanup()
+
+    def test_trust_validation_logs_and_raises_policy_category(self) -> None:
+        policy = SandboxPolicy(plugin_id="cat_test")
+        context = SandboxContext(policy)
+        with pytest.raises(SandboxViolation, match="Trust level policy validation failed") as exc_info:
+            context.activate()
+        raised = exc_info.value
+        assert raised.category is SandboxViolationCategory.POLICY
+        events = context.event_logger.get_events(category=SandboxViolationCategory.POLICY)
+        assert len(events) >= 1
+        context.cleanup()
+
+
+class _ViolatingStrategy:
+    name = "violating_strategy"
+    version = "1.0.0"
+
+    def on_bar(self, state, portfolio):
+        raise SandboxViolation(
+            "simulated violation",
+            category=SandboxViolationCategory.RESOURCE,
+            plugin_id="test",
+        )
+
+
+class TestExecutorPropagatesStrategyViolation:
+    async def test_strategy_sandbox_violation_propagated(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "sv_test")
+        executor = PluginSandboxExecutor(_ViolatingStrategy(), policy)
+        try:
+            with pytest.raises(SandboxBlockedError, match="simulated violation"):
+                await executor.safe_evaluate(None, None, None)
+        finally:
+            executor.cleanup()
+
+    async def test_activation_metrics_recorded_before_reraise(self) -> None:
+        collector = SandboxMetricsCollector()
+        policy = SandboxPolicy(plugin_id="metrics_reraise")
+        executor = PluginSandboxExecutor(_EmptyStrategy(), policy, metrics_collector=collector)
+        try:
+            with pytest.raises(SandboxBlockedError):
+                await executor.safe_evaluate(None, None, None)
+            metrics = collector.get_plugin_metrics("metrics_reraise")
+            assert metrics is not None
+            assert metrics["errors"] == 1
+        finally:
+            executor.cleanup()

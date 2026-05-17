@@ -29,9 +29,7 @@ from engine.plugins.registry import PluginRegistry
 from engine.plugins.sandbox import StrategySandbox
 from engine.plugins.sandbox.core.context import SandboxContext
 from engine.plugins.sandbox.core.policy import (
-    ImportPolicy,
     IntrospectionPolicy,
-    ResourcePolicy,
     SandboxPolicy,
 )
 from engine.plugins.sandbox.executor import PluginSandboxExecutor
@@ -533,10 +531,7 @@ class TestStrategySandboxTrustLevel:
 
 class TestViolationReportIntegration:
     async def test_report_from_sandbox_context_violations(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="report_test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "report_test")
         ctx = SandboxContext(policy)
         ctx.activate()
         try:
@@ -571,10 +566,7 @@ class TestViolationReportIntegration:
 class TestMetricsWithExecutor:
     async def test_metrics_collected_across_evaluations(self) -> None:
         collector = SandboxMetricsCollector()
-        policy = SandboxPolicy(
-            plugin_id="metrics_test",
-            resource_policy=ResourcePolicy(max_cpu_seconds=5),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "metrics_test", max_cpu_seconds=5)
 
         class Strat:
             name = "metrics_test"

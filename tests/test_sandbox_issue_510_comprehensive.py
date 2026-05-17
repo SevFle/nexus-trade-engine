@@ -377,9 +377,10 @@ class TestSandboxContextTrustValidation:
         )
         ctx = SandboxContext(policy)
         try:
-            ctx.activate()
+            with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
+                ctx.activate()
             events = ctx.event_logger.get_events(
-                category=SandboxViolationCategory.INTROSPECTION
+                category=SandboxViolationCategory.POLICY
             )
             assert any("validation failed" in e.detail for e in events)
         finally:
@@ -547,6 +548,11 @@ class TestIntrospectionGuardBlockedBuiltinSets:
             "__reduce_ex__",
             "__getstate__",
             "__setstate__",
+            "__builtins__",
+            "__func__",
+            "__self__",
+            "__module__",
+            "__weakref__",
         }
         assert expected == _EXPLICITLY_BLOCKED_ATTRS
 
@@ -626,7 +632,7 @@ class TestNetworkGuardCombinedHostLogic:
 
 class TestSandboxContextContextManager:
     def test_context_manager_activate_deactivate(self) -> None:
-        policy = SandboxPolicy(plugin_id="ctx_mgr_test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "ctx_mgr_test")
         ctx = SandboxContext(policy)
         with ctx:
             assert ctx.is_active is True
@@ -634,7 +640,7 @@ class TestSandboxContextContextManager:
         ctx.cleanup()
 
     def test_context_manager_cleanup(self) -> None:
-        policy = SandboxPolicy(plugin_id="ctx_cleanup")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "ctx_cleanup")
         ctx = SandboxContext(policy)
         work_dir = ctx.work_dir
         ctx.activate()
@@ -645,10 +651,7 @@ class TestSandboxContextContextManager:
 
 class TestSandboxContextViolationCollection:
     def test_violations_collected_from_all_layers(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="violation_collect",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "violation_collect")
         ctx = SandboxContext(policy)
         ctx.activate()
         try:
@@ -662,10 +665,7 @@ class TestSandboxContextViolationCollection:
 
     def test_violations_reported_to_metrics_collector(self) -> None:
         metrics = SandboxMetricsCollector()
-        policy = SandboxPolicy(
-            plugin_id="metrics_violation",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "metrics_violation")
         ctx = SandboxContext(policy, metrics_collector=metrics)
         ctx.activate()
         try:

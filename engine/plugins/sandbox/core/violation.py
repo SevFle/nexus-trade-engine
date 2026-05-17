@@ -10,6 +10,7 @@ class SandboxViolationCategory(Enum):
     RESOURCE = "resource"
     FILESYSTEM = "filesystem"
     INTROSPECTION = "introspection"
+    POLICY = "policy"
 
 
 class SandboxViolation(Exception):  # noqa: N818
@@ -117,6 +118,14 @@ class IntrospectionViolation(SandboxViolation):
             plugin_id=plugin_id,
             attempted_action=f"access:{attribute}",
         )
+
+
+class SandboxBlockedError(Exception):
+    violation: SandboxViolation
+
+    def __init__(self, violation: SandboxViolation) -> None:
+        self.violation = violation
+        super().__init__(str(violation))
 
 
 class ResourceExhausted(SandboxViolation):

@@ -8,7 +8,7 @@ import structlog
 
 from engine.core.signal import Signal
 from engine.plugins.sandbox.core.context import SandboxContext
-from engine.plugins.sandbox.core.violation import SandboxViolation
+from engine.plugins.sandbox.core.violation import SandboxBlockedError, SandboxViolation
 from engine.plugins.sandbox.monitoring.event_logger import SecurityEventLogger
 from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
 
@@ -90,7 +90,7 @@ class PluginSandboxExecutor:
                 strategy_name=self.strategy.name,
                 error=str(exc),
             )
-            return []
+            raise SandboxBlockedError(exc) from exc
 
         try:
             raw_signals = await asyncio.wait_for(
@@ -112,6 +112,8 @@ class PluginSandboxExecutor:
                 timeout_s=self.policy.resource_policy.max_cpu_seconds,
             )
             return []
+        except SandboxViolation as exc:
+            raise SandboxBlockedError(exc) from exc
         except Exception as e:
             elapsed_ms = (time.monotonic() - start) * 1000
             self._metrics.record_evaluation(

@@ -8,6 +8,7 @@ from engine.plugins.sandbox.core.policy import (
 from engine.plugins.sandbox.core.state import SandboxTLS, get_default_tls
 from engine.plugins.sandbox.core.violation import (
     ResourceExhausted,
+    SandboxBlockedError,
     SandboxViolation,
     SandboxViolationCategory,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "EnvironmentPolicy",
     "LifecycleManager",
     "ResourceExhausted",
+    "SandboxBlockedError",
     "SandboxContext",
     "SandboxIntegration",
     "SandboxLifecycle",

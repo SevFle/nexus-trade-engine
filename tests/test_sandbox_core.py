@@ -232,7 +232,7 @@ class TestSandboxViolationCategory:
         assert SandboxViolationCategory.INTROSPECTION.value == "introspection"
 
     def test_member_count(self) -> None:
-        assert len(list(SandboxViolationCategory)) == 5
+        assert len(list(SandboxViolationCategory)) == 6
 
 
 class TestImportViolation:

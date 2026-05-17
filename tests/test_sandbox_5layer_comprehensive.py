@@ -1368,13 +1368,14 @@ class TestPluginMetrics:
 
 class TestPluginSandboxExecutorEdgeCases:
     def test_from_factory_creates_placeholder(self):
-        policy = SandboxPolicy(plugin_id="exec-test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "exec-test")
 
         def factory():
             return SimpleNamespace(name="real", version="1.0", on_bar=lambda s, p: [])
 
         executor = PluginSandboxExecutor.from_factory(factory, policy)
         assert executor.strategy.name == "real"
+        executor.cleanup()
 
     def test_get_health(self):
         policy = SandboxPolicy(
