@@ -109,7 +109,6 @@ class SandboxContext:
                 plugin_id=self._policy.plugin_id,
                 attempted_action="trust_level_hard_limit_check",
             )
-            self._event_logger.log_violation(exc)
             raise exc
 
     def activate(self) -> None:

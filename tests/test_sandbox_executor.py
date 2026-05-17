@@ -245,7 +245,7 @@ class TestSandboxContextTrustValidation:
 
     def test_activate_raises_on_tampered_integrity(self) -> None:
         policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "tamper_test")
-        policy.resource_policy.wall_time_seconds = 9999
+        policy.network_policy.allowed_endpoints = ["tampered.evil.com"]
         context = SandboxContext(policy)
         try:
             with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
@@ -322,7 +322,7 @@ class TestExecutorActivationViolation:
     async def test_activation_violation_from_integrity_tamper_records_metrics(self) -> None:
         collector = SandboxMetricsCollector()
         policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "tamper_metrics")
-        policy.resource_policy.wall_time_seconds = 9999
+        policy.network_policy.allowed_endpoints = ["tampered.evil.com"]
         executor = PluginSandboxExecutor(
             _EmptyStrategy(), policy, metrics_collector=collector
         )
