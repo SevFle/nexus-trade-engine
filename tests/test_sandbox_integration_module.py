@@ -5,6 +5,7 @@ from engine.plugins.sandbox.core.integration import SandboxIntegration
 from engine.plugins.sandbox.core.policy import SandboxPolicy
 from engine.plugins.sandbox.core.state import SandboxTLS
 from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
+from engine.plugins.trust_levels import TrustLevel
 
 
 class TestSandboxIntegration:
@@ -57,7 +58,7 @@ class TestSandboxIntegration:
 
     def test_activate_and_deactivate(self) -> None:
         integ = SandboxIntegration()
-        policy = SandboxPolicy(plugin_id="test_act")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test_act")
         ctx = SandboxContext(policy)
         try:
             integ.register(ctx)
@@ -72,7 +73,7 @@ class TestSandboxIntegration:
     def test_get_metrics(self) -> None:
         metrics = SandboxMetricsCollector()
         integ = SandboxIntegration(metrics_collector=metrics)
-        policy = SandboxPolicy(plugin_id="test_met")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test_met")
         ctx = SandboxContext(policy)
         try:
             integ.register(ctx)

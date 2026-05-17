@@ -13,6 +13,7 @@ edit this file by hand — it is regenerated as part of every release PR.
 ## [Unreleased]
 
 ### Internal
+- (fix) Make quality gate pass: LINT: 1 lint errors blocking the gate.;
 - (write_tests) Write tests for the most recently changed code to break the loop
 - (subagent) SEV-267 — Plugin Sandbox with Security Isolation (Phase 2, Lane B)
 

@@ -384,17 +384,15 @@ class TestStrategySandboxParseMemory:
 
 class TestPluginSandboxExecutorFromFactory:
     def test_from_factory_with_sync_strategy(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="test",
-            resource_policy=ResourcePolicy(max_cpu_seconds=2),
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED, "test", max_cpu_seconds=2,
         )
         executor = PluginSandboxExecutor.from_factory(_SyncStrategy, policy)
         assert executor.strategy.name == "sync_strat"
 
     async def test_from_factory_async_strategy(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="test",
-            resource_policy=ResourcePolicy(max_cpu_seconds=2),
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED, "test", max_cpu_seconds=2,
         )
         executor = PluginSandboxExecutor.from_factory(_AsyncStrategy, policy)
         try:
@@ -405,9 +403,8 @@ class TestPluginSandboxExecutorFromFactory:
             executor.cleanup()
 
     def test_from_factory_blocks_dangerous_import_in_init(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="test",
-            resource_policy=ResourcePolicy(max_cpu_seconds=2),
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED, "test", max_cpu_seconds=2,
         )
 
         class _Bad:
@@ -426,9 +423,8 @@ class TestPluginSandboxExecutorFromFactory:
 
 class TestPluginSandboxExecutorEvaluate:
     async def test_sync_strategy_evaluation(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="test",
-            resource_policy=ResourcePolicy(max_cpu_seconds=2),
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED, "test", max_cpu_seconds=2,
         )
         executor = PluginSandboxExecutor(_SyncStrategy(), policy)
         try:
@@ -439,9 +435,8 @@ class TestPluginSandboxExecutorEvaluate:
             executor.cleanup()
 
     async def test_async_coroutine_strategy(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="test",
-            resource_policy=ResourcePolicy(max_cpu_seconds=2),
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED, "test", max_cpu_seconds=2,
         )
         executor = PluginSandboxExecutor(_AsyncStrategy(), policy)
         try:
@@ -476,9 +471,8 @@ class TestPluginSandboxExecutorEvaluate:
             executor.cleanup()
 
     async def test_mixed_signal_filtering(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="test",
-            resource_policy=ResourcePolicy(max_cpu_seconds=2),
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED, "test", max_cpu_seconds=2,
         )
         executor = PluginSandboxExecutor(_MixedReturnStrategy(), policy)
         try:
@@ -489,9 +483,8 @@ class TestPluginSandboxExecutorEvaluate:
             executor.cleanup()
 
     async def test_signal_id_injection(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="test",
-            resource_policy=ResourcePolicy(max_cpu_seconds=2),
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED, "test", max_cpu_seconds=2,
         )
         executor = PluginSandboxExecutor(_NoIdStrategy(), policy)
         try:
@@ -505,9 +498,8 @@ class TestPluginSandboxExecutorEvaluate:
 class TestPluginSandboxExecutorMetrics:
     async def test_records_success(self) -> None:
         collector = SandboxMetricsCollector()
-        policy = SandboxPolicy(
-            plugin_id="test",
-            resource_policy=ResourcePolicy(max_cpu_seconds=2),
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED, "test", max_cpu_seconds=2,
         )
         executor = PluginSandboxExecutor(
             _SyncStrategy(), policy, metrics_collector=collector,
@@ -540,9 +532,8 @@ class TestPluginSandboxExecutorMetrics:
 
     async def test_records_timeout(self) -> None:
         collector = SandboxMetricsCollector()
-        policy = SandboxPolicy(
-            plugin_id="test",
-            resource_policy=ResourcePolicy(max_cpu_seconds=1),
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED, "test", max_cpu_seconds=1,
         )
         executor = PluginSandboxExecutor(
             _SlowStrategy(), policy, metrics_collector=collector,
