@@ -48,7 +48,6 @@ from engine.plugins.sandbox.core.violation import (
     SandboxViolation,
     SandboxViolationCategory,
 )
-from engine.plugins.trust_levels import TrustLevel
 from engine.plugins.sandbox.layers.filesystem_isolation import FilesystemIsolation
 from engine.plugins.sandbox.layers.import_restriction import RestrictedImporter
 from engine.plugins.sandbox.layers.introspection_guard import (
@@ -1060,6 +1059,12 @@ class TestSecurityEventLogging:
         logger.log_violation(ResourceExhausted("memory", 512, 600, plugin_id="p"))
         logger.log_violation(FilesystemViolation("/etc/passwd", "read", plugin_id="p"))
         logger.log_violation(IntrospectionViolation("__globals__", plugin_id="p"))
+        logger.log_violation(SandboxViolation(
+            "Trust level policy validation failed",
+            category=SandboxViolationCategory.POLICY,
+            plugin_id="p",
+            attempted_action="trust_level_validation",
+        ))
 
         for cat in SandboxViolationCategory:
             events = logger.get_events(category=cat)
@@ -1540,7 +1545,7 @@ class TestPolicyEdgeCases:
 class TestViolationTypes:
     def test_all_categories_exist(self) -> None:
         categories = {c.value for c in SandboxViolationCategory}
-        assert categories == {"import", "network", "resource", "filesystem", "introspection"}
+        assert categories == {"import", "network", "resource", "filesystem", "introspection", "policy"}
 
     def test_import_violation_fields(self) -> None:
         v = ImportViolation("os", plugin_id="p1")

@@ -230,9 +230,10 @@ class TestSandboxViolationCategory:
         assert SandboxViolationCategory.RESOURCE.value == "resource"
         assert SandboxViolationCategory.FILESYSTEM.value == "filesystem"
         assert SandboxViolationCategory.INTROSPECTION.value == "introspection"
+        assert SandboxViolationCategory.POLICY.value == "policy"
 
     def test_member_count(self) -> None:
-        assert len(list(SandboxViolationCategory)) == 5
+        assert len(list(SandboxViolationCategory)) == 6
 
 
 class TestImportViolation:

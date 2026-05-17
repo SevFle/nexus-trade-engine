@@ -355,6 +355,7 @@ class TestViolationCategory:
         assert "resource" in cats
         assert "filesystem" in cats
         assert "introspection" in cats
+        assert "policy" in cats
 
 
 # ─── TrustLevel and helpers ────────────────────────────────────────────

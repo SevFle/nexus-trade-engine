@@ -90,6 +90,7 @@ class PluginSandboxExecutor:
                 strategy_name=self.strategy.name,
                 error=str(exc),
             )
+            self._context.cleanup()
             return []
 
         try:
