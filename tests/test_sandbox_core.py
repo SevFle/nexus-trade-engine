@@ -553,6 +553,8 @@ class TestSandboxPolicyHardLimits:
         policy = SandboxPolicy.from_manifest(manifest)
         assert policy._integrity_hash is not None
 
-    def test_from_trust_level_sets_integrity_hash(self) -> None:
+    def test_from_trust_level_auto_sets_integrity_hash(self) -> None:
+        # from_trust_level() calls set_integrity_hash() internally,
+        # consistent with from_manifest() and trusted_policy().
         policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         assert policy._integrity_hash is not None

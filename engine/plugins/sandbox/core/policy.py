@@ -205,6 +205,7 @@ class SandboxPolicy:
                 "allowed_endpoints": sorted(self.network_policy.allowed_endpoints),
                 "read_only_paths": sorted(self.filesystem_policy.read_only_paths),
                 "read_write_paths": sorted(self.filesystem_policy.read_write_paths),
+                "blocked_builtins": sorted(self.introspection_policy.blocked_builtins),
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -344,6 +345,8 @@ class SandboxPolicy:
             introspection_policy=_TRUST_INTROSPECTION_PRESETS[trust_level],
             environment_policy=env_policy,
         )
+        # Set integrity hash so verify_integrity() can detect post-creation
+        # mutations.  Consistent with from_manifest() and trusted_policy().
         policy.set_integrity_hash()
         return policy
 
