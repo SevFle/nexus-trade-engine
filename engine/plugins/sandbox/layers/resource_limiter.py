@@ -42,6 +42,7 @@ class _CPUTimer:
         self._thread: threading.Thread | None = None
         self._use_signal = False
         self._old_handler: Any = None
+        self._pending_signal_cleanup = False
 
     @property
     def expired(self) -> bool:
@@ -66,6 +67,26 @@ class _CPUTimer:
                 self._expired.set()
                 return
 
+    def _flush_pending_cleanup(self) -> None:
+        if not self._pending_signal_cleanup:
+            return
+        with _signal_lock:
+            if not self._pending_signal_cleanup:
+                return
+            with contextlib.suppress(ValueError, OSError):
+                signal.setitimer(signal.ITIMER_VIRTUAL, 0)
+            if self._old_handler is not None:
+                try:
+                    signal.signal(signal.SIGVTALRM, self._old_handler)
+                except (ValueError, OSError):
+                    logger.warning(
+                        "sandbox.signal_restore_failed",
+                        plugin_id=self._plugin_id,
+                    )
+                else:
+                    self._old_handler = None
+            self._pending_signal_cleanup = False
+
     def _try_start_signal(self) -> bool:
         if self._force_poll:
             return False
@@ -73,6 +94,7 @@ class _CPUTimer:
             return False
         if threading.current_thread() is not threading.main_thread():
             return False
+        self._flush_pending_cleanup()
         with _signal_lock:
             try:
                 self._old_handler = signal.signal(signal.SIGVTALRM, self._signal_handler)
@@ -85,16 +107,17 @@ class _CPUTimer:
 
     def _stop_signal(self) -> None:
         if threading.current_thread() is not threading.main_thread():
+            self._pending_signal_cleanup = True
+            self._use_signal = False
             logger.warning(
                 "sandbox.stop_signal_not_main_thread",
                 plugin_id=self._plugin_id,
             )
-            self._use_signal = False
             return
         with contextlib.suppress(ValueError, OSError):
             signal.setitimer(signal.ITIMER_VIRTUAL, 0)
-        if self._old_handler is not None:
-            with _signal_lock:
+        with _signal_lock:
+            if self._old_handler is not None:
                 try:
                     signal.signal(signal.SIGVTALRM, self._old_handler)
                 except (ValueError, OSError):
@@ -107,13 +130,17 @@ class _CPUTimer:
         self._use_signal = False
 
     def start(self) -> None:
+        self._flush_pending_cleanup()
         self._start_cpu = self._cpu_time()
         self._wall_start = time.monotonic()
         self._cancelled.clear()
         self._expired.clear()
         self._use_signal = False
-        self._old_handler = None
-        self._try_start_signal()
+        with _signal_lock:
+            self._old_handler = None
+        self._pending_signal_cleanup = False
+        if self._try_start_signal():
+            return
         self._thread = threading.Thread(target=self._poll, daemon=True)
         self._thread.start()
 

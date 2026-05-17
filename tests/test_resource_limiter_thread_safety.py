@@ -921,7 +921,7 @@ class TestContextManagerCancel:
 
     def test_nested_context_managers(self) -> None:
         with _CPUTimer(60.0) as cpu_t, _WallTimer(60.0) as wall_t:
-            assert cpu_t._thread is not None
+            assert cpu_t._thread is not None or cpu_t._use_signal
             assert wall_t._timer is not None
         cpu_t.cancel()
         wall_t.cancel()
@@ -971,3 +971,249 @@ class TestPluginIdPropagation:
             limiter.check_cpu_timer()
         assert exc_info.value.plugin_id == "limiter-pid"
         limiter.uninstall()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 13. Signal lock serialization with main-thread barrier participation
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestSignalLockSerialization:
+    def test_main_thread_participates_via_barrier_contention(self) -> None:
+        if not _HAS_SIGVTALRM:
+            pytest.skip("SIGVTALRM not available")
+        n_workers = 4
+        barrier = threading.Barrier(n_workers + 1)
+        errors: list[Exception] = []
+        modes: list[tuple[str, int, str]] = []
+        modes_lock = threading.Lock()
+
+        def worker_timer(idx: int) -> None:
+            t = _CPUTimer(10.0)
+            barrier.wait()
+            try:
+                t.start()
+                with modes_lock:
+                    modes.append(("worker", idx, t.mode))
+                time.sleep(0.02)
+                t.cancel()
+            except Exception as e:
+                errors.append(e)
+
+        threads = [
+            threading.Thread(target=worker_timer, args=(i,))
+            for i in range(n_workers)
+        ]
+        for th in threads:
+            th.start()
+
+        barrier.wait()
+        t = _CPUTimer(10.0)
+        try:
+            t.start()
+            with modes_lock:
+                modes.append(("main", 0, t.mode))
+            time.sleep(0.02)
+            t.cancel()
+        except Exception as e:
+            errors.append(e)
+
+        for th in threads:
+            th.join(timeout=5.0)
+
+        assert len(errors) == 0
+        main_modes = [m for m in modes if m[0] == "main"]
+        worker_modes = [m for m in modes if m[0] == "worker"]
+        assert len(main_modes) == 1
+        assert main_modes[0][2] == "signal"
+        assert len(worker_modes) == n_workers
+        assert all(m[2] == "poll" for m in worker_modes)
+
+    def test_serialized_start_cancel_with_main_thread(self) -> None:
+        if not _HAS_SIGVTALRM:
+            pytest.skip("SIGVTALRM not available")
+        n_workers = 3
+        iterations = 10
+        barrier = threading.Barrier(n_workers + 1)
+        errors: list[Exception] = []
+        stop = threading.Event()
+
+        def racer(idx: int) -> None:
+            while not stop.is_set():
+                barrier.wait(timeout=5.0)
+                try:
+                    t = _CPUTimer(60.0)
+                    t.start()
+                    t.cancel()
+                except Exception as e:
+                    errors.append(e)
+
+        threads = [
+            threading.Thread(target=racer, args=(i,))
+            for i in range(n_workers)
+        ]
+        for th in threads:
+            th.start()
+
+        for _ in range(iterations):
+            barrier.wait(timeout=5.0)
+            try:
+                t = _CPUTimer(60.0)
+                t.start()
+                assert t.mode == "signal"
+                t.cancel()
+            except Exception as e:
+                errors.append(e)
+
+        stop.set()
+        for th in threads:
+            th.join(timeout=5.0)
+
+        assert len(errors) == 0
+
+    def test_stop_signal_from_non_main_thread_cleans_up(self) -> None:
+        if not _HAS_SIGVTALRM:
+            pytest.skip("SIGVTALRM not available")
+        t = _CPUTimer(10.0)
+        t.start()
+        assert t._use_signal is True
+        barrier = threading.Barrier(2)
+        errors: list[Exception] = []
+
+        def stopper() -> None:
+            barrier.wait()
+            try:
+                t._stop_signal()
+            except Exception as e:
+                errors.append(e)
+
+        th = threading.Thread(target=stopper)
+        th.start()
+        barrier.wait()
+        th.join(timeout=5.0)
+
+        assert len(errors) == 0
+        assert not t._use_signal
+        assert t._pending_signal_cleanup is True
+        assert t._old_handler is not None
+
+        t._flush_pending_cleanup()
+        assert t._old_handler is None
+        assert t._pending_signal_cleanup is False
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 14. Signal lock safety - _old_handler guard and deferred cleanup
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestSignalLockSafety:
+    def test_flush_pending_cleanup_preserves_old_handler_on_failure(self) -> None:
+        if not _HAS_SIGVTALRM:
+            pytest.skip("SIGVTALRM not available")
+        t = _CPUTimer(10.0)
+        t.start()
+        assert t._use_signal is True
+        saved_handler = t._old_handler
+        assert saved_handler is not None
+
+        t._pending_signal_cleanup = True
+        t._use_signal = False
+
+        with patch("signal.signal", side_effect=ValueError("not main thread")):
+            t._flush_pending_cleanup()
+
+        assert t._old_handler is saved_handler
+        assert t._pending_signal_cleanup is False
+
+        t._pending_signal_cleanup = True
+        with patch("signal.signal", return_value=saved_handler):
+            t._flush_pending_cleanup()
+
+        assert t._old_handler is None
+
+    def test_stop_signal_main_thread_preserves_old_handler_on_failure(self) -> None:
+        if not _HAS_SIGVTALRM:
+            pytest.skip("SIGVTALRM not available")
+        t = _CPUTimer(10.0)
+        t.start()
+        assert t._use_signal is True
+        saved_handler = t._old_handler
+        assert saved_handler is not None
+
+        with patch("signal.signal", side_effect=ValueError("boom")):
+            t._stop_signal()
+
+        assert t._old_handler is saved_handler
+        assert t._use_signal is False
+
+        with patch("signal.signal", return_value=saved_handler):
+            t._stop_signal()
+
+        assert t._old_handler is None
+
+    def test_start_resets_old_handler_under_lock(self) -> None:
+        if not _HAS_SIGVTALRM:
+            pytest.skip("SIGVTALRM not available")
+        t = _CPUTimer(10.0)
+        t.start()
+        assert t._old_handler is not None
+        t.cancel()
+
+        t.start()
+        t.cancel()
+        assert t._old_handler is None
+
+    def test_concurrent_start_cancel_does_not_corrupt_old_handler(self) -> None:
+        if not _HAS_SIGVTALRM:
+            pytest.skip("SIGVTALRM not available")
+        n_workers = 4
+        iterations = 50
+        errors: list[Exception] = []
+
+        def racer() -> None:
+            for _ in range(iterations):
+                try:
+                    t = _CPUTimer(60.0)
+                    t.start()
+                    t.cancel()
+                except Exception as e:
+                    errors.append(e)
+
+        threads = [threading.Thread(target=racer) for _ in range(n_workers)]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join(timeout=10.0)
+
+        assert len(errors) == 0
+
+    def test_non_main_thread_stop_defers_and_main_flush_restores(self) -> None:
+        if not _HAS_SIGVTALRM:
+            pytest.skip("SIGVTALRM not available")
+        t = _CPUTimer(10.0)
+        t.start()
+        assert t._use_signal is True
+        original_handler = t._old_handler
+        barrier = threading.Barrier(2)
+        errors: list[Exception] = []
+
+        def stopper() -> None:
+            barrier.wait()
+            try:
+                t._stop_signal()
+            except Exception as e:
+                errors.append(e)
+
+        th = threading.Thread(target=stopper)
+        th.start()
+        barrier.wait()
+        th.join(timeout=5.0)
+
+        assert len(errors) == 0
+        assert t._pending_signal_cleanup is True
+        assert t._old_handler is original_handler
+
+        t._flush_pending_cleanup()
+        assert t._old_handler is None
+        assert t._pending_signal_cleanup is False
