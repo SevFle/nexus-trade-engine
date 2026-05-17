@@ -27,7 +27,6 @@ import pytest
 
 from engine.plugins.sandbox.core.policy import (
     FilesystemPolicy,
-    ImportPolicy,
     IntrospectionPolicy,
     NetworkPolicy,
     ResourcePolicy,
@@ -39,7 +38,6 @@ from engine.plugins.sandbox.core.violation import (
     SandboxViolation,
     SandboxViolationCategory,
 )
-from engine.plugins.trust_levels import TrustLevel
 from engine.plugins.sandbox.layers.filesystem_isolation import FilesystemIsolation
 from engine.plugins.sandbox.layers.import_restriction import RestrictedImporter
 from engine.plugins.sandbox.layers.introspection_guard import (
@@ -53,6 +51,7 @@ from engine.plugins.sandbox.layers.resource_limiter import (
     HAS_RESOURCE_MODULE,
     ResourceLimiter,
 )
+from engine.plugins.trust_levels import TrustLevel
 
 # ─── Layer 1: Import Restrictions ────────────────────────────────────
 

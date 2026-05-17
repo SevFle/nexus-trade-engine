@@ -22,7 +22,6 @@ from engine.plugins.manifest import StrategyManifest
 from engine.plugins.sandbox import StrategySandbox
 from engine.plugins.sandbox.core.context import SandboxContext
 from engine.plugins.sandbox.core.policy import (
-    ImportPolicy,
     IntrospectionPolicy,
     ResourcePolicy,
     SandboxPolicy,
@@ -36,6 +35,7 @@ from engine.plugins.sandbox.layers.introspection_guard import (
 from engine.plugins.sandbox.layers.resource_limiter import ResourceLimiter
 from engine.plugins.sandbox.monitoring.event_logger import SecurityEventLogger
 from engine.plugins.sandbox.monitoring.violation_report import ViolationReport
+from engine.plugins.trust_levels import TrustLevel
 
 
 def _make_manifest(**overrides: Any) -> StrategyManifest:
@@ -515,10 +515,7 @@ class TestPluginSigningIntegration:
 
 class TestContextThreadSafety:
     def test_context_cleanup_after_activate(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="thread_test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "thread_test")
         ctx = SandboxContext(policy)
         work_dir = ctx.work_dir
         ctx.activate()
@@ -528,7 +525,7 @@ class TestContextThreadSafety:
         assert not os.path.isdir(work_dir)
 
     def test_context_double_cleanup_safe(self) -> None:
-        policy = SandboxPolicy(plugin_id="double_cleanup")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "double_cleanup")
         ctx = SandboxContext(policy)
         ctx.activate()
         ctx.cleanup()

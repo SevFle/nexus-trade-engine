@@ -90,6 +90,7 @@ class PluginSandboxExecutor:
                 strategy_name=self.strategy.name,
                 error=str(exc),
             )
+            self._context.cleanup()
             return []
 
         try:
@@ -111,6 +112,7 @@ class PluginSandboxExecutor:
                 strategy_name=self.strategy.name,
                 timeout_s=self.policy.resource_policy.max_cpu_seconds,
             )
+            self._context.cleanup()
             return []
         except Exception as e:
             elapsed_ms = (time.monotonic() - start) * 1000
@@ -126,6 +128,7 @@ class PluginSandboxExecutor:
                 error=str(e),
                 elapsed_ms=elapsed_ms,
             )
+            self._context.cleanup()
             return []
         finally:
             self._context.deactivate()

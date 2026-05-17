@@ -29,7 +29,6 @@ from engine.plugins.registry import PluginRegistry
 from engine.plugins.sandbox import StrategySandbox
 from engine.plugins.sandbox.core.context import SandboxContext
 from engine.plugins.sandbox.core.policy import (
-    ImportPolicy,
     IntrospectionPolicy,
     ResourcePolicy,
     SandboxPolicy,
@@ -533,10 +532,7 @@ class TestStrategySandboxTrustLevel:
 
 class TestViolationReportIntegration:
     async def test_report_from_sandbox_context_violations(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="report_test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "report_test")
         ctx = SandboxContext(policy)
         ctx.activate()
         try:
