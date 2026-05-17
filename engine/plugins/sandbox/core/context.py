@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from engine.plugins.sandbox.core.policy import SandboxPolicy
     from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
 
-from engine.plugins.sandbox.core.violation import SandboxViolationCategory
+from engine.plugins.sandbox.core.violation import SandboxViolation, SandboxViolationCategory
 from engine.plugins.sandbox.layers import (
     FilesystemIsolation,
     IntrospectionGuard,
@@ -85,23 +85,19 @@ class SandboxContext:
     def validate_trust_level(self) -> bool:
         policy = self._policy
         trust = self._trust_level
-        if trust == TrustLevel.UNTRUSTED:
-            if len(policy.import_policy.blocked_modules) < _MIN_BLOCKED_MODULES_UNTRUSTED:
-                return False
-            if policy.resource_policy.max_cpu_seconds > _MAX_CPU_SECONDS_UNTRUSTED:
-                return False
-            if policy.filesystem_policy.read_write_paths:
-                return False
-            if policy.resource_policy.max_threads > 1:
-                return False
-        elif trust == TrustLevel.TRUSTED_LIMITED:
-            if len(policy.import_policy.blocked_modules) < _MIN_BLOCKED_MODULES_LIMITED:
-                return False
-            if policy.resource_policy.max_cpu_seconds > _MAX_CPU_SECONDS_LIMITED:
-                return False
-        if not policy.verify_integrity():
+        if trust == TrustLevel.UNTRUSTED and (
+            len(policy.import_policy.blocked_modules) < _MIN_BLOCKED_MODULES_UNTRUSTED
+            or policy.resource_policy.max_cpu_seconds > _MAX_CPU_SECONDS_UNTRUSTED
+            or policy.filesystem_policy.read_write_paths
+            or policy.resource_policy.max_threads > 1
+        ):
             return False
-        return True
+        if trust == TrustLevel.TRUSTED_LIMITED and (
+            len(policy.import_policy.blocked_modules) < _MIN_BLOCKED_MODULES_LIMITED
+            or policy.resource_policy.max_cpu_seconds > _MAX_CPU_SECONDS_LIMITED
+        ):
+            return False
+        return policy.verify_integrity()
 
     def _enforce_hard_limits(self) -> None:
         violations = self._policy.enforce_hard_limits(self._trust_level)
@@ -112,6 +108,12 @@ class SandboxContext:
                 detail=f"Hard limit violations: {detail}",
                 attempted_action="trust_level_hard_limit_check",
             )
+            raise SandboxViolation(
+                f"Hard limit violations: {detail}",
+                category=SandboxViolationCategory.INTROSPECTION,
+                plugin_id=self._policy.plugin_id,
+                attempted_action="trust_level_hard_limit_check",
+            )
 
     def activate(self) -> None:
         if self._active:
@@ -120,6 +122,12 @@ class SandboxContext:
             self._event_logger.log_event(
                 category=SandboxViolationCategory.INTROSPECTION,
                 detail=f"Trust level policy validation failed for {self._policy.trust_level}",
+                attempted_action="trust_level_validation",
+            )
+            raise SandboxViolation(
+                f"Trust level policy validation failed for {self._policy.trust_level}",
+                category=SandboxViolationCategory.INTROSPECTION,
+                plugin_id=self._policy.plugin_id,
                 attempted_action="trust_level_validation",
             )
         self._enforce_hard_limits()

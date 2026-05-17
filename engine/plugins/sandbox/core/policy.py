@@ -225,11 +225,13 @@ class SandboxPolicy:
         max_mem = _TRUST_MAX_MEMORY_HARD_LIMITS.get(trust, 1024**3)
         if self.resource_policy.max_cpu_seconds > max_cpu:
             violations.append(
-                f"max_cpu_seconds={self.resource_policy.max_cpu_seconds} exceeds hard limit {max_cpu}"
+                f"max_cpu_seconds={self.resource_policy.max_cpu_seconds}"
+                f" exceeds hard limit {max_cpu}"
             )
         if self.resource_policy.max_memory_bytes > max_mem:
             violations.append(
-                f"max_memory_bytes={self.resource_policy.max_memory_bytes} exceeds hard limit {max_mem}"
+                f"max_memory_bytes={self.resource_policy.max_memory_bytes}"
+                f" exceeds hard limit {max_mem}"
             )
         if trust == TrustLevel.UNTRUSTED:
             if self.filesystem_policy.read_write_paths:

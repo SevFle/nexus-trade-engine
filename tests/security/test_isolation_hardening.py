@@ -3,16 +3,11 @@
 from __future__ import annotations
 
 import builtins
-import os
-import tempfile
-from pathlib import Path
-from typing import Any
 
 import pytest
 
 from engine.plugins.sandbox.core.context import SandboxContext
 from engine.plugins.sandbox.core.policy import (
-    EnvironmentPolicy,
     FilesystemPolicy,
     ImportPolicy,
     IntrospectionPolicy,
@@ -20,18 +15,18 @@ from engine.plugins.sandbox.core.policy import (
     ResourcePolicy,
     SandboxPolicy,
 )
-from engine.plugins.sandbox.core.violation import SandboxViolationCategory
+from engine.plugins.sandbox.core.violation import SandboxViolation
 from engine.plugins.sandbox.layers.filesystem_isolation import (
-    FilesystemIsolation,
     _BLOCKED_SYSTEM_PREFIXES,
+    FilesystemIsolation,
 )
 from engine.plugins.sandbox.layers.introspection_guard import (
     _EXPLICITLY_BLOCKED_ATTRS,
     IntrospectionGuard,
 )
 from engine.plugins.sandbox.layers.network_guard import (
-    NetworkGuard,
     _METADATA_ENDPOINTS,
+    NetworkGuard,
 )
 from engine.plugins.sandbox.monitoring.event_logger import SecurityEventLogger
 from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
@@ -149,7 +144,7 @@ class TestIntrospectionHardening:
         guard.install()
         try:
             with pytest.raises(PermissionError, match="not accessible"):
-                builtins.getattr(object(), "__builtins__")
+                builtins.getattr(object(), "__builtins__")  # noqa: B009
         finally:
             guard.uninstall()
 
@@ -165,20 +160,20 @@ class TestContextTrustEnforcement:
         policy = SandboxPolicy(
             plugin_id="hard_test",
             trust_level="untrusted",
-            resource_policy=ResourcePolicy(max_cpu_seconds=9999),
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
+            resource_policy=ResourcePolicy(max_cpu_seconds=30, max_memory_bytes=2 * 1024**3),
         )
         ctx = SandboxContext(policy, metrics_collector=collector)
         ctx._event_logger = logger
-        ctx.activate()
-        try:
-            events = logger.get_events()
-            hard_limit_events = [
-                e for e in events
-                if "Hard limit" in e.detail
-            ]
-            assert len(hard_limit_events) >= 1
-        finally:
-            ctx.cleanup()
+        with pytest.raises(SandboxViolation, match="Hard limit violations"):
+            ctx.activate()
+        events = logger.get_events()
+        hard_limit_events = [
+            e for e in events
+            if "Hard limit" in e.detail
+        ]
+        assert len(hard_limit_events) >= 1
+        ctx.cleanup()
 
     def test_context_validates_integrity(self) -> None:
         policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "integrity_test")
@@ -203,6 +198,30 @@ class TestContextTrustEnforcement:
         )
         ctx = SandboxContext(policy)
         assert ctx.validate_trust_level() is False
+        ctx.cleanup()
+
+    def test_activate_rejects_tampered_integrity(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "tamper_activate")
+        policy.set_integrity_hash()
+        policy.resource_policy.max_cpu_seconds = 9999
+        ctx = SandboxContext(policy)
+        with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
+            ctx.activate()
+        assert ctx.is_active is False
+        ctx.cleanup()
+
+    def test_activate_rejects_insufficient_blocked_modules(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="weak_imports",
+            trust_level="untrusted",
+            import_policy=ImportPolicy(blocked_modules={"os"}),
+            resource_policy=ResourcePolicy(max_cpu_seconds=10),
+        )
+        policy.set_integrity_hash()
+        ctx = SandboxContext(policy)
+        with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
+            ctx.activate()
+        assert ctx.is_active is False
         ctx.cleanup()
 
     def test_context_environment_policy_set(self) -> None:

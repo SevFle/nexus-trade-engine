@@ -5,6 +5,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from engine.plugins.sandbox.core.policy import (
+    _TRUST_ENVIRONMENT_PRESETS,
+    _TRUST_MAX_CPU_HARD_LIMITS,
+    _TRUST_MAX_MEMORY_HARD_LIMITS,
     EnvironmentPolicy,
     FilesystemPolicy,
     ImportPolicy,
@@ -12,9 +15,6 @@ from engine.plugins.sandbox.core.policy import (
     NetworkPolicy,
     ResourcePolicy,
     SandboxPolicy,
-    _TRUST_ENVIRONMENT_PRESETS,
-    _TRUST_MAX_CPU_HARD_LIMITS,
-    _TRUST_MAX_MEMORY_HARD_LIMITS,
     _parse_memory,
 )
 from engine.plugins.sandbox.core.violation import (
@@ -449,7 +449,6 @@ class TestSandboxPolicyIntegrity:
     def test_integrity_hash_changes_on_modification(self) -> None:
         policy = SandboxPolicy(plugin_id="test", trust_level="untrusted")
         policy.set_integrity_hash()
-        original_hash = policy._integrity_hash
         policy.resource_policy.max_cpu_seconds = 999
         assert policy.verify_integrity() is False
 

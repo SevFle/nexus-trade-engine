@@ -34,6 +34,7 @@ from engine.plugins.sandbox.core.context import (
     _MIN_BLOCKED_MODULES_UNTRUSTED,
     SandboxContext,
 )
+from engine.plugins.trust_levels import TrustLevel
 from engine.plugins.sandbox.core.policy import (
     FilesystemPolicy,
     ImportPolicy,
@@ -1359,10 +1360,7 @@ class TestSandboxContextTrustLevelValidation:
 
 class TestSandboxContextLifecycle:
     def test_context_manager_activates_deactivates(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         assert not ctx.is_active
         with ctx:
@@ -1370,10 +1368,7 @@ class TestSandboxContextLifecycle:
         assert not ctx.is_active
 
     def test_cleanup_removes_work_dir(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         work_dir = ctx.work_dir
         assert os.path.isdir(work_dir)
@@ -1382,10 +1377,7 @@ class TestSandboxContextLifecycle:
         assert not os.path.isdir(work_dir)
 
     def test_double_activate_noop(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         ctx.activate()
         ctx.activate()
@@ -1393,10 +1385,7 @@ class TestSandboxContextLifecycle:
         ctx.deactivate()
 
     def test_double_deactivate_noop(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         ctx.activate()
         ctx.deactivate()
@@ -1431,10 +1420,7 @@ class TestSandboxContextLifecycle:
 
 class TestSandboxContextViolationCollection:
     def test_violations_from_all_layers_collected(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         ctx.activate()
         with contextlib.suppress(Exception), pytest.raises(PermissionError):
@@ -1449,10 +1435,7 @@ class TestSandboxContextViolationCollection:
         assert SandboxViolationCategory.INTROSPECTION in categories
 
     def test_violations_cleared_after_deactivate(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         ctx.activate()
         with contextlib.suppress(Exception), pytest.raises(PermissionError):
@@ -1470,10 +1453,7 @@ class TestSandboxContextViolationCollection:
 
 class TestSandboxContextBuiltinsRestoration:
     def test_builtins_restored_after_filesystem_violation(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         original_open = builtins.open
         ctx.activate()
@@ -1483,10 +1463,7 @@ class TestSandboxContextBuiltinsRestoration:
         assert builtins.open is original_open
 
     def test_builtins_restored_after_introspection_violation(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         original_getattr = builtins.getattr
         original_object = builtins.object
@@ -1498,10 +1475,7 @@ class TestSandboxContextBuiltinsRestoration:
         assert builtins.object is original_object
 
     def test_builtins_restored_after_import_violation(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         original_import = builtins.__import__
         ctx.activate()
@@ -1511,10 +1485,7 @@ class TestSandboxContextBuiltinsRestoration:
         assert builtins.__import__ is original_import
 
     def test_all_builtins_restored_after_multiple_violations(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         original_open = builtins.open
         original_getattr = builtins.getattr
@@ -1540,10 +1511,7 @@ class TestSandboxContextBuiltinsRestoration:
 
 class TestCrossLayerCombinedAttacks:
     def test_eval_then_import_blocked(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         ctx.activate()
         try:
@@ -1553,10 +1521,7 @@ class TestCrossLayerCombinedAttacks:
             ctx.deactivate()
 
     def test_exec_then_import_blocked(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         ctx.activate()
         try:
@@ -1566,10 +1531,7 @@ class TestCrossLayerCombinedAttacks:
             ctx.deactivate()
 
     def test_filesystem_and_introspection_violations_in_same_session(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         ctx.activate()
         with contextlib.suppress(Exception), pytest.raises(PermissionError):
@@ -1583,10 +1545,7 @@ class TestCrossLayerCombinedAttacks:
         assert SandboxViolationCategory.INTROSPECTION in categories
 
     def test_work_dir_accessible_during_sandbox(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         work = ctx.work_dir
         with ctx:
@@ -1597,10 +1556,7 @@ class TestCrossLayerCombinedAttacks:
         ctx.cleanup()
 
     def test_sequential_contexts_independent(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx1 = SandboxContext(policy)
         ctx1.activate()
         with contextlib.suppress(Exception), pytest.raises(PermissionError):
@@ -1622,10 +1578,7 @@ class TestCrossLayerCombinedAttacks:
 
 class TestCrossLayerAll5LayersCollect:
     def test_all_5_layers_installed_and_uninstalled(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         original_open = builtins.open
         original_getattr = builtins.getattr
@@ -1649,10 +1602,7 @@ class TestCrossLayerAll5LayersCollect:
         assert socket.create_connection is original_conn
 
     def test_install_order_network_first(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="p",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p")
         ctx = SandboxContext(policy)
         original_send = httpx.AsyncClient.send
         original_conn = socket.create_connection

@@ -402,7 +402,7 @@ class TestTrustLevels:
 
 class TestSandboxContextEdgeCases:
     def test_activate_raises_on_layer_failure(self):
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         with patch.object(
             ctx._network_layer, "install", side_effect=RuntimeError("boom")
@@ -411,7 +411,7 @@ class TestSandboxContextEdgeCases:
         assert not ctx.is_active
 
     def test_double_activate_is_noop(self):
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         ctx.activate()
         assert ctx.is_active
@@ -420,19 +420,19 @@ class TestSandboxContextEdgeCases:
         ctx.deactivate()
 
     def test_double_deactivate_is_noop(self):
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         ctx.deactivate()
         assert not ctx.is_active
 
     def test_context_manager(self):
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         with SandboxContext(policy) as ctx:
             assert ctx.is_active
         assert not ctx.is_active
 
     def test_cleanup_deactivates_and_cleans(self):
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         ctx.activate()
         assert ctx.is_active
@@ -1535,14 +1535,7 @@ class TestStrategySandbox:
 
 class TestCrossLayerIntegration:
     def test_violations_collected_from_all_layers(self):
-        policy = SandboxPolicy(
-            plugin_id="cross-viol",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-            network_policy=NetworkPolicy(allowed_endpoints=[]),
-            resource_policy=ResourcePolicy(max_threads=0),
-            filesystem_policy=FilesystemPolicy(),
-            introspection_policy=IntrospectionPolicy(),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "cross-viol")
         ctx = SandboxContext(policy)
         ctx.activate()
         try:

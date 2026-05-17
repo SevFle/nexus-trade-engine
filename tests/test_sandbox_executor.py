@@ -7,16 +7,13 @@ import asyncio
 import pytest
 
 from engine.core.signal import Signal
-from engine.plugins.manifest import StrategyManifest
 from engine.plugins.sandbox.core.context import SandboxContext
 from engine.plugins.sandbox.core.policy import (
-    FilesystemPolicy,
     ImportPolicy,
-    IntrospectionPolicy,
-    NetworkPolicy,
     ResourcePolicy,
     SandboxPolicy,
 )
+from engine.plugins.sandbox.core.violation import SandboxViolation
 from engine.plugins.sandbox.executor import PluginSandboxExecutor
 from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
 from engine.plugins.trust_levels import TrustLevel
@@ -76,10 +73,7 @@ class TestPluginSandboxExecutorBasic:
             executor.cleanup()
 
     async def test_slow_strategy_times_out(self) -> None:
-        policy = SandboxPolicy(
-            plugin_id="test",
-            resource_policy=ResourcePolicy(max_cpu_seconds=1),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test", max_cpu_seconds=1)
         executor = PluginSandboxExecutor(_SlowStrategy(), policy)
         try:
             signals = await executor.safe_evaluate(None, None, None)
@@ -126,10 +120,7 @@ class TestPluginSandboxExecutorMetrics:
 
     async def test_metrics_on_error(self) -> None:
         collector = SandboxMetricsCollector()
-        policy = SandboxPolicy(
-            plugin_id="error_test",
-            resource_policy=ResourcePolicy(max_cpu_seconds=1),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "error_test", max_cpu_seconds=1)
         executor = PluginSandboxExecutor(_BadStrategy(), policy, metrics_collector=collector)
         try:
             await executor.safe_evaluate(None, None, None)
@@ -206,3 +197,128 @@ class TestPluginSandboxExecutorTrustEnforcement:
             assert executor.policy.verify_integrity() is True
         finally:
             executor.cleanup()
+
+
+class TestSandboxContextTrustValidation:
+    def test_activate_raises_on_empty_blocked_modules(self) -> None:
+        policy = SandboxPolicy(plugin_id="bad_trust")
+        context = SandboxContext(policy)
+        try:
+            with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
+                context.activate()
+            assert context.is_active is False
+        finally:
+            context.cleanup()
+
+    def test_activate_raises_on_cpu_exceeds_validate_limit(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="cpu_validate_fail",
+            trust_level="untrusted",
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
+            resource_policy=ResourcePolicy(max_cpu_seconds=90),
+        )
+        context = SandboxContext(policy)
+        try:
+            with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
+                context.activate()
+            assert context.is_active is False
+        finally:
+            context.cleanup()
+
+    def test_activate_raises_on_read_write_paths_untrusted(self) -> None:
+        from engine.plugins.sandbox.core.policy import FilesystemPolicy
+
+        policy = SandboxPolicy(
+            plugin_id="rw_paths_fail",
+            trust_level="untrusted",
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
+            resource_policy=ResourcePolicy(max_cpu_seconds=30),
+            filesystem_policy=FilesystemPolicy(read_write_paths=["/data/write"]),
+        )
+        context = SandboxContext(policy)
+        try:
+            with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
+                context.activate()
+            assert context.is_active is False
+        finally:
+            context.cleanup()
+
+    def test_activate_raises_on_tampered_integrity(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "tamper_test")
+        policy.resource_policy.max_cpu_seconds = 9999
+        context = SandboxContext(policy)
+        try:
+            with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
+                context.activate()
+            assert context.is_active is False
+        finally:
+            context.cleanup()
+
+
+class TestSandboxContextHardLimits:
+    def test_activate_raises_on_memory_hard_limit_exceeded(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="mem_hard_fail",
+            trust_level="untrusted",
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
+            resource_policy=ResourcePolicy(max_cpu_seconds=30, max_memory_bytes=2 * 1024**3),
+        )
+        context = SandboxContext(policy)
+        try:
+            with pytest.raises(SandboxViolation, match="Hard limit violations"):
+                context.activate()
+            assert context.is_active is False
+        finally:
+            context.cleanup()
+
+    def test_activate_raises_on_untrusted_threads(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="threads_hard_fail",
+            trust_level="untrusted",
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
+            resource_policy=ResourcePolicy(max_cpu_seconds=30, max_threads=4),
+        )
+        context = SandboxContext(policy)
+        try:
+            with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
+                context.activate()
+            assert context.is_active is False
+        finally:
+            context.cleanup()
+
+
+class TestExecutorActivationViolation:
+    async def test_executor_returns_empty_on_activation_violation(self) -> None:
+        policy = SandboxPolicy(plugin_id="bad_exec")
+        executor = PluginSandboxExecutor(_EmptyStrategy(), policy)
+        try:
+            signals = await executor.safe_evaluate(None, None, None)
+            assert signals == []
+        finally:
+            executor.cleanup()
+
+
+class TestSandboxPolicyIntegrity:
+    def test_verify_integrity_detects_tampering(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "integ_tamper")
+        assert policy.verify_integrity() is True
+        policy.resource_policy.max_cpu_seconds = 9999
+        assert policy.verify_integrity() is False
+
+    def test_verify_integrity_passes_without_hash(self) -> None:
+        policy = SandboxPolicy(plugin_id="no_hash")
+        assert policy.verify_integrity() is True
+
+    def test_enforce_hard_limits_returns_violations(self) -> None:
+        policy = SandboxPolicy(
+            plugin_id="hard_violations",
+            trust_level="untrusted",
+            resource_policy=ResourcePolicy(max_cpu_seconds=200, max_memory_bytes=2 * 1024**3),
+        )
+        violations = policy.enforce_hard_limits(TrustLevel.UNTRUSTED)
+        assert len(violations) >= 2
+
+    def test_enforce_hard_limits_no_violations_for_valid_policy(self) -> None:
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "valid_hard")
+        violations = policy.enforce_hard_limits(TrustLevel.UNTRUSTED)
+        assert violations == []

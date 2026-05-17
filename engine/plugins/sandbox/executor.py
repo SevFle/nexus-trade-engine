@@ -8,6 +8,7 @@ import structlog
 
 from engine.core.signal import Signal
 from engine.plugins.sandbox.core.context import SandboxContext
+from engine.plugins.sandbox.core.violation import SandboxViolation
 from engine.plugins.sandbox.monitoring.event_logger import SecurityEventLogger
 from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
 
@@ -74,7 +75,22 @@ class PluginSandboxExecutor:
         market: Any,
     ) -> list[Signal]:
         start = time.monotonic()
-        self._context.activate()
+        try:
+            self._context.activate()
+        except SandboxViolation as exc:
+            elapsed_ms = (time.monotonic() - start) * 1000
+            self._metrics.record_evaluation(
+                self.policy.plugin_id,
+                elapsed_ms,
+                0,
+                error=str(exc),
+            )
+            logger.exception(
+                "sandbox.activation_violation",
+                strategy_name=self.strategy.name,
+                error=str(exc),
+            )
+            return []
 
         try:
             raw_signals = await asyncio.wait_for(

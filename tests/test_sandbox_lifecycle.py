@@ -10,6 +10,7 @@ from engine.plugins.sandbox.core.lifecycle import (
     SandboxPhase,
 )
 from engine.plugins.sandbox.core.policy import SandboxPolicy
+from engine.plugins.trust_levels import TrustLevel
 
 
 class TestSandboxPhase:
@@ -59,7 +60,7 @@ class TestSandboxLifecycle:
 
     def test_activate_transitions(self) -> None:
         lc = SandboxLifecycle(plugin_id="test")
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         try:
             lc.bind(ctx)
@@ -73,7 +74,7 @@ class TestSandboxLifecycle:
 
     def test_deactivate_transitions(self) -> None:
         lc = SandboxLifecycle(plugin_id="test")
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         try:
             lc.bind(ctx)
@@ -86,7 +87,7 @@ class TestSandboxLifecycle:
 
     def test_cleanup_transitions(self) -> None:
         lc = SandboxLifecycle(plugin_id="test")
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         try:
             lc.bind(ctx)
@@ -99,7 +100,7 @@ class TestSandboxLifecycle:
 
     def test_activate_idempotent(self) -> None:
         lc = SandboxLifecycle(plugin_id="test")
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         try:
             lc.bind(ctx)
@@ -127,7 +128,7 @@ class TestSandboxLifecycle:
 
     def test_event_history(self) -> None:
         lc = SandboxLifecycle(plugin_id="test")
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         try:
             lc.bind(ctx)
@@ -177,7 +178,7 @@ class TestLifecycleManager:
 
     def test_activate_deactivate(self) -> None:
         mgr = LifecycleManager()
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         try:
             mgr.create(ctx)
@@ -190,8 +191,8 @@ class TestLifecycleManager:
 
     def test_get_active(self) -> None:
         mgr = LifecycleManager()
-        policy1 = SandboxPolicy(plugin_id="p1")
-        policy2 = SandboxPolicy(plugin_id="p2")
+        policy1 = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p1")
+        policy2 = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "p2")
         ctx1 = SandboxContext(policy1)
         ctx2 = SandboxContext(policy2)
         try:

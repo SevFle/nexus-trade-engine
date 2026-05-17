@@ -36,8 +36,10 @@ from engine.plugins.sandbox.core.policy import (
 from engine.plugins.sandbox.core.violation import (
     ImportViolation,
     ResourceExhausted,
+    SandboxViolation,
     SandboxViolationCategory,
 )
+from engine.plugins.trust_levels import TrustLevel
 from engine.plugins.sandbox.layers.filesystem_isolation import FilesystemIsolation
 from engine.plugins.sandbox.layers.import_restriction import RestrictedImporter
 from engine.plugins.sandbox.layers.introspection_guard import (
@@ -1015,7 +1017,7 @@ class TestSandboxContextUnit:
     def test_activate_sets_active(self) -> None:
         from engine.plugins.sandbox.core.context import SandboxContext
 
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         try:
             ctx.activate()
@@ -1026,7 +1028,7 @@ class TestSandboxContextUnit:
     def test_deactivate_clears_active(self) -> None:
         from engine.plugins.sandbox.core.context import SandboxContext
 
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         ctx.activate()
         ctx.deactivate()
@@ -1035,7 +1037,7 @@ class TestSandboxContextUnit:
     def test_activate_idempotent(self) -> None:
         from engine.plugins.sandbox.core.context import SandboxContext
 
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         try:
             ctx.activate()
@@ -1055,7 +1057,7 @@ class TestSandboxContextUnit:
     def test_context_manager_protocol(self) -> None:
         from engine.plugins.sandbox.core.context import SandboxContext
 
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         with ctx:
             assert ctx.is_active is True
@@ -1081,7 +1083,7 @@ class TestSandboxContextUnit:
     def test_cleanup_deactivates_and_removes_dir(self) -> None:
         from engine.plugins.sandbox.core.context import SandboxContext
 
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         work_dir = ctx.work_dir
         ctx.activate()
@@ -1093,10 +1095,7 @@ class TestSandboxContextUnit:
     def test_violation_collection_on_deactivate(self) -> None:
         from engine.plugins.sandbox.core.context import SandboxContext
 
-        policy = SandboxPolicy(
-            plugin_id="test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         ctx.activate()
         try:
@@ -1115,10 +1114,8 @@ class TestSandboxContextUnit:
         ctx = SandboxContext(policy)
         orig_import = builtins.__import__
         orig_getattr = builtins.getattr
-        try:
+        with pytest.raises(SandboxViolation):
             ctx.activate()
-        finally:
-            ctx.deactivate()
         assert builtins.__import__ is orig_import
         assert builtins.getattr is orig_getattr
 
@@ -1225,7 +1222,7 @@ class TestEscalationAttempts:
     def test_nested_context_activation(self) -> None:
         from engine.plugins.sandbox.core.context import SandboxContext
 
-        policy = SandboxPolicy(plugin_id="test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "test")
         ctx = SandboxContext(policy)
         try:
             ctx.activate()
@@ -1259,10 +1256,7 @@ class TestFullSandboxRuntime:
     async def test_good_strategy_end_to_end(self) -> None:
         from engine.plugins.sandbox.executor import PluginSandboxExecutor
 
-        policy = SandboxPolicy(
-            plugin_id="e2e_good",
-            resource_policy=ResourcePolicy(max_cpu_seconds=5),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "e2e_good", max_cpu_seconds=5)
 
         class GoodStrat:
             name = "e2e_good"
@@ -1283,10 +1277,7 @@ class TestFullSandboxRuntime:
     async def test_import_violation_end_to_end(self) -> None:
         from engine.plugins.sandbox.executor import PluginSandboxExecutor
 
-        policy = SandboxPolicy(
-            plugin_id="e2e_import",
-            resource_policy=ResourcePolicy(max_cpu_seconds=5),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "e2e_import", max_cpu_seconds=5)
 
         class ImportOsStrat:
             name = "e2e_import"
@@ -1306,10 +1297,7 @@ class TestFullSandboxRuntime:
     async def test_filesystem_violation_end_to_end(self, tmp_path: Any) -> None:
         from engine.plugins.sandbox.executor import PluginSandboxExecutor
 
-        policy = SandboxPolicy(
-            plugin_id="e2e_fs",
-            resource_policy=ResourcePolicy(max_cpu_seconds=5),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "e2e_fs", max_cpu_seconds=5)
 
         secret = tmp_path / "secret.txt"
         secret.write_text("sensitive")
@@ -1336,10 +1324,7 @@ class TestFullSandboxRuntime:
     async def test_introspection_violation_end_to_end(self) -> None:
         from engine.plugins.sandbox.executor import PluginSandboxExecutor
 
-        policy = SandboxPolicy(
-            plugin_id="e2e_intro",
-            resource_policy=ResourcePolicy(max_cpu_seconds=5),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "e2e_intro", max_cpu_seconds=5)
 
         class SubclassStrat:
             name = "e2e_intro"
@@ -1361,10 +1346,7 @@ class TestFullSandboxRuntime:
 
         from engine.plugins.sandbox.executor import PluginSandboxExecutor
 
-        policy = SandboxPolicy(
-            plugin_id="e2e_timeout",
-            resource_policy=ResourcePolicy(max_cpu_seconds=1),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "e2e_timeout", max_cpu_seconds=1)
 
         class SlowStrat:
             name = "e2e_timeout"
@@ -1388,10 +1370,7 @@ class TestFullSandboxRuntime:
         original_open = builtins.open
         original_getattr = builtins.getattr
 
-        policy = SandboxPolicy(
-            plugin_id="e2e_restore",
-            resource_policy=ResourcePolicy(max_cpu_seconds=5),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "e2e_restore", max_cpu_seconds=5)
 
         class CrashStrat:
             name = "e2e_restore"
@@ -1413,10 +1392,11 @@ class TestFullSandboxRuntime:
     async def test_network_violation_end_to_end(self) -> None:
         from engine.plugins.sandbox.executor import PluginSandboxExecutor
 
-        policy = SandboxPolicy(
-            plugin_id="e2e_net",
-            resource_policy=ResourcePolicy(max_cpu_seconds=5),
-            network_policy=NetworkPolicy(allowed_endpoints=["safe.example.com"]),
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED,
+            "e2e_net",
+            max_cpu_seconds=5,
+            network_endpoints=["safe.example.com"],
         )
 
         class DirectHttpStrat:
@@ -1440,10 +1420,7 @@ class TestFullSandboxRuntime:
     async def test_multiple_evaluations_sequential(self) -> None:
         from engine.plugins.sandbox.executor import PluginSandboxExecutor
 
-        policy = SandboxPolicy(
-            plugin_id="e2e_multi",
-            resource_policy=ResourcePolicy(max_cpu_seconds=5),
-        )
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "e2e_multi", max_cpu_seconds=5)
 
         class CountStrat:
             name = "e2e_multi"

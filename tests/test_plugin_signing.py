@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from engine.plugins.plugin_signing import PluginSigner, SignatureVerifier

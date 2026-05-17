@@ -6,7 +6,6 @@ import time
 
 from engine.plugins.sandbox.core.context import SandboxContext
 from engine.plugins.sandbox.core.policy import (
-    ImportPolicy,
     SandboxPolicy,
 )
 from engine.plugins.sandbox.core.violation import (
@@ -17,9 +16,8 @@ from engine.plugins.sandbox.monitoring.admin_api import (
     PolicySnapshot,
     SandboxAdminAPI,
 )
-from engine.plugins.sandbox.monitoring.event_logger import SecurityEvent, SecurityEventLogger
+from engine.plugins.sandbox.monitoring.event_logger import SecurityEventLogger
 from engine.plugins.sandbox.monitoring.metrics import (
-    PluginMetrics,
     SandboxMetricsCollector,
 )
 from engine.plugins.sandbox.monitoring.violation_report import ViolationReport

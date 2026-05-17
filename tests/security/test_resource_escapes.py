@@ -404,7 +404,7 @@ class TestResourceExhaustionViaContext:
     def test_context_installs_resource_limiter(self) -> None:
         policy = SandboxPolicy(
             plugin_id="test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
             resource_policy=ResourcePolicy(max_cpu_seconds=5.0, wall_time_seconds=10.0),
         )
         ctx = SandboxContext(policy)
@@ -415,7 +415,7 @@ class TestResourceExhaustionViaContext:
     def test_context_wall_timer_active(self) -> None:
         policy = SandboxPolicy(
             plugin_id="test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
             resource_policy=ResourcePolicy(max_cpu_seconds=5.0, wall_time_seconds=10.0),
         )
         ctx = SandboxContext(policy)
@@ -426,7 +426,7 @@ class TestResourceExhaustionViaContext:
     def test_context_wall_timer_cleaned_up(self) -> None:
         policy = SandboxPolicy(
             plugin_id="test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
             resource_policy=ResourcePolicy(max_cpu_seconds=5.0, wall_time_seconds=10.0),
         )
         ctx = SandboxContext(policy)
@@ -437,7 +437,7 @@ class TestResourceExhaustionViaContext:
     def test_context_cpu_timer_active(self) -> None:
         policy = SandboxPolicy(
             plugin_id="test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
             resource_policy=ResourcePolicy(max_cpu_seconds=5.0, wall_time_seconds=10.0),
         )
         ctx = SandboxContext(policy)
@@ -448,7 +448,7 @@ class TestResourceExhaustionViaContext:
     def test_context_cpu_timer_cleaned_up(self) -> None:
         policy = SandboxPolicy(
             plugin_id="test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
             resource_policy=ResourcePolicy(max_cpu_seconds=5.0, wall_time_seconds=10.0),
         )
         ctx = SandboxContext(policy)
@@ -459,7 +459,7 @@ class TestResourceExhaustionViaContext:
     def test_wall_time_exceeded_in_context(self) -> None:
         policy = SandboxPolicy(
             plugin_id="test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
             resource_policy=ResourcePolicy(max_cpu_seconds=60.0, wall_time_seconds=0.05),
         )
         ctx = SandboxContext(policy)
@@ -476,7 +476,7 @@ class TestResourceViolationCollection:
     def test_resource_violations_collected_by_context(self) -> None:
         policy = SandboxPolicy(
             plugin_id="test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
             resource_policy=ResourcePolicy(max_cpu_seconds=60.0, wall_time_seconds=0.05),
         )
         ctx = SandboxContext(policy)
@@ -497,7 +497,7 @@ class TestResourceViolationCollection:
     def test_resource_violations_cleared_after_deactivate(self) -> None:
         policy = SandboxPolicy(
             plugin_id="test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(blocked_modules={f"m{i}" for i in range(15)}),
             resource_policy=ResourcePolicy(max_threads=0),
         )
         ctx = SandboxContext(policy)
