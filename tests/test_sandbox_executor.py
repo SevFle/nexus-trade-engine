@@ -297,6 +297,60 @@ class TestExecutorActivationViolation:
         finally:
             executor.cleanup()
 
+    async def test_activation_violation_records_metrics(self) -> None:
+        collector = SandboxMetricsCollector()
+        policy = SandboxPolicy(
+            plugin_id="metrics_violation",
+            trust_level="untrusted",
+            resource_policy=ResourcePolicy(max_memory_bytes=10 * 1024**3),
+        )
+        executor = PluginSandboxExecutor(
+            _EmptyStrategy(), policy, metrics_collector=collector
+        )
+        try:
+            with pytest.raises(SandboxViolation):
+                await executor.safe_evaluate(None, None, None)
+            metrics = collector.get_plugin_metrics("metrics_violation")
+            assert metrics is not None
+            assert metrics["total_evaluations"] == 1
+            assert metrics["errors"] == 1
+            assert metrics["last_error"] is not None
+            assert "metrics_violation" in metrics["last_error"]
+        finally:
+            executor.cleanup()
+
+    async def test_activation_violation_from_integrity_tamper_records_metrics(self) -> None:
+        collector = SandboxMetricsCollector()
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "tamper_metrics")
+        policy.resource_policy.wall_time_seconds = 9999
+        executor = PluginSandboxExecutor(
+            _EmptyStrategy(), policy, metrics_collector=collector
+        )
+        try:
+            with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
+                await executor.safe_evaluate(None, None, None)
+            metrics = collector.get_plugin_metrics("tamper_metrics")
+            assert metrics is not None
+            assert metrics["total_evaluations"] == 1
+            assert metrics["errors"] == 1
+        finally:
+            executor.cleanup()
+
+    async def test_activation_violation_no_signals_returned(self) -> None:
+        collector = SandboxMetricsCollector()
+        policy = SandboxPolicy(plugin_id="no_signals_violation")
+        executor = PluginSandboxExecutor(
+            _GoodStrategy(), policy, metrics_collector=collector
+        )
+        try:
+            with pytest.raises(SandboxViolation):
+                await executor.safe_evaluate(None, None, None)
+            metrics = collector.get_plugin_metrics("no_signals_violation")
+            assert metrics is not None
+            assert metrics["total_signals_emitted"] == 0
+        finally:
+            executor.cleanup()
+
 
 class TestSandboxPolicyIntegrity:
     def test_verify_integrity_detects_tampering(self) -> None:
