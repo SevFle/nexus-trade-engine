@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import atexit
 import builtins
+import threading
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -71,10 +73,23 @@ _BLOCKED_BUILTINS_DEFAULT: frozenset[str] = frozenset(
 _SAFE_DIR_ATTRS: frozenset[str] = _EXPLICITLY_BLOCKED_ATTRS | _FRAME_ATTRS | _TRACEBACK_ATTRS
 
 
-class _RestrictedObject:
-    @classmethod
-    def __subclasses__(cls) -> list[type]:
-        raise RuntimeError("__subclasses__() is not allowed in strategy sandbox")
+def _make_guard_state():
+    _tls = threading.local()
+    _real_getattr = getattr
+
+    def is_paused():
+        return _real_getattr(_tls, "_paused", False)
+
+    def set_paused(value):
+        object.__setattr__(_tls, "_paused", value)
+
+    return is_paused, set_paused
+
+
+_is_guard_paused, _set_guard_paused = _make_guard_state()
+
+
+_original_object_store: list[Any] = []
 
 
 def _make_safe_dir(original_dir: Any, guard: IntrospectionGuard) -> Any:
@@ -89,7 +104,15 @@ def _make_safe_dir(original_dir: Any, guard: IntrospectionGuard) -> Any:
     return safe_dir
 
 
+class _RestrictedObject:
+    @classmethod
+    def __subclasses__(cls) -> list[type]:
+        raise RuntimeError("__subclasses__() is not allowed in strategy sandbox")
+
+
 class IntrospectionGuard:
+    _lock = threading.Lock()
+
     def __init__(self, policy: IntrospectionPolicy, plugin_id: str | None = None) -> None:
         self._policy = policy
         self._plugin_id = plugin_id
@@ -99,6 +122,7 @@ class IntrospectionGuard:
         self._original_builtins: dict[str, Any] = {}
         self._installed = False
         self._violation_log: list[IntrospectionViolation] = []
+        self._atexit_registered = False
 
     def _is_blocked_attr(self, name: str) -> bool:
         if name in _EXPLICITLY_BLOCKED_ATTRS:
@@ -113,6 +137,8 @@ class IntrospectionGuard:
         return False
 
     def _restricted_getattr(self, obj: Any, name: str, *default: Any) -> Any:
+        if _is_guard_paused():
+            return self._original_getattr(obj, name, *default)
         if self._is_blocked_attr(name):
             violation = IntrospectionViolation(name, plugin_id=self._plugin_id)
             self._violation_log.append(violation)
@@ -140,52 +166,71 @@ class IntrospectionGuard:
         if self._installed:
             return
 
-        all_blocked = self._policy.blocked_builtins | _BLOCKED_BUILTINS_DEFAULT
+        with self._lock:
+            if self._installed:
+                return
 
-        for name in all_blocked:
-            if name in builtins.__dict__:
-                self._original_builtins[name] = builtins.__dict__[name]
+            all_blocked = self._policy.blocked_builtins | _BLOCKED_BUILTINS_DEFAULT
 
-        self._original_object = builtins.object
-        builtins.object = _RestrictedObject
+            for name in all_blocked:
+                if name in builtins.__dict__:
+                    self._original_builtins[name] = builtins.__dict__[name]
 
-        self._original_getattr = builtins.getattr
-        builtins.getattr = self._restricted_getattr
+            self._original_object = builtins.object
+            _original_object_store.append(builtins.object)
+            builtins.object = _RestrictedObject
 
-        self._original_setattr = builtins.setattr
-        builtins.setattr = self._restricted_setattr
+            self._original_getattr = builtins.getattr
+            builtins.getattr = self._restricted_getattr
 
-        for name in all_blocked:
-            if name in self._original_builtins:
-                builtins.__dict__[name] = self._make_blocked_builtin(name)
+            self._original_setattr = builtins.setattr
+            builtins.setattr = self._restricted_setattr
 
-        if "dir" in builtins.__dict__:
-            self._original_builtins["dir"] = builtins.__dict__["dir"]
-            builtins.__dict__["dir"] = _make_safe_dir(builtins.__dict__["dir"], self)
+            for name in all_blocked:
+                if name in self._original_builtins:
+                    builtins.__dict__[name] = self._make_blocked_builtin(name)
 
-        self._installed = True
+            if "dir" in builtins.__dict__:
+                self._original_builtins["dir"] = builtins.__dict__["dir"]
+                builtins.__dict__["dir"] = _make_safe_dir(builtins.__dict__["dir"], self)
+
+            self._installed = True
+
+            if not self._atexit_registered:
+                atexit.register(self._atexit_cleanup)
+                self._atexit_registered = True
+
+    def _atexit_cleanup(self) -> None:
+        _set_guard_paused(True)
+        self.uninstall()
 
     def uninstall(self) -> None:
         if not self._installed:
             return
 
-        if self._original_object is not None:
-            builtins.object = self._original_object
-            self._original_object = None
+        with self._lock:
+            if not self._installed:
+                return
 
-        if self._original_getattr is not None:
-            builtins.getattr = self._original_getattr
-            self._original_getattr = None
+            if self._original_object is not None:
+                builtins.object = self._original_object
+                self._original_object = None
+                if _original_object_store:
+                    _original_object_store.pop()
 
-        if self._original_setattr is not None:
-            builtins.setattr = self._original_setattr
-            self._original_setattr = None
+            if self._original_getattr is not None:
+                builtins.getattr = self._original_getattr
+                self._original_getattr = None
 
-        for name, original in self._original_builtins.items():
-            setattr(builtins, name, original)
-        self._original_builtins.clear()
+            if self._original_setattr is not None:
+                builtins.setattr = self._original_setattr
+                self._original_setattr = None
 
-        self._installed = False
+            for name, original in self._original_builtins.items():
+                setattr(builtins, name, original)
+            self._original_builtins.clear()
+
+            self._installed = False
 
     def get_violations(self) -> list[IntrospectionViolation]:
         return list(self._violation_log)

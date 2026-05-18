@@ -1651,3 +1651,442 @@ class TestImportPolicyEdgeCases:
         policy = ImportPolicy(allowed_modules={"json"})
         assert policy.is_allowed("json")
         assert not policy.is_allowed("math")
+
+
+class TestRestrictedObjectNoBypass:
+    def test_no_original_object_class_attribute(self) -> None:
+        assert not hasattr(_RestrictedObject, "_original_object_class")
+        assert "_original_object_class" not in dir(_RestrictedObject)
+
+    def test_restricted_object_has_no_leaked_original_ref(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            for attr in ("_original_object_class", "_original_object", "original"):
+                assert not hasattr(_RestrictedObject, attr), (
+                    f"_RestrictedObject should not expose {attr}"
+                )
+        finally:
+            guard.uninstall()
+
+    def test_restricted_object_class_dict_clean(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            suspicious_keys = {
+                k
+                for k in _RestrictedObject.__dict__
+                if "original" in k.lower() or "real" in k.lower() or "stored" in k.lower()
+            }
+            assert not suspicious_keys, f"Suspicious keys found: {suspicious_keys}"
+        finally:
+            guard.uninstall()
+
+    def test_cannot_recover_original_via_subclasses(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(RuntimeError, match="not allowed"):
+                builtins.object.__subclasses__()
+        finally:
+            guard.uninstall()
+
+    def test_cannot_recover_original_via_class_getattr(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises((PermissionError, AttributeError)):
+                builtins.getattr(builtins.object, "_original_object_class")
+            with pytest.raises(PermissionError):
+                builtins.getattr(builtins.object, "__dict__")
+        finally:
+            guard.uninstall()
+
+    def test_dir_on_restricted_object_no_leak(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            attrs = builtins.dir(builtins.object)
+            assert "_original_object_class" not in attrs
+            assert "_original_object" not in attrs
+        finally:
+            guard.uninstall()
+
+    def test_restricted_object_identity_stable(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            assert builtins.object is _RestrictedObject
+            assert type(_RestrictedObject) is type
+        finally:
+            guard.uninstall()
+
+    def test_original_object_restored_after_uninstall(self) -> None:
+        original = builtins.object
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        assert builtins.object is _RestrictedObject
+        guard.uninstall()
+        assert builtins.object is original
+        assert builtins.object is not _RestrictedObject
+
+    def test_install_uninstall_cycle_preserves_object(self) -> None:
+        original = builtins.object
+        for _ in range(3):
+            guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+            guard.install()
+            assert builtins.object is _RestrictedObject
+            guard.uninstall()
+            assert builtins.object is original
+
+    def test_isinstance_works_with_restricted_object(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            assert isinstance(42, int)
+            assert isinstance("hello", str)
+            assert isinstance([], list)
+            assert isinstance({}, dict)
+            assert not isinstance(42, str)
+        finally:
+            guard.uninstall()
+
+    def test_issubclass_works_with_restricted_object(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            assert issubclass(bool, int)
+            assert not issubclass(str, int)
+        finally:
+            guard.uninstall()
+
+    def test_restricted_object_is_a_class(self) -> None:
+        assert isinstance(_RestrictedObject, type)
+
+    def test_restricted_object_can_be_subclassed_outside_sandbox(self) -> None:
+        class MySub(_RestrictedObject):
+            pass
+
+        assert issubclass(MySub, _RestrictedObject)
+
+    def test_original_object_store_module_level(self) -> None:
+        from engine.plugins.sandbox.layers.introspection_guard import _original_object_store
+
+        assert isinstance(_original_object_store, list)
+        assert len(_original_object_store) == 0
+
+    def test_original_object_store_populated_during_install(self) -> None:
+        from engine.plugins.sandbox.layers.introspection_guard import _original_object_store
+
+        original = builtins.object
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            assert len(_original_object_store) == 1
+            assert _original_object_store[0] is original
+        finally:
+            guard.uninstall()
+
+    def test_original_object_store_empty_after_uninstall(self) -> None:
+        from engine.plugins.sandbox.layers.introspection_guard import _original_object_store
+
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        assert len(_original_object_store) == 1
+        guard.uninstall()
+        assert len(_original_object_store) == 0
+
+    def test_store_handles_nested_installs(self) -> None:
+        from engine.plugins.sandbox.layers.introspection_guard import _original_object_store
+
+        guard1 = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p1")
+        guard2 = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p2")
+        guard1.install()
+        assert len(_original_object_store) == 1
+        guard2.install()
+        assert len(_original_object_store) == 2
+        guard2.uninstall()
+        assert len(_original_object_store) == 1
+        guard1.uninstall()
+        assert len(_original_object_store) == 0
+
+    def test_no_original_ref_accessible_via_type(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            obj_type = builtins.type(builtins.object)
+            assert obj_type is type
+            with pytest.raises(PermissionError):
+                builtins.getattr(obj_type, "__subclasses__")
+        finally:
+            guard.uninstall()
+
+    def test_restricted_object_no_bases_bypass(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(builtins.object, "__bases__")
+            with pytest.raises(PermissionError):
+                builtins.getattr(builtins.object, "__mro__")
+        finally:
+            guard.uninstall()
+
+    def test_double_install_single_store_entry(self) -> None:
+        from engine.plugins.sandbox.layers.introspection_guard import _original_object_store
+
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        guard.install()
+        assert len(_original_object_store) == 1
+        guard.uninstall()
+        assert len(_original_object_store) == 0
+
+    def test_guard_pause_allows_normal_getattr(self) -> None:
+        from engine.plugins.sandbox.layers.introspection_guard import (
+            _is_guard_paused,
+            _set_guard_paused,
+        )
+
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            _set_guard_paused(True)
+            assert _is_guard_paused()
+            result = builtins.getattr(int, "__name__")
+            assert result == "int"
+        finally:
+            _set_guard_paused(False)
+            guard.uninstall()
+
+    def test_guard_unpause_restores_blocking(self) -> None:
+        from engine.plugins.sandbox.layers.introspection_guard import _set_guard_paused
+
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            _set_guard_paused(True)
+            builtins.getattr(int, "__bases__")
+            _set_guard_paused(False)
+            with pytest.raises(PermissionError):
+                builtins.getattr(int, "__bases__")
+        finally:
+            _set_guard_paused(False)
+            guard.uninstall()
+
+    def test_blocked_attr_method_direct(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        for attr in ("__subclasses__", "__bases__", "__globals__", "__code__", "__closure__"):
+            assert guard._is_blocked_attr(attr)
+
+    def test_blocked_attr_custom_policy(self) -> None:
+        policy = IntrospectionPolicy(blocked_attributes={"custom_dangerous"})
+        guard = IntrospectionGuard(policy, plugin_id="p")
+        assert guard._is_blocked_attr("custom_dangerous")
+        assert not guard._is_blocked_attr("safe_attr")
+
+    def test_blocked_attr_frame_access_disabled(self) -> None:
+        policy = IntrospectionPolicy(block_frame_access=False)
+        guard = IntrospectionGuard(policy, plugin_id="p")
+        assert not guard._is_blocked_attr("f_globals")
+        assert not guard._is_blocked_attr("f_code")
+        assert guard._is_blocked_attr("__subclasses__")
+
+    def test_violation_log_entries(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="test-pid")
+        guard.install()
+        try:
+            for attr in ("__subclasses__", "__bases__", "__globals__"):
+                with pytest.raises(PermissionError):
+                    builtins.getattr(int, attr)
+        finally:
+            guard.uninstall()
+        violations = guard.get_violations()
+        assert len(violations) == 3
+        for v in violations:
+            assert isinstance(v, IntrospectionViolation)
+            assert v.plugin_id == "test-pid"
+        attrs = {v.attribute for v in violations}
+        assert attrs == {"__subclasses__", "__bases__", "__globals__"}
+
+
+class TestIntrospectionGuardBypassScenarios:
+    def test_cannot_bypass_via_object_type_call(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(builtins.object, "__dict__")
+        finally:
+            guard.uninstall()
+
+    def test_cannot_bypass_via_class_of_restricted(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(type(builtins.object), "__subclasses__")
+        finally:
+            guard.uninstall()
+
+    def test_cannot_bypass_via_mro(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(int, "__mro__")
+        finally:
+            guard.uninstall()
+
+    def test_cannot_bypass_via_globals_on_function(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            def sample_fn():
+                pass
+
+            with pytest.raises(PermissionError):
+                builtins.getattr(sample_fn, "__globals__")
+        finally:
+            guard.uninstall()
+
+    def test_cannot_bypass_via_closure(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+
+            def outer():
+                x = 1
+
+                def inner():
+                    return x
+
+                return inner
+
+            fn = outer()
+            with pytest.raises(PermissionError):
+                builtins.getattr(fn, "__closure__")
+        finally:
+            guard.uninstall()
+
+    def test_cannot_bypass_via_code_object(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+
+            def sample():
+                pass
+
+            with pytest.raises(PermissionError):
+                builtins.getattr(sample, "__code__")
+        finally:
+            guard.uninstall()
+
+    def test_cannot_bypass_via_reduce(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(int, "__reduce__")
+            with pytest.raises(PermissionError):
+                builtins.getattr(int, "__reduce_ex__")
+        finally:
+            guard.uninstall()
+
+    def test_cannot_bypass_via_getstate_setstate(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(int, "__getstate__")
+            with pytest.raises(PermissionError):
+                builtins.getattr(int, "__setstate__")
+        finally:
+            guard.uninstall()
+
+    def test_cannot_set_frame_attributes(self) -> None:
+        mock_obj = MagicMock()
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.setattr(mock_obj, "f_globals", {})
+            with pytest.raises(PermissionError):
+                builtins.setattr(mock_obj, "f_locals", {})
+            with pytest.raises(PermissionError):
+                builtins.setattr(mock_obj, "f_code", None)
+        finally:
+            guard.uninstall()
+
+    def test_safe_getattr_allows_normal_attrs(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            assert builtins.getattr(int, "__name__") == "int"
+            assert builtins.getattr(str, "__name__") == "str"
+            assert builtins.getattr([1, 2], "__len__")() == 2
+        finally:
+            guard.uninstall()
+
+    def test_safe_setattr_allows_normal_writes(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+
+        class MutableObj:
+            x = 0
+
+        obj = MutableObj()
+        guard.install()
+        try:
+            builtins.setattr(obj, "x", 42)
+            assert obj.x == 42
+        finally:
+            guard.uninstall()
+
+    def test_restricted_object_subclassing_raises_in_sandbox(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(RuntimeError, match="not allowed"):
+                builtins.object.__subclasses__()
+        finally:
+            guard.uninstall()
+
+    def test_blocked_builtins_custom_set(self) -> None:
+        policy = IntrospectionPolicy(blocked_builtins={"input"})
+        guard = IntrospectionGuard(policy, plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.input("test")
+        finally:
+            guard.uninstall()
+
+    def test_blocked_builtins_default_set(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            for name in ("eval", "exec", "compile", "breakpoint", "vars", "globals", "locals"):
+                with pytest.raises(PermissionError):
+                    builtins.__dict__[name]("test" if name in ("eval", "exec", "compile") else None)
+        finally:
+            guard.uninstall()
+
+    def test_restricted_setattr_blocks_traceback(self) -> None:
+        mock_obj = MagicMock()
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.setattr(mock_obj, "__traceback__", None)
+            with pytest.raises(PermissionError):
+                builtins.setattr(mock_obj, "__context__", None)
+            with pytest.raises(PermissionError):
+                builtins.setattr(mock_obj, "__cause__", None)
+        finally:
+            guard.uninstall()
+
+    def test_uninstall_without_install_is_safe(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.uninstall()
+        guard.uninstall()
+        assert not guard._installed
