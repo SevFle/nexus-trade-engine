@@ -55,6 +55,7 @@ from engine.plugins.sandbox.layers.import_restriction import RestrictedImporter
 from engine.plugins.sandbox.layers.introspection_guard import (
     _EXPLICITLY_BLOCKED_ATTRS,
     _FRAME_ATTRS,
+    _SAFE_DIR_ATTRS,
     IntrospectionGuard,
     _RestrictedObject,
 )
@@ -559,19 +560,29 @@ class TestIntrospectionFrameAccess:
 
     def test_setattr_blocks_frame_write(self) -> None:
         guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+
+        class _Obj:
+            x = 1
+
+        obj = _Obj()
         guard.install()
         try:
             with pytest.raises(PermissionError):
-                builtins.setattr(MagicMock(), "f_globals", {})
+                builtins.setattr(obj, "f_globals", {})
         finally:
             guard.uninstall()
 
     def test_setattr_blocks_traceback_write(self) -> None:
         guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+
+        class _Obj:
+            x = 1
+
+        obj = _Obj()
         guard.install()
         try:
             with pytest.raises(PermissionError):
-                builtins.setattr(MagicMock(), "__traceback__", None)
+                builtins.setattr(obj, "__traceback__", None)
         finally:
             guard.uninstall()
 
@@ -1651,3 +1662,464 @@ class TestImportPolicyEdgeCases:
         policy = ImportPolicy(allowed_modules={"json"})
         assert policy.is_allowed("json")
         assert not policy.is_allowed("math")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Layer 5: Introspection Guard — Coverage Gap Tests
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestIntrospectionCustomBlockedAttributes:
+    def test_getattr_blocked_for_custom_attr(self) -> None:
+        policy = IntrospectionPolicy(blocked_attributes={"my_secret"})
+        guard = IntrospectionGuard(policy, plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(int, "my_secret")
+        finally:
+            guard.uninstall()
+
+    def test_custom_blocked_attr_logs_violation(self) -> None:
+        policy = IntrospectionPolicy(blocked_attributes={"hidden_prop"})
+        guard = IntrospectionGuard(policy, plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(str, "hidden_prop")
+        finally:
+            guard.uninstall()
+        assert len(guard.get_violations()) == 1
+        assert guard.get_violations()[0].attribute == "hidden_prop"
+
+    def test_custom_blocked_attr_via_is_blocked_attr(self) -> None:
+        policy = IntrospectionPolicy(blocked_attributes={"custom_field"})
+        guard = IntrospectionGuard(policy, plugin_id="p")
+        assert guard._is_blocked_attr("custom_field")
+        assert not guard._is_blocked_attr("not_blocked")
+
+    def test_custom_attr_blocked_in_dir(self) -> None:
+        policy = IntrospectionPolicy(blocked_attributes={"_internal"})
+        guard = IntrospectionGuard(policy, plugin_id="p")
+        guard.install()
+        try:
+            result = builtins.dir(list)
+            assert "_internal" not in result
+        finally:
+            guard.uninstall()
+
+
+class TestIntrospectionFrameAttrBlocking:
+    def test_getattr_blocks_frame_attr_f_globals(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(MagicMock(), "f_globals")
+        finally:
+            guard.uninstall()
+
+    def test_getattr_blocks_frame_attr_f_back(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(MagicMock(), "f_back")
+        finally:
+            guard.uninstall()
+
+    def test_getattr_blocks_frame_attr_f_code(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(MagicMock(), "f_code")
+        finally:
+            guard.uninstall()
+
+    def test_getattr_blocks_frame_attr_f_locals(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(MagicMock(), "f_locals")
+        finally:
+            guard.uninstall()
+
+    def test_frame_attr_blocked_logs_violation(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        guard.clear_violations()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(int, "f_builtins")
+        finally:
+            guard.uninstall()
+        violations = guard.get_violations()
+        frame_violations = [v for v in violations if v.attribute == "f_builtins"]
+        assert len(frame_violations) >= 1
+
+    def test_is_blocked_attr_frame_with_block_frame_true(self) -> None:
+        policy = IntrospectionPolicy(block_frame_access=True)
+        guard = IntrospectionGuard(policy, plugin_id="p")
+        assert guard._is_blocked_attr("f_globals")
+        assert guard._is_blocked_attr("f_back")
+        assert guard._is_blocked_attr("f_code")
+        assert guard._is_blocked_attr("tb_frame")
+        assert guard._is_blocked_attr("tb_lineno")
+        assert guard._is_blocked_attr("__traceback__")
+        assert guard._is_blocked_attr("__context__")
+        assert guard._is_blocked_attr("__cause__")
+
+    def test_is_blocked_attr_traceback_with_block_frame_true(self) -> None:
+        policy = IntrospectionPolicy(block_frame_access=True)
+        guard = IntrospectionGuard(policy, plugin_id="p")
+        assert guard._is_blocked_attr("__traceback__")
+        assert guard._is_blocked_attr("__context__")
+        assert guard._is_blocked_attr("__cause__")
+
+    def test_is_blocked_attr_frame_with_block_frame_false(self) -> None:
+        policy = IntrospectionPolicy(block_frame_access=False)
+        guard = IntrospectionGuard(policy, plugin_id="p")
+        assert not guard._is_blocked_attr("f_globals")
+        assert not guard._is_blocked_attr("tb_frame")
+        assert not guard._is_blocked_attr("__traceback__")
+        assert not guard._is_blocked_attr("__context__")
+
+    def test_is_blocked_attr_explicitly_blocked_regardless_of_frame(self) -> None:
+        policy = IntrospectionPolicy(block_frame_access=False)
+        guard = IntrospectionGuard(policy, plugin_id="p")
+        assert guard._is_blocked_attr("__subclasses__")
+        assert guard._is_blocked_attr("__bases__")
+        assert guard._is_blocked_attr("__globals__")
+
+
+class TestIntrospectionSetattrViolationPath:
+    def test_setattr_frame_attr_logs_violation(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+
+        class _Obj:
+            pass
+
+        obj = _Obj()
+        guard.install()
+        guard.clear_violations()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.setattr(obj, "f_globals", {})
+        finally:
+            guard.uninstall()
+        violations = guard.get_violations()
+        frame_violations = [v for v in violations if v.attribute == "f_globals"]
+        assert len(frame_violations) >= 1
+
+    def test_setattr_traceback_attr_logs_violation(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+
+        class _Obj:
+            pass
+
+        obj = _Obj()
+        guard.install()
+        guard.clear_violations()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.setattr(obj, "__traceback__", None)
+        finally:
+            guard.uninstall()
+        violations = guard.get_violations()
+        tb_violations = [v for v in violations if v.attribute == "__traceback__"]
+        assert len(tb_violations) >= 1
+
+    def test_setattr_frame_attrs_all_blocked(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+
+        class _Obj:
+            pass
+
+        obj = _Obj()
+        guard.install()
+        try:
+            for attr in ("tb_frame", "tb_lineno", "tb_next", "f_back", "f_builtins", "f_code", "f_globals", "f_locals", "f_trace"):
+                with pytest.raises(PermissionError):
+                    builtins.setattr(obj, attr, None)
+        finally:
+            guard.uninstall()
+        assert len(guard.get_violations()) >= 9
+
+    def test_setattr_traceback_attrs_all_blocked(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+
+        class _Obj:
+            pass
+
+        obj = _Obj()
+        guard.install()
+        try:
+            for attr in ("__traceback__", "__context__", "__cause__"):
+                with pytest.raises(PermissionError):
+                    builtins.setattr(obj, attr, None)
+        finally:
+            guard.uninstall()
+        assert len(guard.get_violations()) >= 3
+
+    def test_setattr_violation_has_plugin_id(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="test-setattr")
+
+        class _Obj:
+            pass
+
+        obj = _Obj()
+        guard.install()
+        guard.clear_violations()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.setattr(obj, "f_code", {})
+        finally:
+            guard.uninstall()
+        v = [v for v in guard.get_violations() if v.attribute == "f_code"]
+        assert len(v) >= 1
+        assert v[0].plugin_id == "test-setattr"
+
+
+class TestIntrospectionInstallUninstallEdgeCases:
+    def test_double_install_idempotent(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        original_getattr = builtins.getattr
+        guard.install()
+        patched_getattr = builtins.getattr
+        guard.install()
+        assert builtins.getattr is patched_getattr
+        guard.uninstall()
+        assert builtins.getattr is original_getattr
+
+    def test_uninstall_without_install_safe(self) -> None:
+        original_getattr = builtins.getattr
+        original_setattr = builtins.setattr
+        original_object = builtins.object
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.uninstall()
+        assert builtins.getattr is original_getattr
+        assert builtins.setattr is original_setattr
+        assert builtins.object is original_object
+
+    def test_double_uninstall_safe(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        guard.uninstall()
+        original_getattr = builtins.getattr
+        guard.uninstall()
+        assert builtins.getattr is original_getattr
+
+    def test_installed_flag_lifecycle(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        assert not guard._installed
+        guard.install()
+        assert guard._installed
+        guard.uninstall()
+        assert not guard._installed
+
+    def test_install_patches_getattr_setattr_object(self) -> None:
+        original_getattr = builtins.getattr
+        original_setattr = builtins.setattr
+        original_object = builtins.object
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        assert builtins.getattr is not original_getattr
+        assert builtins.setattr is not original_setattr
+        assert builtins.object is _RestrictedObject
+        guard.uninstall()
+        assert builtins.getattr is original_getattr
+        assert builtins.setattr is original_setattr
+        assert builtins.object is original_object
+
+    def test_install_restores_all_on_uninstall(self) -> None:
+        original_eval = builtins.eval
+        original_exec = builtins.exec
+        original_dir = builtins.dir
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        assert builtins.eval is not original_eval
+        assert builtins.exec is not original_exec
+        assert builtins.dir is not original_dir
+        guard.uninstall()
+        assert builtins.eval is original_eval
+        assert builtins.exec is original_exec
+        assert builtins.dir is original_dir
+
+
+class TestIntrospectionRestrictedObjectEdgeCases:
+    def test_restricted_object_cannot_be_subclassed(self) -> None:
+        with pytest.raises(RuntimeError, match="not allowed"):
+            _RestrictedObject.__subclasses__()
+
+    def test_restricted_object_replaces_object_on_install(self) -> None:
+        original = builtins.object
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            assert builtins.object is _RestrictedObject
+            assert builtins.object is not original
+        finally:
+            guard.uninstall()
+        assert builtins.object is original
+
+
+class TestIntrospectionBlockedBuiltinsComprehensive:
+    def test_blocked_builtins_all_default_covered(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            for name in ("eval", "exec", "compile", "breakpoint", "vars", "globals", "locals"):
+                with pytest.raises(PermissionError):
+                    getattr(builtins, name)("x" if name in ("eval", "exec", "compile") else None)
+        finally:
+            guard.uninstall()
+
+    def test_blocked_builtin_violation_logged_each(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            for name in ("eval", "exec", "compile"):
+                with pytest.raises(PermissionError):
+                    getattr(builtins, name)("1")
+        finally:
+            guard.uninstall()
+        assert len(guard.get_violations()) == 3
+        names = {v.attribute for v in guard.get_violations()}
+        assert names == {"eval", "exec", "compile"}
+
+    def test_custom_and_default_builtins_both_blocked(self) -> None:
+        policy = IntrospectionPolicy(blocked_builtins={"print"})
+        guard = IntrospectionGuard(policy, plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.eval("1")
+            with pytest.raises(PermissionError):
+                builtins.print("x")
+        finally:
+            guard.uninstall()
+
+    def test_safe_builtins_still_work(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            assert builtins.len([1, 2, 3]) == 3
+            assert builtins.str(42) == "42"
+            assert builtins.int("42") == 42
+            assert builtins.list((1, 2)) == [1, 2]
+            assert builtins.dict([("a", 1)]) == {"a": 1}
+        finally:
+            guard.uninstall()
+
+
+class TestIntrospectionGetattrDefault:
+    def test_getattr_with_default_not_blocked(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            result = builtins.getattr(int, "nonexistent_attr", "default_val")
+            assert result == "default_val"
+        finally:
+            guard.uninstall()
+
+    def test_getattr_with_default_blocked_attr(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(int, "__subclasses__", None)
+        finally:
+            guard.uninstall()
+
+    def test_getattr_dunder_name_works(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            assert builtins.getattr(int, "__name__") == "int"
+            assert builtins.getattr(str, "__name__") == "str"
+        finally:
+            guard.uninstall()
+
+    def test_getattr_dunder_doc_works(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            result = builtins.getattr(str, "__doc__")
+            assert isinstance(result, str)
+        finally:
+            guard.uninstall()
+
+
+class TestIntrospectionSafeDirComprehensive:
+    def test_dir_on_module_filters_blocked(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            import json
+            result = builtins.dir(json)
+            for attr in _EXPLICITLY_BLOCKED_ATTRS:
+                assert attr not in result
+        finally:
+            guard.uninstall()
+
+    def test_dir_on_instance_filters_blocked(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            result = builtins.dir(42)
+            for attr in _SAFE_DIR_ATTRS:
+                assert attr not in result
+        finally:
+            guard.uninstall()
+
+    def test_dir_without_args(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            result = builtins.dir()
+            assert isinstance(result, list)
+            for attr in _EXPLICITLY_BLOCKED_ATTRS:
+                assert attr not in result
+        finally:
+            guard.uninstall()
+
+
+class TestIntrospectionViolationDetails:
+    def test_violation_category(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(int, "__bases__")
+        finally:
+            guard.uninstall()
+        v = guard.get_violations()[0]
+        assert v.category == SandboxViolationCategory.INTROSPECTION
+
+    def test_violation_plugin_id_set(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="my-plugin")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(int, "__mro__")
+        finally:
+            guard.uninstall()
+        assert guard.get_violations()[0].plugin_id == "my-plugin"
+
+    def test_multiple_violations_different_categories(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(PermissionError):
+                builtins.getattr(int, "__subclasses__")
+            with pytest.raises(PermissionError):
+                builtins.eval("1")
+        finally:
+            guard.uninstall()
+        violations = guard.get_violations()
+        assert len(violations) == 2
+        attrs = {v.attribute for v in violations}
+        assert "__subclasses__" in attrs
+        assert "eval" in attrs
