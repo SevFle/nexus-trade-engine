@@ -200,7 +200,7 @@ class SandboxPolicy:
             try:
                 items = sorted(value)
             except TypeError:
-                items = list(value)
+                items = sorted(value, key=repr)
             return [SandboxPolicy._serialize_policy_value(v) for v in items]
         if isinstance(value, dict):
             return {
@@ -226,7 +226,11 @@ class SandboxPolicy:
     def verify_integrity(self) -> bool:
         if self._integrity_hash is None:
             return True
-        return self._integrity_hash == self.compute_integrity_hash()
+        current = self.compute_integrity_hash()
+        if self._integrity_hash == current:
+            return True
+        v1_hash = current.removeprefix("v2:")
+        return self._integrity_hash == v1_hash
 
     def enforce_hard_limits(self, trust: TrustLevel) -> list[str]:
         violations: list[str] = []
