@@ -56,7 +56,6 @@ from engine.plugins.sandbox.layers.introspection_guard import (
     _EXPLICITLY_BLOCKED_ATTRS,
     _FRAME_ATTRS,
     IntrospectionGuard,
-    _RestrictedObject,
 )
 from engine.plugins.sandbox.layers.network_guard import (
     NetworkGuard,
@@ -398,16 +397,21 @@ class TestFilesystemIoOpen:
 
 
 class TestIntrospectionRestrictedObject:
-    def test_restricted_object_subclasses_raises(self) -> None:
-        with pytest.raises(RuntimeError, match="not allowed"):
-            _RestrictedObject.__subclasses__()
+    def test_object_subclasses_blocked_after_install(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            with pytest.raises(RuntimeError, match="not allowed"):
+                builtins.object.__subclasses__()
+        finally:
+            guard.uninstall()
 
-    def test_restricted_object_replaces_builtins_object(self) -> None:
+    def test_builtins_object_replaced_during_install(self) -> None:
         original = builtins.object
         guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
         guard.install()
         try:
-            assert builtins.object is _RestrictedObject
+            assert builtins.object is not original
         finally:
             guard.uninstall()
         assert builtins.object is original
