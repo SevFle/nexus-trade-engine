@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from engine.plugins.sandbox.core.policy import SandboxPolicy
     from engine.plugins.sandbox.monitoring.metrics import SandboxMetricsCollector
 
+from engine.plugins.sandbox.core.state import set_current_context
 from engine.plugins.sandbox.core.violation import SandboxViolation, SandboxViolationCategory
 from engine.plugins.sandbox.layers import (
     FilesystemIsolation,
@@ -97,7 +98,7 @@ class SandboxContext:
             or policy.resource_policy.max_cpu_seconds > _MAX_CPU_SECONDS_LIMITED
         ):
             return False
-        return policy.verify_integrity()
+        return not (policy.is_sealed() and not policy.verify_integrity())
 
     def _enforce_hard_limits(self) -> None:
         violations = self._policy.enforce_hard_limits(self._trust_level)
@@ -132,6 +133,7 @@ class SandboxContext:
             self._introspection_layer.install()
             self._import_layer.install()
             self._active = True
+            set_current_context(self)
         except Exception:
             self._force_deactivate()
             raise
@@ -149,6 +151,7 @@ class SandboxContext:
         self._network_layer.uninstall()
         self._collect_violations()
         self._active = False
+        set_current_context(None)
 
     def _collect_violations(self) -> None:
         all_violations: list[Any] = []

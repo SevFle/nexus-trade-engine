@@ -192,6 +192,15 @@ class SandboxPolicy:
     environment_policy: EnvironmentPolicy = field(default_factory=EnvironmentPolicy)
     _integrity_hash: str | None = field(default=None, repr=False)
 
+    def __post_init__(self) -> None:
+        if not self.import_policy.blocked_modules and not self.import_policy.allowed_modules:
+            try:
+                trust = TrustLevel(self.trust_level)
+            except ValueError:
+                trust = TrustLevel.UNTRUSTED
+            if trust in _TRUST_IMPORT_PRESETS:
+                self.import_policy.blocked_modules = set(_TRUST_IMPORT_PRESETS[trust])
+
     @staticmethod
     def _serialize_policy_value(value: Any) -> Any:
         if isinstance(value, enum.Enum):
@@ -227,6 +236,9 @@ class SandboxPolicy:
         if self._integrity_hash is None:
             return True
         return self._integrity_hash == self.compute_integrity_hash()
+
+    def is_sealed(self) -> bool:
+        return self._integrity_hash is not None
 
     def enforce_hard_limits(self, trust: TrustLevel) -> list[str]:
         violations: list[str] = []

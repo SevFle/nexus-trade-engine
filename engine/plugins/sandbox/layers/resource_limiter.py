@@ -182,8 +182,10 @@ class _CPUTimer:
         self.cancel()
 
     def __del__(self) -> None:
-        with contextlib.suppress(Exception):
+        try:  # noqa: SIM105
             self.cancel()
+        except Exception:  # noqa: S110
+            pass
 
 
 class _WallTimer:
@@ -248,8 +250,10 @@ class _WallTimer:
         self.cancel()
 
     def __del__(self) -> None:
-        with contextlib.suppress(Exception):
+        try:  # noqa: SIM105
             self.cancel()
+        except Exception:  # noqa: S110
+            pass
 
 
 class ResourceLimiter:

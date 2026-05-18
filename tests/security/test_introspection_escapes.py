@@ -227,3 +227,101 @@ class TestEscapeVectors:
                 builtins.getattr(int, "__mro__")  # noqa: B009
         finally:
             guard.uninstall()
+
+
+class TestPassThroughAfterUninstall:
+    def test_getattr_passes_through_after_uninstall(self) -> None:
+        policy = IntrospectionPolicy()
+        guard = IntrospectionGuard(policy)
+        guard.install()
+        patched_fn = guard._restricted_getattr
+        guard.uninstall()
+        result = patched_fn("hello", "upper")
+        assert callable(result)
+
+    def test_setattr_passes_through_after_uninstall(self) -> None:
+        policy = IntrospectionPolicy()
+        guard = IntrospectionGuard(policy)
+        guard.install()
+        patched_fn = guard._restricted_setattr
+        guard.uninstall()
+        obj = type("Obj", (), {"x": 0})()
+        patched_fn(obj, "x", 42)
+        assert obj.x == 42
+
+    def test_blocked_builtin_passes_through_after_uninstall(self) -> None:
+        policy = IntrospectionPolicy()
+        guard = IntrospectionGuard(policy)
+        guard.install()
+        blocked_eval = builtins.eval
+        guard.uninstall()
+        assert blocked_eval("1+1") == 2
+
+    def test_getattr_globals_allowed_after_uninstall(self) -> None:
+        policy = IntrospectionPolicy()
+        guard = IntrospectionGuard(policy)
+        guard.install()
+
+        def sample_fn() -> None:
+            pass
+
+        guard.uninstall()
+        result = guard._restricted_getattr(sample_fn, "__globals__")
+        assert isinstance(result, dict)
+
+
+class TestAtexitSafetyNet:
+    def test_atexit_cleanup_uninstalls_guard(self) -> None:
+        policy = IntrospectionPolicy()
+        guard = IntrospectionGuard(policy)
+        original_getattr = builtins.getattr
+        original_object = builtins.object
+        guard.install()
+        assert guard._installed
+        guard._atexit_cleanup()
+        assert not guard._installed
+        assert builtins.getattr is original_getattr
+        assert builtins.object is original_object
+
+    def test_atexit_cleanup_noop_if_not_installed(self) -> None:
+        policy = IntrospectionPolicy()
+        guard = IntrospectionGuard(policy)
+        guard._atexit_cleanup()
+        assert not guard._installed
+
+    def test_atexit_cleanup_suppresses_exceptions(self) -> None:
+        policy = IntrospectionPolicy()
+        guard = IntrospectionGuard(policy)
+        original_getattr = builtins.getattr
+        guard.install()
+        builtins.getattr = original_getattr
+        guard._atexit_cleanup()
+        assert not guard._installed
+
+
+class TestClosureBasedUninstallFlag:
+    def test_uninstall_flag_is_thread_local(self) -> None:
+        import threading
+
+        from engine.plugins.sandbox.layers.introspection_guard import (
+            _is_uninstalling,
+            _set_uninstalling,
+        )
+
+        results = {}
+
+        def worker(name: str) -> None:
+            _set_uninstalling(True)
+            results[name] = _is_uninstalling()
+
+        t1 = threading.Thread(target=worker, args=("t1",))
+        t1.start()
+        t1.join()
+        assert results["t1"] is True
+        assert not _is_uninstalling()
+        _set_uninstalling(False)
+
+    def test_uninstall_flag_default_is_false(self) -> None:
+        from engine.plugins.sandbox.layers.introspection_guard import _is_uninstalling
+
+        assert not _is_uninstalling()

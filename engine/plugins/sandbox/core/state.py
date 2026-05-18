@@ -10,7 +10,10 @@ _tls = threading.local()
 
 
 def get_current_context() -> SandboxContext | None:
-    return getattr(_tls, "active_context", None)
+    try:
+        return _tls.active_context
+    except AttributeError:
+        return None
 
 
 def set_current_context(ctx: SandboxContext | None) -> None:
@@ -48,7 +51,10 @@ class SandboxTLS:
 
     @property
     def context(self) -> SandboxContext | None:
-        return getattr(self._local, "active_context", None)
+        try:
+            return self._local.active_context
+        except AttributeError:
+            return None
 
     @property
     def plugin_id(self) -> str | None:

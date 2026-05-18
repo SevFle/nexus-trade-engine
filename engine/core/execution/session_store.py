@@ -43,6 +43,7 @@ class PaperSessionStore:
 
     async def save(self, session_id: str, data: dict[str, Any]) -> None:
         payload = {**data, "_updated_at": time.monotonic()}
+        self._local_fallback[session_id] = payload
         try:
             client = await self._get_client()
             serialized = json.dumps(payload, default=str)
@@ -51,7 +52,6 @@ class PaperSessionStore:
             )
         except Exception:
             logger.exception("paper_store.save_fallback", session_id=session_id)
-            self._local_fallback[session_id] = payload
 
     async def get(self, session_id: str) -> dict[str, Any] | None:
         try:
