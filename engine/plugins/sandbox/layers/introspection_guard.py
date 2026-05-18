@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import atexit as _atexit_module
 import builtins
+import sys
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -70,6 +72,74 @@ _BLOCKED_BUILTINS_DEFAULT: frozenset[str] = frozenset(
 
 _SAFE_DIR_ATTRS: frozenset[str] = _EXPLICITLY_BLOCKED_ATTRS | _FRAME_ATTRS | _TRACEBACK_ATTRS
 
+_ALLOWED_CALLER_PREFIXES: frozenset[str] = frozenset(
+    {
+        "sqlalchemy",
+        "opentelemetry",
+        "logging",
+        "pytest",
+        "_pytest",
+        "pluggy",
+        "asyncio",
+        "_asyncio",
+        "httpx",
+        "httpcore",
+        "uvicorn",
+        "starlette",
+        "fastapi",
+        "inspect",
+        "importlib",
+        "concurrent",
+        "threading",
+        "_thread",
+        "greenlet",
+        "anyio",
+        "_anyio",
+        "trio",
+        "h11",
+        "h2",
+        "hyperlink",
+    }
+)
+
+_SANDBOX_STRATEGY_PREFIXES: frozenset[str] = frozenset(
+    {
+        "engine.plugins.sandbox.strategy",
+        "engine.plugins.sandbox.runner",
+        "engine.plugins.sandbox.executor",
+    }
+)
+
+
+def _should_bypass_restriction() -> bool:
+    try:
+        frame = sys._getframe(2)  # noqa: SLF001
+    except ValueError:
+        return True
+
+    has_trusted = False
+    is_atexit = False
+
+    while frame is not None:
+        module = frame.f_globals.get("__name__", "")
+
+        if module == _atexit_module.__name__:
+            is_atexit = True
+
+        if not has_trusted:
+            for prefix in _ALLOWED_CALLER_PREFIXES:
+                if module == prefix or module.startswith(prefix + "."):
+                    has_trusted = True
+                    break
+
+        for prefix in _SANDBOX_STRATEGY_PREFIXES:
+            if module.startswith(prefix):
+                return False
+
+        frame = frame.f_back
+
+    return is_atexit or has_trusted
+
 
 class _RestrictedObject:
     @classmethod
@@ -114,6 +184,8 @@ class IntrospectionGuard:
 
     def _restricted_getattr(self, obj: Any, name: str, *default: Any) -> Any:
         if self._is_blocked_attr(name):
+            if _should_bypass_restriction():
+                return self._original_getattr(obj, name, *default)
             violation = IntrospectionViolation(name, plugin_id=self._plugin_id)
             self._violation_log.append(violation)
             raise PermissionError(violation.detail)
