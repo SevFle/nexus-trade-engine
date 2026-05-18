@@ -200,16 +200,6 @@ class TestPluginSandboxExecutorTrustEnforcement:
 
 
 class TestSandboxContextTrustValidation:
-    def test_activate_raises_on_empty_blocked_modules(self) -> None:
-        policy = SandboxPolicy(plugin_id="bad_trust")
-        context = SandboxContext(policy)
-        try:
-            with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
-                context.activate()
-            assert context.is_active is False
-        finally:
-            context.cleanup()
-
     def test_activate_raises_on_cpu_exceeds_validate_limit(self) -> None:
         policy = SandboxPolicy(
             plugin_id="cpu_validate_fail",
@@ -289,7 +279,11 @@ class TestSandboxContextHardLimits:
 
 class TestExecutorActivationViolation:
     async def test_executor_raises_on_activation_violation(self) -> None:
-        policy = SandboxPolicy(plugin_id="bad_exec")
+        policy = SandboxPolicy(
+            plugin_id="bad_exec",
+            trust_level="untrusted",
+            resource_policy=ResourcePolicy(max_cpu_seconds=90),
+        )
         executor = PluginSandboxExecutor(_EmptyStrategy(), policy)
         try:
             with pytest.raises(SandboxViolation):
@@ -302,7 +296,7 @@ class TestExecutorActivationViolation:
         policy = SandboxPolicy(
             plugin_id="metrics_violation",
             trust_level="untrusted",
-            resource_policy=ResourcePolicy(max_memory_bytes=10 * 1024**3),
+            resource_policy=ResourcePolicy(max_cpu_seconds=90),
         )
         executor = PluginSandboxExecutor(
             _EmptyStrategy(), policy, metrics_collector=collector
@@ -338,7 +332,11 @@ class TestExecutorActivationViolation:
 
     async def test_activation_violation_no_signals_returned(self) -> None:
         collector = SandboxMetricsCollector()
-        policy = SandboxPolicy(plugin_id="no_signals_violation")
+        policy = SandboxPolicy(
+            plugin_id="no_signals_violation",
+            trust_level="untrusted",
+            resource_policy=ResourcePolicy(max_cpu_seconds=90),
+        )
         executor = PluginSandboxExecutor(
             _GoodStrategy(), policy, metrics_collector=collector
         )

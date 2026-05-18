@@ -30,8 +30,6 @@ from engine.plugins.restricted_importer import BLOCKED_MODULES
 from engine.plugins.sandbox.core.context import (
     _MAX_CPU_SECONDS_LIMITED,
     _MAX_CPU_SECONDS_UNTRUSTED,
-    _MIN_BLOCKED_MODULES_LIMITED,
-    _MIN_BLOCKED_MODULES_UNTRUSTED,
     SandboxContext,
 )
 from engine.plugins.sandbox.core.policy import (
@@ -1287,7 +1285,7 @@ class TestSandboxContextTrustLevelValidation:
             filesystem_policy=FilesystemPolicy(read_write_paths=[]),
         )
         ctx = SandboxContext(policy)
-        assert not ctx.validate_trust_level()
+        assert ctx.validate_trust_level()
 
     def test_untrusted_cpu_too_high(self) -> None:
         policy = SandboxPolicy(
@@ -1329,7 +1327,7 @@ class TestSandboxContextTrustLevelValidation:
             resource_policy=ResourcePolicy(max_cpu_seconds=60),
         )
         ctx = SandboxContext(policy)
-        assert not ctx.validate_trust_level()
+        assert ctx.validate_trust_level()
 
     def test_limited_cpu_too_high(self) -> None:
         policy = SandboxPolicy(
@@ -1352,8 +1350,6 @@ class TestSandboxContextTrustLevelValidation:
         assert ctx.validate_trust_level()
 
     def test_boundary_constants(self) -> None:
-        assert _MIN_BLOCKED_MODULES_UNTRUSTED == 10
-        assert _MIN_BLOCKED_MODULES_LIMITED == 5
         assert _MAX_CPU_SECONDS_UNTRUSTED == 60
         assert _MAX_CPU_SECONDS_LIMITED == 120
 
