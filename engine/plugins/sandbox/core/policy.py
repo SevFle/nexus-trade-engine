@@ -192,15 +192,25 @@ class SandboxPolicy:
     environment_policy: EnvironmentPolicy = field(default_factory=EnvironmentPolicy)
     _integrity_hash: str | None = field(default=None, repr=False)
 
+    def __post_init__(self) -> None:
+        if not self.import_policy.blocked_modules:
+            try:
+                trust = TrustLevel(self.trust_level)
+            except ValueError:
+                trust = TrustLevel.UNTRUSTED
+            self.import_policy.blocked_modules = _TRUST_IMPORT_PRESETS.get(
+                trust, _get_full_blocked_modules(),
+            )
+
     @staticmethod
     def _serialize_policy_value(value: Any) -> Any:
         if isinstance(value, enum.Enum):
             return value.value
-        if isinstance(value, (set, list, tuple)):
+        if isinstance(value, (set, frozenset, list, tuple)):
             try:
                 items = sorted(value)
             except TypeError:
-                items = list(value)
+                items = sorted(value, key=lambda x: (type(x).__name__, repr(x)))
             return [SandboxPolicy._serialize_policy_value(v) for v in items]
         if isinstance(value, dict):
             return {

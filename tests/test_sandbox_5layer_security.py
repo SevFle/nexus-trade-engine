@@ -801,7 +801,9 @@ class TestLayerComposition:
     def test_violations_from_all_layers_collected_on_deactivate(self) -> None:
         policy = SandboxPolicy(
             plugin_id="multi_violation",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(
+                blocked_modules={"os", "subprocess", "sys", "socket", "ctypes", "gc", "inspect", "importlib", "pickle", "threading"},
+            ),
         )
         ctx = SandboxContext(policy)
         ctx.activate()
@@ -1062,7 +1064,9 @@ class TestSecurityEventLogging:
     def test_context_collects_violations_from_all_layers(self) -> None:
         policy = SandboxPolicy(
             plugin_id="event_test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(
+                blocked_modules={"os", "subprocess", "sys", "socket", "ctypes", "gc", "inspect", "importlib", "pickle", "threading"},
+            ),
         )
         ctx = SandboxContext(policy)
         ctx.activate()

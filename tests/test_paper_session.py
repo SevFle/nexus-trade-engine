@@ -294,8 +294,7 @@ class TestPaperSessionStore:
     @pytest.mark.asyncio
     async def test_evict_expired(self):
         store = PaperSessionStore()
-        await store.save("old", {"session_id": "old"})
-        store._local_fallback["old"]["_updated_at"] = 0
+        store._local_fallback["old"] = {"session_id": "old", "_updated_at": 0}
         await store.evict_expired()
         result = await store.get("old")
         assert result is None
