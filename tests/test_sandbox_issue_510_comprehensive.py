@@ -532,7 +532,7 @@ class TestIntrospectionGuardSafeDir:
 
 class TestIntrospectionGuardBlockedBuiltinSets:
     def test_explicitly_blocked_attrs_comprehensive(self) -> None:
-        expected = {
+        expected = frozenset({
             "__subclasses__",
             "__bases__",
             "__mro__",
@@ -548,7 +548,12 @@ class TestIntrospectionGuardBlockedBuiltinSets:
             "__reduce_ex__",
             "__getstate__",
             "__setstate__",
-        }
+            "__builtins__",
+            "__func__",
+            "__self__",
+            "__module__",
+            "__weakref__",
+        })
         assert expected == _EXPLICITLY_BLOCKED_ATTRS
 
     def test_frame_attrs_comprehensive(self) -> None:
@@ -627,7 +632,11 @@ class TestNetworkGuardCombinedHostLogic:
 
 class TestSandboxContextContextManager:
     def test_context_manager_activate_deactivate(self) -> None:
-        policy = SandboxPolicy(plugin_id="ctx_mgr_test")
+        blocked = {f"mod_{i}" for i in range(15)}
+        policy = SandboxPolicy(
+            plugin_id="ctx_mgr_test",
+            import_policy=ImportPolicy(blocked_modules=blocked),
+        )
         ctx = SandboxContext(policy)
         with ctx:
             assert ctx.is_active is True
@@ -635,7 +644,11 @@ class TestSandboxContextContextManager:
         ctx.cleanup()
 
     def test_context_manager_cleanup(self) -> None:
-        policy = SandboxPolicy(plugin_id="ctx_cleanup")
+        blocked = {f"mod_{i}" for i in range(15)}
+        policy = SandboxPolicy(
+            plugin_id="ctx_cleanup",
+            import_policy=ImportPolicy(blocked_modules=blocked),
+        )
         ctx = SandboxContext(policy)
         work_dir = ctx.work_dir
         ctx.activate()
@@ -646,9 +659,10 @@ class TestSandboxContextContextManager:
 
 class TestSandboxContextViolationCollection:
     def test_violations_collected_from_all_layers(self) -> None:
+        blocked = {f"mod_{i}" for i in range(15)} | {"os"}
         policy = SandboxPolicy(
             plugin_id="violation_collect",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(blocked_modules=blocked),
         )
         ctx = SandboxContext(policy)
         ctx.activate()
@@ -663,9 +677,10 @@ class TestSandboxContextViolationCollection:
 
     def test_violations_reported_to_metrics_collector(self) -> None:
         metrics = SandboxMetricsCollector()
+        blocked = {f"mod_{i}" for i in range(15)} | {"os"}
         policy = SandboxPolicy(
             plugin_id="metrics_violation",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(blocked_modules=blocked),
         )
         ctx = SandboxContext(policy, metrics_collector=metrics)
         ctx.activate()

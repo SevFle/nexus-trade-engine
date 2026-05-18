@@ -1368,7 +1368,11 @@ class TestPluginMetrics:
 
 class TestPluginSandboxExecutorEdgeCases:
     def test_from_factory_creates_placeholder(self):
-        policy = SandboxPolicy(plugin_id="exec-test")
+        blocked = {f"mod_{i}" for i in range(15)}
+        policy = SandboxPolicy(
+            plugin_id="exec-test",
+            import_policy=ImportPolicy(blocked_modules=blocked),
+        )
 
         def factory():
             return SimpleNamespace(name="real", version="1.0", on_bar=lambda s, p: [])

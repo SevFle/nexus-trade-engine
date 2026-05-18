@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import enum
 import hashlib
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any
 
 from engine.plugins.trust_levels import TrustLevel, get_trust_level, get_trust_policy
@@ -191,25 +192,33 @@ class SandboxPolicy:
     environment_policy: EnvironmentPolicy = field(default_factory=EnvironmentPolicy)
     _integrity_hash: str | None = field(default=None, repr=False)
 
+    @staticmethod
+    def _serialize_policy_value(value: Any) -> Any:
+        if isinstance(value, enum.Enum):
+            return value.value
+        if isinstance(value, (set, list, tuple)):
+            try:
+                items = sorted(value)
+            except TypeError:
+                items = list(value)
+            return [SandboxPolicy._serialize_policy_value(v) for v in items]
+        if isinstance(value, dict):
+            return {
+                k: SandboxPolicy._serialize_policy_value(v)
+                for k, v in sorted(value.items())
+            }
+        if hasattr(value, "__dataclass_fields__"):
+            return {
+                f.name: SandboxPolicy._serialize_policy_value(getattr(value, f.name))
+                for f in fields(value)
+                if not f.name.startswith("_")
+            }
+        return value
+
     def compute_integrity_hash(self) -> str:
-        data = json.dumps(
-            {
-                "plugin_id": self.plugin_id,
-                "trust_level": self.trust_level,
-                "blocked_modules": sorted(self.import_policy.blocked_modules),
-                "max_cpu_seconds": self.resource_policy.max_cpu_seconds,
-                "max_memory_bytes": self.resource_policy.max_memory_bytes,
-                "max_file_descriptors": self.resource_policy.max_file_descriptors,
-                "max_threads": self.resource_policy.max_threads,
-                "wall_time_seconds": self.resource_policy.wall_time_seconds,
-                "allowed_endpoints": sorted(self.network_policy.allowed_endpoints),
-                "read_only_paths": sorted(self.filesystem_policy.read_only_paths),
-                "read_write_paths": sorted(self.filesystem_policy.read_write_paths),
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-        return hashlib.sha256(data.encode()).hexdigest()
+        serialized = self._serialize_policy_value(self)
+        data = json.dumps(serialized, sort_keys=True, separators=(",", ":"))
+        return "v2:" + hashlib.sha256(data.encode()).hexdigest()
 
     def set_integrity_hash(self) -> None:
         self._integrity_hash = self.compute_integrity_hash()

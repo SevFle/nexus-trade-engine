@@ -534,7 +534,7 @@ class TestViolationReportIntegration:
     async def test_report_from_sandbox_context_violations(self) -> None:
         policy = SandboxPolicy(
             plugin_id="report_test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(blocked_modules={f"mod_{i}" for i in range(15)} | {"os"}),
         )
         ctx = SandboxContext(policy)
         ctx.activate()

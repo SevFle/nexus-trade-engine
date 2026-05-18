@@ -515,9 +515,10 @@ class TestPluginSigningIntegration:
 
 class TestContextThreadSafety:
     def test_context_cleanup_after_activate(self) -> None:
+        blocked = {f"mod_{i}" for i in range(15)} | {"os"}
         policy = SandboxPolicy(
             plugin_id="thread_test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
+            import_policy=ImportPolicy(blocked_modules=blocked),
         )
         ctx = SandboxContext(policy)
         work_dir = ctx.work_dir
@@ -528,7 +529,11 @@ class TestContextThreadSafety:
         assert not os.path.isdir(work_dir)
 
     def test_context_double_cleanup_safe(self) -> None:
-        policy = SandboxPolicy(plugin_id="double_cleanup")
+        blocked = {f"mod_{i}" for i in range(15)}
+        policy = SandboxPolicy(
+            plugin_id="double_cleanup",
+            import_policy=ImportPolicy(blocked_modules=blocked),
+        )
         ctx = SandboxContext(policy)
         ctx.activate()
         ctx.cleanup()

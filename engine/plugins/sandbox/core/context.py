@@ -122,6 +122,7 @@ class SandboxContext:
                 plugin_id=self._policy.plugin_id,
                 attempted_action="trust_level_validation",
             )
+            self._event_logger.log_violation(exc)
             raise exc
         self._enforce_hard_limits()
         try:
