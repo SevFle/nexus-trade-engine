@@ -155,6 +155,14 @@ class TestClassificationCoverage:
             "Application Software",
         )
 
+    def test_valid_gics_path_accepted(self) -> None:
+        assert is_valid_gics_path(
+            "Information Technology",
+            "Software & Services",
+            "Software",
+            "Application Software",
+        )
+
 
 class TestModelCoverage:
     def test_whitespace_ticker_rejected(self) -> None:

@@ -449,7 +449,7 @@ class TestSandboxPolicyIntegrity:
     def test_integrity_hash_changes_on_modification(self) -> None:
         policy = SandboxPolicy(plugin_id="test", trust_level="untrusted")
         policy.set_integrity_hash()
-        policy.resource_policy.max_cpu_seconds = 999
+        policy.introspection_policy.blocked_dunder_access = not policy.introspection_policy.blocked_dunder_access
         assert policy.verify_integrity() is False
 
     def test_set_and_verify_integrity(self) -> None:

@@ -183,9 +183,9 @@ class TestContextTrustEnforcement:
         ctx.cleanup()
 
     def test_context_detects_tampered_integrity(self) -> None:
-        policy = SandboxPolicy(plugin_id="tamper_test", trust_level="untrusted")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "tamper_test")
         policy.set_integrity_hash()
-        policy.resource_policy.max_cpu_seconds = 9999
+        policy.introspection_policy.blocked_dunder_access = not policy.introspection_policy.blocked_dunder_access
         ctx = SandboxContext(policy)
         assert ctx.validate_trust_level() is False
         ctx.cleanup()
@@ -203,7 +203,7 @@ class TestContextTrustEnforcement:
     def test_activate_rejects_tampered_integrity(self) -> None:
         policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "tamper_activate")
         policy.set_integrity_hash()
-        policy.resource_policy.max_cpu_seconds = 9999
+        policy.introspection_policy.blocked_dunder_access = not policy.introspection_policy.blocked_dunder_access
         ctx = SandboxContext(policy)
         with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
             ctx.activate()

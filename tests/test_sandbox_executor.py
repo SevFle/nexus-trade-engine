@@ -245,7 +245,7 @@ class TestSandboxContextTrustValidation:
 
     def test_activate_raises_on_tampered_integrity(self) -> None:
         policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "tamper_test")
-        policy.resource_policy.wall_time_seconds = 9999
+        policy.introspection_policy.blocked_dunder_access = not policy.introspection_policy.blocked_dunder_access
         context = SandboxContext(policy)
         try:
             with pytest.raises(SandboxViolation, match="Trust level policy validation failed"):
@@ -322,7 +322,7 @@ class TestExecutorActivationViolation:
     async def test_activation_violation_from_integrity_tamper_records_metrics(self) -> None:
         collector = SandboxMetricsCollector()
         policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "tamper_metrics")
-        policy.resource_policy.wall_time_seconds = 9999
+        policy.introspection_policy.blocked_dunder_access = not policy.introspection_policy.blocked_dunder_access
         executor = PluginSandboxExecutor(
             _EmptyStrategy(), policy, metrics_collector=collector
         )
@@ -356,7 +356,7 @@ class TestSandboxPolicyIntegrity:
     def test_verify_integrity_detects_tampering(self) -> None:
         policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, "integ_tamper")
         assert policy.verify_integrity() is True
-        policy.resource_policy.max_cpu_seconds = 9999
+        policy.introspection_policy.blocked_dunder_access = not policy.introspection_policy.blocked_dunder_access
         assert policy.verify_integrity() is False
 
     def test_verify_integrity_passes_without_hash(self) -> None:

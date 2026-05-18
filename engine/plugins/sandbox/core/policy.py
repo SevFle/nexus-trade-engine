@@ -205,6 +205,7 @@ class SandboxPolicy:
                 "allowed_endpoints": sorted(self.network_policy.allowed_endpoints),
                 "read_only_paths": sorted(self.filesystem_policy.read_only_paths),
                 "read_write_paths": sorted(self.filesystem_policy.read_write_paths),
+                "blocked_dunder_access": self.introspection_policy.blocked_dunder_access,
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -344,6 +345,10 @@ class SandboxPolicy:
             introspection_policy=_TRUST_INTROSPECTION_PRESETS[trust_level],
             environment_policy=env_policy,
         )
+        # from_trust_level auto-sets the integrity hash so that callers do not
+        # need to remember to call set_integrity_hash() themselves.  Calling
+        # set_integrity_hash() again after mutation is still valid and will
+        # recompute the hash over the mutated state.
         policy.set_integrity_hash()
         return policy
 
