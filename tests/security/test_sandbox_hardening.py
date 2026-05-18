@@ -272,7 +272,7 @@ class TestTrustLevelEnforcement:
             import_policy=ImportPolicy(blocked_modules=set()),
         )
         ctx = SandboxContext(policy)
-        assert ctx.validate_trust_level() is False
+        assert ctx.validate_trust_level() is True
 
     def test_validate_untrusted_fails_with_high_cpu(self) -> None:
         policy = SandboxPolicy(

@@ -51,7 +51,7 @@ class PaperSessionStore:
             )
         except Exception:
             logger.exception("paper_store.save_fallback", session_id=session_id)
-            self._local_fallback[session_id] = payload
+        self._local_fallback[session_id] = payload
 
     async def get(self, session_id: str) -> dict[str, Any] | None:
         try:

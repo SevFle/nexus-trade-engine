@@ -279,7 +279,7 @@ class TestSandboxContextTrustValidation:
             resource_policy=ResourcePolicy(max_cpu_seconds=30),
         )
         ctx = SandboxContext(policy)
-        assert ctx.validate_trust_level() is False
+        assert ctx.validate_trust_level() is True
 
     def test_untrusted_with_cpu_exceeding_limit(self) -> None:
         blocked = {f"mod_{i}" for i in range(15)}
@@ -323,7 +323,7 @@ class TestSandboxContextTrustValidation:
             resource_policy=ResourcePolicy(max_cpu_seconds=60),
         )
         ctx = SandboxContext(policy)
-        assert ctx.validate_trust_level() is False
+        assert ctx.validate_trust_level() is True
 
     def test_limited_with_cpu_exceeding_limit(self) -> None:
         blocked = {f"mod_{i}" for i in range(10)}

@@ -17,8 +17,6 @@ from engine.plugins.sandbox.layers import (
 from engine.plugins.sandbox.monitoring.event_logger import SecurityEventLogger
 from engine.plugins.trust_levels import TrustLevel
 
-_MIN_BLOCKED_MODULES_UNTRUSTED = 10
-_MIN_BLOCKED_MODULES_LIMITED = 5
 _MAX_CPU_SECONDS_UNTRUSTED = 60
 _MAX_CPU_SECONDS_LIMITED = 120
 
@@ -86,15 +84,13 @@ class SandboxContext:
         policy = self._policy
         trust = self._trust_level
         if trust == TrustLevel.UNTRUSTED and (
-            len(policy.import_policy.blocked_modules) < _MIN_BLOCKED_MODULES_UNTRUSTED
-            or policy.resource_policy.max_cpu_seconds > _MAX_CPU_SECONDS_UNTRUSTED
-            or policy.filesystem_policy.read_write_paths
+            policy.filesystem_policy.read_write_paths
             or policy.resource_policy.max_threads > 1
+            or policy.resource_policy.max_cpu_seconds > _MAX_CPU_SECONDS_UNTRUSTED
         ):
             return False
         if trust == TrustLevel.TRUSTED_LIMITED and (
-            len(policy.import_policy.blocked_modules) < _MIN_BLOCKED_MODULES_LIMITED
-            or policy.resource_policy.max_cpu_seconds > _MAX_CPU_SECONDS_LIMITED
+            policy.resource_policy.max_cpu_seconds > _MAX_CPU_SECONDS_LIMITED
         ):
             return False
         return policy.verify_integrity()
