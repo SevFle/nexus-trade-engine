@@ -106,7 +106,7 @@ class _FileWriteStrategy:
     version = "1.0.0"
 
     def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
-        with open("/tmp/sandbox_write_test", "w") as f:  # noqa: S108
+        with open("/tmp/sandbox_write_test", "w") as f:
             f.write("pwned")
         return []
 
