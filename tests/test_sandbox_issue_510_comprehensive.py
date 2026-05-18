@@ -580,7 +580,7 @@ class TestIntrospectionGuardBlockedBuiltinSets:
         assert expected == _TRACEBACK_ATTRS
 
     def test_blocked_builtins_default_set(self) -> None:
-        expected = {"eval", "exec", "compile", "breakpoint", "vars", "globals", "locals"}
+        expected = {"eval", "exec", "breakpoint", "vars", "globals", "locals"}
         assert expected == _BLOCKED_BUILTINS_DEFAULT
 
     def test_safe_dir_attrs_is_superset(self) -> None:

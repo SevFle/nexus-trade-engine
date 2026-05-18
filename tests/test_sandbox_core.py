@@ -109,7 +109,7 @@ class TestIntrospectionPolicy:
         policy = IntrospectionPolicy()
         assert "eval" in policy.blocked_builtins
         assert "exec" in policy.blocked_builtins
-        assert "compile" in policy.blocked_builtins
+        assert "compile" not in policy.blocked_builtins
         assert "breakpoint" in policy.blocked_builtins
 
     def test___import___removed_from_default(self) -> None:

@@ -64,7 +64,6 @@ class IntrospectionPolicy:
         default_factory=lambda: {
             "eval",
             "exec",
-            "compile",
             "breakpoint",
             "credits",
             "license",
@@ -145,11 +144,11 @@ _TRUST_IMPORT_PRESETS: dict[TrustLevel, set[str]] = {
 
 _TRUST_INTROSPECTION_PRESETS: dict[TrustLevel, IntrospectionPolicy] = {
     TrustLevel.TRUSTED_FULL: IntrospectionPolicy(
-        blocked_builtins={"exec", "compile"},
+        blocked_builtins={"exec"},
         blocked_attributes={"__subclasses__", "__globals__"},
     ),
     TrustLevel.TRUSTED_LIMITED: IntrospectionPolicy(
-        blocked_builtins={"eval", "exec", "compile", "breakpoint"},
+        blocked_builtins={"eval", "exec", "breakpoint"},
         blocked_attributes={"__subclasses__", "__globals__", "__bases__", "__mro__"},
     ),
     TrustLevel.UNTRUSTED: IntrospectionPolicy(),
@@ -364,7 +363,7 @@ class SandboxPolicy:
             import_policy=ImportPolicy(blocked_modules={"subprocess", "ctypes", "_ctypes"}),
             resource_policy=ResourcePolicy(max_cpu_seconds=300, max_memory_bytes=2 * 1024**3),
             introspection_policy=IntrospectionPolicy(
-                blocked_builtins={"exec", "compile"},
+                blocked_builtins={"exec"},
                 blocked_attributes={"__subclasses__", "__globals__"},
             ),
             environment_policy=_TRUST_ENVIRONMENT_PRESETS[TrustLevel.TRUSTED_FULL],

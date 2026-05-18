@@ -826,7 +826,7 @@ class TestIntrospectionGuardUnit:
     def test_default_blocked_builtins(self) -> None:
         assert "eval" in _BLOCKED_BUILTINS_DEFAULT
         assert "exec" in _BLOCKED_BUILTINS_DEFAULT
-        assert "compile" in _BLOCKED_BUILTINS_DEFAULT
+        assert "compile" not in _BLOCKED_BUILTINS_DEFAULT
         assert "breakpoint" in _BLOCKED_BUILTINS_DEFAULT
 
     def test_is_blocked_attr_explicitly(self) -> None:
@@ -851,12 +851,12 @@ class TestIntrospectionGuardUnit:
         assert guard._is_blocked_attr("name") is False
         assert guard._is_blocked_attr("__init__") is False
 
-    def test_install_replaces_object(self) -> None:
+    def test_install_preserves_object(self) -> None:
         original = builtins.object
         guard = IntrospectionGuard(IntrospectionPolicy())
         try:
             guard.install()
-            assert builtins.object is not original
+            assert builtins.object is original
         finally:
             guard.uninstall()
 
@@ -887,12 +887,12 @@ class TestIntrospectionGuardUnit:
         finally:
             guard.uninstall()
 
-    def test_install_blocks_compile(self) -> None:
+    def test_install_allows_compile(self) -> None:
         guard = IntrospectionGuard(IntrospectionPolicy())
         try:
             guard.install()
-            with pytest.raises(PermissionError, match="not accessible"):
-                compile("1+1", "<test>", "eval")
+            code = compile("1+1", "<test>", "eval")
+            assert code is not None
         finally:
             guard.uninstall()
 
@@ -906,19 +906,15 @@ class TestIntrospectionGuardUnit:
             guard.uninstall()
 
     def test_uninstall_restores_all(self) -> None:
-        original_object = builtins.object
         original_getattr = builtins.getattr
         original_eval = builtins.eval
         original_exec = builtins.exec
-        original_compile = builtins.compile
         guard = IntrospectionGuard(IntrospectionPolicy())
         guard.install()
         guard.uninstall()
-        assert builtins.object is original_object
         assert builtins.getattr is original_getattr
         assert builtins.eval is original_eval
         assert builtins.exec is original_exec
-        assert builtins.compile is original_compile
 
     def test_install_idempotent(self) -> None:
         guard = IntrospectionGuard(IntrospectionPolicy())

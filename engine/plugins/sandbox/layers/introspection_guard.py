@@ -60,7 +60,6 @@ _BLOCKED_BUILTINS_DEFAULT: frozenset[str] = frozenset(
     {
         "eval",
         "exec",
-        "compile",
         "breakpoint",
         "vars",
         "globals",
@@ -69,12 +68,6 @@ _BLOCKED_BUILTINS_DEFAULT: frozenset[str] = frozenset(
 )
 
 _SAFE_DIR_ATTRS: frozenset[str] = _EXPLICITLY_BLOCKED_ATTRS | _FRAME_ATTRS | _TRACEBACK_ATTRS
-
-
-class _RestrictedObject:
-    @classmethod
-    def __subclasses__(cls) -> list[type]:
-        raise RuntimeError("__subclasses__() is not allowed in strategy sandbox")
 
 
 def _make_safe_dir(original_dir: Any, guard: IntrospectionGuard) -> Any:
@@ -95,7 +88,6 @@ class IntrospectionGuard:
         self._plugin_id = plugin_id
         self._original_getattr: Any = None
         self._original_setattr: Any = None
-        self._original_object: Any = None
         self._original_builtins: dict[str, Any] = {}
         self._installed = False
         self._violation_log: list[IntrospectionViolation] = []
@@ -146,9 +138,6 @@ class IntrospectionGuard:
             if name in builtins.__dict__:
                 self._original_builtins[name] = builtins.__dict__[name]
 
-        self._original_object = builtins.object
-        builtins.object = _RestrictedObject
-
         self._original_getattr = builtins.getattr
         builtins.getattr = self._restricted_getattr
 
@@ -168,10 +157,6 @@ class IntrospectionGuard:
     def uninstall(self) -> None:
         if not self._installed:
             return
-
-        if self._original_object is not None:
-            builtins.object = self._original_object
-            self._original_object = None
 
         if self._original_getattr is not None:
             builtins.getattr = self._original_getattr

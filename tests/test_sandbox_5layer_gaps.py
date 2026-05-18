@@ -56,7 +56,6 @@ from engine.plugins.sandbox.layers.introspection_guard import (
     _EXPLICITLY_BLOCKED_ATTRS,
     _FRAME_ATTRS,
     IntrospectionGuard,
-    _RestrictedObject,
 )
 from engine.plugins.sandbox.layers.network_guard import (
     NetworkGuard,
@@ -398,16 +397,12 @@ class TestFilesystemIoOpen:
 
 
 class TestIntrospectionRestrictedObject:
-    def test_restricted_object_subclasses_raises(self) -> None:
-        with pytest.raises(RuntimeError, match="not allowed"):
-            _RestrictedObject.__subclasses__()
-
-    def test_restricted_object_replaces_builtins_object(self) -> None:
+    def test_restricted_object_not_used(self) -> None:
         original = builtins.object
         guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
         guard.install()
         try:
-            assert builtins.object is _RestrictedObject
+            assert builtins.object is original
         finally:
             guard.uninstall()
         assert builtins.object is original
@@ -688,7 +683,7 @@ class TestIntrospectionViolationAccumulation:
 
 
 class TestIntrospectionBuiltinBlocking:
-    @pytest.mark.parametrize("name", ["eval", "exec", "compile", "breakpoint", "vars", "globals", "locals"])
+    @pytest.mark.parametrize("name", ["eval", "exec", "breakpoint", "vars", "globals", "locals"])
     def test_blocked_builtin_raises(self, name: str) -> None:
         guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
         guard.install()
@@ -696,7 +691,16 @@ class TestIntrospectionBuiltinBlocking:
             blocked_fn = getattr(builtins, name, None)
             if blocked_fn is not None:
                 with pytest.raises(PermissionError):
-                    blocked_fn("test" if name in ("eval", "exec", "compile") else None)
+                    blocked_fn("test" if name in ("eval", "exec") else None)
+        finally:
+            guard.uninstall()
+
+    def test_compile_is_whitelisted(self) -> None:
+        guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
+        guard.install()
+        try:
+            code = compile("1+1", "<test>", "eval")
+            assert code is not None
         finally:
             guard.uninstall()
 
@@ -724,13 +728,11 @@ class TestIntrospectionBuiltinBlocking:
     def test_all_builtins_restored_on_uninstall(self) -> None:
         original_eval = builtins.eval
         original_exec = builtins.exec
-        original_compile = builtins.compile
         guard = IntrospectionGuard(IntrospectionPolicy(), plugin_id="p")
         guard.install()
         guard.uninstall()
         assert builtins.eval is original_eval
         assert builtins.exec is original_exec
-        assert builtins.compile is original_compile
 
 
 # ═══════════════════════════════════════════════════════════════════════

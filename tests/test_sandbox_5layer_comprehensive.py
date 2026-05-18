@@ -848,14 +848,14 @@ class TestIntrospectionGuardEdgeCases:
         finally:
             guard.uninstall()
 
-    def test_blocked_builtins_compile(self):
+    def test_whitelisted_builtin_compile(self):
         guard = IntrospectionGuard(
             IntrospectionPolicy(), plugin_id="ig-compile"
         )
         guard.install()
         try:
-            with pytest.raises(PermissionError):
-                builtins.compile("1+1", "<test>", "eval")
+            code = builtins.compile("1+1", "<test>", "eval")
+            assert code is not None
         finally:
             guard.uninstall()
 
@@ -947,14 +947,14 @@ class TestIntrospectionGuardEdgeCases:
         assert not guard._is_blocked_attr("name")
         assert not guard._is_blocked_attr("value")
 
-    def test_subclasses_blocked_on_restricted_object(self):
+    def test_subclasses_blocked_via_restricted_getattr(self):
         guard = IntrospectionGuard(
             IntrospectionPolicy(), plugin_id="ig-sub"
         )
         guard.install()
         try:
-            with pytest.raises(RuntimeError):
-                object.__subclasses__()
+            with pytest.raises(PermissionError):
+                getattr(int, "__subclasses__")  # noqa: B009
         finally:
             guard.uninstall()
 

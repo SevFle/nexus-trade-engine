@@ -675,12 +675,12 @@ class TestIntrospectionLayerBlocking:
         finally:
             guard.uninstall()
 
-    def test_install_blocks_compile(self) -> None:
+    def test_install_allows_compile(self) -> None:
         guard = IntrospectionGuard(IntrospectionPolicy())
         try:
             guard.install()
-            with pytest.raises(PermissionError, match="not accessible"):
-                builtins.compile("1+1", "<test>", "eval")
+            code = builtins.compile("1+1", "<test>", "eval")
+            assert code is not None
         finally:
             guard.uninstall()
 
@@ -693,24 +693,22 @@ class TestIntrospectionLayerBlocking:
         finally:
             guard.uninstall()
 
-    def test_install_replaces_object_and_getattr(self) -> None:
+    def test_install_replaces_getattr_but_not_object(self) -> None:
         orig_object = builtins.object
         orig_getattr = builtins.getattr
         guard = IntrospectionGuard(IntrospectionPolicy())
         try:
             guard.install()
-            assert builtins.object is not orig_object
+            assert builtins.object is orig_object
             assert builtins.getattr is not orig_getattr
         finally:
             guard.uninstall()
 
     def test_uninstall_restores_all_builtins(self) -> None:
         originals = {
-            "object": builtins.object,
             "getattr": builtins.getattr,
             "eval": builtins.eval,
             "exec": builtins.exec,
-            "compile": builtins.compile,
             "breakpoint": builtins.breakpoint,  # type: ignore[attr-defined]
         }
         guard = IntrospectionGuard(IntrospectionPolicy())
@@ -767,7 +765,7 @@ class TestIntrospectionLayerBlocking:
 
 class TestLayerComposition:
     def test_all_five_layers_install_and_uninstall(self) -> None:
-        policy = SandboxPolicy(plugin_id="comp")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, plugin_id="comp")
         ctx = SandboxContext(policy)
         orig_import = builtins.__import__
         orig_open = builtins.open
@@ -779,7 +777,6 @@ class TestLayerComposition:
             assert builtins.__import__ is not orig_import
             assert builtins.open is not orig_open
             assert builtins.getattr is not orig_getattr
-            assert builtins.object is not orig_object
         finally:
             ctx.deactivate()
         assert builtins.__import__ is orig_import
@@ -788,7 +785,7 @@ class TestLayerComposition:
         assert builtins.object is orig_object
 
     def test_context_manager_activates_and_deactivates(self) -> None:
-        policy = SandboxPolicy(plugin_id="ctx_mgr")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, plugin_id="ctx_mgr")
         ctx = SandboxContext(policy)
         orig_import = builtins.__import__
         with ctx:
@@ -799,9 +796,9 @@ class TestLayerComposition:
         ctx.cleanup()
 
     def test_violations_from_all_layers_collected_on_deactivate(self) -> None:
-        policy = SandboxPolicy(
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED,
             plugin_id="multi_violation",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
         )
         ctx = SandboxContext(policy)
         ctx.activate()
@@ -819,7 +816,7 @@ class TestLayerComposition:
         assert len(intro_events) >= 1
 
     def test_work_dir_accessible_during_activation(self) -> None:
-        policy = SandboxPolicy(plugin_id="workdir_test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, plugin_id="workdir_test")
         ctx = SandboxContext(policy)
         ctx.activate()
         try:
@@ -830,7 +827,7 @@ class TestLayerComposition:
         ctx.cleanup()
 
     def test_cleanup_removes_work_dir_after_activation(self) -> None:
-        policy = SandboxPolicy(plugin_id="cleanup_test")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, plugin_id="cleanup_test")
         ctx = SandboxContext(policy)
         work_dir = ctx.work_dir
         ctx.activate()
@@ -838,7 +835,7 @@ class TestLayerComposition:
         assert not os.path.isdir(work_dir)
 
     def test_activate_idempotent(self) -> None:
-        policy = SandboxPolicy(plugin_id="idempotent")
+        policy = SandboxPolicy.from_trust_level(TrustLevel.UNTRUSTED, plugin_id="idempotent")
         ctx = SandboxContext(policy)
         try:
             ctx.activate()
@@ -915,7 +912,7 @@ class TestTrustLevels:
 
     def test_trusted_fewer_blocked_builtins(self, trusted_policy: SandboxPolicy) -> None:
         assert "exec" in trusted_policy.introspection_policy.blocked_builtins
-        assert "compile" in trusted_policy.introspection_policy.blocked_builtins
+        assert "compile" not in trusted_policy.introspection_policy.blocked_builtins
         assert "eval" not in trusted_policy.introspection_policy.blocked_builtins
 
     def test_trusted_fewer_blocked_attributes(self, trusted_policy: SandboxPolicy) -> None:
@@ -1060,9 +1057,9 @@ class TestSecurityEventLogging:
             assert len(events) >= 1, f"Expected events for {cat.value}"
 
     def test_context_collects_violations_from_all_layers(self) -> None:
-        policy = SandboxPolicy(
+        policy = SandboxPolicy.from_trust_level(
+            TrustLevel.UNTRUSTED,
             plugin_id="event_test",
-            import_policy=ImportPolicy(blocked_modules={"os"}),
         )
         ctx = SandboxContext(policy)
         ctx.activate()
@@ -1209,7 +1206,7 @@ class TestFiveLayerE2E:
             version = "1.0"
 
             def on_bar(self, s, p):
-                object.__subclasses__()
+                getattr(int, "__subclasses__")  # noqa: B009
                 return []
 
         sandbox = StrategySandbox(SubclassEscape(), manifest)
