@@ -196,11 +196,11 @@ class SandboxPolicy:
     def _serialize_policy_value(value: Any) -> Any:
         if isinstance(value, enum.Enum):
             return value.value
-        if isinstance(value, (set, list, tuple)):
+        if isinstance(value, (frozenset, set, list, tuple)):
             try:
                 items = sorted(value)
             except TypeError:
-                items = list(value)
+                items = sorted(value, key=repr)
             return [SandboxPolicy._serialize_policy_value(v) for v in items]
         if isinstance(value, dict):
             return {
@@ -383,5 +383,5 @@ def _parse_memory(mem_str: str) -> int:
     }
     for suffix, multiplier in sorted(units.items(), key=lambda x: -len(x[0])):
         if val.endswith(suffix):
-            return int(float(val[: -len(suffix)]) * multiplier)
-    return int(val)
+            return max(0, int(float(val[: -len(suffix)]) * multiplier))
+    return max(0, int(val))
