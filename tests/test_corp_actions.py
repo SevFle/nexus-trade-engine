@@ -576,8 +576,6 @@ class TestCompoundPR2:
     def test_split_then_spinoff_compose(self):
         # 2-for-1 split on 2024-06-01, then 80%-retention spinoff
         # on 2025-06-01. A 2024-01-01 bar at $200 should adjust to:
-        #   split:   200 / 2 = 100
-        #   spinoff: 100 * 0.80 = 80
         log = CorporateActionLog(
             [
                 CorporateAction(

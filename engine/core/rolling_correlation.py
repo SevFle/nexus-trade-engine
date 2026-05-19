@@ -31,16 +31,18 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+_MIN_DATA_POINTS = 2
+
 
 def _validate_window(window: int) -> None:
-    if window < 2:
+    if window < _MIN_DATA_POINTS:
         raise ValueError("window must be >= 2")
 
 
 def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float:
     """Pearson correlation. Returns ``0.0`` on length mismatch or zero variance."""
     n = len(xs)
-    if n != len(ys) or n < 2:
+    if n != len(ys) or n < _MIN_DATA_POINTS:
         return 0.0
     mx = sum(xs) / n
     my = sum(ys) / n
@@ -128,7 +130,7 @@ def mean_pairwise_correlation(
     """
     _validate_window(window)
     keys = list(return_series.keys())
-    if len(keys) < 2:
+    if len(keys) < _MIN_DATA_POINTS:
         return []
     lengths = {len(s) for s in return_series.values()}
     if len(lengths) > 1:
@@ -138,14 +140,11 @@ def mean_pairwise_correlation(
     n = next(iter(lengths))
     if n < window:
         return [None] * n
-    pair_series: list[list[float | None]] = []
-    for i in range(len(keys)):
-        for j in range(i + 1, len(keys)):
-            pair_series.append(
-                rolling_correlation(
-                    return_series[keys[i]], return_series[keys[j]], window
-                )
-            )
+    pair_series = [
+        rolling_correlation(return_series[keys[i]], return_series[keys[j]], window)
+        for i in range(len(keys))
+        for j in range(i + 1, len(keys))
+    ]
     if not pair_series:
         return [None] * n
     out: list[float | None] = [None] * n

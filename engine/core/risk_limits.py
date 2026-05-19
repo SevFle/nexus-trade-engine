@@ -195,7 +195,7 @@ class RiskGate:
         with self._lock:
             return self._check_locked(intent, state)
 
-    def _check_locked(
+    def _check_locked(  # noqa: PLR0912
         self, intent: OrderIntent, state: AccountState
     ) -> RiskDecision:
         breaches: list[str] = []

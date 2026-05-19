@@ -64,6 +64,12 @@ class OIDCAuthProvider(IAuthProvider):
         if not code or db is None:
             return AuthResult(success=False, error="Authorization code and db session required")
 
+        def _resolve_signing_key(jwks, kid):
+            for key_data in jwks.get("keys", []):
+                if key_data.get("kid") == kid:
+                    return jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
+            raise ValueError(f"No matching key found for kid={kid}")
+
         try:
             import httpx
 
@@ -86,16 +92,9 @@ class OIDCAuthProvider(IAuthProvider):
 
             id_token = tokens.get("id_token", "")
             jwks = await self._get_jwks()
-            unverified_header = jwt.get_unverified_header(id_token)
-            kid = unverified_header.get("kid")
-            signing_key = None
-            for key_data in jwks.get("keys", []):
-                if key_data.get("kid") == kid:
-                    signing_key = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
-                    break
-            if signing_key is None:
-                msg = f"No matching key found for kid={kid}"
-                raise ValueError(msg)
+            signing_key = _resolve_signing_key(
+                jwks, jwt.get_unverified_header(id_token).get("kid")
+            )
             claims_data = jwt.decode(
                 id_token,
                 signing_key,

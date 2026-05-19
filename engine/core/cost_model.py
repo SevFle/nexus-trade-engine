@@ -12,6 +12,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
+_NUMERICAL_TOLERANCE = 1e-10
+_DAYS_PER_YEAR = 365
+
 
 class TaxMethod(StrEnum):
     FIFO = "fifo"
@@ -36,7 +39,7 @@ class Money:
 
     @property
     def is_zero(self) -> bool:
-        return abs(self.amount) < 1e-10
+        return abs(self.amount) < _NUMERICAL_TOLERANCE
 
     def as_pct_of(self, total: float) -> float:
         if total == 0:
@@ -97,7 +100,7 @@ class TaxLot:
     def is_long_term(self, as_of: datetime | None = None) -> bool:
         ref_date = as_of or datetime.now(UTC)
         held_days = (ref_date - self.purchase_date).days
-        return held_days >= 365
+        return held_days >= _DAYS_PER_YEAR
 
     @property
     def cost_basis(self) -> float:
@@ -211,15 +214,15 @@ class DefaultCostModel(ICostModel):
         self.ordinary_dividend_rate = ordinary_dividend_rate
         self.wash_sale_window_days = wash_sale_window_days
 
-    def estimate_commission(self, symbol: str, quantity: int, price: float) -> Money:
+    def estimate_commission(self, _symbol: str, _quantity: int, _price: float) -> Money:
         return Money(amount=self.commission_per_trade)
 
-    def estimate_spread(self, symbol: str, price: float, side: str) -> Money:
+    def estimate_spread(self, _symbol: str, price: float, _side: str) -> Money:
         spread_cost = price * (self.spread_bps / 10_000)
         return Money(amount=spread_cost)
 
     def estimate_slippage(
-        self, symbol: str, quantity: int, price: float, avg_volume: int
+        self, _symbol: str, quantity: int, price: float, avg_volume: int
     ) -> Money:
         base_slippage = price * (self.slippage_bps / 10_000) * quantity
         # Scale slippage with order size relative to volume
@@ -239,7 +242,7 @@ class DefaultCostModel(ICostModel):
             exchange_fee=Money(amount=self.exchange_fee_per_share * quantity),
         )
 
-    def estimate_pct(self, symbol: str, price: float, side: str = "buy") -> float:
+    def estimate_pct(self, _symbol: str, price: float, _side: str = "buy") -> float:
         """Round-trip cost estimate as percentage of trade value."""
         one_side_bps = self.spread_bps + self.slippage_bps
         round_trip_bps = one_side_bps * 2
@@ -248,7 +251,7 @@ class DefaultCostModel(ICostModel):
 
     def estimate_tax(
         self,
-        symbol: str,
+        _symbol: str,
         sell_price: float,
         quantity: int,
         lots: list[TaxLot],

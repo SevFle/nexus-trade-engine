@@ -6,6 +6,7 @@ it in the database for backtest use.
 """
 
 import asyncio
+import logging
 import sys
 
 import yfinance as yf
@@ -41,11 +42,13 @@ async def seed_ohlcv(symbols: list[str] | None = None, period: str = DEFAULT_PER
             async with db_engine.begin() as conn:
                 for idx, row in df.iterrows():
                     await conn.execute(
-                        text("""
-                            INSERT INTO ohlcv_bars (symbol, timestamp, interval, open, high, low, close, volume)
-                            VALUES (:symbol, :ts, :interval, :open, :high, :low, :close, :volume)
-                            ON CONFLICT DO NOTHING
-                        """),
+                        text(
+                            "INSERT INTO ohlcv_bars"
+                            " (symbol, timestamp, interval, open, high, low, close, volume)"
+                            " VALUES (:symbol, :ts, :interval,"
+                            " :open, :high, :low, :close, :volume)"
+                            " ON CONFLICT DO NOTHING"
+                        ),
                         {
                             "symbol": symbol,
                             "ts": idx.to_pydatetime(),
@@ -59,7 +62,7 @@ async def seed_ohlcv(symbols: list[str] | None = None, period: str = DEFAULT_PER
                     )
 
         except Exception:
-            pass
+            logging.exception("seed_data.failed", symbol=symbol)
 
 
 

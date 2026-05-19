@@ -49,7 +49,7 @@ logger = structlog.get_logger()
 
 # Documented disengage token. Operators are expected to type this
 # explicitly so a stray script can't toggle the switch off.
-_DISENGAGE_TOKEN: str = "I_UNDERSTAND_THE_RISK"
+_DISENGAGE_TOKEN: str = "I_UNDERSTAND_THE_RISK"  # noqa: S105
 
 
 class KillSwitchState(StrEnum):

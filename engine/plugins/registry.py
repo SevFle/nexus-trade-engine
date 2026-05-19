@@ -66,8 +66,9 @@ def load_strategy_class(module_path: str) -> Any:
 class PluginRegistry:
     """Discovers and instantiates strategy plugins."""
 
-    def __init__(self, strategies_dir: Path | None = None) -> None:
+    def __init__(self, strategies_dir: Path | None = None, use_sandbox: bool = False) -> None:
         self._strategies = discover_strategies(strategies_dir)
+        self._use_sandbox = use_sandbox
 
     def load_strategy(self, strategy_name: str) -> Any | None:
         entry = self._strategies.get(strategy_name)
@@ -79,6 +80,10 @@ class PluginRegistry:
         except (ImportError, AttributeError) as exc:
             logger.exception("strategy_load_failed", strategy=strategy_name, error=str(exc))
             return None
+
+        if self._use_sandbox:
+            return self._load_sandboxed(strategy_name, cls, entry)
+
         try:
             return cls()
         except Exception as exc:
@@ -86,6 +91,32 @@ class PluginRegistry:
                 "strategy_instantiation_failed",
                 strategy=strategy_name,
                 cls=cls.__name__,
+                error=str(exc),
+            )
+            return None
+
+    def _load_sandboxed(self, strategy_name: str, cls: Any, entry: dict[str, Any]) -> Any | None:
+        from engine.plugins.manifest import StrategyManifest
+        from engine.plugins.sandbox import PluginSandboxExecutor, SandboxPolicy
+
+        manifest_data = entry.get("manifest", {})
+        manifest_data.setdefault("id", strategy_name)
+        manifest_data.setdefault("name", strategy_name)
+        manifest_data.setdefault("version", "0.0.0")
+        try:
+            manifest = StrategyManifest(**manifest_data)
+        except Exception as exc:
+            logger.exception("manifest_parse_failed", strategy=strategy_name, error=str(exc))
+            return None
+
+        policy = SandboxPolicy.from_manifest(manifest)
+
+        try:
+            return PluginSandboxExecutor.from_factory(cls, policy)
+        except Exception as exc:
+            logger.exception(
+                "sandboxed_load_failed",
+                strategy=strategy_name,
                 error=str(exc),
             )
             return None

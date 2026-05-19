@@ -39,10 +39,11 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 DEFAULT_ANNUALISATION = 252
+_MIN_DATA_POINTS = 2
 
 
 def _validate_window(window: int) -> None:
-    if window < 2:
+    if window < _MIN_DATA_POINTS:
         raise ValueError("window must be >= 2")
 
 

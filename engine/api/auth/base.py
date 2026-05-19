@@ -36,6 +36,9 @@ class IAuthProvider(ABC):
     async def create_user(self, _user_info: UserInfo, **_kwargs: Any) -> AuthResult:
         return AuthResult(success=False, error=f"User creation not supported by {self.name}")
 
+    async def get_authorize_url(self, _state: str = "") -> str:
+        return ""
+
     def map_roles(self, external_roles: list[str]) -> str:
         role_priority = {"admin": 2, "developer": 1, "user": 0}
         best = "user"

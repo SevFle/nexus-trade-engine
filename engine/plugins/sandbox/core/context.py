@@ -1,0 +1,205 @@
+from __future__ import annotations
+
+import time
+import traceback
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from engine.plugins.sandbox.core.policy import SandboxPolicy
+    from engine.plugins.sandbox.core.violation import (
+        SandboxViolation,
+        SandboxViolationCategory,
+    )
+
+from engine.plugins.sandbox.layers import (
+    FilesystemIsolation,
+    IntrospectionGuard,
+    NetworkGuard,
+    ResourceLimiter,
+    RestrictedImporter,
+)
+
+_MIN_BLOCKED_MODULES_UNTRUSTED: int = 10
+_MIN_BLOCKED_MODULES_LIMITED: int = 5
+_MAX_CPU_SECONDS_UNTRUSTED: int = 60
+_MAX_CPU_SECONDS_LIMITED: int = 120
+
+
+@dataclass
+class SecurityEvent:
+    timestamp: float
+    category: SandboxViolationCategory
+    detail: str
+    plugin_id: str | None
+    attempted_action: str | None
+    stack_trace: str | None
+
+
+class SecurityEventLogger:
+    def __init__(self, plugin_id: str | None = None) -> None:
+        self._plugin_id = plugin_id
+        self._events: list[SecurityEvent] = []
+
+    def log_violation(self, violation: SandboxViolation) -> None:
+        event = SecurityEvent(
+            timestamp=time.time(),
+            category=violation.category,
+            detail=violation.detail,
+            plugin_id=violation.plugin_id or self._plugin_id,
+            attempted_action=violation.attempted_action,
+            stack_trace=traceback.format_stack(),
+        )
+        self._events.append(event)
+
+    def get_events(
+        self,
+        category: SandboxViolationCategory | None = None,
+        limit: int = 100,
+    ) -> list[SecurityEvent]:
+        events = self._events
+        if category is not None:
+            events = [e for e in events if e.category == category]
+        return events[-limit:]
+
+    def clear(self) -> None:
+        self._events.clear()
+
+    @property
+    def event_count(self) -> int:
+        return len(self._events)
+
+
+class SandboxContext:
+    def __init__(self, policy: SandboxPolicy) -> None:
+        self._policy = policy
+        self._event_logger = SecurityEventLogger(plugin_id=policy.plugin_id)
+        self._import_layer = RestrictedImporter(
+            blocked=policy.import_policy.blocked_modules,
+            allowed=policy.import_policy.allowed_modules or None,
+            plugin_id=policy.plugin_id,
+        )
+        self._network_layer = NetworkGuard(
+            policy=policy.network_policy,
+            plugin_id=policy.plugin_id,
+        )
+        self._resource_layer = ResourceLimiter(
+            policy=policy.resource_policy,
+            plugin_id=policy.plugin_id,
+        )
+        self._filesystem_layer = FilesystemIsolation(
+            policy=policy.filesystem_policy,
+            plugin_id=policy.plugin_id,
+        )
+        self._introspection_layer = IntrospectionGuard(
+            policy=policy.introspection_policy,
+            plugin_id=policy.plugin_id,
+        )
+        self._active = False
+
+    @property
+    def policy(self) -> SandboxPolicy:
+        return self._policy
+
+    @property
+    def event_logger(self) -> SecurityEventLogger:
+        return self._event_logger
+
+    @property
+    def is_active(self) -> bool:
+        return self._active
+
+    @property
+    def trust_level(self) -> Any:
+        from engine.plugins.trust_levels import TrustLevel
+
+        try:
+            return TrustLevel(self._policy.trust_level)
+        except ValueError:
+            return TrustLevel.UNTRUSTED
+
+    @property
+    def work_dir(self) -> str:
+        return self._filesystem_layer.work_dir
+
+    def validate_trust_level(self) -> bool:
+        from engine.plugins.trust_levels import TrustLevel
+
+        tl = self.trust_level
+        import_count = len(self._policy.import_policy.blocked_modules)
+        cpu = self._policy.resource_policy.max_cpu_seconds
+        rw = self._policy.filesystem_policy.read_write_paths
+
+        if tl == TrustLevel.UNTRUSTED:
+            if import_count < _MIN_BLOCKED_MODULES_UNTRUSTED:
+                return False
+            if cpu > _MAX_CPU_SECONDS_UNTRUSTED:
+                return False
+            if rw:
+                return False
+            return True
+
+        if tl == TrustLevel.TRUSTED_LIMITED:
+            if import_count < _MIN_BLOCKED_MODULES_LIMITED:
+                return False
+            if cpu > _MAX_CPU_SECONDS_LIMITED:
+                return False
+            return True
+
+        return True
+
+    def activate(self) -> None:
+        if self._active:
+            return
+        try:
+            self._network_layer.install()
+            self._resource_layer.install()
+            self._filesystem_layer.install()
+            self._introspection_layer.install()
+            self._import_layer.install()
+            self._active = True
+        except Exception:
+            self._force_deactivate()
+            raise
+
+    def deactivate(self) -> None:
+        if not self._active:
+            return
+        self._force_deactivate()
+
+    def _force_deactivate(self) -> None:
+        self._import_layer.uninstall()
+        self._introspection_layer.uninstall()
+        self._filesystem_layer.uninstall()
+        self._resource_layer.uninstall()
+        self._network_layer.uninstall()
+        self._collect_violations()
+        self._active = False
+
+    def _collect_violations(self) -> None:
+        for v in self._import_layer.get_violations():
+            self._event_logger.log_violation(v)
+        self._import_layer.clear_violations()
+        for v in self._network_layer.get_violations():
+            self._event_logger.log_violation(v)
+        self._network_layer.clear_violations()
+        for v in self._resource_layer.get_violations():
+            self._event_logger.log_violation(v)
+        self._resource_layer.clear_violations()
+        for v in self._filesystem_layer.get_violations():
+            self._event_logger.log_violation(v)
+        self._filesystem_layer.clear_violations()
+        for v in self._introspection_layer.get_violations():
+            self._event_logger.log_violation(v)
+        self._introspection_layer.clear_violations()
+
+    def cleanup(self) -> None:
+        self.deactivate()
+        self._filesystem_layer.cleanup()
+
+    def __enter__(self) -> SandboxContext:
+        self.activate()
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        self.deactivate()

@@ -37,9 +37,11 @@ from engine.core.trade_stats import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+_MIN_DATA_POINTS = 2
+
 
 def _validate_window(window: int) -> None:
-    if window < 2:
+    if window < _MIN_DATA_POINTS:
         raise ValueError("window must be >= 2")
 
 
@@ -96,7 +98,7 @@ def rolling_win_loss_ratio(
 
 def _annualised_return(equity_window: Sequence[float], periods_per_year: int) -> float:
     """Compounded return * (periods_per_year / window) — annualised."""
-    if len(equity_window) < 2 or equity_window[0] <= 0:
+    if len(equity_window) < _MIN_DATA_POINTS or equity_window[0] <= 0:
         return 0.0
     total_return = equity_window[-1] / equity_window[0] - 1.0
     bars = len(equity_window) - 1

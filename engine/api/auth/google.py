@@ -101,7 +101,7 @@ class GoogleAuthProvider(IAuthProvider):
             ),
         )
 
-    def get_authorize_url(self, state: str = "") -> str:
+    async def get_authorize_url(self, state: str = "") -> str:
         url = (
             f"https://accounts.google.com/o/oauth2/v2/auth"
             f"?client_id={settings.google_client_id}"

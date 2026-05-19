@@ -62,10 +62,26 @@ class StrategyManifest(BaseModel):
         description="Required data feeds: ohlcv, news, sentiment, order_book, macro",
     )
     min_history_bars: int = 50
-    watchlist: list[str] = Field(default_factory=list, description="Default symbols. Empty = user chooses.")
+    watchlist: list[str] = Field(
+        default_factory=list, description="Default symbols. Empty = user chooses."
+    )
+
+    # ── Security ──
+    trust_level: str = "untrusted"
+    permissions: list[str] = Field(
+        default_factory=list,
+        description="Required permissions: network, filesystem_read, filesystem_write, threads",
+    )
+    content_hash: str | None = Field(
+        default=None,
+        description="SHA-256 hash of the strategy module for integrity verification.",
+    )
 
     def requires_network(self) -> bool:
         return len(self.network.allowed_endpoints) > 0
 
     def requires_gpu(self) -> bool:
         return self.resources.gpu == "required"
+
+    def has_permission(self, permission: str) -> bool:
+        return permission in self.permissions

@@ -88,7 +88,7 @@ class CorporateAction:
     cash_amount: float | None = None
     new_symbol: str | None = None
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:  # noqa: PLR0912, PLR0915
         if self.action_type not in _VALID_ACTION_TYPES:
             msg = (
                 f"unknown action_type {self.action_type!r}; "

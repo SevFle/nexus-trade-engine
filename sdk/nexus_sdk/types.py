@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
+_NUMERICAL_TOLERANCE = 1e-12
+
 
 @dataclass
 class Money:
@@ -16,7 +18,7 @@ class Money:
     currency: str = "USD"
 
     def as_pct_of(self, total: float) -> float:
-        if abs(total) < 1e-12:
+        if abs(total) < _NUMERICAL_TOLERANCE:
             return 0.0
         return (self.amount / total) * 100
 

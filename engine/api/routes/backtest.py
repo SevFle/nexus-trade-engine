@@ -1,38 +1,19 @@
 from __future__ import annotations
 
-import time
-import traceback
 import uuid
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from engine.api.auth.dependency import get_current_user
-from engine.core.backtest_runner import BacktestConfig, BacktestRunner
-from engine.data.feeds import get_data_provider
 from engine.db.models import User
 
 logger = structlog.get_logger()
 
 router = APIRouter()
-
-_backtest_results: dict[str, tuple[float, str, dict[str, Any]]] = {}
-
-_RESULTS_TTL_SECONDS = 3600
-
-
-def _evict_expired_results() -> None:
-    now = time.monotonic()
-    expired = [
-        k for k, (ts, _uid, _data) in _backtest_results.items() if now - ts > _RESULTS_TTL_SECONDS
-    ]
-    for k in expired:
-        del _backtest_results[k]
-    if expired:
-        logger.debug("backtest.results_evicted", count=len(expired))
 
 
 class BacktestRequest(BaseModel):
@@ -127,91 +108,35 @@ class BacktestResultResponse(BaseModel):
     evaluation: dict[str, Any] | None = None
 
 
-async def _run_backtest_background(
-    backtest_id: str,
-    user_id: str,
-    request: BacktestRequest,
-) -> None:
-    _backtest_results[backtest_id] = (
-        time.monotonic(),
-        user_id,
-        {
-            "status": "running",
-            "strategy_name": request.strategy_name,
-            "symbol": request.symbol,
-        },
-    )
-
-    try:
-        provider = get_data_provider("yahoo")
-        config = BacktestConfig(
-            strategy_name=request.strategy_name,
-            symbol=request.symbol,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            initial_capital=request.initial_capital,
-        )
-
-        from engine.plugins.registry import PluginRegistry
-
-        registry = PluginRegistry()
-        strategy = registry.load_strategy(request.strategy_name)
-        if strategy is None:
-            raise ValueError(f"Strategy not found: {request.strategy_name}")
-
-        runner = BacktestRunner(config=config, strategy=strategy, provider=provider)
-        result = await runner.run()
-
-        _backtest_results[backtest_id] = (
-            time.monotonic(),
-            user_id,
-            {
-                "status": "completed",
-                "strategy_name": request.strategy_name,
-                "symbol": request.symbol,
-                "initial_capital": request.initial_capital,
-                "final_value": result.final_capital,
-                "metrics": result.metrics,
-                "equity_curve": result.equity_curve,
-                "trades": result.trades,
-            },
-        )
-
-        _evict_expired_results()
-
-    except Exception as e:
-        logger.exception(
-            "backtest.background_failed",
-            backtest_id=backtest_id,
-            error=str(e),
-            traceback=traceback.format_exc(),
-        )
-        _backtest_results[backtest_id] = (
-            time.monotonic(),
-            user_id,
-            {
-                "status": "failed",
-                "strategy_name": request.strategy_name,
-                "symbol": request.symbol,
-                "error": str(e),
-                "error_type": type(e).__name__,
-            },
-        )
-
-
 @router.post("/run")
 async def run_backtest(
     request: BacktestRequest,
-    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
 ) -> BacktestResponse:
+    from engine.tasks.result_store import get_result_store
+    from engine.tasks.worker import run_backtest_task
+
     backtest_id = str(uuid.uuid4())
-    background_tasks.add_task(
-        _run_backtest_background,
-        backtest_id,
-        str(user.id),
-        request,
+    user_id = str(user.id)
+    store = await get_result_store()
+
+    await store.set_running(
+        backtest_id=backtest_id,
+        user_id=user_id,
+        strategy_name=request.strategy_name,
+        symbol=request.symbol,
     )
+
+    await run_backtest_task.kiq(
+        backtest_id=backtest_id,
+        user_id=user_id,
+        strategy_name=request.strategy_name,
+        symbol=request.symbol,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        initial_capital=request.initial_capital,
+    )
+
     return BacktestResponse(status="accepted", backtest_id=backtest_id)
 
 
@@ -223,10 +148,13 @@ async def get_backtest_result(
     backtest_id: str,
     user: User = Depends(get_current_user),
 ) -> JSONResponse:
-    _evict_expired_results()
+    from engine.tasks.result_store import get_result_store
 
-    entry = _backtest_results.get(backtest_id)
-    if entry is None:
+    store = await get_result_store()
+    await store.evict_expired()
+    stored = await store.get(backtest_id)
+
+    if stored is None:
         return JSONResponse(
             status_code=404,
             content=BacktestResultResponse(
@@ -242,7 +170,7 @@ async def get_backtest_result(
             ).model_dump(),
         )
 
-    owner_id, stored = entry[1], entry[2]
+    owner_id = stored.get("user_id", "")
     if owner_id != str(user.id):
         return JSONResponse(
             status_code=403,

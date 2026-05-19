@@ -294,12 +294,7 @@ async def authorize_provider(
 
     state = secrets.token_urlsafe(32)
 
-    url = ""
-    if hasattr(auth_provider, "get_authorize_url"):
-        maybe_url = auth_provider.get_authorize_url(state=state)
-        if callable(maybe_url) and not isinstance(maybe_url, str):
-            maybe_url = await maybe_url
-        url = maybe_url
+    url = await auth_provider.get_authorize_url(state=state)
 
     if not url:
         raise HTTPException(

@@ -44,6 +44,8 @@ logger = structlog.get_logger()
 
 _RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504}
 _DEFAULT_TIMEOUT = 10.0
+_HTTP_SUCCESS_MIN = 200
+_HTTP_SUCCESS_MAX = 300
 
 
 def canonical_payload(event_type: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -204,7 +206,7 @@ class WebhookDispatcher:
                     float(elapsed_ms),
                     tags={**base_tags, "status": str(resp.status_code)},
                 )
-                if 200 <= resp.status_code < 300:
+                if _HTTP_SUCCESS_MIN <= resp.status_code < _HTTP_SUCCESS_MAX:
                     delivery.status = "delivered"
                     delivery.delivered_at = datetime.now(UTC)
                     delivery.error = None

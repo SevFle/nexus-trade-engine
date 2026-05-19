@@ -354,14 +354,17 @@ class TestM3SilentFailures:
         from fastapi import FastAPI
         from httpx import ASGITransport, AsyncClient
 
-        from engine.api.routes.backtest import _backtest_results, router
+        from engine.api.routes.backtest import router
+        from engine.tasks.result_store import BacktestResultStore, set_result_store
         from tests.conftest import FAKE_USER_ID
 
-        _backtest_results["running-test-id"] = (
+        store = BacktestResultStore()
+        store._local_fallback["running-test-id"] = (
             time.monotonic(),
             str(FAKE_USER_ID),
-            {"status": "running", "strategy_name": "test", "symbol": "TEST"},
+            {"status": "running", "strategy_name": "test", "symbol": "TEST", "user_id": str(FAKE_USER_ID)},
         )
+        set_result_store(store)
 
         app = FastAPI()
         app.include_router(router, prefix="/api/backtest")

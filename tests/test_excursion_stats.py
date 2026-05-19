@@ -43,7 +43,7 @@ class TestTradeExcursion:
 
     def test_frozen(self):
         t = TradeExcursion(pnl=10.0, mfe=15.0, mae=3.0)
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):
             t.pnl = 99.0  # type: ignore[misc]
 
 

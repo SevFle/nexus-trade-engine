@@ -45,7 +45,8 @@ _IV_TOL: float = 1e-8
 # Numerical-stability bounds.
 _SIGMA_MIN: float = 1e-9
 _VOL_LO: float = 1e-4
-_VOL_HI: float = 5.0  # 500% annualised — enough head room for crisis vol
+_VOL_HI: float = 5.0
+_VEGA_TOLERANCE: float = 1e-10
 
 
 class OptionType(StrEnum):
@@ -78,7 +79,7 @@ def _norm_pdf(x: float) -> float:
     return math.exp(-0.5 * x * x) / math.sqrt(2.0 * math.pi)
 
 
-def _validate(S: float, K: float, T: float, sigma: float | None) -> None:
+def _validate(S: float, K: float, T: float, sigma: float | None) -> None:  # noqa: N803
     if S < 0:
         raise ValueError("S must be non-negative")
     if K < 0:
@@ -90,7 +91,7 @@ def _validate(S: float, K: float, T: float, sigma: float | None) -> None:
 
 
 def _d1_d2(
-    S: float, K: float, T: float, r: float, sigma: float, q: float
+    S: float, K: float, T: float, r: float, sigma: float, q: float  # noqa: N803
 ) -> tuple[float, float]:
     """Black-Scholes ``d1`` and ``d2``. Caller has validated inputs."""
     sigma_sqrt_t = sigma * math.sqrt(T)
@@ -107,9 +108,9 @@ def _d1_d2(
 def bs_price(
     *,
     option_type: OptionType,
-    S: float,
-    K: float,
-    T: float,
+    S: float,  # noqa: N803
+    K: float,  # noqa: N803
+    T: float,  # noqa: N803
     r: float,
     sigma: float,
     q: float = 0.0,
@@ -136,9 +137,9 @@ def bs_price(
 def bs_greeks(
     *,
     option_type: OptionType,
-    S: float,
-    K: float,
-    T: float,
+    S: float,  # noqa: N803
+    K: float,  # noqa: N803
+    T: float,  # noqa: N803
     r: float,
     sigma: float,
     q: float = 0.0,
@@ -196,9 +197,9 @@ def implied_volatility(
     *,
     option_type: OptionType,
     market_price: float,
-    S: float,
-    K: float,
-    T: float,
+    S: float,  # noqa: N803
+    K: float,  # noqa: N803
+    T: float,  # noqa: N803
     r: float,
     q: float = 0.0,
     initial_guess: float = 0.20,
@@ -239,7 +240,7 @@ def implied_volatility(
         greeks = bs_greeks(
             option_type=option_type, S=S, K=K, T=T, r=r, sigma=sigma, q=q
         )
-        if greeks.vega > 1e-10:
+        if greeks.vega > _VEGA_TOLERANCE:
             step = diff / greeks.vega
             new_sigma = sigma - step
             if _VOL_LO < new_sigma < _VOL_HI:
