@@ -68,9 +68,8 @@ class FilesystemIsolation:
     def _is_write_allowed(self, resolved: str) -> bool:
         rw_paths = [os.path.realpath(p) for p in self._policy.read_write_paths]
         rw_paths.append(os.path.realpath(self._work_dir))
-        rw_paths = [p + os.sep if os.path.isdir(p) else p for p in rw_paths]
         return any(
-            resolved == p or resolved.startswith(p + os.sep)
+            resolved == p or resolved.startswith((p + os.sep, p))
             for p in rw_paths
             if p
         )
@@ -83,18 +82,15 @@ class FilesystemIsolation:
             self._violation_log.append(violation)
             raise PermissionError(violation.detail)
 
+        normalized = str(path).replace("\\", os.sep)
         traversals = ["..", "/proc", "/sys", "/dev"]
-        path_str = str(path)
         for t in traversals:
-            if (
-                t in path_str.split(os.sep)
-                or (
-                    t in resolved
-                    and t == ".."
-                    and resolved.count(os.sep) < path_str.count(os.sep)
+            if t in normalized.split(os.sep):
+                violation = FilesystemViolation(
+                    resolved, "path_traversal", plugin_id=self._plugin_id
                 )
-            ):
-                pass
+                self._violation_log.append(violation)
+                raise PermissionError(violation.detail)
 
         return resolved
 

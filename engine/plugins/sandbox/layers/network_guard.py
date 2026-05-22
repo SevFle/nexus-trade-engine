@@ -90,6 +90,12 @@ class NetworkGuard:
             violation = NetworkViolation(host, port=port, plugin_id=self._plugin_id)
             self._violation_log.append(violation)
             raise PermissionError(violation.detail)
+        if not self._is_port_allowed(port):
+            violation = NetworkViolation(host, port=port, plugin_id=self._plugin_id)
+            self._violation_log.append(violation)
+            raise PermissionError(
+                f"Network access port not whitelisted: {port} for {host} in strategy sandbox"
+            )
         return self._original_socket_create_connection(address, *args, **kwargs)
 
     def _restricted_getaddrinfo(

@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from engine.plugins.trust_levels import TrustLevel
+
 
 @dataclass
 class ImportPolicy:
@@ -58,6 +60,7 @@ class IntrospectionPolicy:
     blocked_builtins: set[str] = field(default_factory=lambda: {
         "eval", "exec", "compile",
         "breakpoint", "credits", "license", "quit", "exit",
+        "vars", "globals", "locals",
         "__import__",
     })
     blocked_attributes: set[str] = field(default_factory=lambda: {
@@ -139,8 +142,6 @@ class SandboxPolicy:
 
     @classmethod
     def from_trust_level(cls, trust_level: Any, plugin_id: str = "unknown") -> SandboxPolicy:
-        from engine.plugins.trust_levels import TrustLevel
-
         if isinstance(trust_level, str):
             try:
                 trust_level = TrustLevel(trust_level)
