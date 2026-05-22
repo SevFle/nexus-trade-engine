@@ -1,12 +1,17 @@
-from engine.plugins.sandbox._sandbox import SandboxMetrics, StrategySandbox
-
 __all__ = [
     "SandboxMetrics",
     "StrategySandbox",
 ]
 
 
+from engine.plugins.sandbox._sandbox import SandboxMetrics, StrategySandbox
+
+
 def __getattr__(name: str):
+    _sandbox_exports = {"SandboxMetrics", "StrategySandbox"}
+    if name in _sandbox_exports:
+        return globals()[name]
+
     lazy_exports = {
         "FilesystemIsolation": "engine.plugins.sandbox.layers.filesystem_isolation",
         "FilesystemPolicy": "engine.plugins.sandbox.core.policy",

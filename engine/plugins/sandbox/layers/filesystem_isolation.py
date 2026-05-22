@@ -70,7 +70,7 @@ class FilesystemIsolation:
         rw_paths.append(os.path.realpath(self._work_dir))
         rw_paths = [p + os.sep if os.path.isdir(p) else p for p in rw_paths]
         return any(
-            resolved == p or resolved.startswith(p + os.sep)
+            resolved == p or resolved.startswith(p)
             for p in rw_paths
             if p
         )

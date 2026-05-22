@@ -70,9 +70,7 @@ class IntrospectionGuard:
             return True
         if name in _EXPLICITLY_BLOCKED_ATTRS:
             return True
-        if self._policy.block_frame_access and name in _FRAME_ATTRS:
-            return True
-        return False
+        return bool(self._policy.block_frame_access and name in _FRAME_ATTRS)
 
     def _restricted_getattr(self, obj: Any, name: str, *default: Any) -> Any:
         if self._is_blocked_attr(name):
