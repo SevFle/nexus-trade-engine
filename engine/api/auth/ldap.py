@@ -10,6 +10,13 @@ from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo
 from engine.config import settings
 from engine.db.models import User
 
+try:
+    import ldap
+    from ldap.filter import escape_filter_chars
+except ImportError:
+    ldap = None  # type: ignore[assignment]
+    escape_filter_chars = None  # type: ignore[assignment]
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,9 +37,6 @@ class LDAPAuthProvider(IAuthProvider):
             return AuthResult(success=False, error="Username, password, and db session required")
 
         try:
-            import ldap
-            from ldap.filter import escape_filter_chars
-
             conn = ldap.initialize(settings.ldap_server_url)
             conn.set_option(ldap.OPT_NETWORK_TIMEOUT, 10)
             conn.set_option(ldap.OPT_TIMEOUT, 10)
@@ -97,6 +101,7 @@ class LDAPAuthProvider(IAuthProvider):
                 role=mapped_role,
                 auth_provider="ldap",
                 external_id=ldap_uid,
+                is_active=True,
             )
             db.add(user)
             await db.flush()

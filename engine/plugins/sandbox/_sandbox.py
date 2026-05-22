@@ -185,6 +185,10 @@ class StrategySandbox:
     def cleanup(self) -> None:
         self._context.cleanup()
 
+    @property
+    def _work_dir(self) -> str:
+        return self._context.work_dir
+
     def get_health(self) -> dict:
         return {
             "strategy_name": self.strategy.name,

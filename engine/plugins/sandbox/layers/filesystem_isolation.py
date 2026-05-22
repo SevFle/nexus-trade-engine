@@ -61,14 +61,13 @@ class FilesystemIsolation:
     def _is_path_allowed(self, resolved: str) -> bool:
         allowed = self._get_allowed_paths()
         return any(
-            resolved == p or resolved.startswith((p + os.sep, p))
+            resolved == p or resolved.startswith(p + os.sep)
             for p in allowed
         )
 
     def _is_write_allowed(self, resolved: str) -> bool:
         rw_paths = [os.path.realpath(p) for p in self._policy.read_write_paths]
         rw_paths.append(os.path.realpath(self._work_dir))
-        rw_paths = [p + os.sep if os.path.isdir(p) else p for p in rw_paths]
         return any(
             resolved == p or resolved.startswith(p + os.sep)
             for p in rw_paths
@@ -76,25 +75,27 @@ class FilesystemIsolation:
         )
 
     def _validate_path(self, path: str) -> str:
-        resolved = os.path.realpath(str(path))
+        path_str = str(path)
 
-        if self._policy.block_symlinks and os.path.islink(str(path)):
+        if ".." in path_str.split(os.sep):
+            resolved = os.path.realpath(path_str)
+            violation = FilesystemViolation(resolved, "traversal", plugin_id=self._plugin_id)
+            self._violation_log.append(violation)
+            raise PermissionError(violation.detail)
+
+        resolved = os.path.realpath(path_str)
+
+        if self._policy.block_symlinks and os.path.islink(path_str):
             violation = FilesystemViolation(resolved, "symlink", plugin_id=self._plugin_id)
             self._violation_log.append(violation)
             raise PermissionError(violation.detail)
 
-        traversals = ["..", "/proc", "/sys", "/dev"]
-        path_str = str(path)
-        for t in traversals:
-            if (
-                t in path_str.split(os.sep)
-                or (
-                    t in resolved
-                    and t == ".."
-                    and resolved.count(os.sep) < path_str.count(os.sep)
-                )
-            ):
-                pass
+        blocked_components = ["proc", "sys", "dev", "etc", "root", "home"]
+        for comp in blocked_components:
+            if comp in resolved.split(os.sep):
+                violation = FilesystemViolation(resolved, "traversal", plugin_id=self._plugin_id)
+                self._violation_log.append(violation)
+                raise PermissionError(violation.detail)
 
         return resolved
 
