@@ -318,10 +318,10 @@ async def authorize_provider(
 @router.get("/{provider}/callback")
 async def provider_callback(
     provider: str,
-    code: str,
-    state: str,
-    request: Request,
-    response: Response,
+    code: str = "",
+    state: str = "",
+    request: Request = None,
+    response: Response = None,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     if not state:

@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 from engine.core.backtest_runner import BacktestConfig, BacktestRunner
+from engine.core.signal import Signal
 from engine.data.feeds import MarketDataProvider
 
 
@@ -40,8 +41,6 @@ class _SimpleBuyStrategy:
         self._bought = False
 
     def on_bar(self, state, portfolio):
-        from engine.core.signal import Signal
-
         if not self._bought and portfolio.cash > 50000:
             self._bought = True
             return [Signal.buy(symbol="AAPL", strategy_id=self.name, quantity=10)]
