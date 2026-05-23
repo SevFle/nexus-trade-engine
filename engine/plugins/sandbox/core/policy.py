@@ -3,6 +3,27 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+# ---------------------------------------------------------------------------
+# Lazy-import cache for TrustLevel (runtime usage only).
+#
+# TrustLevel is needed at runtime in from_trust_level() to convert strings
+# to enum values and compare against trust tiers.  We deliberately avoid a
+# top-level import so that engine.plugins.sandbox.core never pulls in
+# engine.plugins.trust_levels at module-load time, preventing circular
+# dependency cycles.  The cached helper below performs the import once and
+# reuses the class on subsequent calls.
+# ---------------------------------------------------------------------------
+_CACHED_TRUST_LEVEL: type | None = None
+
+
+def _get_trust_level_cls() -> type:
+    global _CACHED_TRUST_LEVEL  # noqa: PLW0603
+    if _CACHED_TRUST_LEVEL is None:
+        from engine.plugins.trust_levels import TrustLevel  # noqa: PLC0415
+
+        _CACHED_TRUST_LEVEL = TrustLevel
+    return _CACHED_TRUST_LEVEL
+
 
 @dataclass
 class ImportPolicy:
@@ -139,7 +160,7 @@ class SandboxPolicy:
 
     @classmethod
     def from_trust_level(cls, trust_level: Any, plugin_id: str = "unknown") -> SandboxPolicy:
-        from engine.plugins.trust_levels import TrustLevel
+        TrustLevel = _get_trust_level_cls()  # noqa: N806
 
         if isinstance(trust_level, str):
             try:

@@ -20,6 +20,27 @@ from engine.plugins.sandbox.layers import (
     RestrictedImporter,
 )
 
+# ---------------------------------------------------------------------------
+# Lazy-import cache for TrustLevel (runtime usage only).
+#
+# SandboxContext.trust_level and SandboxContext.validate_trust_level need
+# TrustLevel at runtime to resolve enum values from policy strings.  A
+# top-level import would create a circular dependency between
+# engine.plugins.sandbox.core and engine.plugins.trust_levels, so we use
+# a cached lazy helper instead.  The import is performed once and the
+# class reference is reused on every subsequent call.
+# ---------------------------------------------------------------------------
+_CACHED_TRUST_LEVEL: type | None = None
+
+
+def _get_trust_level_cls() -> type:
+    global _CACHED_TRUST_LEVEL  # noqa: PLW0603
+    if _CACHED_TRUST_LEVEL is None:
+        from engine.plugins.trust_levels import TrustLevel  # noqa: PLC0415
+
+        _CACHED_TRUST_LEVEL = TrustLevel
+    return _CACHED_TRUST_LEVEL
+
 _MIN_BLOCKED_MODULES_UNTRUSTED: int = 10
 _MIN_BLOCKED_MODULES_LIMITED: int = 5
 _MAX_CPU_SECONDS_UNTRUSTED: int = 60
@@ -111,7 +132,7 @@ class SandboxContext:
 
     @property
     def trust_level(self) -> Any:
-        from engine.plugins.trust_levels import TrustLevel
+        TrustLevel = _get_trust_level_cls()  # noqa: N806
 
         try:
             return TrustLevel(self._policy.trust_level)
@@ -123,7 +144,7 @@ class SandboxContext:
         return self._filesystem_layer.work_dir
 
     def validate_trust_level(self) -> bool:
-        from engine.plugins.trust_levels import TrustLevel
+        TrustLevel = _get_trust_level_cls()  # noqa: N806
 
         tl = self.trust_level
         import_count = len(self._policy.import_policy.blocked_modules)
@@ -131,20 +152,17 @@ class SandboxContext:
         rw = self._policy.filesystem_policy.read_write_paths
 
         if tl == TrustLevel.UNTRUSTED:
-            if import_count < _MIN_BLOCKED_MODULES_UNTRUSTED:
-                return False
-            if cpu > _MAX_CPU_SECONDS_UNTRUSTED:
-                return False
-            if rw:
-                return False
-            return True
+            return (
+                import_count >= _MIN_BLOCKED_MODULES_UNTRUSTED
+                and cpu <= _MAX_CPU_SECONDS_UNTRUSTED
+                and not rw
+            )
 
         if tl == TrustLevel.TRUSTED_LIMITED:
-            if import_count < _MIN_BLOCKED_MODULES_LIMITED:
-                return False
-            if cpu > _MAX_CPU_SECONDS_LIMITED:
-                return False
-            return True
+            return (
+                import_count >= _MIN_BLOCKED_MODULES_LIMITED
+                and cpu <= _MAX_CPU_SECONDS_LIMITED
+            )
 
         return True
 
