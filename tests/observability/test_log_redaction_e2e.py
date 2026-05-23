@@ -19,11 +19,22 @@ def stream_buf(monkeypatch) -> io.StringIO:
     from engine.config import settings as _settings
 
     monkeypatch.setattr(_settings, "log_format", "json")
+    monkeypatch.setattr(_settings, "log_sink", "stdout")
+    monkeypatch.setattr(_settings, "log_level", "DEBUG")
+    monkeypatch.setattr(_settings, "app_env", "test")
+
+    structlog.reset_defaults()
     setup_logging()
+
     buf = io.StringIO()
     root = logging.getLogger()
-    if root.handlers:
-        root.handlers[0].stream = buf  # type: ignore[attr-defined]
+    formatter = root.handlers[0].formatter if root.handlers else None
+    root.handlers.clear()
+    handler = logging.StreamHandler(buf)
+    if formatter:
+        handler.setFormatter(formatter)
+    root.addHandler(handler)
+    root.setLevel(logging.DEBUG)
     return buf
 
 

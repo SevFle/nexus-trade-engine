@@ -74,24 +74,29 @@ class TestRunBacktestTask:
         mock_registry.load_strategy.return_value = mock_strategy
 
         mock_provider = MagicMock()
+        mock_store = AsyncMock()
 
         with (
             patch("engine.core.backtest_runner.BacktestRunner", return_value=mock_runner),
             patch("engine.core.backtest_runner.BacktestConfig"),
             patch("engine.data.feeds.get_data_provider", return_value=mock_provider),
             patch("engine.plugins.registry.PluginRegistry", return_value=mock_registry),
+            patch("engine.tasks.result_store.get_result_store", return_value=mock_store),
         ):
             from engine.tasks.worker import run_backtest_task
 
             result = await run_backtest_task(
-                strategy_name="sma_crossover",
-                symbol="AAPL",
-                start_date="2025-01-01",
-                end_date="2025-12-31",
-                initial_capital=100_000.0,
+                "bt-001",
+                "user-001",
+                "sma_crossover",
+                "AAPL",
+                "2025-01-01",
+                "2025-12-31",
+                100_000.0,
             )
 
         assert result["status"] == "completed"
+        assert result["backtest_id"] == "bt-001"
         assert result["strategy_name"] == "sma_crossover"
         assert result["symbol"] == "AAPL"
         assert result["total_trades"] == 1
@@ -103,18 +108,22 @@ class TestRunBacktestTask:
         mock_registry.load_strategy.return_value = None
 
         mock_provider = MagicMock()
+        mock_store = AsyncMock()
 
         with (
             patch("engine.data.feeds.get_data_provider", return_value=mock_provider),
             patch("engine.plugins.registry.PluginRegistry", return_value=mock_registry),
+            patch("engine.tasks.result_store.get_result_store", return_value=mock_store),
         ):
             from engine.tasks.worker import run_backtest_task
 
             result = await run_backtest_task(
-                strategy_name="nonexistent",
-                symbol="AAPL",
-                start_date="2025-01-01",
-                end_date="2025-12-31",
+                "bt-002",
+                "user-002",
+                "nonexistent",
+                "AAPL",
+                "2025-01-01",
+                "2025-12-31",
             )
 
         assert result["status"] == "failed"
@@ -126,18 +135,22 @@ class TestRunBacktestTask:
         mock_registry.load_strategy.side_effect = RuntimeError("boom")
 
         mock_provider = MagicMock()
+        mock_store = AsyncMock()
 
         with (
             patch("engine.data.feeds.get_data_provider", return_value=mock_provider),
             patch("engine.plugins.registry.PluginRegistry", return_value=mock_registry),
+            patch("engine.tasks.result_store.get_result_store", return_value=mock_store),
         ):
             from engine.tasks.worker import run_backtest_task
 
             result = await run_backtest_task(
-                strategy_name="sma",
-                symbol="AAPL",
-                start_date="2025-01-01",
-                end_date="2025-12-31",
+                "bt-003",
+                "user-003",
+                "sma",
+                "AAPL",
+                "2025-01-01",
+                "2025-12-31",
             )
 
         assert result["status"] == "failed"
