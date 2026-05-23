@@ -115,34 +115,35 @@ class StrategySandbox:
         start = time.monotonic()
         self._context.activate()
 
+        log_on_exit = None
         try:
             raw_signals = await asyncio.wait_for(
                 self._call_strategy(portfolio, market),
                 timeout=self._max_eval_seconds,
             )
         except TimeoutError:
-            elapsed_ms = (time.monotonic() - start) * 1000
             self.metrics.errors += 1
             self.metrics.last_error = f"Timeout after {self._max_eval_seconds}s"
-            logger.exception(
-                "sandbox.timeout",
-                strategy_name=self.strategy.name,
-                timeout_s=self._max_eval_seconds,
-            )
-            return []
+            log_on_exit = ("sandbox.timeout", {
+                "strategy_name": self.strategy.name,
+                "timeout_s": self._max_eval_seconds,
+            })
         except Exception as e:
             elapsed_ms = (time.monotonic() - start) * 1000
             self.metrics.errors += 1
             self.metrics.last_error = str(e)
-            logger.exception(
-                "sandbox.evaluation_error",
-                strategy_name=self.strategy.name,
-                error=str(e),
-                elapsed_ms=elapsed_ms,
-            )
-            return []
+            log_on_exit = ("sandbox.evaluation_error", {
+                "strategy_name": self.strategy.name,
+                "error": str(e),
+                "elapsed_ms": elapsed_ms,
+            })
         finally:
             self._context.deactivate()
+
+        if log_on_exit is not None:
+            event, kw = log_on_exit
+            logger.error(event, **kw)
+            return []
 
         elapsed_ms = (time.monotonic() - start) * 1000
         signals = self._convert_signals(raw_signals)

@@ -19,6 +19,7 @@ from engine.plugins.sandbox.layers import (
     ResourceLimiter,
     RestrictedImporter,
 )
+from engine.plugins.trust_levels import TrustLevel
 
 _MIN_BLOCKED_MODULES_UNTRUSTED: int = 10
 _MIN_BLOCKED_MODULES_LIMITED: int = 5
@@ -111,8 +112,6 @@ class SandboxContext:
 
     @property
     def trust_level(self) -> Any:
-        from engine.plugins.trust_levels import TrustLevel
-
         try:
             return TrustLevel(self._policy.trust_level)
         except ValueError:
@@ -123,28 +122,23 @@ class SandboxContext:
         return self._filesystem_layer.work_dir
 
     def validate_trust_level(self) -> bool:
-        from engine.plugins.trust_levels import TrustLevel
-
         tl = self.trust_level
         import_count = len(self._policy.import_policy.blocked_modules)
         cpu = self._policy.resource_policy.max_cpu_seconds
         rw = self._policy.filesystem_policy.read_write_paths
 
         if tl == TrustLevel.UNTRUSTED:
-            if import_count < _MIN_BLOCKED_MODULES_UNTRUSTED:
-                return False
-            if cpu > _MAX_CPU_SECONDS_UNTRUSTED:
-                return False
-            if rw:
-                return False
-            return True
+            return (
+                import_count >= _MIN_BLOCKED_MODULES_UNTRUSTED
+                and cpu <= _MAX_CPU_SECONDS_UNTRUSTED
+                and not rw
+            )
 
         if tl == TrustLevel.TRUSTED_LIMITED:
-            if import_count < _MIN_BLOCKED_MODULES_LIMITED:
-                return False
-            if cpu > _MAX_CPU_SECONDS_LIMITED:
-                return False
-            return True
+            return (
+                import_count >= _MIN_BLOCKED_MODULES_LIMITED
+                and cpu <= _MAX_CPU_SECONDS_LIMITED
+            )
 
         return True
 
