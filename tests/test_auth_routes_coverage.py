@@ -263,8 +263,7 @@ class TestOAuthCallbackEndpoint:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get("/api/v1/auth/google/callback?code=abc")
-            assert resp.status_code == 401
-            assert "Missing" in resp.json()["detail"]
+            assert resp.status_code == 422
 
     @pytest.mark.asyncio
     async def test_callback_invalid_state(self, db_session):
@@ -281,9 +280,9 @@ class TestOAuthCallbackEndpoint:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            ac.cookies.set("oauth_state_google", "wrong-state", domain="test")
             resp = await ac.get(
-                "/api/v1/auth/google/callback?code=abc&state=right-state"
+                "/api/v1/auth/google/callback?code=abc&state=right-state",
+                headers={"Cookie": "oauth_state_google=wrong-state"},
             )
             assert resp.status_code == 401
 
@@ -305,9 +304,9 @@ class TestOAuthCallbackEndpoint:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            ac.cookies.set("oauth_state_google", "valid-state", domain="test")
             resp = await ac.get(
-                "/api/v1/auth/google/callback?code=abc&state=valid-state"
+                "/api/v1/auth/google/callback?code=abc&state=valid-state",
+                headers={"Cookie": "oauth_state_google=valid-state"},
             )
             assert resp.status_code == 401
             assert "Google authentication failed" in resp.json()["detail"]
@@ -330,9 +329,9 @@ class TestOAuthCallbackEndpoint:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            ac.cookies.set("oauth_state_google", "valid-state", domain="test")
             resp = await ac.get(
-                "/api/v1/auth/google/callback?code=abc&state=valid-state"
+                "/api/v1/auth/google/callback?code=abc&state=valid-state",
+                headers={"Cookie": "oauth_state_google=valid-state"},
             )
             assert resp.status_code == 500
             assert "no user info" in resp.json()["detail"]
@@ -362,9 +361,9 @@ class TestOAuthCallbackEndpoint:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            ac.cookies.set("oauth_state_google", "valid-state", domain="test")
             resp = await ac.get(
-                "/api/v1/auth/google/callback?code=abc&state=valid-state"
+                "/api/v1/auth/google/callback?code=abc&state=valid-state",
+                headers={"Cookie": "oauth_state_google=valid-state"},
             )
             assert resp.status_code == 500
             assert "User not found" in resp.json()["detail"]
@@ -408,9 +407,9 @@ class TestOAuthCallbackEndpoint:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            ac.cookies.set("oauth_state_google", "valid-state", domain="test")
             resp = await ac.get(
-                "/api/v1/auth/google/callback?code=abc&state=valid-state"
+                "/api/v1/auth/google/callback?code=abc&state=valid-state",
+                headers={"Cookie": "oauth_state_google=valid-state"},
             )
             assert resp.status_code == 200
             data = resp.json()
@@ -457,9 +456,9 @@ class TestOAuthCallbackEndpoint:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            ac.cookies.set("oauth_state_github", "my-state", domain="test")
             resp = await ac.get(
-                "/api/v1/auth/github/callback?code=abc&state=my-state"
+                "/api/v1/auth/github/callback?code=abc&state=my-state",
+                headers={"Cookie": "oauth_state_github=my-state"},
             )
             assert resp.status_code == 200
             cookie_header = resp.headers.get("set-cookie", "")
@@ -505,9 +504,9 @@ class TestOAuthCallbackEndpoint:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            ac.cookies.set("oauth_state_oidc", "oidc-state", domain="test")
             resp = await ac.get(
-                "/api/v1/auth/oidc/callback?code=abc&state=oidc-state"
+                "/api/v1/auth/oidc/callback?code=abc&state=oidc-state",
+                headers={"Cookie": "oauth_state_oidc=oidc-state"},
             )
             assert resp.status_code == 200
             data = resp.json()

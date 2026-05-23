@@ -14,12 +14,12 @@ from engine.plugins.sandbox.core.violation import FilesystemViolation
 
 _BLOCKED_SYSTEM_PREFIXES: frozenset[str] = frozenset(
     {
-        "/proc",
-        "/sys",
-        "/dev",
-        "/etc",
-        "/root",
-        "/home",
+        "proc",
+        "sys",
+        "dev",
+        "etc",
+        "root",
+        "home",
     }
 )
 
@@ -61,7 +61,7 @@ class FilesystemIsolation:
     def _is_path_allowed(self, resolved: str) -> bool:
         allowed = self._get_allowed_paths()
         return any(
-            resolved == p or resolved.startswith((p + os.sep, p))
+            resolved == p or resolved.startswith(p + os.sep)
             for p in allowed
         )
 
@@ -83,18 +83,12 @@ class FilesystemIsolation:
             self._violation_log.append(violation)
             raise PermissionError(violation.detail)
 
-        traversals = ["..", "/proc", "/sys", "/dev"]
-        path_str = str(path)
+        traversals = ["..", *list(_BLOCKED_SYSTEM_PREFIXES)]
         for t in traversals:
-            if (
-                t in path_str.split(os.sep)
-                or (
-                    t in resolved
-                    and t == ".."
-                    and resolved.count(os.sep) < path_str.count(os.sep)
-                )
-            ):
-                pass
+            if t in resolved.split(os.sep):
+                violation = FilesystemViolation(resolved, "traversal", plugin_id=self._plugin_id)
+                self._violation_log.append(violation)
+                raise PermissionError(violation.detail)
 
         return resolved
 

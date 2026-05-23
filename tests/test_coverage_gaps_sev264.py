@@ -40,17 +40,25 @@ class TestRunBacktestTask:
         mock_broker_inst = MagicMock()
         mock_broker_inst.with_result_backend.return_value = mock_broker_inst
         mock_broker_inst.with_middlewares.return_value = mock_broker_inst
-        mock_broker_inst.task = lambda: (lambda f: f)
+
+        def _mock_task(fn=None, **kwargs):
+            if fn is not None:
+                return fn
+            return lambda f: f
+
+        mock_broker_inst.task = _mock_task
 
         mods_to_remove = [k for k in sys.modules if k.startswith("engine.tasks")]
         saved = {m: sys.modules.pop(m) for m in mods_to_remove}
 
         with (
-            patch("engine.tasks.worker.ListQueueBroker", return_value=mock_broker_inst),
-            patch("engine.tasks.worker.RedisAsyncResultBackend"),
-            patch("engine.tasks.worker.CorrelationMiddleware"),
-            patch("engine.tasks.worker.TaskiqScheduler"),
+            patch("taskiq_redis.ListQueueBroker", return_value=mock_broker_inst),
+            patch("taskiq_redis.RedisAsyncResultBackend"),
+            patch("engine.observability.taskiq_middleware.CorrelationMiddleware"),
+            patch("taskiq.TaskiqScheduler"),
         ):
+            for m in [k for k in sys.modules if k.startswith("engine.tasks")]:
+                saved.setdefault(m, sys.modules.pop(m))
             yield
 
         for m in mods_to_remove:
@@ -75,15 +83,20 @@ class TestRunBacktestTask:
 
         mock_provider = MagicMock()
 
+        mock_store = AsyncMock()
+
         with (
             patch("engine.core.backtest_runner.BacktestRunner", return_value=mock_runner),
             patch("engine.core.backtest_runner.BacktestConfig"),
             patch("engine.data.feeds.get_data_provider", return_value=mock_provider),
             patch("engine.plugins.registry.PluginRegistry", return_value=mock_registry),
+            patch("engine.tasks.result_store.get_result_store", return_value=mock_store),
         ):
             from engine.tasks.worker import run_backtest_task
 
             result = await run_backtest_task(
+                backtest_id="bt-001",
+                user_id="user-001",
                 strategy_name="sma_crossover",
                 symbol="AAPL",
                 start_date="2025-01-01",
@@ -104,13 +117,18 @@ class TestRunBacktestTask:
 
         mock_provider = MagicMock()
 
+        mock_store = AsyncMock()
+
         with (
             patch("engine.data.feeds.get_data_provider", return_value=mock_provider),
             patch("engine.plugins.registry.PluginRegistry", return_value=mock_registry),
+            patch("engine.tasks.result_store.get_result_store", return_value=mock_store),
         ):
             from engine.tasks.worker import run_backtest_task
 
             result = await run_backtest_task(
+                backtest_id="bt-002",
+                user_id="user-001",
                 strategy_name="nonexistent",
                 symbol="AAPL",
                 start_date="2025-01-01",
@@ -127,13 +145,18 @@ class TestRunBacktestTask:
 
         mock_provider = MagicMock()
 
+        mock_store = AsyncMock()
+
         with (
             patch("engine.data.feeds.get_data_provider", return_value=mock_provider),
             patch("engine.plugins.registry.PluginRegistry", return_value=mock_registry),
+            patch("engine.tasks.result_store.get_result_store", return_value=mock_store),
         ):
             from engine.tasks.worker import run_backtest_task
 
             result = await run_backtest_task(
+                backtest_id="bt-003",
+                user_id="user-001",
                 strategy_name="sma",
                 symbol="AAPL",
                 start_date="2025-01-01",

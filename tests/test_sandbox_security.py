@@ -531,14 +531,15 @@ class TestFilesystemIsolation:
     async def test_sandbox_work_dir_created(self, manifest: StrategyManifest) -> None:
         sandbox = StrategySandbox(_GoodStrategy(), manifest)
         try:
-            assert sandbox._work_dir is not None
-            assert os.path.isdir(sandbox._work_dir)
+            work_dir = sandbox._context.work_dir
+            assert work_dir is not None
+            assert os.path.isdir(work_dir)
         finally:
             sandbox.cleanup()
 
     async def test_cleanup_removes_work_dir(self, manifest: StrategyManifest) -> None:
         sandbox = StrategySandbox(_GoodStrategy(), manifest)
-        work_dir = sandbox._work_dir
+        work_dir = sandbox._context.work_dir
         assert work_dir is not None
         sandbox.cleanup()
         assert not os.path.isdir(work_dir)

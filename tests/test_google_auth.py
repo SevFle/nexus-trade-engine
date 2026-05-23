@@ -148,7 +148,7 @@ class TestGoogleAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = AsyncMock(side_effect=lambda u: setattr(u, 'is_active', True))
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await google_provider.authenticate(code="auth-code", db=mock_db)
@@ -291,7 +291,7 @@ class TestGoogleAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = AsyncMock(side_effect=lambda u: setattr(u, 'is_active', True))
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await google_provider.authenticate(code="auth-code", db=mock_db)
@@ -319,7 +319,7 @@ class TestGoogleAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = AsyncMock(side_effect=lambda u: setattr(u, 'is_active', True))
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             await google_provider.authenticate(code="my-auth-code", db=mock_db)
@@ -350,7 +350,7 @@ class TestGoogleAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = AsyncMock(side_effect=lambda u: setattr(u, 'is_active', True))
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             await google_provider.authenticate(code="auth-code", db=mock_db)

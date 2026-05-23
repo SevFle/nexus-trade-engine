@@ -5,13 +5,16 @@ from __future__ import annotations
 
 import io
 import json
-import logging
 import re
 
 import pytest
 import structlog
 
-from engine.observability.logging import setup_logging
+from engine.observability.processors import (
+    add_correlation_context,
+    add_service_metadata,
+)
+from engine.observability.redact import redact_processor
 
 
 @pytest.fixture
@@ -19,11 +22,28 @@ def stream_buf(monkeypatch) -> io.StringIO:
     from engine.config import settings as _settings
 
     monkeypatch.setattr(_settings, "log_format", "json")
-    setup_logging()
+    monkeypatch.setattr(_settings, "log_sink", "stdout")
+    monkeypatch.setattr(_settings, "log_level", "DEBUG")
+
     buf = io.StringIO()
-    root = logging.getLogger()
-    if root.handlers:
-        root.handlers[0].stream = buf  # type: ignore[attr-defined]
+
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.stdlib.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso", utc=True, key="timestamp"),
+            add_service_metadata,
+            add_correlation_context,
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.UnicodeDecoder(),
+            redact_processor,
+            structlog.processors.JSONRenderer(),
+        ],
+        logger_factory=structlog.PrintLoggerFactory(buf),
+        wrapper_class=structlog.BoundLogger,
+        cache_logger_on_first_use=False,
+    )
+
     return buf
 
 
