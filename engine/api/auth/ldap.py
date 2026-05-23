@@ -11,7 +11,21 @@ from engine.config import settings
 from engine.db.models import User
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from sqlalchemy.ext.asyncio import AsyncSession
+
+ldap: Any = None
+escape_filter_chars: Callable[[str], str] | None = None
+
+try:
+    import ldap as _ldap_module
+    from ldap.filter import escape_filter_chars as _escape_filter_chars
+
+    ldap = _ldap_module
+    escape_filter_chars = _escape_filter_chars
+except ImportError:
+    pass
 
 logger = structlog.get_logger()
 
@@ -22,6 +36,12 @@ class LDAPAuthProvider(IAuthProvider):
         return "ldap"
 
     async def authenticate(self, **kwargs: Any) -> AuthResult:
+        if ldap is None:
+            return AuthResult(success=False, error="LDAP module not installed")
+
+        if escape_filter_chars is None:
+            return AuthResult(success=False, error="LDAP module not installed")
+
         username = kwargs.get("username", "")
         password = kwargs.get("password", "")
         db: AsyncSession | None = kwargs.get("db")
@@ -30,9 +50,6 @@ class LDAPAuthProvider(IAuthProvider):
             return AuthResult(success=False, error="Username, password, and db session required")
 
         try:
-            import ldap
-            from ldap.filter import escape_filter_chars
-
             conn = ldap.initialize(settings.ldap_server_url)
             conn.set_option(ldap.OPT_NETWORK_TIMEOUT, 10)
             conn.set_option(ldap.OPT_TIMEOUT, 10)

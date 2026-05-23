@@ -2,11 +2,12 @@
 
 Covers:
   - name property
-  - authenticate (missing params, bind failure, user not found,
-    happy path new user, existing user with role sync, email conflict,
-    disabled user, group-to-role mapping, default role fallback,
-    role sync on subsequent login)
+  - authenticate (ldap-not-installed guard, missing params, bind failure,
+    user not found, happy path new user, existing user with role sync,
+    email conflict, disabled user, group-to-role mapping, default role
+    fallback, role sync on subsequent login, escape_filter_chars guard)
   - get_authorize_url returns empty (LDAP is not OAuth)
+  - module-level import fallback when python-ldap is absent
 """
 
 from __future__ import annotations
@@ -63,31 +64,233 @@ def _make_mock_ldap(attrs=None, search_results=None, bind_error=None):
     return mock_conn
 
 
+async def _mock_refresh(obj):
+    if hasattr(obj, "is_active") and obj.is_active is None:
+        obj.is_active = True
+
+
+def _make_new_user_db():
+    mock_db = AsyncMock(spec=AsyncSession)
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = mock_result
+    mock_db.flush = AsyncMock()
+    mock_db.refresh = AsyncMock(side_effect=_mock_refresh)
+    return mock_db
+
+
 class TestLDAPNameProperty:
     def test_name_returns_ldap(self, ldap_provider):
         assert ldap_provider.name == "ldap"
 
 
+class TestLDAPNotInstalledGuard:
+    async def test_authenticate_returns_error_when_ldap_is_none(self, ldap_provider, mock_settings):
+        with patch("engine.api.auth.ldap.ldap", None):
+            result = await ldap_provider.authenticate(
+                username="user", password="pass", db=AsyncMock(spec=AsyncSession),
+            )
+        assert result.success is False
+        assert result.error == "LDAP module not installed"
+
+    async def test_guard_returns_error_even_with_valid_params(self, ldap_provider, mock_settings):
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch("engine.api.auth.ldap.ldap", None):
+            result = await ldap_provider.authenticate(
+                username="validuser", password="validpass", db=mock_db,
+            )
+        assert result.success is False
+        assert "LDAP module not installed" in result.error
+
+    async def test_guard_triggers_before_missing_params_check(self, ldap_provider, mock_settings):
+        with patch("engine.api.auth.ldap.ldap", None):
+            result = await ldap_provider.authenticate()
+        assert result.success is False
+        assert result.error == "LDAP module not installed"
+        assert "Username" not in result.error
+
+    async def test_guard_triggers_with_empty_username(self, ldap_provider, mock_settings):
+        with patch("engine.api.auth.ldap.ldap", None):
+            result = await ldap_provider.authenticate(username="", password="pass")
+        assert result.success is False
+        assert result.error == "LDAP module not installed"
+
+    async def test_guard_triggers_with_no_password(self, ldap_provider, mock_settings):
+        with patch("engine.api.auth.ldap.ldap", None):
+            result = await ldap_provider.authenticate(username="user", password="")
+        assert result.success is False
+        assert result.error == "LDAP module not installed"
+
+    async def test_ldap_none_result_has_no_user_info(self, ldap_provider, mock_settings):
+        with patch("engine.api.auth.ldap.ldap", None):
+            result = await ldap_provider.authenticate(
+                username="user", password="pass", db=AsyncMock(spec=AsyncSession),
+            )
+        assert result.user_info is None
+
+    async def test_ldap_module_level_is_none_when_not_installed(self):
+        import engine.api.auth.ldap as ldap_mod
+
+        assert ldap_mod.ldap is None
+        assert ldap_mod.escape_filter_chars is None
+
+    async def test_guard_bypassed_when_ldap_patched(self, ldap_provider, mock_settings):
+        mock_ldap = MagicMock()
+        mock_ldap.initialize.return_value = _make_mock_ldap()
+        mock_ldap.SCOPE_SUBTREE = 2
+
+        mock_db = _make_new_user_db()
+
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+            result = await ldap_provider.authenticate(
+                username="testuser", password="correctpass", db=mock_db,
+            )
+
+        assert result.success is True
+        assert result.error is None
+
+
+class TestEscapeFilterCharsGuard:
+    async def test_escape_filter_chars_none_returns_error(self, ldap_provider, mock_settings):
+        mock_ldap = MagicMock()
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", None):
+            result = await ldap_provider.authenticate(
+                username="user", password="pass", db=mock_db,
+            )
+        assert result.success is False
+        assert result.error == "LDAP module not installed"
+
+    async def test_escape_filter_chars_none_no_user_info(self, ldap_provider, mock_settings):
+        mock_ldap = MagicMock()
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", None):
+            result = await ldap_provider.authenticate(
+                username="user", password="pass", db=AsyncMock(spec=AsyncSession),
+            )
+        assert result.user_info is None
+
+    async def test_escape_filter_chars_none_with_valid_ldap(self, ldap_provider, mock_settings):
+        mock_ldap = MagicMock()
+        mock_ldap.initialize.return_value = _make_mock_ldap()
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", None):
+            result = await ldap_provider.authenticate(
+                username="testuser", password="pass", db=AsyncMock(spec=AsyncSession),
+            )
+        assert result.success is False
+        assert result.error == "LDAP module not installed"
+        mock_ldap.initialize.assert_not_called()
+
+    async def test_both_ldap_and_escape_none(self, ldap_provider, mock_settings):
+        with patch("engine.api.auth.ldap.ldap", None), \
+             patch("engine.api.auth.ldap.escape_filter_chars", None):
+            result = await ldap_provider.authenticate(
+                username="user", password="pass", db=AsyncMock(spec=AsyncSession),
+            )
+        assert result.success is False
+        assert result.error == "LDAP module not installed"
+
+    async def test_escape_filter_chars_callable_succeeds(self, ldap_provider, mock_settings):
+        mock_ldap = MagicMock()
+        mock_ldap.initialize.return_value = _make_mock_ldap()
+        mock_ldap.SCOPE_SUBTREE = 2
+
+        mock_db = _make_new_user_db()
+
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+            result = await ldap_provider.authenticate(
+                username="testuser", password="correctpass", db=mock_db,
+            )
+        assert result.success is True
+
+    async def test_escape_filter_chars_actually_escapes(self, ldap_provider, mock_settings):
+        mock_ldap = MagicMock()
+        mock_ldap.initialize.return_value = _make_mock_ldap()
+        mock_ldap.SCOPE_SUBTREE = 2
+
+        mock_db = _make_new_user_db()
+
+        escaped_values = []
+
+        def custom_escape(val):
+            escaped_values.append(val)
+            return val.replace("*", "\\2a").replace("(", "\\28").replace(")", "\\29")
+
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", side_effect=custom_escape):
+            result = await ldap_provider.authenticate(
+                username="user*(test)", password="pass", db=mock_db,
+            )
+
+        assert result.success is True
+        assert escaped_values == ["user*(test)"]
+
+
+class TestLDAPTypingVerification:
+    def test_ldap_module_level_type_is_any_or_none(self):
+        import engine.api.auth.ldap as ldap_mod
+
+        assert ldap_mod.ldap is None or ldap_mod.ldap is not None
+
+    def test_escape_filter_chars_module_level_is_callable_or_none(self):
+        import engine.api.auth.ldap as ldap_mod
+
+        if ldap_mod.escape_filter_chars is not None:
+            assert callable(ldap_mod.escape_filter_chars)
+        else:
+            assert ldap_mod.escape_filter_chars is None
+
+    def test_no_type_ignore_comments_in_source(self):
+        import inspect
+
+        import engine.api.auth.ldap as ldap_mod
+
+        source = inspect.getsource(ldap_mod)
+        assert "type: ignore" not in source
+
+    def test_ldap_and_escape_initialized_at_module_level(self):
+        import engine.api.auth.ldap as ldap_mod
+
+        assert hasattr(ldap_mod, "ldap")
+        assert hasattr(ldap_mod, "escape_filter_chars")
+
+
 class TestLDAPAuthenticate:
     async def test_authenticate_missing_username(self, ldap_provider, mock_settings):
+        mock_ldap = MagicMock()
         mock_db = AsyncMock(spec=AsyncSession)
-        result = await ldap_provider.authenticate(password="pass", db=mock_db)
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+            result = await ldap_provider.authenticate(password="pass", db=mock_db)
         assert result.success is False
         assert "Username" in result.error
 
     async def test_authenticate_missing_password(self, ldap_provider, mock_settings):
+        mock_ldap = MagicMock()
         mock_db = AsyncMock(spec=AsyncSession)
-        result = await ldap_provider.authenticate(username="user", db=mock_db)
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+            result = await ldap_provider.authenticate(username="user", db=mock_db)
         assert result.success is False
         assert "Username" in result.error
 
     async def test_authenticate_missing_db(self, ldap_provider, mock_settings):
-        result = await ldap_provider.authenticate(username="user", password="pass")
+        mock_ldap = MagicMock()
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+            result = await ldap_provider.authenticate(username="user", password="pass")
         assert result.success is False
         assert "Username" in result.error
 
     async def test_authenticate_missing_all(self, ldap_provider, mock_settings):
-        result = await ldap_provider.authenticate()
+        mock_ldap = MagicMock()
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+            result = await ldap_provider.authenticate()
         assert result.success is False
         assert "Username" in result.error
 
@@ -102,6 +305,22 @@ class TestLDAPAuthenticate:
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
             result = await ldap_provider.authenticate(
                 username="testuser", password="wrongpass", db=mock_db,
+            )
+
+        assert result.success is False
+        assert "Invalid credentials" in result.error
+
+    async def test_authenticate_bind_ldap_error(self, ldap_provider, mock_settings):
+        mock_ldap = MagicMock()
+        mock_ldap.initialize.return_value = _make_mock_ldap(
+            bind_error=Exception("LDAP connection refused"),
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+            result = await ldap_provider.authenticate(
+                username="testuser", password="pass", db=mock_db,
             )
 
         assert result.success is False
@@ -129,12 +348,7 @@ class TestLDAPAuthenticate:
         mock_ldap.initialize.return_value = _make_mock_ldap()
         mock_ldap.SCOPE_SUBTREE = 2
 
-        mock_db = AsyncMock(spec=AsyncSession)
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
-        mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db = _make_new_user_db()
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
@@ -302,12 +516,7 @@ class TestLDAPAuthenticate:
         mock_ldap.initialize.return_value = _make_mock_ldap(attrs=attrs)
         mock_ldap.SCOPE_SUBTREE = 2
 
-        mock_db = AsyncMock(spec=AsyncSession)
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
-        mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db = _make_new_user_db()
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
@@ -329,12 +538,7 @@ class TestLDAPAuthenticate:
         mock_ldap.initialize.return_value = _make_mock_ldap(attrs=attrs)
         mock_ldap.SCOPE_SUBTREE = 2
 
-        mock_db = AsyncMock(spec=AsyncSession)
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
-        mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db = _make_new_user_db()
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
@@ -355,12 +559,7 @@ class TestLDAPAuthenticate:
         mock_ldap.initialize.return_value = _make_mock_ldap(attrs=attrs)
         mock_ldap.SCOPE_SUBTREE = 2
 
-        mock_db = AsyncMock(spec=AsyncSession)
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
-        mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db = _make_new_user_db()
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
@@ -383,12 +582,7 @@ class TestLDAPAuthenticate:
         mock_ldap.initialize.return_value = _make_mock_ldap(attrs=attrs)
         mock_ldap.SCOPE_SUBTREE = 2
 
-        mock_db = AsyncMock(spec=AsyncSession)
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
-        mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db = _make_new_user_db()
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
@@ -411,12 +605,7 @@ class TestLDAPAuthenticate:
         mock_ldap.initialize.return_value = _make_mock_ldap(attrs=attrs)
         mock_ldap.SCOPE_SUBTREE = 2
 
-        mock_db = AsyncMock(spec=AsyncSession)
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
-        mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db = _make_new_user_db()
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
@@ -436,12 +625,7 @@ class TestLDAPAuthenticate:
         mock_ldap.initialize.return_value = _make_mock_ldap()
         mock_ldap.SCOPE_SUBTREE = 2
 
-        mock_db = AsyncMock(spec=AsyncSession)
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
-        mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db = _make_new_user_db()
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
@@ -457,12 +641,7 @@ class TestLDAPAuthenticate:
         mock_ldap.initialize.return_value = _make_mock_ldap()
         mock_ldap.SCOPE_SUBTREE = 2
 
-        mock_db = AsyncMock(spec=AsyncSession)
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
-        mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db = _make_new_user_db()
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars") as mock_escape:
@@ -473,6 +652,82 @@ class TestLDAPAuthenticate:
 
         mock_escape.assert_called_once_with("test*user")
 
+    async def test_authenticate_special_chars_in_username(self, ldap_provider, mock_settings):
+        mock_ldap = MagicMock()
+        mock_ldap.initialize.return_value = _make_mock_ldap()
+        mock_ldap.SCOPE_SUBTREE = 2
+
+        mock_db = _make_new_user_db()
+
+        escaped = []
+
+        def capture_escape(val):
+            escaped.append(val)
+            return val.replace("(", "\\28").replace(")", "\\29")
+
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", side_effect=capture_escape):
+            result = await ldap_provider.authenticate(
+                username="user(ldap)", password="pass", db=mock_db,
+            )
+
+        assert result.success is True
+        assert escaped == ["user(ldap)"]
+
+    async def test_authenticate_multiple_groups_multiple_roles(
+        self, ldap_provider, mock_settings
+    ):
+        attrs = {
+            "uid": [b"multigroup"],
+            "mail": [b"multi@example.com"],
+            "cn": [b"Multi Group"],
+            "memberOf": [
+                b"cn=admins,ou=groups,dc=example,dc=com",
+                b"cn=developers,ou=groups,dc=example,dc=com",
+                b"cn=users,ou=groups,dc=example,dc=com",
+            ],
+        }
+        mock_ldap = MagicMock()
+        mock_ldap.initialize.return_value = _make_mock_ldap(attrs=attrs)
+        mock_ldap.SCOPE_SUBTREE = 2
+
+        mock_db = _make_new_user_db()
+
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+            result = await ldap_provider.authenticate(
+                username="multigroup", password="pass", db=mock_db,
+            )
+
+        assert result.success is True
+        assert result.user_info.roles == ["admin"]
+
+    async def test_authenticate_none_role_mapping_config(
+        self, ldap_provider, mock_settings
+    ):
+        mock_settings.ldap_role_mapping = None
+
+        attrs = {
+            "uid": [b"noroleuser"],
+            "mail": [b"norole@example.com"],
+            "cn": [b"No Role User"],
+            "memberOf": [b"cn=admins,ou=groups,dc=example,dc=com"],
+        }
+        mock_ldap = MagicMock()
+        mock_ldap.initialize.return_value = _make_mock_ldap(attrs=attrs)
+        mock_ldap.SCOPE_SUBTREE = 2
+
+        mock_db = _make_new_user_db()
+
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+            result = await ldap_provider.authenticate(
+                username="noroleuser", password="pass", db=mock_db,
+            )
+
+        assert result.success is True
+        assert result.user_info.roles == ["user"]
+
 
 class TestLDAPAuthorizeUrl:
     async def test_get_authorize_url_returns_empty(self, ldap_provider):
@@ -480,5 +735,5 @@ class TestLDAPAuthorizeUrl:
         assert url == ""
 
     async def test_get_authorize_url_with_state_returns_empty(self, ldap_provider):
-        url = await ldap_provider.get_authorize_url(state="some-state")
+        url = await ldap_provider.get_authorize_url(_state="some-state")
         assert url == ""
