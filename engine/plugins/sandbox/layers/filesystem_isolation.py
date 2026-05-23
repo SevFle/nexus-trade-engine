@@ -61,7 +61,7 @@ class FilesystemIsolation:
     def _is_path_allowed(self, resolved: str) -> bool:
         allowed = self._get_allowed_paths()
         return any(
-            resolved == p or resolved.startswith((p + os.sep, p))
+            resolved == p or resolved.startswith(p + os.sep)
             for p in allowed
         )
 

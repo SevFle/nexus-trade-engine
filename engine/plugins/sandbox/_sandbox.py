@@ -98,6 +98,10 @@ class StrategySandbox:
             sandbox._context.deactivate()
         return sandbox
 
+    @property
+    def work_dir(self) -> str:
+        return self._context.work_dir
+
     async def safe_evaluate(
         self,
         portfolio: PortfolioSnapshot,

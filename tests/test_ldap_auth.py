@@ -474,6 +474,17 @@ class TestLDAPAuthenticate:
         mock_escape.assert_called_once_with("test*user")
 
 
+    async def test_authenticate_ldap_unavailable(self, ldap_provider, mock_settings):
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch("engine.api.auth.ldap.ldap", None), \
+             patch("engine.api.auth.ldap.escape_filter_chars", None):
+            result = await ldap_provider.authenticate(
+                username="user", password="pass", db=mock_db,
+            )
+        assert result.success is False
+        assert "LDAP module is not available" in result.error
+
+
 class TestLDAPAuthorizeUrl:
     async def test_get_authorize_url_returns_empty(self, ldap_provider):
         url = await ldap_provider.get_authorize_url()
