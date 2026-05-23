@@ -97,6 +97,7 @@ class LDAPAuthProvider(IAuthProvider):
                 role=mapped_role,
                 auth_provider="ldap",
                 external_id=ldap_uid,
+                is_active=True,
             )
             db.add(user)
             await db.flush()
