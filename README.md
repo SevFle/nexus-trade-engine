@@ -19,6 +19,7 @@ Nexus is built on a five-layer architecture where every component is independent
 | **Data Layer** | Storage & market feeds | TimescaleDB, PostgreSQL, Redis |
 
 Interactive architecture diagrams are available in [`docs/architecture/`](docs/architecture/).
+For the full system architecture with data flow diagrams, see [`docs/architecture.md`](docs/architecture.md).
 
 ## Core Concepts
 
@@ -127,17 +128,33 @@ nexus-trade-engine/
 
 See the [Plugin Developer Guide](docs/PLUGIN_DEV_GUIDE.md) for full documentation.
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/architecture.md) | System components, data flow, execution pipeline |
+| [API Reference](docs/api-reference.md) | All REST endpoints, request/response shapes |
+| [Data Model](docs/data-model.md) | Database entities, relationships, constraints |
+| [Technical Decisions](docs/technical-decisions.md) | ADR-style entries for major choices |
+| [Development Setup](docs/development-setup.md) | Local dev, Docker, tests, migrations |
+| [Deployment](docs/deployment.md) | Production infrastructure and rollout |
+| [Runbooks](docs/runbooks.md) | Debugging common production issues |
+| [Limitations & Debt](docs/limitations-and-debt.md) | Known gaps and technical debt |
+
+Full documentation index: [`docs/README.md`](docs/README.md)
+
 ## Tech Stack
 
 | Component | Technology |
 |-----------|-----------|
-| Engine | Python 3.11, FastAPI, Celery |
+| Engine | Python 3.11+, FastAPI |
 | Database | PostgreSQL 16, TimescaleDB |
-| Cache | Redis 7 |
+| Cache / Queue | Valkey 8 (Redis-compatible) |
+| Task Queue | TaskIQ + taskiq-redis |
 | Frontend | React 18, Vite, Tailwind CSS |
-| Task Queue | Celery + Redis broker |
-| Containerization | Docker, Docker Compose |
-| Testing | pytest, pytest-asyncio |
+| Containerization | Docker (distroless), Docker Compose |
+| Testing | pytest, pytest-asyncio, hypothesis |
+| Observability | structlog, OpenTelemetry, Prometheus, Sentry |
 
 ## Roadmap
 

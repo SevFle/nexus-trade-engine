@@ -138,10 +138,10 @@ class TestMarketStateGetNews:
         result = state.get_news()
         assert result == news
 
-    def test_get_news_default_hours_ignored(self):
+    def test_get_news_hours_param_ignored(self):
         news = [{"headline": "A"}]
         state = MarketState(news=news)
-        assert state.get_news(hours=48) == news
+        assert state.get_news(_hours=48) == news
 
     def test_get_news_empty(self):
         state = MarketState()
