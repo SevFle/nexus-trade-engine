@@ -81,6 +81,7 @@ class GoogleAuthProvider(IAuthProvider):
                 role="user",
                 auth_provider="google",
                 external_id=google_id,
+                is_active=True,
             )
             db.add(user)
             await db.flush()

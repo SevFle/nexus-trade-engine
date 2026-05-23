@@ -84,6 +84,10 @@ class StrategySandbox:
         else:
             self._http_client = None
 
+    @property
+    def _work_dir(self) -> str:
+        return self._context.work_dir
+
     @classmethod
     def from_factory(
         cls,

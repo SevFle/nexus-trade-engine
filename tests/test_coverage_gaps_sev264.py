@@ -84,6 +84,8 @@ class TestRunBacktestTask:
             from engine.tasks.worker import run_backtest_task
 
             result = await run_backtest_task(
+                backtest_id="bt-1",
+                user_id="u-1",
                 strategy_name="sma_crossover",
                 symbol="AAPL",
                 start_date="2025-01-01",
@@ -111,6 +113,8 @@ class TestRunBacktestTask:
             from engine.tasks.worker import run_backtest_task
 
             result = await run_backtest_task(
+                backtest_id="bt-2",
+                user_id="u-2",
                 strategy_name="nonexistent",
                 symbol="AAPL",
                 start_date="2025-01-01",
@@ -134,6 +138,8 @@ class TestRunBacktestTask:
             from engine.tasks.worker import run_backtest_task
 
             result = await run_backtest_task(
+                backtest_id="bt-3",
+                user_id="u-3",
                 strategy_name="sma",
                 symbol="AAPL",
                 start_date="2025-01-01",

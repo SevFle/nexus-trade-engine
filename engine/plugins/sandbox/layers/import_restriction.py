@@ -67,7 +67,6 @@ class RestrictedImporter(MetaPathFinder):
 
     def install(self) -> None:
         if not self._installed:
-            self._original_import = builtins.__import__
             builtins.__import__ = self._restricted_import
             sys.meta_path.insert(0, self)
             self._installed = True

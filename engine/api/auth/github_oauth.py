@@ -60,9 +60,9 @@ class GitHubAuthProvider(IAuthProvider):
             logger.exception("auth.github.failed", error=str(exc))
             return AuthResult(success=False, error="GitHub authentication failed")
 
-        github_id = str(profile.get("id", ""))
+        github_id = str(profile.get("id") or "")
         email = profile.get("email") or f"{profile.get('login', '')}@github"
-        name = profile.get("name") or profile.get("login", "GitHub User")
+        name = profile.get("name") or profile.get("login") or "GitHub User"
 
         if not github_id:
             return AuthResult(success=False, error="Incomplete GitHub profile")
@@ -87,6 +87,7 @@ class GitHubAuthProvider(IAuthProvider):
                 role="user",
                 auth_provider="github",
                 external_id=github_id,
+                is_active=True,
             )
             db.add(user)
             await db.flush()
