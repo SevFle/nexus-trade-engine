@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import sys
+import threading
 from importlib.abc import MetaPathFinder
 from typing import TYPE_CHECKING, Any
 
@@ -12,6 +13,22 @@ if TYPE_CHECKING:
     from importlib.machinery import ModuleSpec
 
 from engine.plugins.restricted_importer import BLOCKED_MODULES
+
+_INFRA_ALLOWLIST: frozenset[str] = frozenset(
+    [
+        "pytest",
+        "_pytest",
+        "pluggy",
+        "_pluggy",
+        "coverage",
+        "_coverage",
+        "pytest_cov",
+        "hypothesis",
+        "_hypothesis",
+    ]
+)
+
+_local = threading.local()
 
 
 class RestrictedImporter(MetaPathFinder):
@@ -28,22 +45,33 @@ class RestrictedImporter(MetaPathFinder):
         self._plugin_id = plugin_id
         self._violation_log: list[ImportViolation] = []
 
+    def _is_in_hook(self) -> bool:
+        return getattr(_local, "in_hook", False)
+
     def find_spec(
         self,
         fullname: str,
         _path: object = None,
         _target: object = None,
     ) -> ModuleSpec | None:
-        root = fullname.split(".", maxsplit=1)[0]
-        if root in self.blocked:
-            violation = ImportViolation(fullname, plugin_id=self._plugin_id)
-            self._violation_log.append(violation)
-            raise ImportError(violation.detail)
-        if self.allowed is not None and root not in self.allowed:
-            violation = ImportViolation(fullname, plugin_id=self._plugin_id)
-            self._violation_log.append(violation)
-            raise ImportError(violation.detail)
-        return None
+        if self._is_in_hook():
+            return None
+        _local.in_hook = True
+        try:
+            root = fullname.split(".", maxsplit=1)[0]
+            if root in _INFRA_ALLOWLIST:
+                return None
+            if root in self.blocked:
+                violation = ImportViolation(fullname, plugin_id=self._plugin_id)
+                self._violation_log.append(violation)
+                raise ImportError(violation.detail)
+            if self.allowed is not None and root not in self.allowed:
+                violation = ImportViolation(fullname, plugin_id=self._plugin_id)
+                self._violation_log.append(violation)
+                raise ImportError(violation.detail)
+            return None
+        finally:
+            _local.in_hook = False
 
     def _restricted_import(
         self,
@@ -53,17 +81,25 @@ class RestrictedImporter(MetaPathFinder):
         fromlist: tuple[str, ...] = (),
         level: int = 0,
     ) -> object:
-        if level == 0:
-            root = name.split(".", maxsplit=1)[0]
-            if root in self.blocked:
-                violation = ImportViolation(name, plugin_id=self._plugin_id)
-                self._violation_log.append(violation)
-                raise ImportError(violation.detail)
-            if self.allowed is not None and root not in self.allowed:
-                violation = ImportViolation(name, plugin_id=self._plugin_id)
-                self._violation_log.append(violation)
-                raise ImportError(violation.detail)
-        return self._original_import(name, globals_, locals_, fromlist, level)
+        if self._is_in_hook():
+            return self._original_import(name, globals_, locals_, fromlist, level)
+        _local.in_hook = True
+        try:
+            if level == 0:
+                root = name.split(".", maxsplit=1)[0]
+                if root in _INFRA_ALLOWLIST:
+                    return self._original_import(name, globals_, locals_, fromlist, level)
+                if root in self.blocked:
+                    violation = ImportViolation(name, plugin_id=self._plugin_id)
+                    self._violation_log.append(violation)
+                    raise ImportError(violation.detail)
+                if self.allowed is not None and root not in self.allowed:
+                    violation = ImportViolation(name, plugin_id=self._plugin_id)
+                    self._violation_log.append(violation)
+                    raise ImportError(violation.detail)
+            return self._original_import(name, globals_, locals_, fromlist, level)
+        finally:
+            _local.in_hook = False
 
     def install(self) -> None:
         if not self._installed:

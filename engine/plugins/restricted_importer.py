@@ -12,12 +12,29 @@ from __future__ import annotations
 
 import builtins
 import sys
+import threading
 from importlib.abc import MetaPathFinder
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from importlib.machinery import ModuleSpec
+
+_INFRA_ALLOWLIST: frozenset[str] = frozenset(
+    [
+        "pytest",
+        "_pytest",
+        "pluggy",
+        "_pluggy",
+        "coverage",
+        "_coverage",
+        "pytest_cov",
+        "hypothesis",
+        "_hypothesis",
+    ]
+)
+
+_local = threading.local()
 
 BLOCKED_MODULES: frozenset[str] = frozenset(
     [
@@ -99,10 +116,21 @@ class RestrictedImporter(MetaPathFinder):
         _path: object = None,
         _target: object = None,
     ) -> ModuleSpec | None:
-        root = fullname.split(".", maxsplit=1)[0]
-        if root in self.blocked:
-            raise ImportError(f"Module '{fullname}' is blocked in strategy sandbox")
-        return None
+        if self._is_in_hook():
+            return None
+        _local.in_hook = True
+        try:
+            root = fullname.split(".", maxsplit=1)[0]
+            if root in _INFRA_ALLOWLIST:
+                return None
+            if root in self.blocked:
+                raise ImportError(f"Module '{fullname}' is blocked in strategy sandbox")
+            return None
+        finally:
+            _local.in_hook = False
+
+    def _is_in_hook(self) -> bool:
+        return getattr(_local, "in_hook", False)
 
     def _restricted_import(
         self,
@@ -112,11 +140,19 @@ class RestrictedImporter(MetaPathFinder):
         fromlist: tuple[str, ...] = (),
         level: int = 0,
     ) -> object:
-        if level == 0:
-            root = name.split(".", maxsplit=1)[0]
-            if root in self.blocked:
-                raise ImportError(f"Module '{name}' is blocked in strategy sandbox")
-        return self._original_import(name, globals_, locals_, fromlist, level)
+        if self._is_in_hook():
+            return self._original_import(name, globals_, locals_, fromlist, level)
+        _local.in_hook = True
+        try:
+            if level == 0:
+                root = name.split(".", maxsplit=1)[0]
+                if root in _INFRA_ALLOWLIST:
+                    return self._original_import(name, globals_, locals_, fromlist, level)
+                if root in self.blocked:
+                    raise ImportError(f"Module '{name}' is blocked in strategy sandbox")
+            return self._original_import(name, globals_, locals_, fromlist, level)
+        finally:
+            _local.in_hook = False
 
     def install(self) -> None:
         if not self._installed:
