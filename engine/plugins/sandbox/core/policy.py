@@ -139,7 +139,7 @@ class SandboxPolicy:
 
     @classmethod
     def from_trust_level(cls, trust_level: Any, plugin_id: str = "unknown") -> SandboxPolicy:
-        from engine.plugins.trust_levels import TrustLevel
+        from engine.plugins.trust_levels import TrustLevel  # noqa: PLC0415
 
         if isinstance(trust_level, str):
             try:

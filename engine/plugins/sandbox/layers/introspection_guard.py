@@ -66,13 +66,12 @@ class IntrospectionGuard:
         self._violation_log: list[IntrospectionViolation] = []
 
     def _is_blocked_attr(self, name: str) -> bool:
-        if name in _BLOCKED_ATTRS or name in self._policy.blocked_attributes:
-            return True
-        if name in _EXPLICITLY_BLOCKED_ATTRS:
-            return True
-        if self._policy.block_frame_access and name in _FRAME_ATTRS:
-            return True
-        return False
+        return (
+            name in _BLOCKED_ATTRS
+            or name in self._policy.blocked_attributes
+            or name in _EXPLICITLY_BLOCKED_ATTRS
+            or (self._policy.block_frame_access and name in _FRAME_ATTRS)
+        )
 
     def _restricted_getattr(self, obj: Any, name: str, *default: Any) -> Any:
         if self._is_blocked_attr(name):

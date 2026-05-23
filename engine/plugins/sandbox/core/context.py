@@ -111,21 +111,20 @@ class SandboxContext:
 
     @property
     def trust_level(self) -> Any:
-        from engine.plugins.trust_levels import TrustLevel
-
-        try:
-            return TrustLevel(self._policy.trust_level)
-        except ValueError:
-            return TrustLevel.UNTRUSTED
+        return self._policy.trust_level
 
     @property
     def work_dir(self) -> str:
         return self._filesystem_layer.work_dir
 
     def validate_trust_level(self) -> bool:
-        from engine.plugins.trust_levels import TrustLevel
+        from engine.plugins.trust_levels import TrustLevel  # noqa: PLC0415
 
-        tl = self.trust_level
+        try:
+            tl = TrustLevel(self._policy.trust_level)
+        except ValueError:
+            tl = TrustLevel.UNTRUSTED
+
         import_count = len(self._policy.import_policy.blocked_modules)
         cpu = self._policy.resource_policy.max_cpu_seconds
         rw = self._policy.filesystem_policy.read_write_paths
@@ -135,16 +134,12 @@ class SandboxContext:
                 return False
             if cpu > _MAX_CPU_SECONDS_UNTRUSTED:
                 return False
-            if rw:
-                return False
-            return True
+            return not rw
 
         if tl == TrustLevel.TRUSTED_LIMITED:
             if import_count < _MIN_BLOCKED_MODULES_LIMITED:
                 return False
-            if cpu > _MAX_CPU_SECONDS_LIMITED:
-                return False
-            return True
+            return not cpu > _MAX_CPU_SECONDS_LIMITED
 
         return True
 
