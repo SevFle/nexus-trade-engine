@@ -344,6 +344,55 @@ class TestScoringExecutor:
         result = executor.compute_scores(["AAPL", "MSFT"], raw_data)
         assert len(result.scores) >= 1
 
+    def test_executor_zero_total_weight_returns_empty(self):
+        from engine.plugins.scoring_executor import ScoringExecutor
+
+        class _ZeroWeightStrat(IScoringStrategy):
+            @property
+            def id(self) -> str:
+                return "zero_weight"
+
+            @property
+            def name(self) -> str:
+                return "Zero Weight"
+
+            @property
+            def version(self) -> str:
+                return "0.1.0"
+
+            async def initialize(self, config: StrategyConfig) -> None:
+                pass
+
+            async def dispose(self) -> None:
+                pass
+
+            async def evaluate(self, _portfolio, _market: MarketState, _costs) -> list[Signal]:
+                return []
+
+            def get_config_schema(self) -> dict:
+                return {}
+
+            def get_scoring_factors(self) -> list[ScoringFactor]:
+                return [
+                    ScoringFactor(name="roe", weight=0.0, direction=FactorDirection.HIGHER_IS_BETTER),
+                ]
+
+            async def score_universe(
+                self, _universe: list[str], _market: MarketState, _costs
+            ) -> ScoringResult:
+                return ScoringResult(strategy_id=self.id, scores=[])
+
+        strategy = _ZeroWeightStrat()
+        executor = ScoringExecutor(strategy, min_data_points=2)
+
+        raw_data = {
+            "AAPL": {"roe": 0.25},
+            "MSFT": {"roe": 0.20},
+        }
+        result = executor.compute_scores(["AAPL", "MSFT"], raw_data)
+        assert len(result.scores) == 0
+        assert "roe" in result.excluded_factors
+
 
 class TestPluginRegistryScoringDetection:
     def test_detects_scoring_strategy(self, tmp_path: Path):

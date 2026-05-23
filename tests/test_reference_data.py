@@ -734,3 +734,135 @@ class TestTypeaheadSuggest:
         out = idx.suggest("App")  # prefix hits Apple
         assert out
         assert out[0].record.primary_ticker == "AAPL"
+
+
+class TestClassificationMissingBranches:
+    def test_invalid_industry_in_valid_group(self):
+        assert not is_valid_gics_path(
+            "Information Technology",
+            "Software & Services",
+            "Nonexistent Industry",
+            "Whatever",
+        )
+
+    def test_crypto_taxonomy_case_insensitive(self):
+        assert crypto_taxonomy("btc") == "l1"
+
+    def test_forex_pair_class_reversed_major(self):
+        assert forex_pair_class("USD", "EUR") == "major"
+
+    def test_forex_pair_class_minor_cross(self):
+        assert forex_pair_class("AUD", "CAD") == "minor"
+
+
+class TestModelTickerWhitespace:
+    def test_whitespace_only_ticker_rejected(self):
+        with pytest.raises(ValueError, match="non-empty and trimmed"):
+            RefInstrument(
+                primary_ticker="   ",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Whitespace Ticker",
+            )
+
+    def test_leading_whitespace_ticker_rejected(self):
+        with pytest.raises(ValueError, match="non-empty and trimmed"):
+            RefInstrument(
+                primary_ticker=" AAPL",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Leading Space",
+            )
+
+    def test_trailing_whitespace_ticker_rejected(self):
+        with pytest.raises(ValueError, match="non-empty and trimmed"):
+            RefInstrument(
+                primary_ticker="AAPL ",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Trailing Space",
+            )
+
+
+class TestResolverEdgeCases:
+    def test_resolve_non_str_non_dict_raises_type_error(self):
+        r = Resolver()
+        with pytest.raises(TypeError, match="resolve query must be str or dict"):
+            r.resolve(123)
+
+    def test_resolve_empty_dict_returns_none(self):
+        r = Resolver()
+        assert r.resolve({}) is None
+
+    def test_resolve_dict_garbage_ticker_returns_none(self):
+        r = Resolver()
+        r.register(_aapl())
+        assert r.resolve({"ticker": "<script>", "venue": "XNAS"}) is None
+
+
+class TestSearchEdgeCases:
+    def test_search_empty_query(self):
+        idx = SearchIndex()
+        idx.add(_aapl())
+        assert idx.search("") == []
+
+    def test_search_whitespace_query(self):
+        idx = SearchIndex()
+        idx.add(_aapl())
+        assert idx.search("   ") == []
+
+    def test_suggest_oversize_query(self):
+        idx = SearchIndex()
+        idx.add(_aapl())
+        assert idx.suggest("a" * 1000) == []
+
+    def test_search_name_exact_match_score(self):
+        idx = SearchIndex()
+        idx.add(
+            RefInstrument(
+                primary_ticker="ZZZ",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Microsoft Corp.",
+            )
+        )
+        results = idx.search("microsoft corp.")
+        assert results
+        assert results[0].primary_ticker == "ZZZ"
+
+    def test_search_ticker_contains_score(self):
+        idx = SearchIndex()
+        idx.add(
+            RefInstrument(
+                primary_ticker="AAPL",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Apple Inc.",
+            )
+        )
+        results = idx.search("ap")
+        assert results
+        assert results[0].primary_ticker == "AAPL"
+
+    def test_suggest_fuzzy_asset_class_filter(self):
+        idx = SearchIndex()
+        idx.add(
+            RefInstrument(
+                primary_ticker="ETH",
+                primary_venue="XCRY",
+                asset_class="crypto",
+                name="Ethereum",
+            )
+        )
+        idx.add(
+            RefInstrument(
+                primary_ticker="AAPL",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Apple Inc.",
+            )
+        )
+        out = idx.suggest("Ethx", asset_class="crypto")
+        tickers = [s.record.primary_ticker for s in out]
+        assert "ETH" in tickers
+        assert "AAPL" not in tickers

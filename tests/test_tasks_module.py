@@ -45,3 +45,12 @@ class TestTasksModule:
         from engine.tasks import worker
 
         assert hasattr(worker, "scheduler")
+
+    def test_re_exports_accessible(self):
+        from engine import tasks
+
+        assert tasks.BacktestResultStore is not None
+        assert tasks.broker is not None
+        assert tasks.run_backtest_task is not None
+        assert callable(tasks.get_result_store)
+        assert callable(tasks.set_result_store)
