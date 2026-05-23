@@ -15,6 +15,16 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
+try:
+    import ldap
+except ImportError:
+    ldap: Any = None
+
+try:
+    from ldap.filter import escape_filter_chars
+except ImportError:
+    escape_filter_chars: Any = None
+
 
 class LDAPAuthProvider(IAuthProvider):
     @property
@@ -29,10 +39,10 @@ class LDAPAuthProvider(IAuthProvider):
         if not username or not password or db is None:
             return AuthResult(success=False, error="Username, password, and db session required")
 
-        try:
-            import ldap
-            from ldap.filter import escape_filter_chars
+        if ldap is None or escape_filter_chars is None:
+            return AuthResult(success=False, error="LDAP module not installed")
 
+        try:
             conn = ldap.initialize(settings.ldap_server_url)
             conn.set_option(ldap.OPT_NETWORK_TIMEOUT, 10)
             conn.set_option(ldap.OPT_TIMEOUT, 10)
@@ -94,6 +104,7 @@ class LDAPAuthProvider(IAuthProvider):
                 email=ldap_mail,
                 hashed_password=None,
                 display_name=ldap_cn,
+                is_active=True,
                 role=mapped_role,
                 auth_provider="ldap",
                 external_id=ldap_uid,

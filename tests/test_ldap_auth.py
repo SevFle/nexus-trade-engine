@@ -482,3 +482,26 @@ class TestLDAPAuthorizeUrl:
     async def test_get_authorize_url_with_state_returns_empty(self, ldap_provider):
         url = await ldap_provider.get_authorize_url(state="some-state")
         assert url == ""
+
+
+class TestLDAPModuleNotInstalled:
+    async def test_authenticate_ldap_none(self, ldap_provider, mock_settings):
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch("engine.api.auth.ldap.ldap", None), \
+             patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
+            result = await ldap_provider.authenticate(
+                username="testuser", password="pass", db=mock_db,
+            )
+        assert result.success is False
+        assert "LDAP module not installed" in result.error
+
+    async def test_authenticate_escape_filter_chars_none(self, ldap_provider, mock_settings):
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_ldap = MagicMock()
+        with patch("engine.api.auth.ldap.ldap", mock_ldap), \
+             patch("engine.api.auth.ldap.escape_filter_chars", None):
+            result = await ldap_provider.authenticate(
+                username="testuser", password="pass", db=mock_db,
+            )
+        assert result.success is False
+        assert "LDAP module not installed" in result.error
