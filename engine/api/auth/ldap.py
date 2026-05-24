@@ -13,6 +13,16 @@ from engine.db.models import User
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+try:
+    import ldap as _ldap_mod
+    from ldap.filter import escape_filter_chars as _escape_filter_chars
+
+    ldap = _ldap_mod
+    escape_filter_chars = _escape_filter_chars
+except ImportError:
+    ldap = None  # type: ignore[assignment]
+    escape_filter_chars = None  # type: ignore[assignment]
+
 logger = structlog.get_logger()
 
 
@@ -26,13 +36,15 @@ class LDAPAuthProvider(IAuthProvider):
         password = kwargs.get("password", "")
         db: AsyncSession | None = kwargs.get("db")
 
+        _pre_err: str | None = None
         if not username or not password or db is None:
-            return AuthResult(success=False, error="Username, password, and db session required")
+            _pre_err = "Username, password, and db session required"
+        elif ldap is None or escape_filter_chars is None:
+            _pre_err = "LDAP support not installed"
+        if _pre_err is not None:
+            return AuthResult(success=False, error=_pre_err)
 
         try:
-            import ldap
-            from ldap.filter import escape_filter_chars
-
             conn = ldap.initialize(settings.ldap_server_url)
             conn.set_option(ldap.OPT_NETWORK_TIMEOUT, 10)
             conn.set_option(ldap.OPT_TIMEOUT, 10)
@@ -66,14 +78,12 @@ class LDAPAuthProvider(IAuthProvider):
         ldap_groups = [g.decode() for g in member_of_raw]
 
         role_mapping = json.loads(settings.ldap_role_mapping) if settings.ldap_role_mapping else {}
-        mapped_roles: list[str] = []
-        for group_dn in ldap_groups:
-            for ldap_group, nexus_role in role_mapping.items():
-                if ldap_group in group_dn:
-                    mapped_roles.append(nexus_role)
-
-        if not mapped_roles:
-            mapped_roles = ["user"]
+        mapped_roles: list[str] = [
+            nexus_role
+            for group_dn in ldap_groups
+            for ldap_group, nexus_role in role_mapping.items()
+            if ldap_group in group_dn
+        ] or ["user"]
 
         mapped_role = self.map_roles(mapped_roles)
 
@@ -97,6 +107,7 @@ class LDAPAuthProvider(IAuthProvider):
                 role=mapped_role,
                 auth_provider="ldap",
                 external_id=ldap_uid,
+                is_active=True,
             )
             db.add(user)
             await db.flush()

@@ -94,6 +94,10 @@ def _build_mock_client(profile=None, token_error=None, profile_error=None):
     )
 
 
+async def _set_is_active(user):
+    user.is_active = True
+
+
 class TestGitHubNameProperty:
     def test_name_returns_github(self, github_provider):
         assert github_provider.name == "github"
@@ -148,7 +152,7 @@ class TestGitHubAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await github_provider.authenticate(code="auth-code", db=mock_db)
@@ -247,7 +251,7 @@ class TestGitHubAuthenticate:
     async def test_authenticate_incomplete_profile_missing_id(
         self, github_provider, mock_settings
     ):
-        profile = {"id": None, "login": "testuser", "email": "t@e.com", "name": "Test"}
+        profile = {"login": "testuser", "email": "t@e.com", "name": "Test"}
         fake_client = _build_mock_client(profile=profile)
 
         mock_db = AsyncMock(spec=AsyncSession)
@@ -272,7 +276,7 @@ class TestGitHubAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await github_provider.authenticate(code="auth-code", db=mock_db)
@@ -296,7 +300,7 @@ class TestGitHubAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await github_provider.authenticate(code="auth-code", db=mock_db)
@@ -309,7 +313,6 @@ class TestGitHubAuthenticate:
     ):
         profile = {
             "id": 77777,
-            "login": None,
             "email": "nobody@example.com",
             "name": None,
         }
@@ -320,7 +323,7 @@ class TestGitHubAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await github_provider.authenticate(code="auth-code", db=mock_db)
@@ -350,7 +353,7 @@ class TestGitHubAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             await github_provider.authenticate(code="my-auth-code", db=mock_db)
@@ -381,7 +384,7 @@ class TestGitHubAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             await github_provider.authenticate(code="auth-code", db=mock_db)

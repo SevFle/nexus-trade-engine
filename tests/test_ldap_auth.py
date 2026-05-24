@@ -63,6 +63,10 @@ def _make_mock_ldap(attrs=None, search_results=None, bind_error=None):
     return mock_conn
 
 
+async def _set_is_active(user):
+    user.is_active = True
+
+
 class TestLDAPNameProperty:
     def test_name_returns_ldap(self, ldap_provider):
         assert ldap_provider.name == "ldap"
@@ -134,7 +138,7 @@ class TestLDAPAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
@@ -307,7 +311,7 @@ class TestLDAPAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
@@ -334,7 +338,7 @@ class TestLDAPAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
@@ -360,7 +364,7 @@ class TestLDAPAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
@@ -388,7 +392,7 @@ class TestLDAPAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
@@ -416,7 +420,7 @@ class TestLDAPAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
@@ -441,7 +445,7 @@ class TestLDAPAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars", lambda x: x):
@@ -462,7 +466,7 @@ class TestLDAPAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("engine.api.auth.ldap.ldap", mock_ldap), \
              patch("engine.api.auth.ldap.escape_filter_chars") as mock_escape:

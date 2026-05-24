@@ -21,6 +21,7 @@ All strategy method calls go through the sandbox, which:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -121,6 +122,7 @@ class StrategySandbox:
                 timeout=self._max_eval_seconds,
             )
         except TimeoutError:
+            self._context.deactivate()
             elapsed_ms = (time.monotonic() - start) * 1000
             self.metrics.errors += 1
             self.metrics.last_error = f"Timeout after {self._max_eval_seconds}s"
@@ -131,6 +133,7 @@ class StrategySandbox:
             )
             return []
         except Exception as e:
+            self._context.deactivate()
             elapsed_ms = (time.monotonic() - start) * 1000
             self.metrics.errors += 1
             self.metrics.last_error = str(e)
@@ -142,7 +145,8 @@ class StrategySandbox:
             )
             return []
         finally:
-            self._context.deactivate()
+            with contextlib.suppress(Exception):
+                self._context.deactivate()
 
         elapsed_ms = (time.monotonic() - start) * 1000
         signals = self._convert_signals(raw_signals)

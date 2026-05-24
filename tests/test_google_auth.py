@@ -94,6 +94,10 @@ def _build_mock_client(userinfo=None, token_error=None, userinfo_error=None):
     )
 
 
+async def _set_is_active(user):
+    user.is_active = True
+
+
 class TestGoogleNameProperty:
     def test_name_returns_google(self, google_provider):
         assert google_provider.name == "google"
@@ -148,7 +152,7 @@ class TestGoogleAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await google_provider.authenticate(code="auth-code", db=mock_db)
@@ -291,7 +295,7 @@ class TestGoogleAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             result = await google_provider.authenticate(code="auth-code", db=mock_db)
@@ -319,7 +323,7 @@ class TestGoogleAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             await google_provider.authenticate(code="my-auth-code", db=mock_db)
@@ -350,7 +354,7 @@ class TestGoogleAuthenticate:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         mock_db.flush = AsyncMock()
-        mock_db.refresh = AsyncMock()
+        mock_db.refresh = _set_is_active
 
         with patch("httpx.AsyncClient", return_value=fake_client):
             await google_provider.authenticate(code="auth-code", db=mock_db)

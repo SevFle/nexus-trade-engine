@@ -51,6 +51,7 @@ from engine.core.rolling_benchmark import (
     rolling_information_ratio,
     rolling_tracking_error,
 )
+from engine.core.signal import Signal
 from engine.data.feeds import MarketDataProvider
 from engine.data.providers._resilience import call_with_retry
 from engine.data.providers.base import (
@@ -124,8 +125,6 @@ class _BuySellStrategy:
         self._sold = False
 
     def on_bar(self, state, portfolio):
-        from engine.core.signal import Signal
-
         if not self._bought and portfolio.cash > 50000:
             self._bought = True
             return [Signal.buy(symbol="AAPL", strategy_id=self.name, quantity=10)]

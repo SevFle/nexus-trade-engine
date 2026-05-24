@@ -350,14 +350,24 @@ class TestProtectedRoutes:
         assert resp.status_code in (401, 403)
 
     async def test_backtest_with_auth(self, auth_client: AsyncClient, auth_tokens: dict):
-        resp = await auth_client.post(
-            "/api/v1/backtest/run",
-            json={
-                "strategy_name": "test",
-                "symbol": "AAPL",
-                "start_date": "2024-01-01",
-                "end_date": "2024-12-31",
-            },
-            headers={"Authorization": f"Bearer {auth_tokens['access_token']}"},
-        )
+        from unittest.mock import AsyncMock, patch
+
+        mock_store = AsyncMock()
+        mock_store.set_running = AsyncMock()
+
+        with (
+            patch("engine.tasks.worker.run_backtest_task") as mock_task,
+            patch("engine.tasks.result_store.get_result_store", return_value=mock_store),
+        ):
+            mock_task.kiq = AsyncMock()
+            resp = await auth_client.post(
+                "/api/v1/backtest/run",
+                json={
+                    "strategy_name": "test",
+                    "symbol": "AAPL",
+                    "start_date": "2024-01-01",
+                    "end_date": "2024-12-31",
+                },
+                headers={"Authorization": f"Bearer {auth_tokens['access_token']}"},
+            )
         assert resp.status_code == 200
