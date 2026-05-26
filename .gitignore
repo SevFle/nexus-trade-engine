@@ -65,3 +65,4 @@ celerybeat.pid
 graphify-out/
 .playwright-mcp/
 .evolve-prompt.md
+.local/
