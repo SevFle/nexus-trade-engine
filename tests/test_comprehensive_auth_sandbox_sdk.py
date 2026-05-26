@@ -169,6 +169,7 @@ class TestSandboxWorkDir:
         sandbox.cleanup()
         assert sandbox._work_dir is None
 
+    @pytest.mark.asyncio
     async def test_work_dir_survives_evaluation(self, manifest):
         sandbox = StrategySandbox(_SimpleStrategy(), manifest)
         try:
@@ -181,6 +182,7 @@ class TestSandboxWorkDir:
 
 
 class TestSandboxErrorPatterns:
+    @pytest.mark.asyncio
     async def test_import_error_contains_blocked(self, manifest):
         class _ImportOs:
             name = "import_os_err"
@@ -199,6 +201,7 @@ class TestSandboxErrorPatterns:
         finally:
             sandbox.cleanup()
 
+    @pytest.mark.asyncio
     async def test_runtime_error_in_strategy(self, manifest):
         class _Crash:
             name = "crash"
@@ -216,6 +219,7 @@ class TestSandboxErrorPatterns:
         finally:
             sandbox.cleanup()
 
+    @pytest.mark.asyncio
     async def test_file_permission_error_message(self, manifest, tmp_path):
         secret = tmp_path / "secret.txt"
         secret.write_text("sensitive")
@@ -241,6 +245,7 @@ class TestSandboxErrorPatterns:
         finally:
             sandbox.cleanup()
 
+    @pytest.mark.asyncio
     async def test_write_permission_error_message(self, manifest):
         class _FileWrite:
             name = "file_write_err"
@@ -260,6 +265,7 @@ class TestSandboxErrorPatterns:
         finally:
             sandbox.cleanup()
 
+    @pytest.mark.asyncio
     async def test_file_descriptor_error_message(self, manifest):
         import builtins
 
@@ -286,6 +292,7 @@ class TestSandboxErrorPatterns:
 
 
 class TestSandboxMetricsOnError:
+    @pytest.mark.asyncio
     async def test_error_count_increments(self, manifest):
         class _Bad:
             name = "bad_metrics"
@@ -305,6 +312,7 @@ class TestSandboxMetricsOnError:
         finally:
             sandbox.cleanup()
 
+    @pytest.mark.asyncio
     async def test_metrics_no_error_on_success(self, manifest):
         sandbox = StrategySandbox(_SimpleStrategy(), manifest)
         try:
