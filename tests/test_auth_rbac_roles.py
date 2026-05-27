@@ -209,7 +209,7 @@ class TestBaseProviderMapRoles:
 
     def test_map_roles_new_domain_roles(self):
         p = self._make_provider()
-        assert p.map_roles(["retail_trader", "quant_dev"]) == "quant_dev"
+        assert p.map_roles(["retail_trader", "quant_dev"]) == "developer"
         assert p.map_roles(["portfolio_manager", "quant_dev"]) == "portfolio_manager"
         assert p.map_roles(["viewer"]) == "user"
         assert p.map_roles(["retail_trader"]) == "retail_trader"

@@ -22,6 +22,12 @@ class AuthResult:
     error: str | None = None
 
 
+_ROLE_PROMOTIONS: dict[str, str] = {
+    "viewer": "user",
+    "quant_dev": "developer",
+}
+
+
 class IAuthProvider(ABC):
     @property
     @abstractmethod
@@ -51,4 +57,4 @@ class IAuthProvider(ABC):
             normalized = role.lower().strip()
             if normalized in role_priority and role_priority[normalized] > role_priority[best]:
                 best = normalized
-        return best
+        return _ROLE_PROMOTIONS.get(best, best)
