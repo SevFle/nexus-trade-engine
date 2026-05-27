@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
+import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -131,3 +134,167 @@ class TestSignalStrategyIdInjection:
         signals = await sandbox.safe_evaluate(None, None, None)
         if signals:
             assert signals[0].strategy_id == "no_id_strategy"
+
+
+class TestPlaceholderStrategy:
+    def test_placeholder_returns_empty(self):
+        from engine.plugins.sandbox import _PlaceholderStrategy
+
+        p = _PlaceholderStrategy()
+        assert p.on_bar(None, None) == []
+
+
+class TestSandboxResourceLimits:
+    def test_apply_resource_limits_no_resource_module(self, manifest):
+        import engine.plugins.sandbox as sandbox_mod
+
+        sandbox = StrategySandbox(GoodStrategy(), manifest)
+        original = sandbox_mod.HAS_RESOURCE_MODULE
+        sandbox_mod.HAS_RESOURCE_MODULE = False
+        try:
+            sandbox._apply_resource_limits()
+            sandbox._restore_resource_limits()
+        finally:
+            sandbox_mod.HAS_RESOURCE_MODULE = original
+            sandbox.cleanup()
+
+    def test_apply_resource_limits_catches_setrlimit_error(self, manifest):
+        import engine.plugins.sandbox as sandbox_mod
+
+        sandbox = StrategySandbox(GoodStrategy(), manifest)
+        with (
+            patch.object(sandbox_mod._resource, "getrlimit", return_value=(100, 200)),
+            patch.object(sandbox_mod._resource, "setrlimit", side_effect=OSError("denied")),
+        ):
+            sandbox._apply_resource_limits()
+        assert "RLIMIT_AS" not in sandbox._saved_resource_limits
+        sandbox.cleanup()
+
+    def test_apply_resource_limits_catches_nofile_error(self, manifest):
+        import engine.plugins.sandbox as sandbox_mod
+
+        sandbox = StrategySandbox(GoodStrategy(), manifest)
+        calls = iter([(1024, 1024), (64, 1024)])
+
+        def fake_getrlimit(_):
+            return next(calls)
+
+        def fake_setrlimit(_, limits):
+            if limits[0] < 100:
+                raise ValueError("too low")
+
+        with (
+            patch.object(sandbox_mod._resource, "getrlimit", side_effect=fake_getrlimit),
+            patch.object(sandbox_mod._resource, "setrlimit", side_effect=fake_setrlimit),
+        ):
+            sandbox._apply_resource_limits()
+        sandbox.cleanup()
+
+
+class TestRestrictedOpenWriteBlock:
+    def test_write_mode_blocked(self, manifest):
+        sandbox = StrategySandbox(GoodStrategy(), manifest)
+        sandbox._original_open = builtins.open
+        file_in_workdir = str(sandbox._work_dir) + "/test.txt"
+        with pytest.raises(PermissionError, match="Write access"):
+            sandbox._restricted_open(file_in_workdir, "w")
+        sandbox.cleanup()
+
+    def test_append_mode_blocked(self, manifest):
+        sandbox = StrategySandbox(GoodStrategy(), manifest)
+        sandbox._original_open = builtins.open
+        file_in_workdir = str(sandbox._work_dir) + "/test.txt"
+        with pytest.raises(PermissionError, match="Write access"):
+            sandbox._restricted_open(file_in_workdir, "a")
+        sandbox.cleanup()
+
+
+class TestRestrictedHttpSend:
+    async def test_allowed_host_passes_through(self):
+        manifest = StrategyManifest(
+            id="test",
+            name="test",
+            version="1.0.0",
+            resources={"max_cpu_seconds": 1},
+            network={"allowed_endpoints": ["api.example.com"]},
+        )
+
+        async def fake_send(client, request, *, stream=False, **kwargs):
+            return MagicMock()
+
+        sandbox = StrategySandbox(GoodStrategy(), manifest)
+        sandbox._original_httpx_send = fake_send
+        restricted_send = sandbox._make_restricted_send()
+
+        mock_request = MagicMock()
+        mock_request.url.host = "api.example.com"
+        result = await restricted_send(MagicMock(), mock_request)
+        assert result is not None
+        sandbox.cleanup()
+
+    async def test_blocked_host_raises(self):
+        manifest = StrategyManifest(
+            id="test",
+            name="test",
+            version="1.0.0",
+            resources={"max_cpu_seconds": 1},
+            network={"allowed_endpoints": ["api.example.com"]},
+        )
+
+        sandbox = StrategySandbox(GoodStrategy(), manifest)
+        sandbox._original_httpx_send = MagicMock()
+        restricted_send = sandbox._make_restricted_send()
+
+        mock_request = MagicMock()
+        mock_request.url.host = "evil.com"
+        with pytest.raises(PermissionError, match="Network access"):
+            await restricted_send(MagicMock(), mock_request)
+        sandbox.cleanup()
+
+
+class TestSandboxCleanup:
+    def test_cleanup_restores_builtins_when_restrictions_active(self, manifest):
+        original_open = builtins.open
+        original_object = builtins.object
+        original_getattr = builtins.getattr
+        import io as _io
+
+        original_io_open = _io.open
+        sandbox = StrategySandbox(GoodStrategy(), manifest)
+        sandbox._activate_restrictions()
+        assert sandbox._original_open is not None
+        sandbox.cleanup()
+        assert sandbox._original_open is None
+        assert builtins.open is original_open
+        builtins.object = original_object
+        builtins.getattr = original_getattr
+        _io.open = original_io_open
+
+
+class TestNoResourceModuleImport:
+    def test_sandbox_works_without_resource_module(self, manifest):
+        saved_sandbox = sys.modules.pop("engine.plugins.sandbox", None)
+        saved_resource = sys.modules.get("resource")
+        sys.modules["resource"] = None
+        try:
+            sys.modules.pop("engine.plugins.restricted_importer", None)
+            sys.modules.pop("engine.plugins.sandboxed_http", None)
+            import engine.plugins.sandbox as sandbox_mod
+
+            assert sandbox_mod.HAS_RESOURCE_MODULE is False
+            sandbox = sandbox_mod.StrategySandbox(
+                sandbox_mod._PlaceholderStrategy(), manifest
+            )
+            sandbox._apply_resource_limits()
+            sandbox._restore_resource_limits()
+            sandbox.cleanup()
+        finally:
+            for mod in list(sys.modules):
+                if mod.startswith("engine.plugins.sandbox"):
+                    sys.modules.pop(mod, None)
+            if saved_sandbox is not None:
+                sys.modules["engine.plugins.sandbox"] = saved_sandbox
+            if saved_resource is not None:
+                sys.modules["resource"] = saved_resource
+            else:
+                sys.modules.pop("resource", None)

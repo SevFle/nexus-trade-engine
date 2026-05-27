@@ -41,6 +41,12 @@ class TestTasksModule:
 
         assert engine.tasks is not None
 
+    def test_tasks_package_re_exports(self):
+        from engine.tasks import broker, run_backtest_task
+
+        assert broker is not None
+        assert run_backtest_task is not None
+
     def test_worker_has_scheduler(self):
         from engine.tasks import worker
 

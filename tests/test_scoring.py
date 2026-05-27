@@ -345,6 +345,56 @@ class TestScoringExecutor:
         assert len(result.scores) >= 1
 
 
+class TestScoringExecutorZeroWeight:
+    def test_compute_scores_returns_empty_when_zero_weight(self):
+        from engine.plugins.scoring_executor import ScoringExecutor
+
+        class _ZeroWeightStrat(IScoringStrategy):
+            @property
+            def id(self) -> str:
+                return "zero_weight"
+
+            @property
+            def name(self) -> str:
+                return "Zero Weight"
+
+            @property
+            def version(self) -> str:
+                return "0.1.0"
+
+            async def initialize(self, config: StrategyConfig) -> None:
+                pass
+
+            async def dispose(self) -> None:
+                pass
+
+            async def evaluate(self, _portfolio, _market: MarketState, _costs) -> list[Signal]:
+                return []
+
+            def get_config_schema(self) -> dict:
+                return {}
+
+            def get_scoring_factors(self) -> list[ScoringFactor]:
+                return [
+                    ScoringFactor(
+                        name="factor1", weight=0.0, direction=FactorDirection.HIGHER_IS_BETTER
+                    ),
+                ]
+
+            async def score_universe(
+                self, _universe: list[str], _market: MarketState, _costs
+            ) -> ScoringResult:
+                return ScoringResult(strategy_id=self.id, scores=[])
+
+        strategy = _ZeroWeightStrat()
+        executor = ScoringExecutor(strategy, min_data_points=2)
+        universe = [f"SYM{i}" for i in range(15)]
+        raw_data = {f"SYM{i}": {"factor1": float(i)} for i in range(15)}
+        result = executor.compute_scores(universe, raw_data)
+        assert result.scores == []
+        assert "factor1" not in result.excluded_factors
+
+
 class TestPluginRegistryScoringDetection:
     def test_detects_scoring_strategy(self, tmp_path: Path):
         import textwrap

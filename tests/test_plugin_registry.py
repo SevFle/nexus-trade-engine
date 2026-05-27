@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util
+import sys
 import textwrap
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -84,6 +87,11 @@ class TestLoadStrategyClass:
     def test_raises_import_error_for_missing_file(self):
         with pytest.raises((ImportError, FileNotFoundError)):
             load_strategy_class("/nonexistent/strategy.py")
+
+    def test_raises_import_error_when_spec_is_none(self):
+        with patch.object(importlib.util, "spec_from_file_location", return_value=None), \
+             pytest.raises(ImportError, match="Cannot load strategy"):
+            load_strategy_class("/some/path.py")
 
     def test_raises_attribute_error_when_no_strategy_class(self, strategies_dir):
         path = strategies_dir / "no_class"
@@ -166,3 +174,18 @@ class TestDiscoverRealStrategies:
         manifest = entry["manifest"]
         assert manifest["name"] == "mean_reversion_basic"
         assert "version" in manifest
+
+
+class TestIsScoringStrategyImportError:
+    def test_returns_false_when_sdk_not_importable(self):
+        from engine.plugins.registry import is_scoring_strategy
+
+        saved = sys.modules.get("nexus_sdk.scoring")
+        sys.modules["nexus_sdk.scoring"] = None
+        try:
+            assert is_scoring_strategy("not_a_strategy") is False
+        finally:
+            if saved is not None:
+                sys.modules["nexus_sdk.scoring"] = saved
+            else:
+                sys.modules.pop("nexus_sdk.scoring", None)

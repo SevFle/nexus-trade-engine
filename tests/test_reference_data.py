@@ -734,3 +734,142 @@ class TestTypeaheadSuggest:
         out = idx.suggest("App")  # prefix hits Apple
         assert out
         assert out[0].record.primary_ticker == "AAPL"
+
+    def test_suggest_oversize_query_returns_empty(self):
+        out = self._idx().suggest("A" * 100)
+        assert out == []
+
+    def test_suggest_name_exact_match(self):
+        out = self._idx().suggest("apple inc.")
+        assert out
+        assert out[0].record.primary_ticker == "AAPL"
+        assert out[0].score == 90
+
+    def test_suggest_fuzzy_respects_asset_class_filter(self):
+        idx = SearchIndex()
+        idx.add(
+            RefInstrument(
+                primary_ticker="XYZ1",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Zeta Alpha Beta Corp",
+            )
+        )
+        idx.add(
+            RefInstrument(
+                primary_ticker="XYZ2",
+                primary_venue="XCRY",
+                asset_class="crypto",
+                name="Zeta Alpha Beta Coin",
+            )
+        )
+        out = idx.suggest("Zeto", asset_class="crypto")
+        tickers = [s.record.primary_ticker for s in out]
+        assert "XYZ2" in tickers
+        assert "XYZ1" not in tickers
+
+
+class TestSearchEmptyQuery:
+    def test_search_empty_string_returns_empty(self):
+        idx = SearchIndex()
+        idx.add(_aapl())
+        assert idx.search("") == []
+
+    def test_search_whitespace_only_returns_empty(self):
+        idx = SearchIndex()
+        idx.add(_aapl())
+        assert idx.search("   ") == []
+
+
+class TestSearchNameExactMatch:
+    def test_name_exact_match_scores_90(self):
+        idx = SearchIndex()
+        idx.add(_aapl())
+        results = idx.search("apple inc.")
+        assert results
+        assert results[0].primary_ticker == "AAPL"
+
+
+class TestSearchTickerContains:
+    def test_ticker_contains_scores_60(self):
+        idx = SearchIndex()
+        idx.add(
+            RefInstrument(
+                primary_ticker="AAPL",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Apple Inc.",
+            )
+        )
+        idx.add(
+            RefInstrument(
+                primary_ticker="MSFT",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Zeta Corp",
+            )
+        )
+        results = idx.search("PL")
+        tickers = [r.primary_ticker for r in results]
+        assert "AAPL" in tickers
+
+
+class TestWithinOneEdit:
+    def test_equal_strings_returns_true(self):
+        from engine.reference.search import _within_one_edit
+
+        assert _within_one_edit("abc", "abc") is True
+
+    def test_trailing_insertion_returns_true(self):
+        from engine.reference.search import _within_one_edit
+
+        assert _within_one_edit("ab", "abc") is True
+
+    def test_two_edits_returns_false(self):
+        from engine.reference.search import _within_one_edit
+
+        assert _within_one_edit("ab", "abcd") is False
+
+
+class TestResolverTypeError:
+    def test_resolve_rejects_non_str_non_dict(self):
+        r = Resolver()
+        r.register(_aapl())
+        with pytest.raises(TypeError, match="resolve query must be str or dict"):
+            r.resolve(123)
+
+
+class TestResolverDictEdgeCases:
+    def test_dict_ticker_with_venue_garbage_filtered(self):
+        r = Resolver()
+        r.register(_aapl())
+        assert r.resolve({"ticker": "<script>", "venue": "XNAS"}) is None
+
+    def test_dict_unknown_keys_returns_none(self):
+        r = Resolver()
+        r.register(_aapl())
+        assert r.resolve({"unknown_key": "value"}) is None
+
+
+class TestTickerWhitespaceValidator:
+    def test_leading_whitespace_rejected(self):
+        with pytest.raises(ValueError, match="non-empty and trimmed"):
+            RefInstrument._ticker_no_whitespace(" AAPL")
+
+    def test_trailing_whitespace_rejected(self):
+        with pytest.raises(ValueError, match="non-empty and trimmed"):
+            RefInstrument._ticker_no_whitespace("AAPL ")
+
+    def test_whitespace_only_rejected(self):
+        with pytest.raises(ValueError, match="non-empty and trimmed"):
+            RefInstrument._ticker_no_whitespace("   ")
+
+
+class TestGICSInvalidIndustry:
+    def test_invalid_industry_rejected(self):
+        assert not is_valid_gics_path(
+            "Information Technology",
+            "Software & Services",
+            "Nonexistent Industry",
+            "Application Software",
+        )
