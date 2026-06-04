@@ -120,7 +120,13 @@ async def e2e_client(e2e_db: AsyncSession) -> AsyncIterator[AsyncClient]:
     async def override_get_db():
         yield e2e_db
 
+    async def _noop_legal_acceptance():
+        return None
+
+    from engine.legal.dependencies import require_legal_acceptance
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[require_legal_acceptance] = _noop_legal_acceptance
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
