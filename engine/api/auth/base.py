@@ -22,12 +22,6 @@ class AuthResult:
     error: str | None = None
 
 
-_ROLE_PROMOTIONS: dict[str, str] = {
-    "viewer": "user",
-    "quant_dev": "developer",
-}
-
-
 class IAuthProvider(ABC):
     @property
     @abstractmethod
@@ -52,9 +46,13 @@ class IAuthProvider(ABC):
             "portfolio_manager": 5,
             "admin": 6,
         }
-        best = "user"
+        # Fail-secure: unknown / empty input collapses to the lowest-privilege
+        # role ("viewer"). We intentionally do NOT alias any external role
+        # names to internal ones — only roles actually present in the input
+        # are considered, and the highest-priority one wins.
+        best = "viewer"
         for role in external_roles:
             normalized = role.lower().strip()
             if normalized in role_priority and role_priority[normalized] > role_priority[best]:
                 best = normalized
-        return _ROLE_PROMOTIONS.get(best, best)
+        return best

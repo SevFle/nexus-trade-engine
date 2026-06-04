@@ -203,21 +203,42 @@ class TestBaseProviderMapRoles:
         p = self._make_provider()
         assert p.map_roles(["user", "admin", "developer"]) == "admin"
 
-    def test_map_roles_unknown_roles_ignored(self):
+    def test_map_roles_unknown_roles_default_to_viewer(self):
+        # Fail-secure: unrecognized roles must collapse to the lowest-privilege
+        # role ("viewer") — never to "user" or anything else.
         p = self._make_provider()
-        assert p.map_roles(["superuser", "god"]) == "user"
+        assert p.map_roles(["superuser", "god"]) == "viewer"
 
     def test_map_roles_new_domain_roles(self):
+        # No silent role promotion: each input role is returned at its own
+        # priority level. quant_dev is no longer aliased up to "developer",
+        # and viewer is no longer aliased up to "user".
         p = self._make_provider()
-        assert p.map_roles(["retail_trader", "quant_dev"]) == "developer"
+        assert p.map_roles(["retail_trader", "quant_dev"]) == "quant_dev"
         assert p.map_roles(["portfolio_manager", "quant_dev"]) == "portfolio_manager"
-        assert p.map_roles(["viewer"]) == "user"
+        assert p.map_roles(["viewer"]) == "viewer"
         assert p.map_roles(["retail_trader"]) == "retail_trader"
         assert p.map_roles(["portfolio_manager"]) == "portfolio_manager"
 
-    def test_map_roles_empty_list_returns_user(self):
+    def test_map_roles_empty_list_returns_viewer(self):
+        # Fail-secure: empty input must default to the lowest-privilege role.
         p = self._make_provider()
-        assert p.map_roles([]) == "user"
+        assert p.map_roles([]) == "viewer"
+
+    def test_map_roles_no_silent_role_promotion(self):
+        # Regression guard: quant_dev must never silently promote to developer,
+        # and viewer must never silently promote to user. Only roles actually
+        # present in the input are eligible, selected by ROLE_HIERARCHY priority.
+        p = self._make_provider()
+        assert p.map_roles(["quant_dev"]) == "quant_dev"
+        assert p.map_roles(["quant_dev"]) != "developer"
+        assert p.map_roles(["viewer"]) == "viewer"
+        assert p.map_roles(["viewer"]) != "user"
+        # Mixed input: even when a higher-priority *internal* role would be
+        # reachable via the old alias, we must select only from what was
+        # actually provided.
+        assert p.map_roles(["viewer", "quant_dev"]) == "quant_dev"
+        assert p.map_roles(["viewer", "quant_dev"]) != "developer"
 
 
 class TestAuthExports:
