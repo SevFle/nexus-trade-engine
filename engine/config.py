@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = 7
     auth_providers: str = "local"
     auth_local_allow_registration: bool = True
+    # When False (default) existing users keep their role on subsequent logins;
+    # set to True to let identity providers (LDAP/OIDC) overwrite the stored
+    # role from external claims on every successful authentication.
+    auth_overwrite_role_on_login: bool = False
 
     # MFA — Fernet key (url-safe base64, 32 bytes decoded) used to
     # encrypt TOTP secrets at rest. Empty disables MFA enrollment.

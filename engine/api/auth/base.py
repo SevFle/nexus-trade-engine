@@ -4,6 +4,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
+import structlog
+
+logger = structlog.get_logger()
+
 
 @dataclass
 class UserInfo:
@@ -22,12 +26,6 @@ class AuthResult:
     error: str | None = None
 
 
-_ROLE_PROMOTIONS: dict[str, str] = {
-    "viewer": "user",
-    "quant_dev": "developer",
-}
-
-
 class IAuthProvider(ABC):
     @property
     @abstractmethod
@@ -43,6 +41,15 @@ class IAuthProvider(ABC):
         return AuthResult(success=False, error=f"User creation not supported by {self.name}")
 
     def map_roles(self, external_roles: list[str]) -> str:
+        """Map a list of external roles into a single canonical role.
+
+        External claims are reflected faithfully: roles already present in the
+        canonical hierarchy are honoured according to their priority; no role
+        is silently elevated to a higher one. A warning is emitted for *every*
+        unrecognized role so operators can spot mis-named groups or claims.
+        When no claim matches a known role, ``"user"`` is returned as a safe
+        baseline.
+        """
         role_priority: dict[str, int] = {
             "viewer": 0,
             "user": 1,
@@ -52,9 +59,16 @@ class IAuthProvider(ABC):
             "portfolio_manager": 5,
             "admin": 6,
         }
-        best = "user"
+        best: str | None = None
         for role in external_roles:
             normalized = role.lower().strip()
-            if normalized in role_priority and role_priority[normalized] > role_priority[best]:
-                best = normalized
-        return _ROLE_PROMOTIONS.get(best, best)
+            if normalized in role_priority:
+                if best is None or role_priority[normalized] > role_priority[best]:
+                    best = normalized
+            else:
+                logger.warning(
+                    "auth.role.unknown",
+                    role=normalized,
+                    provider=self.name,
+                )
+        return best if best is not None else "user"

@@ -21,7 +21,7 @@ class LDAPAuthProvider(IAuthProvider):
     def name(self) -> str:
         return "ldap"
 
-    async def authenticate(self, **kwargs: Any) -> AuthResult:
+    async def authenticate(self, **kwargs: Any) -> AuthResult:  # noqa: PLR0912
         username = kwargs.get("username", "")
         password = kwargs.get("password", "")
         db: AsyncSession | None = kwargs.get("db")
@@ -103,8 +103,17 @@ class LDAPAuthProvider(IAuthProvider):
             await db.refresh(user)
             logger.info("auth.ldap.user_created", user_id=str(user.id))
         elif user.role != mapped_role:
-            user.role = mapped_role
-            await db.flush()
+            if settings.auth_overwrite_role_on_login:
+                user.role = mapped_role
+                await db.flush()
+            else:
+                logger.info(
+                    "auth.ldap.role_preserved",
+                    user_id=str(user.id),
+                    stored_role=user.role,
+                    mapped_role=mapped_role,
+                    hint="Set NEXUS_AUTH_OVERWRITE_ROLE_ON_LOGIN=true to enable overwrite",
+                )
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")
