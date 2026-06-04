@@ -111,6 +111,7 @@ async def e2e_db(e2e_engine) -> AsyncIterator[AsyncSession]:
 async def e2e_client(e2e_db: AsyncSession) -> AsyncIterator[AsyncClient]:
     from engine.api.auth.local import LocalAuthProvider
     from engine.api.auth.registry import AuthProviderRegistry
+    from engine.legal.dependencies import require_legal_acceptance
 
     app = create_app()
     registry = AuthProviderRegistry()
@@ -120,7 +121,14 @@ async def e2e_client(e2e_db: AsyncSession) -> AsyncIterator[AsyncClient]:
     async def override_get_db():
         yield e2e_db
 
+    async def bypass_legal_acceptance() -> None:
+        return None
+
     app.dependency_overrides[get_db] = override_get_db
+    # The e2e metadata only creates users/refresh_tokens/portfolios — the
+    # legal_documents table is missing, so bypass the dependency instead
+    # of forcing every e2e fixture to seed the legal catalog.
+    app.dependency_overrides[require_legal_acceptance] = bypass_legal_acceptance
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

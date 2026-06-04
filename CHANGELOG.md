@@ -13,6 +13,10 @@ edit this file by hand — it is regenerated as part of every release PR.
 ## [Unreleased]
 
 ### Internal
+- (fix) Fix 62 failing tests by overriding legal_acceptance dependency in test conftest to bypass the legal_documents table quer
+
+
+### Internal
 - (write_tests) Write tests for the most recently changed code to break the loop
 
 

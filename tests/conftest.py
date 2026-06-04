@@ -32,6 +32,19 @@ from engine.app import create_app
 from engine.config import settings
 from engine.db.models import Base, User
 from engine.deps import get_db
+from engine.legal.dependencies import require_legal_acceptance
+
+
+async def _bypass_legal_acceptance() -> None:
+    """Test-only override for ``require_legal_acceptance``.
+
+    The real dependency queries the ``legal_documents`` table, which most
+    test databases (notably the e2e auth ones in ``tests/test_auth_e2e.py``)
+    do not create. Returning ``None`` mirrors the no-op behaviour the
+    dependency has when no placeholder user is set, and keeps tests focused
+    on the routes under test rather than the legal-acceptance side effect.
+    """
+    return
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -63,19 +76,25 @@ def _bypass_auth(request, monkeypatch):
     """Globally bypass Bearer-token auth in tests. Patches FastAPI so every
     new app gets a dependency_override for get_current_user, covering tests
     that build their own isolated FastAPI instances. Tests in test_auth*
-    opt out so they exercise real auth behavior."""
-    nodeid = request.node.nodeid
-    if "test_auth" in nodeid or "_requires_auth" in nodeid:
-        return
+    opt out so they exercise real auth behavior.
 
+    The legal-acceptance override is registered unconditionally because it
+    depends on the ``legal_documents`` table, which many test fixtures do
+    not create (e.g. the e2e auth tests use a hand-rolled metadata)."""
     from fastapi import FastAPI
 
     fake = _fake_authenticated_user()
     original_init = FastAPI.__init__
 
+    is_auth_test = "test_auth" in request.node.nodeid or "_requires_auth" in request.node.nodeid
+
     def patched_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
-        self.dependency_overrides[get_current_user] = lambda: fake
+        # Legal-acceptance bypass is always installed so test DBs that lack
+        # the ``legal_documents`` table do not blow up on every request.
+        self.dependency_overrides[require_legal_acceptance] = _bypass_legal_acceptance
+        if not is_auth_test:
+            self.dependency_overrides[get_current_user] = lambda: fake
 
     monkeypatch.setattr(FastAPI, "__init__", patched_init)
 
@@ -84,6 +103,7 @@ def _bypass_auth(request, monkeypatch):
 async def client() -> AsyncIterator[AsyncClient]:
     app = create_app()
     app.dependency_overrides[get_current_user] = _fake_authenticated_user
+    app.dependency_overrides[require_legal_acceptance] = _bypass_legal_acceptance
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -154,6 +174,7 @@ async def db_client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = _fake_authenticated_user
+    app.dependency_overrides[require_legal_acceptance] = _bypass_legal_acceptance
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
