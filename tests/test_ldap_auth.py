@@ -404,6 +404,12 @@ class TestLDAPAuthenticateExistingUser:
     ):
         from engine.db.models import User
 
+        # Overwrite-on-login is gated on
+        # ``auth_overwrite_role_on_login`` (SEV-741, defaults to False);
+        # opt in explicitly here to preserve the original contract this
+        # test pins.
+        mock_settings.auth_overwrite_role_on_login = True
+
         attrs = _make_ldap_attrs(
             member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
         )
@@ -434,6 +440,340 @@ class TestLDAPAuthenticateExistingUser:
         assert result.success is True
         assert existing_user.role == "admin"
         mock_db.flush.assert_called()
+
+
+class TestLDAPRoleOverwriteOnLoginGate:
+    """SEV-741: role overwrite on federated login is gated on
+    ``settings.auth_overwrite_role_on_login`` (defaults to False) and
+    emits an explicit warning when the mapped role is a downgrade."""
+
+    async def test_overwrite_skipped_when_setting_disabled(
+        self, ldap_provider, mock_settings
+    ):
+        """With ``auth_overwrite_role_on_login=False`` (the default) a
+        returning user's existing role must be preserved even when the
+        IdP now asserts a different role."""
+        from engine.db.models import User
+
+        mock_settings.auth_overwrite_role_on_login = False
+
+        attrs = _make_ldap_attrs(
+            member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
+        )
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=promoted,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        existing_user = User(
+            email="keepadmin@example.com",
+            display_name="Existing Admin",
+            is_active=True,
+            role="user",
+            auth_provider="ldap",
+            external_id="keepadmin",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="keepadmin", password="pass", db=mock_db
+            )
+
+        assert result.success is True
+        # Role should remain unchanged because overwrite is disabled.
+        assert existing_user.role == "user"
+        mock_db.flush.assert_not_called()
+
+    async def test_overwrite_applied_when_setting_enabled(
+        self, ldap_provider, mock_settings
+    ):
+        from engine.db.models import User
+
+        mock_settings.auth_overwrite_role_on_login = True
+
+        attrs = _make_ldap_attrs(
+            member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
+        )
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=upgrade,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        existing_user = User(
+            email="upgrade@example.com",
+            display_name="Upgrading User",
+            is_active=True,
+            role="user",
+            auth_provider="ldap",
+            external_id="upgrade",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="upgrade", password="pass", db=mock_db
+            )
+
+        assert result.success is True
+        assert existing_user.role == "admin"
+        mock_db.flush.assert_called()
+
+    async def test_downgrade_warning_fires_when_overwrite_disabled(
+        self, ldap_provider, mock_settings
+    ):
+        """A downgrade attempt must emit a warning even when overwrite
+        is disabled, so operators can detect attempted privilege
+        reductions."""
+        from engine.db.models import User
+
+        mock_settings.auth_overwrite_role_on_login = False
+
+        attrs = _make_ldap_attrs(member_of=[])  # maps to "user"
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=downgrade,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        existing_user = User(
+            email="admin@example.com",
+            display_name="Existing Admin",
+            is_active=True,
+            role="admin",
+            auth_provider="ldap",
+            external_id="downgrade",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        calls: list[dict[str, object]] = []
+
+        class _StubLogger:
+            def warning(self, _event, **kwargs):
+                calls.append({"event": _event, **kwargs})
+
+            def info(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, "level": "info", **kwargs})
+
+            def exception(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, "level": "error", **kwargs})
+
+        with (
+            patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}),
+            patch("engine.api.auth.ldap.logger", _StubLogger()),
+        ):
+            result = await ldap_provider.authenticate(
+                username="downgrade", password="pass", db=mock_db
+            )
+
+        assert result.success is True
+        # Role unchanged because overwrite disabled.
+        assert existing_user.role == "admin"
+        # But the downgrade warning must still fire.
+        assert any(
+            c["event"] == "auth.ldap.role_downgrade_on_login" for c in calls
+        ), f"Expected role_downgrade_on_login warning, got: {calls}"
+        downgrade_calls = [
+            c for c in calls if c["event"] == "auth.ldap.role_downgrade_on_login"
+        ]
+        assert downgrade_calls[0]["current_role"] == "admin"
+        assert downgrade_calls[0]["mapped_role"] == "user"
+        assert downgrade_calls[0]["overwrite_enabled"] is False
+
+    async def test_downgrade_warning_fires_when_overwrite_enabled(
+        self, ldap_provider, mock_settings
+    ):
+        """When overwrite is enabled and the mapped role is a downgrade,
+        the warning fires AND the role is actually written."""
+        from engine.db.models import User
+
+        mock_settings.auth_overwrite_role_on_login = True
+
+        attrs = _make_ldap_attrs(member_of=[])
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=down2,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        existing_user = User(
+            email="down2@example.com",
+            display_name="Existing Dev",
+            is_active=True,
+            role="developer",
+            auth_provider="ldap",
+            external_id="down2",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        calls: list[dict[str, object]] = []
+
+        class _StubLogger:
+            def warning(self, _event, **kwargs):
+                calls.append({"event": _event, **kwargs})
+
+            def info(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, "level": "info", **kwargs})
+
+            def exception(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, "level": "error", **kwargs})
+
+        with (
+            patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}),
+            patch("engine.api.auth.ldap.logger", _StubLogger()),
+        ):
+            result = await ldap_provider.authenticate(
+                username="down2", password="pass", db=mock_db
+            )
+
+        assert result.success is True
+        # Overwrite enabled → role actually downgraded.
+        assert existing_user.role == "user"
+        # And the warning fired with the correct payload.
+        downgrade_calls = [
+            c for c in calls if c["event"] == "auth.ldap.role_downgrade_on_login"
+        ]
+        assert downgrade_calls, f"Expected downgrade warning, got: {calls}"
+        assert downgrade_calls[0]["current_role"] == "developer"
+        assert downgrade_calls[0]["mapped_role"] == "user"
+        assert downgrade_calls[0]["overwrite_enabled"] is True
+
+    async def test_no_warning_when_role_unchanged(
+        self, ldap_provider, mock_settings
+    ):
+        """When mapped role equals existing role there is nothing to
+        warn about and no flush should happen regardless of the
+        overwrite setting."""
+        from engine.db.models import User
+
+        mock_settings.auth_overwrite_role_on_login = True
+
+        attrs = _make_ldap_attrs(
+            member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
+        )
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=same,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        existing_user = User(
+            email="same@example.com",
+            display_name="Same Role",
+            is_active=True,
+            role="admin",
+            auth_provider="ldap",
+            external_id="same",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        calls: list[dict[str, object]] = []
+
+        class _StubLogger:
+            def warning(self, _event, **kwargs):
+                calls.append({"event": _event, **kwargs})
+
+            def info(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, "level": "info", **kwargs})
+
+            def exception(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, "level": "error", **kwargs})
+
+        with (
+            patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}),
+            patch("engine.api.auth.ldap.logger", _StubLogger()),
+        ):
+            result = await ldap_provider.authenticate(
+                username="same", password="pass", db=mock_db
+            )
+
+        assert result.success is True
+        assert existing_user.role == "admin"
+        assert not any(
+            c["event"] == "auth.ldap.role_downgrade_on_login" for c in calls
+        )
+        mock_db.flush.assert_not_called()
+
+    async def test_no_warning_on_upgrade_when_overwrite_enabled(
+        self, ldap_provider, mock_settings
+    ):
+        """Upgrade (mapped > current) does not trigger the downgrade
+        warning, but the role is still written because overwrite is
+        opted-in."""
+        from engine.db.models import User
+
+        mock_settings.auth_overwrite_role_on_login = True
+
+        attrs = _make_ldap_attrs(
+            member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
+        )
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=up,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        existing_user = User(
+            email="up@example.com",
+            display_name="Promotion",
+            is_active=True,
+            role="viewer",
+            auth_provider="ldap",
+            external_id="up",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        calls: list[dict[str, object]] = []
+
+        class _StubLogger:
+            def warning(self, _event, **kwargs):
+                calls.append({"event": _event, **kwargs})
+
+            def info(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, "level": "info", **kwargs})
+
+            def exception(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, "level": "error", **kwargs})
+
+        with (
+            patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}),
+            patch("engine.api.auth.ldap.logger", _StubLogger()),
+        ):
+            result = await ldap_provider.authenticate(
+                username="up", password="pass", db=mock_db
+            )
+
+        assert result.success is True
+        assert existing_user.role == "admin"
+        assert not any(
+            c["event"] == "auth.ldap.role_downgrade_on_login" for c in calls
+        )
+
+    async def test_overwrite_disabled_by_default_in_settings(self):
+        """Defense-in-depth: ``auth_overwrite_role_on_login`` must
+        default to False on a fresh Settings instance."""
+        s = Settings(_env_file=None)
+        assert s.auth_overwrite_role_on_login is False
 
 
 class TestLDAPAuthenticateEmailConflict:
