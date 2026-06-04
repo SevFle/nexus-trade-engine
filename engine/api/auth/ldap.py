@@ -37,6 +37,23 @@ class LDAPAuthProvider(IAuthProvider):
             conn.set_option(ldap.OPT_NETWORK_TIMEOUT, 10)
             conn.set_option(ldap.OPT_TIMEOUT, 10)
 
+            # TLS hardening — must be set BEFORE start_tls_s / bind.
+            # OPT_X_TLS_DEMAND forces the client to verify the server
+            # certificate and abort the handshake on failure (no silent
+            # fallback to plaintext or unverified TLS).
+            conn.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_DEMAND)
+            # When the operator specifies a CA bundle, pin the trust
+            # anchor explicitly. Otherwise the system trust store is used.
+            if settings.ldap_ca_cert_path:
+                conn.set_option(
+                    ldap.OPT_X_TLS_CACERTFILE, settings.ldap_ca_cert_path
+                )
+            # Upgrade a plain ldap:// connection to TLS before binding.
+            # For ldaps:// this is a no-op (TLS is already negotiated at
+            # socket-open time), but python-ldap tolerates the redundant
+            # call on already-encrypted connections.
+            conn.start_tls_s()
+
             safe_username = escape_filter_chars(username)
             user_dn = f"{settings.ldap_bind_dn.replace('{{username}}', safe_username)}"
             conn.simple_bind_s(user_dn, password)

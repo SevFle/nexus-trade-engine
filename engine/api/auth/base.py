@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
@@ -7,6 +8,51 @@ from typing import Any
 import structlog
 
 logger = structlog.get_logger()
+
+
+# Characters we strip from unrecognized-role strings before logging.
+# This covers the entire C0 + C1 control plane (U+0000-U+001F, U+007F-U+009F)
+# including NUL, BEL, BS, TAB, LF, CR, ESC, DEL and friends. These are the
+# characters that can break log parsers, hide subsequent text in terminals,
+# or smuggle content into structured-log downstream consumers.
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+# Maximum number of characters of an unrecognized role we are willing to
+# emit to logs. Anything longer is almost certainly garbage (e.g. a token
+# accidentally routed through the role claim) and would just bloat log
+# aggregators.
+_MAX_LOG_ROLE_LENGTH = 128
+
+
+def sanitize_role_for_log(role: str) -> str:
+    """Return a log-safe representation of an external role string.
+
+    External (IdP-supplied) role strings are user-controlled and must not
+    be emitted verbatim into structured logs — they may contain C0/C1
+    control characters that break terminal rendering, log parsers, or
+    downstream SIEM ingestion, or they may be arbitrarily long payloads
+    that bloat log aggregators.
+
+    This helper:
+
+    * Strips every character in the Unicode control planes (``\\x00``-
+      ``\\x1f``, ``\\x7f``-``\\x9f``). Newlines, tabs and carriage
+      returns are removed as well — they are the most dangerous in a
+      logging context (log forging / terminal escape injection).
+    * Truncates the result to :data:`_MAX_LOG_ROLE_LENGTH` characters
+      and appends an ellipsis indicator when truncation occurs.
+    * Preserves printable ASCII and printable Unicode (letters,
+      punctuation, emoji, etc.) as-is so the value remains useful for
+      operator triage.
+
+    The empty string is returned unchanged.
+    """
+    if not role:
+        return role
+    cleaned = _CONTROL_CHARS_RE.sub("", role)
+    if len(cleaned) > _MAX_LOG_ROLE_LENGTH:
+        cleaned = cleaned[:_MAX_LOG_ROLE_LENGTH] + "..."
+    return cleaned
 
 
 @dataclass
@@ -79,7 +125,10 @@ class IAuthProvider(ABC):
             logger.warning(
                 "auth.map_roles.unrecognized_roles",
                 provider=self.name,
-                unrecognized=unrecognized,
+                # Sanitize IdP-supplied strings before they reach the log
+                # pipeline — they may contain control chars or be very
+                # long, both of which break log parsers / terminals.
+                unrecognized=[sanitize_role_for_log(r) for r in unrecognized],
                 recognized=recognized,
                 mapped=best if best is not None else "user",
             )

@@ -97,6 +97,11 @@ class Settings(BaseSettings):
     ldap_bind_password: str = ""
     ldap_search_base: str = ""
     ldap_role_mapping: str = "{}"
+    # Filesystem path to a PEM bundle of trusted CA certificates used to
+    # verify the LDAP server's TLS certificate. When empty the system's
+    # default trust store is used. Setting this explicitly is strongly
+    # recommended for production deployments to pin the trust anchor.
+    ldap_ca_cert_path: str = ""
 
     @property
     def is_production(self) -> bool:

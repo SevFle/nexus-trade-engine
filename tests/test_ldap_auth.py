@@ -93,14 +93,22 @@ class _FakeLDAPConn:
         bind_raises: Exception | None = None,
         search_results: list[tuple[str, dict[str, list[bytes]]]] | None = None,
         search_raises: Exception | None = None,
+        start_tls_raises: Exception | None = None,
     ):
         self._bind_raises = bind_raises
         self._search_results = search_results or []
         self._search_raises = search_raises
+        self._start_tls_raises = start_tls_raises
         self._options: dict[int, Any] = {}
+        self.start_tls_called = False
 
     def set_option(self, opt: int, value: Any) -> None:
         self._options[opt] = value
+
+    def start_tls_s(self) -> None:
+        self.start_tls_called = True
+        if self._start_tls_raises:
+            raise self._start_tls_raises
 
     def simple_bind_s(self, dn: str, password: str) -> None:
         if self._bind_raises:
@@ -119,6 +127,7 @@ def _build_ldap_mock(
     bind_raises: Exception | None = None,
     search_results: list[tuple[str, dict[str, list[bytes]]]] | None = None,
     search_raises: Exception | None = None,
+    start_tls_raises: Exception | None = None,
 ):
     mock_ldap = MagicMock()
     mock_ldap.initialize = MagicMock(
@@ -126,10 +135,16 @@ def _build_ldap_mock(
             bind_raises=bind_raises,
             search_results=search_results,
             search_raises=search_raises,
+            start_tls_raises=start_tls_raises,
         )
     )
+    # Numeric values are arbitrary — they just need to be hashable so we
+    # can assert which option constants were passed to ``set_option``.
     mock_ldap.OPT_NETWORK_TIMEOUT = 7
     mock_ldap.OPT_TIMEOUT = 8
+    mock_ldap.OPT_X_TLS_REQUIRE_CERT = 100
+    mock_ldap.OPT_X_TLS_DEMAND = 101
+    mock_ldap.OPT_X_TLS_CACERTFILE = 102
     mock_ldap.SCOPE_SUBTREE = 2
     mock_filter = MagicMock()
     mock_filter.escape_filter_chars = MagicMock(side_effect=lambda x: x)
