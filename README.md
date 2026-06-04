@@ -139,6 +139,29 @@ See the [Plugin Developer Guide](docs/PLUGIN_DEV_GUIDE.md) for full documentatio
 | Containerization | Docker, Docker Compose |
 | Testing | pytest, pytest-asyncio |
 
+## Documentation
+
+Engineering docs live in [`docs/`](docs/README.md). Start there if
+you're new to the codebase. Highlights:
+
+- [Architecture overview](docs/architecture/overview.md) — components,
+  request lifecycle, event flow.
+- [Data model](docs/architecture/database.md) — every table, its
+  role, and the ER diagram.
+- [API reference](docs/api/README.md) — every HTTP and WebSocket
+  endpoint, by domain.
+- [Development setup](docs/development.md) — native or Docker dev
+  stack, tests, lint, typecheck.
+- [Deployment](docs/deployment.md) — topology, env vars, rollout.
+- [Known limitations](docs/limitations.md) — honest, prioritised
+  tech-debt inventory.
+- [ADR log](docs/adr/) — major technical decisions and their context.
+- [Operational runbooks](docs/operations/runbooks/) — one runbook per
+  SLO-linked alert.
+
+Each doc stays under ~500 lines so reviews stay tractable; large
+domains are split (see `docs/api/`).
+
 ## Roadmap
 
 - [x] Core architecture scaffold
