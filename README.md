@@ -127,17 +127,41 @@ nexus-trade-engine/
 
 See the [Plugin Developer Guide](docs/PLUGIN_DEV_GUIDE.md) for full documentation.
 
+## Documentation
+
+Engineering documentation lives in [`docs/`](docs/README.md) and is
+written for engineers who will read the source alongside the prose.
+Start with the [docs index](docs/README.md) for a reading-order map;
+key entry points:
+
+- [Architecture overview](docs/architecture/overview.md) — system
+  components, request lifecycle, configuration.
+- [API reference](docs/api-reference.md) — every HTTP and WebSocket
+  route, auth model, error semantics.
+- [Data model](docs/data-model.md) — entities, relationships,
+  invariants.
+- [Development setup](docs/development.md) — local stack, tests,
+  lint loop.
+- [Deployment](docs/deployment.md) — infra requirements, env vars,
+  rollout & rollback.
+- [Known limitations & tech debt](docs/known-limitations.md) —
+  honest, ranked list of what's half-built.
+- [Runbooks](docs/operations/runbooks/README.md) — on-call debug
+  guides, per-SLO and common-issue.
+- [ADRs](docs/adr/README.md) — architecture decision records.
+
 ## Tech Stack
 
 | Component | Technology |
 |-----------|-----------|
-| Engine | Python 3.11, FastAPI, Celery |
+| Engine | Python 3.11, FastAPI, TaskIQ |
 | Database | PostgreSQL 16, TimescaleDB |
-| Cache | Redis 7 |
+| Cache / Broker | Valkey 8 (Redis-compatible) |
 | Frontend | React 18, Vite, Tailwind CSS |
-| Task Queue | Celery + Redis broker |
-| Containerization | Docker, Docker Compose |
-| Testing | pytest, pytest-asyncio |
+| Task Queue | TaskIQ + Valkey broker |
+| Containerization | Docker (distroless runtime), Docker Compose |
+| Testing | pytest, pytest-asyncio, Hypothesis |
+| Lint / Types | Ruff, basedpyright |
 
 ## Roadmap
 
