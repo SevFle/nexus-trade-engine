@@ -16,6 +16,7 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -23,7 +24,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from engine.api.auth.ldap import LDAPAuthProvider
+from engine.api.auth.ldap import LDAPAuthProvider, _ldap_fetch
 from engine.config import Settings
 
 
@@ -93,14 +94,23 @@ class _FakeLDAPConn:
         bind_raises: Exception | None = None,
         search_results: list[tuple[str, dict[str, list[bytes]]]] | None = None,
         search_raises: Exception | None = None,
+        start_tls_raises: Exception | None = None,
     ):
         self._bind_raises = bind_raises
         self._search_results = search_results or []
         self._search_raises = search_raises
+        self._start_tls_raises = start_tls_raises
         self._options: dict[int, Any] = {}
+        self.start_tls_called = False
+        self.unbind_called = False
 
     def set_option(self, opt: int, value: Any) -> None:
         self._options[opt] = value
+
+    def start_tls_s(self) -> None:
+        self.start_tls_called = True
+        if self._start_tls_raises:
+            raise self._start_tls_raises
 
     def simple_bind_s(self, dn: str, password: str) -> None:
         if self._bind_raises:
@@ -112,28 +122,29 @@ class _FakeLDAPConn:
         return self._search_results
 
     def unbind_s(self) -> None:
-        pass
+        self.unbind_called = True
 
 
 def _build_ldap_mock(
     bind_raises: Exception | None = None,
     search_results: list[tuple[str, dict[str, list[bytes]]]] | None = None,
     search_raises: Exception | None = None,
+    start_tls_raises: Exception | None = None,
 ):
-    mock_ldap = MagicMock()
-    mock_ldap.initialize = MagicMock(
-        return_value=_FakeLDAPConn(
-            bind_raises=bind_raises,
-            search_results=search_results,
-            search_raises=search_raises,
-        )
+    fake_conn = _FakeLDAPConn(
+        bind_raises=bind_raises,
+        search_results=search_results,
+        search_raises=search_raises,
+        start_tls_raises=start_tls_raises,
     )
+    mock_ldap = MagicMock()
+    mock_ldap.initialize = MagicMock(return_value=fake_conn)
     mock_ldap.OPT_NETWORK_TIMEOUT = 7
     mock_ldap.OPT_TIMEOUT = 8
     mock_ldap.SCOPE_SUBTREE = 2
     mock_filter = MagicMock()
     mock_filter.escape_filter_chars = MagicMock(side_effect=lambda x: x)
-    return mock_ldap, mock_filter
+    return mock_ldap, mock_filter, fake_conn
 
 
 def _make_mock_db():
@@ -158,7 +169,7 @@ class TestLDAPAuthenticateBindFailure:
     async def test_bind_failure_returns_invalid_credentials(
         self, ldap_provider, mock_settings
     ):
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _conn = _build_ldap_mock(
             bind_raises=Exception("LDAP bind failed")
         )
 
@@ -174,7 +185,7 @@ class TestLDAPAuthenticateBindFailure:
     async def test_connection_failure_returns_invalid_credentials(
         self, ldap_provider, mock_settings
     ):
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _conn = _build_ldap_mock(
             bind_raises=ConnectionError("Connection refused")
         )
 
@@ -190,7 +201,7 @@ class TestLDAPAuthenticateBindFailure:
 
 class TestLDAPAuthenticateSearchResults:
     async def test_empty_results_user_not_found(self, ldap_provider, mock_settings):
-        mock_ldap, mock_filter = _build_ldap_mock(search_results=[])
+        mock_ldap, mock_filter, _conn = _build_ldap_mock(search_results=[])
 
         mock_db = AsyncMock(spec=AsyncSession)
         with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
@@ -239,7 +250,7 @@ class TestLDAPAuthenticateSuccess:
         attrs = _make_ldap_attrs(
             member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
         )
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _conn = _build_ldap_mock(
             search_results=[("uid=testuser,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -263,7 +274,7 @@ class TestLDAPAuthenticateSuccess:
         self, ldap_provider, mock_settings
     ):
         attrs = _make_ldap_attrs(member_of=[])
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _conn = _build_ldap_mock(
             search_results=[("uid=user2,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -283,7 +294,7 @@ class TestLDAPAuthenticateSuccess:
         attrs = _make_ldap_attrs(
             member_of=[b"cn=developers,ou=groups,dc=example,dc=com"]
         )
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _conn = _build_ldap_mock(
             search_results=[("uid=devuser,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -308,7 +319,7 @@ class TestLDAPAuthenticateSuccess:
                 b"cn=admins,ou=groups,dc=example,dc=com",
             ]
         )
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _conn = _build_ldap_mock(
             search_results=[("uid=multi,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -327,7 +338,7 @@ class TestLDAPAuthenticateSuccess:
         self, ldap_provider, mock_settings
     ):
         attrs = _make_ldap_attrs(mail=b"")
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _conn = _build_ldap_mock(
             search_results=[("uid=nomail,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -347,7 +358,7 @@ class TestLDAPAuthenticateSuccess:
         self, ldap_provider, mock_settings
     ):
         attrs = _make_ldap_attrs(cn=b"")
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _conn = _build_ldap_mock(
             search_results=[("uid=nocn,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -371,7 +382,7 @@ class TestLDAPAuthenticateExistingUser:
         from engine.db.models import User
 
         attrs = _make_ldap_attrs()
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _conn = _build_ldap_mock(
             search_results=[("uid=testuser,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -407,7 +418,7 @@ class TestLDAPAuthenticateExistingUser:
         attrs = _make_ldap_attrs(
             member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
         )
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _conn = _build_ldap_mock(
             search_results=[("uid=promoted,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -443,7 +454,7 @@ class TestLDAPAuthenticateEmailConflict:
         from engine.db.models import User
 
         attrs = _make_ldap_attrs()
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _conn = _build_ldap_mock(
             search_results=[("uid=conflict,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -482,7 +493,7 @@ class TestLDAPAuthenticateDisabledUser:
         from engine.db.models import User
 
         attrs = _make_ldap_attrs()
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _conn = _build_ldap_mock(
             search_results=[("uid=disabled,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -524,7 +535,7 @@ class TestLDAPRoleMappingEmpty:
         attrs = _make_ldap_attrs(
             member_of=[b"cn=somegroup,ou=groups,dc=example,dc=com"]
         )
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _conn = _build_ldap_mock(
             search_results=[("uid=norolemap,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -564,3 +575,150 @@ class TestLDAPInheritedMethods:
 
     def test_map_roles_empty_list(self, ldap_provider):
         assert ldap_provider.map_roles([]) == "user"
+
+
+class TestLDAPStartTLSCleanup:
+    """Verify that a STARTTLS failure still releases the LDAP connection.
+
+    Regression coverage for the fix that moved ``conn.start_tls_s()`` inside
+    the ``try`` block of ``_ldap_fetch`` so the ``finally`` clause always
+    unbinds. Previously a STARTTLS handshake failure would leak the socket
+    until GC, which under load exhausted the server's connection table.
+    """
+
+    async def test_starttls_failure_still_unbinds(self, ldap_provider, mock_settings):
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            start_tls_raises=RuntimeError("STARTTLS handshake refused")
+        )
+        mock_db = AsyncMock(spec=AsyncSession)
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="tlsuser", password="pass", db=mock_db
+            )
+
+        assert result.success is False
+        assert "Invalid credentials" in result.error
+        assert fake_conn.start_tls_called is True
+        assert fake_conn.unbind_called is True
+
+    async def test_starttls_failure_does_not_attempt_bind(
+        self, ldap_provider, mock_settings
+    ):
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            start_tls_raises=RuntimeError("STARTTLS handshake refused"),
+            bind_raises=AssertionError("bind must not run when STARTTLS fails"),
+        )
+        mock_db = AsyncMock(spec=AsyncSession)
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="tlsuser", password="pass", db=mock_db
+            )
+
+        assert result.success is False
+        assert fake_conn.unbind_called is True
+
+
+class TestLDAPFetchOffloadedToThread:
+    """Verify ``_ldap_fetch`` runs in a worker thread, not on the event loop.
+
+    Blocking LDAP I/O that runs inline stalls every coroutine sharing the
+    loop. The fix wraps the sync helper in :func:`asyncio.to_thread`; these
+    tests pin that contract so a future refactor cannot silently regress it.
+    """
+
+    async def test_authenticate_uses_asyncio_to_thread(
+        self, ldap_provider, mock_settings
+    ):
+        attrs = _make_ldap_attrs()
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
+            search_results=[("uid=threadcheck,ou=users,dc=example,dc=com", attrs)]
+        )
+        mock_db, _ = _make_mock_db()
+        mock_db.execute = _mock_execute_factory(None, None)
+
+        with (
+            patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}),
+            patch(
+                "engine.api.auth.ldap.asyncio.to_thread",
+                new=AsyncMock(side_effect=asyncio.to_thread),
+            ) as mock_to_thread,
+        ):
+            result = await ldap_provider.authenticate(
+                username="threadcheck", password="pass", db=mock_db
+            )
+
+        assert result.success is True
+        mock_to_thread.assert_called_once()
+        assert mock_to_thread.call_args.args[0] is _ldap_fetch
+
+    async def test_ldap_fetch_executes_off_event_loop(
+        self, ldap_provider, mock_settings
+    ):
+        """The blocking helper must observe a *different* thread than the
+        coroutine driving ``authenticate`` — that is the whole point of
+        ``asyncio.to_thread``."""
+        import threading
+
+        main_thread = threading.get_ident()
+        observed_threads: list[int] = []
+
+        attrs = _make_ldap_attrs()
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
+            search_results=[("uid=threadid,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        real_to_thread = asyncio.to_thread
+
+        async def spy_to_thread(func, /, *args, **kwargs):
+            observed_threads.append(threading.get_ident())
+            return await real_to_thread(func, *args, **kwargs)
+
+        mock_db, _ = _make_mock_db()
+        mock_db.execute = _mock_execute_factory(None, None)
+
+        with (
+            patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}),
+            patch("engine.api.auth.ldap.asyncio.to_thread", new=spy_to_thread),
+        ):
+            # _ldap_fetch records its own thread id by writing into
+            # observed_threads via the search_s side-effect path below.
+            original_search = _fake_conn.search_s
+
+            def recording_search(*a, **kw):
+                observed_threads.append(threading.get_ident())
+                return original_search(*a, **kw)
+
+            _fake_conn.search_s = recording_search
+            result = await ldap_provider.authenticate(
+                username="threadid", password="pass", db=mock_db
+            )
+
+        assert result.success is True
+        # The spy recorded the await-side thread (== main) and search_s
+        # recorded the worker thread; they must differ.
+        assert main_thread in observed_threads
+        worker_threads = [t for t in observed_threads if t != main_thread]
+        assert worker_threads, (
+            "expected _ldap_fetch to run in a worker thread, but search_s ran "
+            f"on the event-loop thread (observed={observed_threads})"
+        )
+
+    async def test_ldap_fetch_unbind_called_on_success(
+        self, ldap_provider, mock_settings
+    ):
+        attrs = _make_ldap_attrs()
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            search_results=[("uid=cleanup,ou=users,dc=example,dc=com", attrs)]
+        )
+        mock_db, _ = _make_mock_db()
+        mock_db.execute = _mock_execute_factory(None, None)
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            await ldap_provider.authenticate(
+                username="cleanup", password="pass", db=mock_db
+            )
+
+        assert fake_conn.start_tls_called is True
+        assert fake_conn.unbind_called is True

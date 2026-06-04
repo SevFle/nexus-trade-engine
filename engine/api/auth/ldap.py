@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -14,6 +15,41 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
+
+
+def _ldap_fetch(
+    ldap_module: Any,
+    conn: Any,
+    user_dn: str,
+    password: str,
+    search_base: str,
+    search_filter: str,
+) -> list[tuple[str, dict[str, list[bytes]]]]:
+    """Run the blocking LDAP bind + search in a single synchronous call.
+
+    ``conn.start_tls_s()`` is invoked *inside* the ``try`` block so that the
+    ``finally`` clause always unbinds the connection — even when the STARTTLS
+    handshake itself fails (e.g. server refuses upgrade). Without this
+    ordering a STARTTLS failure would leak the underlying socket until GC.
+
+    Intended to be dispatched via :func:`asyncio.to_thread` from
+    :meth:`LDAPAuthProvider.authenticate` so the synchronous LDAP I/O does
+    not block the event loop.
+    """
+    try:
+        conn.start_tls_s()
+        conn.simple_bind_s(user_dn, password)
+        return conn.search_s(
+            search_base,
+            ldap_module.SCOPE_SUBTREE,
+            search_filter,
+            ["uid", "mail", "cn", "memberOf"],
+        )
+    finally:
+        try:
+            conn.unbind_s()
+        except Exception:
+            logger.exception("auth.ldap.unbind_failed")
 
 
 class LDAPAuthProvider(IAuthProvider):
@@ -38,17 +74,18 @@ class LDAPAuthProvider(IAuthProvider):
             conn.set_option(ldap.OPT_TIMEOUT, 10)
 
             safe_username = escape_filter_chars(username)
-            user_dn = f"{settings.ldap_bind_dn.replace('{{username}}', safe_username)}"
-            conn.simple_bind_s(user_dn, password)
-
+            user_dn = settings.ldap_bind_dn.replace("{{username}}", safe_username)
             search_filter = f"(uid={safe_username})"
-            results = conn.search_s(
+
+            results = await asyncio.to_thread(
+                _ldap_fetch,
+                ldap,
+                conn,
+                user_dn,
+                password,
                 settings.ldap_search_base,
-                ldap.SCOPE_SUBTREE,
                 search_filter,
-                ["uid", "mail", "cn", "memberOf"],
             )
-            conn.unbind_s()
 
         except Exception as exc:
             logger.exception("auth.ldap.bind_failed", error=str(exc))
