@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = 7
     auth_providers: str = "local"
     auth_local_allow_registration: bool = True
+    # When True, the engine will overwrite an existing user's role on each
+    # federated login with whatever the IdP asserts. Defaults to False for
+    # defense-in-depth: a misconfigured or compromised upstream provider
+    # cannot downgrade or escalate a previously-granted local role without
+    # explicit operator opt-in. (SEV-741)
+    auth_overwrite_role_on_login: bool = False
 
     # MFA — Fernet key (url-safe base64, 32 bytes decoded) used to
     # encrypt TOTP secrets at rest. Empty disables MFA enrollment.
