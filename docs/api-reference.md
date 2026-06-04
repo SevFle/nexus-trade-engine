@@ -1,0 +1,329 @@
+# API Reference
+
+The engine exposes one FastAPI app under `/api/v1/*` (plus `/health`,
+`/ready`, `/metrics` outside the v1 prefix). OpenAPI is auto-generated
+at `/docs` and `/redoc` when the engine is running; this document is
+the curated, narrative version that explains *why* each endpoint
+exists, what it requires, and how it behaves on error.
+
+All routes are mounted by [`engine/api/router.py`](../engine/api/router.py).
+Each table below maps to one router module so you can jump to source.
+
+## Authentication
+
+Every protected route accepts either:
+
+- `Authorization: Bearer <jwt>` — short-lived JWT issued by
+  `POST /api/v1/auth/login` or `/register`/`/refresh`/`/auth/{provider}/callback`.
+- `X-API-Key: nxs_<prefix>_<secret>` — long-lived, bcrypt-hashed API
+  key (gh#94). The plaintext secret is returned **exactly once** on
+  creation. Issued by `POST /api/v1/auth/api-keys`.
+
+JWT and API-key paths share [`get_current_user`](../engine/api/auth/dependency.py);
+the dependency stashes the active `ApiKey` on `request.state` when
+present, so scope checks downstream don't re-authenticate.
+
+### Roles (RBAC hierarchy)
+
+Enforced via `Depends(require_role("developer"))` etc. Numeric levels
+in [`engine/api/auth/dependency.py`](../engine/api/auth/dependency.py:27):
+
+| Role | Level |
+|---|---|
+| `viewer` | 0 |
+| `user` | 1 |
+| `retail_trader` | 2 |
+| `quant_dev` | 3 |
+| `developer` | 4 |
+| `portfolio_manager` | 5 |
+| `admin` | 6 |
+
+A request with role `R` satisfies `require_role(X)` iff
+`level(R) >= level(X)`.
+
+### API-key scopes
+
+Hierarchy (gh#86): `admin > trade > read`. JWT-authenticated requests
+bypass scope enforcement — JWTs are gated by role instead. API keys
+that lack the required scope get `403`.
+
+- `read` — GET / HEAD only.
+- `trade` — POST / PUT / PATCH for backtest, portfolio, webhooks, etc.
+- `admin` — equivalent to the `admin` role.
+
+### Legal acceptance gate
+
+`backtest`, `scoring`, `market-data`, `marketplace`, `portfolio`,
+`strategies`, and `reference` routers are mounted with
+`Depends(require_legal_acceptance)`. Callers without an
+`acceptances` row for the *current version* of every
+`requires_acceptance` document get `403`. Acceptance is recorded via
+`POST /api/v1/legal/accept`. See [`data-model.md`](data-model.md) for
+the immutable acceptance table.
+
+---
+
+## Health & observability
+
+Unauthenticated probes for load balancers and Prometheus.
+
+| Method | Path | Source | Notes |
+|---|---|---|---|
+| GET | `/health` | [`routes/health.py`](../engine/api/routes/health.py:19) | Liveness. Always returns `{"status": "ok"}`. |
+| GET | `/health/providers` | same | Reports each registered data provider (up/degraded/down + latency). |
+| GET | `/ready` | same | Readiness — pings DB (`SELECT 1`) and `valkey.ping()`. Returns `degraded` if either fails. |
+| GET | `/metrics` | [`routes/metrics.py`](../engine/api/routes/metrics.py) | Prometheus exposition. The `RateLimitMiddleware` exempts `/metrics` from throttling. |
+
+## System
+
+`/api/v1/system/*` — operational metadata for CI probes.
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/v1/system/status` | any | Engine version, uptime, DB reachability, and counts (`users`, `portfolios`, `backtests`, `webhooks_active`, `api_keys_active`). |
+
+Source: [`routes/system.py`](../engine/api/routes/system.py).
+
+## Auth & MFA
+
+Mounted at `/api/v1/auth/*` and `/api/v1/auth/mfa/*`. Source:
+[`routes/auth.py`](../engine/api/routes/auth.py), [`routes/mfa.py`](../engine/api/routes/mfa.py).
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/api/v1/auth/register` | `{email, password, display_name?}` | `201` `{access_token, refresh_token, token_type:"bearer", expires_in}` |
+| POST | `/api/v1/auth/login` | `{email, password}` | Either `200` token pair or `200` `{mfa_required:true, challenge_token}` |
+| POST | `/api/v1/auth/refresh` | `{refresh_token}` | New token pair. **Detects reuse**: if a revoked token is presented, *all* the user's sessions are revoked (`401`). |
+| GET  | `/api/v1/auth/me` | — | `UserProfileResponse` (`id, email, display_name, role, auth_provider, is_active`) |
+| POST | `/api/v1/auth/logout` | `{refresh_token?}` | Revokes one token or every active session for the caller. |
+| GET  | `/api/v1/auth/{provider}/authorize` | — | Returns `{authorize_url, state}`; sets an HttpOnly `oauth_state_<provider>` cookie for 10 minutes. |
+| GET  | `/api/v1/auth/{provider}/callback` | `?code=&state=` | Validates state against cookie, mints tokens, returns token pair. |
+
+Providers enabled by `NEXUS_AUTH_PROVIDERS` (csv): `local`, `google`,
+`github`, `oidc`, `ldap`. Each provider registers in
+[`engine/api/auth/`](../engine/api/auth/) at app startup via
+[`_build_auth_registry`](../engine/app.py:86).
+
+### MFA (TOTP + backup codes)
+
+TOTP secrets are Fernet-encrypted with `NEXUS_MFA_ENCRYPTION_KEY`.
+Backup codes are bcrypt-hashed and stored in `users.mfa_backup_codes`
+(JSONB). The plaintext is returned **once** on enrollment / regen.
+
+| Method | Path | Body | Notes |
+|---|---|---|---|
+| POST | `/api/v1/auth/mfa/enroll` | — | Generates a TOTP secret + `otpauth://` URI. Doesn't enable yet. |
+| POST | `/api/v1/auth/mfa/enroll/confirm` | `{secret, code}` | Verifies the code, persists encrypted secret, enables MFA, returns plaintext backup codes. |
+| POST | `/api/v1/auth/mfa/verify` | `{challenge_token, code}` | Exchange a login challenge + TOTP/backup code for a token pair. |
+| POST | `/api/v1/auth/mfa/disable` | `{password, code}` | Requires the user's password AND a valid TOTP code (defense in depth). |
+| POST | `/api/v1/auth/mfa/backup-codes/regen` | `{code}` | Generates a fresh batch, returns plaintext. |
+
+### API keys
+
+Long-lived, scoped, bcrypt-hashed. Source: [`routes/api_keys.py`](../engine/api/routes/api_keys.py).
+Mounted at `/api/v1/auth/api-keys`.
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| POST | `/api/v1/auth/api-keys` | `user` | `{name, scopes:["read"\|"trade"\|"admin"], expires_at?, env?}` → `201` `{id, name, prefix, scopes, ..., token}` — `token` is shown this one time only. |
+| GET | `/api/v1/auth/api-keys` | `user` | Lists caller's keys (excluding hash). |
+| DELETE | `/api/v1/auth/api-keys/{key_id}` | `user` | `204` — sets `revoked_at` (idempotent). |
+
+## Legal
+
+Mounted **outside** the v1 prefix. Source: [`routes/legal.py`](../engine/api/routes/legal.py).
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/v1/legal/documents?category=` | optional | Lists documents, with per-user acceptance status if a bearer token is sent. |
+| GET | `/api/v1/legal/documents/{slug}?version=` | optional | Returns rendered markdown. Template vars (`{{OPERATOR_NAME}}`, `{{EFFECTIVE_DATE}}`, …) are substituted server-side. |
+| POST | `/api/v1/legal/accept` | `user` | Records acceptance(s); `acceptances` are append-only (migration 006). |
+| GET | `/api/v1/legal/acceptances/me?document_slug=` | `user` | Caller's acceptance history. |
+| GET | `/api/v1/legal/attributions?context=` | — | `DataProviderAttribution` rows shown in the UI footer. |
+
+## Portfolio
+
+`/api/v1/portfolio/*`. Source: [`routes/portfolio.py`](../engine/api/routes/portfolio.py).
+All routes require legal acceptance.
+
+| Method | Path | Body | Notes |
+|---|---|---|---|
+| POST | `/api/v1/portfolio/` | `{name, description?, initial_capital?}` | `201` |
+| GET | `/api/v1/portfolio/` | — | Lists caller's portfolios. |
+| GET | `/api/v1/portfolio/{portfolio_id}` | — | `403` if not owner. |
+| DELETE | `/api/v1/portfolio/{portfolio_id}` | — | Hard delete (cascades to positions, orders, tax lots, installed strategies). |
+
+## Strategies
+
+`/api/v1/strategies/*`. Source: [`routes/strategies.py`](../engine/api/routes/strategies.py).
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/strategies/` | Lists installed strategies via `app.state.plugin_registry.list_all()`. |
+| GET | `/api/v1/strategies/{strategy_id}` | Manifest details: `config_schema`, `data_feeds`, `watchlist`, `requires_network`, `requires_gpu`, `is_loaded`. |
+| POST | `/api/v1/strategies/{strategy_id}/activate` | `{params:dict}` — instantiates the strategy under its sandbox. |
+| POST | `/api/v1/strategies/{strategy_id}/deactivate` | Unloads. |
+| POST | `/api/v1/strategies/{strategy_id}/reload` | Hot-reload from disk. |
+| GET | `/api/v1/strategies/{strategy_id}/health` | Runtime health (active flag only today). |
+
+## Backtest
+
+`/api/v1/backtest/*`. Source: [`routes/backtest.py`](../engine/api/routes/backtest.py).
+
+Backtest results currently live in an **in-process dict** keyed by
+`backtest_id` with a 1-hour TTL (see `_RESULTS_TTL_SECONDS`). A future
+refactor persists them to the `backtest_results` table; today, results
+are lost on process restart.
+
+| Method | Path | Body | Notes |
+|---|---|---|---|
+| POST | `/api/v1/backtest/run` | `{strategy_name, symbol, start_date, end_date, initial_capital?, config?}` | Returns `202 {status:"accepted", backtest_id}`. Computation runs as a `BackgroundTasks` job (not TaskIQ — see [known-limitations.md](known-limitations.md)). |
+| GET | `/api/v1/backtest/results/{backtest_id}` | — | `202 {status:"running"}` · `200 {status:"completed", metrics, equity_curve, drawdown_curve, evaluation?}` · `200 {status:"failed", error}` · `404` · `403`. |
+
+The `metrics` object is `MetricsSummary` (24 fields including rolling
+windows); see source for the canonical schema. The full list is also
+served via OpenAPI.
+
+## Scoring
+
+`/api/v1/scoring/*`. Source: [`routes/scoring.py`](../engine/api/routes/scoring.py).
+Requires legal acceptance.
+
+| Method | Path | Body | Notes |
+|---|---|---|---|
+| POST | `/api/v1/scoring/{strategy_name}/run` | `{universe:string[], raw_data:{symbol:{factor:value}}}` | Computes scores via a scoring-strategy plugin, persists a `ScoringSnapshot` row. `400` if strategy isn't a scoring strategy. |
+| GET | `/api/v1/scoring/{strategy_name}/results?limit=&offset=&sort_by=&sort_order=` | — | Paginated history. |
+
+## Marketplace
+
+`/api/v1/marketplace/*`. Source: [`routes/marketplace.py`](../engine/api/routes/marketplace.py).
+**Most routes are stubs** (`{status:"not_implemented"}`) — see
+[known-limitations.md](known-limitations.md).
+
+| Method | Path | Auth | Status |
+|---|---|---|---|
+| GET | `/api/v1/marketplace/browse?category=&search=&sort_by=&page=&per_page=` | `user` | Returns empty list (stub). |
+| GET | `/api/v1/marketplace/categories` | `user` | Static category list (algorithmic, ml, llm, hybrid, income, macro). |
+| POST | `/api/v1/marketplace/install` | `developer` | Stub. |
+| DELETE | `/api/v1/marketplace/uninstall/{strategy_id}` | `developer` | Stub. |
+| POST | `/api/v1/marketplace/{strategy_id}/rate?rating=&review=` | `user` | Stub. `400` if `rating ∉ [1,5]`. |
+
+## Reference
+
+`/api/v1/reference/*`. Source: [`routes/reference.py`](../engine/api/routes/reference.py).
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/reference/suggest?q=&limit=&asset_class=` | Typeahead. Tries the local `SearchIndex` first (seeded at startup), then falls through to the Yahoo Finance search API. Caps `limit` at 50; rejects empty / oversize `q`. |
+
+## Market data
+
+`/api/v1/market-data/*`. Source: [`routes/market_data.py`](../engine/api/routes/market_data.py).
+Requires legal acceptance.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/market-data/{symbol}/bars?interval=&period=&asset_class=&provider=` | OHLCV via the provider registry. Asset class is inferred from the symbol shape (`BTC/USD → CRYPTO`, `EURUSD=X → FOREX`, default `EQUITY`) and can be overridden. |
+| GET | `/api/v1/market-data/{symbol}/quote?asset_class=&provider=` | Latest quote. |
+
+Errors follow the provider hierarchy:
+`TransientProviderError → 503`, `FatalProviderError → 502`,
+`NoProviderAvailableError → 404`.
+
+## Tax
+
+`/api/v1/tax/*`. Source: [`routes/tax.py`](../engine/api/routes/tax.py).
+
+The dispatcher routes a two-letter jurisdiction `code` (`US`, `GB`,
+`DE`, `FR`) to a per-jurisdiction summariser in
+[`engine/core/tax/reports/`](../engine/core/tax/reports). The endpoint
+is stateless — callers re-submit the disposals they care about.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/api/v1/tax/report/{code}` | `{disposals:[{description, acquired, disposed, proceeds:str, cost:str}]}` | `{jurisdiction, summary:{...}}` — shape depends on the jurisdiction. |
+| POST | `/api/v1/tax/report/{code}/csv` | same | `text/csv` attachment (header + values). |
+
+`proceeds`/`cost` are strings to preserve `Decimal` precision.
+
+## Webhooks
+
+`/api/v1/webhooks/*`. Source: [`routes/webhooks.py`](../engine/api/routes/webhooks.py).
+The HMAC-signed `signing_secret` is returned **only on create**.
+
+Templates: `generic`, `discord`, `slack`, `telegram`.
+
+| Method | Path | Scope | Notes |
+|---|---|---|---|
+| POST | `/api/v1/webhooks` | `trade` | `{url, event_types[], custom_headers?, template, max_retries?, portfolio_id?}` → `201`. |
+| GET | `/api/v1/webhooks` | `user` (JWT) / `read` (API key) | Lists caller's configs. |
+| PUT | `/api/v1/webhooks/{webhook_id}` | `trade` | Partial update. |
+| DELETE | `/api/v1/webhooks/{webhook_id}` | `trade` | `204`. |
+| POST | `/api/v1/webhooks/{webhook_id}/test` | `trade` | Synchronously fan out a test event; returns the resulting `WebhookDelivery`. |
+| GET | `/api/v1/webhooks/{webhook_id}/deliveries` | `read` | Delivery history. |
+
+## Privacy (GDPR / CCPA)
+
+`/api/v1/privacy/*`. Source: [`routes/privacy.py`](../engine/api/routes/privacy.py).
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/v1/privacy/export` | Synchronous export of the caller's data + audit row in `dsr_requests`. |
+| POST | `/api/v1/privacy/delete` | `202`. Initiates a 30-day grace deletion. `409` if already pending. |
+| POST | `/api/v1/privacy/delete/cancel` | Cancels during the grace window. `404` if not pending. |
+| GET | `/api/v1/privacy/delete/status` | `{pending, sla_due_at?, request?}`. |
+| GET | `/api/v1/privacy/requests` | DSR history for the caller. |
+| GET | `/api/v1/privacy/kinds` | Allow-list of `kind` values for openapi clients. |
+
+DSR rows are auditable under GDPR Art. 12 (one-month SLA tracked in
+`sla_due_at`).
+
+## WebSocket
+
+`WS /api/v1/ws`. Source: [`routes/websocket.py`](../engine/api/routes/websocket.py)
+and [`api/websocket/manager.py`](../engine/api/websocket/manager.py).
+
+Auth-in-band protocol (deliberately **not** in the URL — query strings
+get logged by proxies):
+
+```
+client                              server
+  │── accept ─────────────────────────▶│
+  │── {"type":"auth","token":"<jwt or nxs_*>"} ─▶│   (10s window)
+  │                                     │── {"type":"auth.ok","user_id":...}
+  │── {"type":"subscribe","topics":[...]}─▶│
+  │◀──── {"type":"<topic event>", ...} ──│  (broadcasts)
+  │── {"type":"ping"} ──────────────────▶│── {"type":"pong"}
+```
+
+Valid topics: `portfolio`, `backtest`, `order`, `alert`. The manager
+is process-local today; multi-replica fan-out requires a Valkey pubsub
+bridge (see [known-limitations.md](known-limitations.md)).
+
+## Errors
+
+- **Auth**: `401` for missing/invalid/expired credentials, `403` for
+  insufficient role/scope or missing legal acceptance.
+- **Validation**: `422` from FastAPI; `400` for hand-rolled checks
+  (e.g. invalid scope in API keys, unknown tax jurisdiction).
+- **Rate limit**: `429` with `Retry-After` from
+  [`RateLimitMiddleware`](../engine/api/rate_limit.py). Default 600
+  req/min/IP, burst 60. `/health` and `/metrics` are exempt;
+  `/api/v1/client/errors` is capped at 30/min to prevent log DoS.
+- **Body size**: hard 1 MiB cap on every request
+  ([`BodySizeLimitMiddleware`](../engine/api/body_size_limit.py)).
+- **Provider errors**: see Market data section above.
+
+## Cross-cutting middleware
+
+Applied in reverse order in [`create_app`](../engine/app.py:154) so the
+last-added wraps everything:
+
+1. `SecurityHeadersMiddleware` — CSP, HSTS, X-Content-Type-Options, …
+2. `CORSMiddleware` — `NEXUS_CORS_ORIGINS` (defaults to `http://localhost:3000`).
+3. `RateLimitMiddleware`
+4. `BodySizeLimitMiddleware` (1 MiB)
+5. `CorrelationIdMiddleware` — stamps `X-Request-ID`.
+6. `HttpMetricsMiddleware` — Prometheus histogram + counter for every
+   route (including `/metrics` itself, deliberately, so scrape latency
+   is observable).
