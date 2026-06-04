@@ -1,0 +1,123 @@
+# MkDocs configuration for the Nexus Trade Engine docs site.
+#
+# Why MkDocs + Material (and not VitePress / Sphinx / plain HTML):
+#   - Python project → MkDocs is the idiomatic choice; Material
+#     is the de-facto theme for Python documentation sites.
+#   - All content stays in plain Markdown under /docs, so every
+#     page renders correctly on GitHub without a build step.
+#     MkDocs only adds nav, search, Mermaid diagrams, dark mode,
+#     and versioned publishing on top.
+#   - VitePress / Nextra are JS-first and would compete with the
+#     existing Vite frontend build pipeline.
+#   - Sphinx is heavier than this project needs (no autodoc
+#     surface; we deliberately keep human-written prose).
+#
+# To preview locally:
+#     pip install mkdocs-material mkdocs-mermaid2-plugin
+#     mkdocs serve
+# Then open http://127.0.0.1:8000.
+
+site_name: Nexus Trade Engine
+site_description: AI-native plugin trading framework with full cost modeling.
+site_url: https://anomalyco.github.io/nexus-trade-engine/
+repo_url: https://github.com/anomalyco/nexus-trade-engine
+repo_name: anomalyco/nexus-trade-engine
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search
+  - mermaid2
+
+nav:
+  - Home: README.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Plugins: architecture/plugins.md
+      - Database: architecture/database.md
+      - Data model: architecture/data-model.md
+  - API reference: api-reference.md
+  - Decisions (ADRs):
+      - Index: adr/README.md
+      - 0001 — Scaffold tech choices: adr/0001-scaffold-tech-choices.md
+      - 0002 — Auth & RBAC model: adr/0002-auth-rbac.md
+      - 0003 — Mobile (PWA) strategy: adr/0003-mobile-app-strategy.md
+      - 0004 — Cost model as input: adr/0004-cost-model-as-input.md
+      - 0005 — Pluggable data providers: adr/0005-pluggable-data-providers.md
+      - 0006 — TaskIQ for background work: adr/0006-task-queue-taskiq.md
+      - 0007 — JWT + API keys + OAuth2: adr/0007-jwt-api-keys-oauth.md
+  - Development: development.md
+  - Deployment: deployment.md
+  - Known limitations: known-limitations.md
+  - Runbooks: runbooks.md
+  - Operations:
+      - SLOs: operations/slos.md
+      - Backup & recovery: operations/backup-and-recovery.md
+      - Load testing: operations/load-testing.md
+      - DR drill checklist: operations/dr-drill-checklist.md
+      - Runbooks:
+          - API availability: operations/runbooks/api-availability.md
+          - API latency: operations/runbooks/api-latency.md
+          - Auth & MFA: operations/runbooks/auth-mfa.md
+          - Backtest submission: operations/runbooks/backtest-submit.md
+          - Webhook delivery: operations/runbooks/webhook-delivery.md
+          - Task pipeline: operations/runbooks/task-pipeline.md
+          - Database: operations/runbooks/database.md
+          - Engine upgrade: operations/runbooks/upgrade.md
+  - Plugin developer guide: PLUGIN_DEV_GUIDE.md
+  - Contributors: contributors.md
+  - Releasing: RELEASING.md
+  - Legal:
+      - Data providers & processors: legal/processors.md
+  - Observability:
+      - Logging: observability/logging.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/anomalyco/nexus-trade-engine
+
+copyright: Copyright &copy; 2026 Nexus Trade Engine contributors. MIT licensed.

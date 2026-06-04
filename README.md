@@ -20,6 +20,22 @@ Nexus is built on a five-layer architecture where every component is independent
 
 Interactive architecture diagrams are available in [`docs/architecture/`](docs/architecture/).
 
+## Documentation
+
+Full engineering documentation lives in [`docs/`](docs/README.md). The
+site is built with MkDocs Material (`mkdocs serve`); every page is
+also readable directly on GitHub.
+
+| Audience | Start here |
+|---|---|
+| New engineer | [Architecture overview](docs/architecture/overview.md) |
+| API consumer | [API reference](docs/api-reference.md) |
+| Strategy author | [Plugin developer guide](docs/PLUGIN_DEV_GUIDE.md) |
+| Operator / SRE | [Deployment](docs/deployment.md) → [Runbooks](docs/runbooks.md) |
+| Contributor | [Development setup](docs/development.md) → [Contributors](docs/contributors.md) |
+| Decision archaeology | [Architecture Decision Records](docs/adr/README.md) |
+| What's missing | [Known limitations & technical debt](docs/known-limitations.md) |
+
 ## Core Concepts
 
 ### Plugin-First Strategy System

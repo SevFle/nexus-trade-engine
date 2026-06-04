@@ -12,6 +12,8 @@ The `runbook` annotation on every alert points back here.
 | [backtest-submit.md](backtest-submit.md)  | `BacktestSubmitSlowBurn`, `BacktestSubmitBudgetExhaustion`                          |
 | [webhook-delivery.md](webhook-delivery.md) | `WebhookDeliverySlowBurn`, `WebhookDeliveryBudgetExhaustion`                        |
 | [task-pipeline.md](task-pipeline.md)      | `TaskPipelineSlowBurn`, `TaskPipelineBudgetExhaustion`                              |
+| [database.md](database.md)                | `DatabaseUnavailable`, `MigrationFailed`, `SlowQueryP95`, `ConnectionPoolExhausted` |
+| [upgrade.md](upgrade.md)                  | (procedural — no alert)                                                              |
 
 ## Runbook structure
 

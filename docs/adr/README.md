@@ -14,8 +14,12 @@ We follow the [MADR](https://adr.github.io/madr/) format. See
 | Number | Status   | Title                                        |
 |-------:|----------|----------------------------------------------|
 | 0001   | Accepted | [Scaffold technology choices](0001-scaffold-tech-choices.md) |
-| 0002   | Accepted | [Auth & RBAC model](0002-auth-rbac.md)        |
+| 0002   | Accepted | [Auth & RBAC model](0002-auth-rbac.md) (superseded by 0007) |
 | 0003   | Accepted | [Mobile experience strategy — PWA on top of the React frontend](0003-mobile-app-strategy.md) |
+| 0004   | Accepted | [Cost model is a strategy input](0004-cost-model-as-input.md) |
+| 0005   | Accepted | [Pluggable market-data providers](0005-pluggable-data-providers.md) |
+| 0006   | Accepted | [TaskIQ for background work](0006-task-queue-taskiq.md) |
+| 0007   | Accepted | [JWT + API keys + OAuth2-family; no sessions](0007-jwt-api-keys-oauth.md) |
 
 When you accept a new ADR, add a row to this table in the same PR.
 
