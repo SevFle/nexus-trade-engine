@@ -22,7 +22,16 @@ class AuthResult:
     error: str | None = None
 
 
-_ROLE_PROMOTIONS: dict[str, str] = {
+# Aliases that translate external IdP role names (e.g. as expressed in OIDC
+# claims or LDAP groupDNs) into the canonical internal role vocabulary. These
+# are *aliases*, not promotions — applying them must not change the privilege
+# level of an external role, only spell it the way the rest of the engine
+# expects (``viewer`` is what the IdP calls a ``user``; ``quant_dev`` is what
+# it calls a ``developer``). The mapping is applied **before** priority
+# selection in :meth:`IAuthProvider.map_roles` so that mixed-role inputs
+# behave monotonically: adding a role to the input set can never lower the
+# resulting canonical role.
+_EXTERNAL_ROLE_ALIASES: dict[str, str] = {
     "viewer": "user",
     "quant_dev": "developer",
 }
@@ -43,6 +52,12 @@ class IAuthProvider(ABC):
         return AuthResult(success=False, error=f"User creation not supported by {self.name}")
 
     def map_roles(self, external_roles: list[str]) -> str:
+        """Fold a list of external IdP role names into one canonical role.
+
+        Only external identity providers should call this — internal role
+        lookups (e.g. from a JWT ``sub``) must read :attr:`User.role` directly
+        so that an alias mapping can never silently elevate a principal.
+        """
         role_priority: dict[str, int] = {
             "viewer": 0,
             "user": 1,
@@ -55,6 +70,9 @@ class IAuthProvider(ABC):
         best = "user"
         for role in external_roles:
             normalized = role.lower().strip()
-            if normalized in role_priority and role_priority[normalized] > role_priority[best]:
-                best = normalized
-        return _ROLE_PROMOTIONS.get(best, best)
+            # Translate external alias → canonical internal name BEFORE
+            # comparing priorities, so that adding roles is monotonic.
+            canonical = _EXTERNAL_ROLE_ALIASES.get(normalized, normalized)
+            if canonical in role_priority and role_priority[canonical] > role_priority[best]:
+                best = canonical
+        return best

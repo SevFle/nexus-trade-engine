@@ -46,7 +46,15 @@ class TestExpandedRoleHierarchy:
         assert ROLE_HIERARCHY["admin"] > ROLE_HIERARCHY["portfolio_manager"]
 
     def test_all_roles_present(self):
-        expected = {"viewer", "user", "retail_trader", "quant_dev", "developer", "portfolio_manager", "admin"}
+        expected = {
+            "viewer",
+            "user",
+            "retail_trader",
+            "quant_dev",
+            "developer",
+            "portfolio_manager",
+            "admin",
+        }
         assert set(ROLE_HIERARCHY.keys()) == expected
 
     def test_backward_compatible_user_developer_admin(self):
@@ -218,6 +226,68 @@ class TestBaseProviderMapRoles:
     def test_map_roles_empty_list_returns_user(self):
         p = self._make_provider()
         assert p.map_roles([]) == "user"
+
+
+class TestExternalRoleAliases:
+    """Pin the alias-before-priority semantics of :meth:`map_roles`.
+
+    These cover the non-monotonicity regression: aliases must be applied
+    *before* highest-priority selection so that adding a role to the input
+    can never lower the resulting canonical role.
+    """
+
+    def _make_provider(self):
+        from engine.api.auth.base import AuthResult, IAuthProvider
+
+        class _Concrete(IAuthProvider):
+            @property
+            def name(self):
+                return "test"
+
+            async def authenticate(self, **kwargs):
+                return AuthResult()
+
+        return _Concrete()
+
+    def test_quant_dev_alone_maps_to_developer(self):
+        p = self._make_provider()
+        assert p.map_roles(["quant_dev"]) == "developer"
+
+    def test_viewer_alone_maps_to_user(self):
+        p = self._make_provider()
+        assert p.map_roles(["viewer"]) == "user"
+
+    def test_mixed_retail_trader_and_viewer_keeps_retail_trader(self):
+        # ``viewer`` is an alias for ``user`` (priority 1); ``retail_trader``
+        # is priority 2 and must win. Adding ``viewer`` to the input must not
+        # lower the result.
+        p = self._make_provider()
+        assert p.map_roles(["retail_trader", "viewer"]) == "retail_trader"
+        # Order should not matter.
+        assert p.map_roles(["viewer", "retail_trader"]) == "retail_trader"
+
+    def test_mixed_viewer_and_quant_dev_maps_to_developer(self):
+        # ``viewer``→``user`` (priority 1) plus ``quant_dev``→``developer``
+        # (priority 4) must yield ``developer``.
+        p = self._make_provider()
+        assert p.map_roles(["viewer", "quant_dev"]) == "developer"
+
+    def test_alias_does_not_lower_highest_role(self):
+        # Monotonicity: adding ``quant_dev`` (which aliases to ``developer``)
+        # to a ``portfolio_manager`` principal must not demote them.
+        p = self._make_provider()
+        assert p.map_roles(["portfolio_manager"]) == "portfolio_manager"
+        assert p.map_roles(["portfolio_manager", "quant_dev"]) == "portfolio_manager"
+
+    def test_alias_aliases_are_case_insensitive(self):
+        p = self._make_provider()
+        assert p.map_roles(["Quant_Dev"]) == "developer"
+        assert p.map_roles(["VIEWER"]) == "user"
+
+    def test_alias_aliases_strip_whitespace(self):
+        p = self._make_provider()
+        assert p.map_roles(["  quant_dev  "]) == "developer"
+        assert p.map_roles(["\tviewer\n"]) == "user"
 
 
 class TestAuthExports:
