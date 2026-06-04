@@ -121,6 +121,17 @@ async def e2e_client(e2e_db: AsyncSession) -> AsyncIterator[AsyncClient]:
         yield e2e_db
 
     app.dependency_overrides[get_db] = override_get_db
+
+    # Consent enforcement is exercised in dedicated legal tests; bypass it
+    # here so RBAC tests don't need a ``legal_documents`` table in the
+    # minimal SQLite metadata created by ``_build_metadata``.
+    from engine.legal.dependencies import require_legal_acceptance
+
+    async def _noop_legal_acceptance() -> None:
+        return None
+
+    app.dependency_overrides[require_legal_acceptance] = _noop_legal_acceptance
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

@@ -12,6 +12,9 @@ edit this file by hand — it is regenerated as part of every release PR.
 
 ## [Unreleased]
 
+### Fixed
+- Ensure `legal_documents` table exists in test database setup and override the legal-acceptance dependency in `conftest.py`, fixing 62 failing tests across the auth and health suites.
+
 ### Internal
 - (write_tests) Write tests for the most recently changed code to break the loop
 

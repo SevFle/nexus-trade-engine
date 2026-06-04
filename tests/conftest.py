@@ -32,6 +32,19 @@ from engine.app import create_app
 from engine.config import settings
 from engine.db.models import Base, User
 from engine.deps import get_db
+from engine.legal.dependencies import require_legal_acceptance
+
+
+async def _noop_legal_acceptance() -> None:
+    """Test-only no-op replacement for ``require_legal_acceptance``.
+
+    The real dependency issues a SELECT against ``legal_documents`` which is
+    not always present in test databases (e.g. minimal SQLite metadata in
+    ``tests/test_auth_e2e.py`` or CI PostgreSQL schemas without migrations
+    applied). Tests don't exercise consent enforcement, so bypassing it
+    keeps the suite hermetic without weakening production behavior.
+    """
+
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -76,6 +89,7 @@ def _bypass_auth(request, monkeypatch):
     def patched_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
         self.dependency_overrides[get_current_user] = lambda: fake
+        self.dependency_overrides[require_legal_acceptance] = _noop_legal_acceptance
 
     monkeypatch.setattr(FastAPI, "__init__", patched_init)
 
@@ -84,6 +98,7 @@ def _bypass_auth(request, monkeypatch):
 async def client() -> AsyncIterator[AsyncClient]:
     app = create_app()
     app.dependency_overrides[get_current_user] = _fake_authenticated_user
+    app.dependency_overrides[require_legal_acceptance] = _noop_legal_acceptance
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -154,6 +169,7 @@ async def db_client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = _fake_authenticated_user
+    app.dependency_overrides[require_legal_acceptance] = _noop_legal_acceptance
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
