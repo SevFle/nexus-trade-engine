@@ -219,6 +219,43 @@ class TestBaseProviderMapRoles:
         p = self._make_provider()
         assert p.map_roles([]) == "user"
 
+    def test_map_roles_warns_when_all_unrecognized(self):
+        from unittest.mock import patch
+
+        from engine.api.auth import base as base_mod
+
+        p = self._make_provider()
+        with patch.object(base_mod, "logger") as mock_logger:
+            result = p.map_roles(["superuser", "god"])
+        assert result == "user"
+        mock_logger.warning.assert_called_once()
+        kwargs = mock_logger.warning.call_args.kwargs
+        assert mock_logger.warning.call_args.args[0] == "auth.roles.unrecognized"
+        assert kwargs["provider"] == "test"
+        assert kwargs["external_roles"] == ["superuser", "god"]
+        assert kwargs["fallback_role"] == "user"
+
+    def test_map_roles_no_warning_when_recognized_present(self):
+        from unittest.mock import patch
+
+        from engine.api.auth import base as base_mod
+
+        p = self._make_provider()
+        with patch.object(base_mod, "logger") as mock_logger:
+            p.map_roles(["user", "admin"])
+            p.map_roles(["unknown_role", "developer"])
+        mock_logger.warning.assert_not_called()
+
+    def test_map_roles_no_warning_on_empty_list(self):
+        from unittest.mock import patch
+
+        from engine.api.auth import base as base_mod
+
+        p = self._make_provider()
+        with patch.object(base_mod, "logger") as mock_logger:
+            p.map_roles([])
+        mock_logger.warning.assert_not_called()
+
 
 class TestAuthExports:
     def test_require_auth_importable(self):

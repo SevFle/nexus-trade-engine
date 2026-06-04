@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
+import structlog
+
 
 @dataclass
 class UserInfo:
@@ -26,6 +28,9 @@ _ROLE_PROMOTIONS: dict[str, str] = {
     "viewer": "user",
     "quant_dev": "developer",
 }
+
+
+logger = structlog.get_logger()
 
 
 class IAuthProvider(ABC):
@@ -53,8 +58,22 @@ class IAuthProvider(ABC):
             "admin": 6,
         }
         best = "user"
+        recognized: list[str] = []
+        unrecognized: list[str] = []
         for role in external_roles:
             normalized = role.lower().strip()
-            if normalized in role_priority and role_priority[normalized] > role_priority[best]:
-                best = normalized
+            if normalized in role_priority:
+                recognized.append(normalized)
+                if role_priority[normalized] > role_priority[best]:
+                    best = normalized
+            else:
+                unrecognized.append(role)
+        if external_roles and not recognized:
+            logger.warning(
+                "auth.roles.unrecognized",
+                provider=self.name,
+                external_roles=list(external_roles),
+                fallback_role=best,
+                recognized_roles=sorted(role_priority.keys()),
+            )
         return _ROLE_PROMOTIONS.get(best, best)

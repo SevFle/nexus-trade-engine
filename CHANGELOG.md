@@ -14,19 +14,8 @@ edit this file by hand — it is regenerated as part of every release PR.
 
 ### Internal
 - (write_tests) Write tests for the most recently changed code to break the loop
-
-
-### Internal
-- (write_tests) Write tests for the most recently changed code to break the loop
-
-
-### Internal
-- (write_tests) Write tests for the most recently changed code to break the loop
-
-
-### Internal
-- (write_tests) Write tests for the most recently changed code to break the loop
 - (subagent) SEV-267 — Plugin Sandbox with Security Isolation (Phase 2, Lane B)
+- (auth) Gate external-provider role resync behind `auth_overwrite_role_on_login` setting and warn on unrecognized roles
 
 
 The initial public 0.1.0 release line. Entries below this point are appended

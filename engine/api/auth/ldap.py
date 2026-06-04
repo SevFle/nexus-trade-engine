@@ -102,7 +102,13 @@ class LDAPAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.ldap.user_created", user_id=str(user.id))
-        elif user.role != mapped_role:
+        elif user.role != mapped_role and settings.auth_overwrite_role_on_login:
+            logger.info(
+                "auth.ldap.role_resync",
+                user_id=str(user.id),
+                previous_role=user.role,
+                new_role=mapped_role,
+            )
             user.role = mapped_role
             await db.flush()
 
