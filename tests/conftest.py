@@ -32,6 +32,7 @@ from engine.app import create_app
 from engine.config import settings
 from engine.db.models import Base, User
 from engine.deps import get_db
+from engine.legal.dependencies import require_legal_acceptance
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -63,10 +64,20 @@ def _bypass_auth(request, monkeypatch):
     """Globally bypass Bearer-token auth in tests. Patches FastAPI so every
     new app gets a dependency_override for get_current_user, covering tests
     that build their own isolated FastAPI instances. Tests in test_auth*
-    opt out so they exercise real auth behavior."""
+    opt out so they exercise real auth behavior.
+
+    Also installs a dependency override for ``require_legal_acceptance``
+    so every test client — including those that build isolated FastAPI
+    instances — bypasses the 451 legal-re-acceptance gate.  The override
+    is applied both here (monkey-patched ``FastAPI.__init__``) and in the
+    per-test ``client`` / ``db_client`` fixtures below.  See ADR-0005 and
+    SEV-501 B2 for the production wiring this guards against.
+    """
     nodeid = request.node.nodeid
-    if "test_auth" in nodeid or "_requires_auth" in nodeid:
-        return
+    opt_out_auth = "test_auth" in nodeid or "_requires_auth" in nodeid
+    # Only the dedicated legal-acceptance exercise file opts out — keep the
+    # legal gate bypassed for every other test (including new infra tests).
+    opt_out_legal = "test_legal_qa.py" in nodeid
 
     from fastapi import FastAPI
 
@@ -75,15 +86,26 @@ def _bypass_auth(request, monkeypatch):
 
     def patched_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
-        self.dependency_overrides[get_current_user] = lambda: fake
+        if not opt_out_auth:
+            self.dependency_overrides[get_current_user] = lambda: fake
+        # Always short-circuit legal acceptance in tests; legal tests opt out
+        # by exercising the dependency directly rather than through the app.
+        if not opt_out_legal:
+            self.dependency_overrides[require_legal_acceptance] = _legal_noop
 
     monkeypatch.setattr(FastAPI, "__init__", patched_init)
+
+
+async def _legal_noop() -> None:
+    """Test-only stub for ``require_legal_acceptance``. Always succeeds."""
+    return
 
 
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
     app = create_app()
     app.dependency_overrides[get_current_user] = _fake_authenticated_user
+    app.dependency_overrides[require_legal_acceptance] = _legal_noop
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -154,6 +176,7 @@ async def db_client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = _fake_authenticated_user
+    app.dependency_overrides[require_legal_acceptance] = _legal_noop
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
