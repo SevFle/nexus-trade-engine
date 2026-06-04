@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -97,6 +97,38 @@ class Settings(BaseSettings):
     ldap_bind_password: str = ""
     ldap_search_base: str = ""
     ldap_role_mapping: str = "{}"
+    # When True, the LDAP connection is upgraded to TLS via STARTTLS after
+    # `ldap.initialize()`. Required in non-development environments unless
+    # `ldap_server_url` already uses the `ldaps://` scheme.
+    ldap_use_starttls: bool = False
+
+    @model_validator(mode="after")
+    def _enforce_ldap_transport_security(self) -> Settings:
+        """Reject plaintext LDAP URLs outside dev/test environments.
+
+        Production and staging deployments must either use the `ldaps://`
+        scheme or opt in to STARTTLS via ``ldap_use_starttls``. Plaintext
+        `ldap://` would transmit bind credentials over the wire in clear,
+        which is a SEV-507-class credential-disclosure risk.
+        """
+        # Allow plaintext bind in development / test for local mock servers.
+        if self.app_env in ("development", "test"):
+            return self
+
+        url = (self.ldap_server_url or "").strip()
+        if not url:
+            return self
+
+        scheme = url.lower().split("://", 1)[0] if "://" in url else ""
+        is_ldaps = scheme == "ldaps"
+        if not is_ldaps and not self.ldap_use_starttls:
+            raise ValueError(
+                "LDAP transport security: ldap_server_url must use the "
+                "'ldaps://' scheme or ldap_use_starttls must be enabled "
+                "outside development/test environments (app_env="
+                f"{self.app_env!r})."
+            )
+        return self
 
     @property
     def is_production(self) -> bool:

@@ -21,6 +21,65 @@ class LDAPAuthProvider(IAuthProvider):
     def name(self) -> str:
         return "ldap"
 
+    def _ldap_fetch(self, username: str, password: str) -> list[Any]:
+        """Bind to LDAP as ``username`` and return the matching entry.
+
+        Wraps every operation against the connection in a single
+        ``try/finally`` so that ``conn.unbind_s()`` is *guaranteed* to run
+        whether bind, STARTTLS, or search raises. Without this guard an
+        exception in ``simple_bind_s`` would leak the underlying socket
+        until GC, which on long-running workers exhausts the LDAP server's
+        connection table.
+
+        Raises:
+            Exception: any LDAP error from bind, search, or STARTTLS —
+                the caller is expected to translate this into an
+                ``AuthResult(success=False)``.
+        """
+        import ldap
+        from ldap.dn import escape_dn_chars
+        from ldap.filter import escape_filter_chars
+
+        conn = ldap.initialize(settings.ldap_server_url)
+        conn.set_option(ldap.OPT_NETWORK_TIMEOUT, 10)
+        conn.set_option(ldap.OPT_TIMEOUT, 10)
+
+        # Defence in depth: the Settings model validator already rejects
+        # plaintext ldap:// in non-dev environments, but the operator may
+        # have configured STARTTLS — apply it before sending credentials.
+        if getattr(settings, "ldap_use_starttls", False):
+            conn.start_tls_s()
+
+        # Escape user-controlled input twice, each for its own context:
+        #   * escape_filter_chars → for the RFC-4515 search filter
+        #   * escape_dn_chars     → for the DN slot of the bind operation
+        # Using only escape_filter_chars for the bind DN leaves the door
+        # open to DN injection (e.g. `admin,ou=...` pivoting the bind).
+        safe_username_filter = escape_filter_chars(username)
+        safe_username_dn = escape_dn_chars(username)
+
+        try:
+            user_dn = settings.ldap_bind_dn.replace("{{username}}", safe_username_dn)
+            conn.simple_bind_s(user_dn, password)
+
+            search_filter = f"(uid={safe_username_filter})"
+            results = conn.search_s(
+                settings.ldap_search_base,
+                ldap.SCOPE_SUBTREE,
+                search_filter,
+                ["uid", "mail", "cn", "memberOf"],
+            )
+        finally:
+            # Guarantee the connection is returned to the pool / closed
+            # on every path, including bind and search failures. A bare
+            # exception here would mask the original error, so swallow.
+            try:
+                conn.unbind_s()
+            except Exception:
+                logger.debug("auth.ldap.unbind_failed_on_cleanup")
+
+        return results
+
     async def authenticate(self, **kwargs: Any) -> AuthResult:
         username = kwargs.get("username", "")
         password = kwargs.get("password", "")
@@ -30,26 +89,7 @@ class LDAPAuthProvider(IAuthProvider):
             return AuthResult(success=False, error="Username, password, and db session required")
 
         try:
-            import ldap
-            from ldap.filter import escape_filter_chars
-
-            conn = ldap.initialize(settings.ldap_server_url)
-            conn.set_option(ldap.OPT_NETWORK_TIMEOUT, 10)
-            conn.set_option(ldap.OPT_TIMEOUT, 10)
-
-            safe_username = escape_filter_chars(username)
-            user_dn = f"{settings.ldap_bind_dn.replace('{{username}}', safe_username)}"
-            conn.simple_bind_s(user_dn, password)
-
-            search_filter = f"(uid={safe_username})"
-            results = conn.search_s(
-                settings.ldap_search_base,
-                ldap.SCOPE_SUBTREE,
-                search_filter,
-                ["uid", "mail", "cn", "memberOf"],
-            )
-            conn.unbind_s()
-
+            results = self._ldap_fetch(username, password)
         except Exception as exc:
             logger.exception("auth.ldap.bind_failed", error=str(exc))
             return AuthResult(success=False, error="Invalid credentials")
