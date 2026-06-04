@@ -6,6 +6,31 @@ Nexus is a modular, plugin-driven algorithmic trading platform designed for stea
 
 ---
 
+## Documentation
+
+Full engineering documentation lives in [`docs/`](docs/README.md) and is
+built with MkDocs Material. The doc tree covers architecture, ADRs,
+the API reference, the data model, deployment, runbooks, and known
+limitations.
+
+Quick links:
+
+- [Documentation index](docs/README.md)
+- [Architecture overview](docs/architecture/overview.md)
+- [API reference](docs/api/README.md)
+- [Data model](docs/data-model.md)
+- [Development setup](docs/development.md)
+- [Deployment](docs/deployment.md)
+- [Known limitations & tech debt](docs/limitations.md)
+- [ADR index](docs/adr/README.md)
+
+To preview the docs locally:
+
+```bash
+uv sync --extra docs        # add the [project.optional-dependencies] docs group
+uv run mkdocs serve -f docs/mkdocs.yml
+```
+
 ## Architecture
 
 Nexus is built on a five-layer architecture where every component is independently scalable and replaceable:

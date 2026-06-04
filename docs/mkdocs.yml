@@ -1,0 +1,77 @@
+site_name: Nexus Trade Engine
+site_description: Internal engineering docs for the Nexus Trade Engine.
+repo_url: https://github.com/anomalyco/nexus-trade-engine
+docs_dir: .
+site_dir: ../site
+use_directory_urls: true
+
+theme:
+  name: material
+  features:
+    - navigation.indexes
+    - navigation.sections
+    - navigation.tabs
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+    - content.code.annotate
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - tags
+
+nav:
+  - Home: README.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Database: architecture/database.md
+      - Plugins: architecture/plugins.md
+  - API:
+      - Reference: api/README.md
+      - Endpoints: api/endpoints.md
+  - Data model: data-model.md
+  - Engineering:
+      - Development setup: development.md
+      - Plugin developer guide: PLUGIN_DEV_GUIDE.md
+      - Releasing: RELEASING.md
+      - Contributors: contributors.md
+  - Operations:
+      - Deployment: deployment.md
+      - SLOs: operations/slos.md
+      - Backup & recovery: operations/backup-and-recovery.md
+      - DR drill: operations/dr-drill-checklist.md
+      - Load testing: operations/load-testing.md
+      - Runbooks: operations/runbooks/README.md
+  - Legal:
+      - Processors: legal/processors.md
+  - Decisions:
+      - ADR index: adr/README.md
+      - "ADR-0001 Scaffold tech choices": adr/0001-scaffold-tech-choices.md
+      - "ADR-0002 Auth & RBAC": adr/0002-auth-rbac.md
+      - "ADR-0003 Mobile app strategy": adr/0003-mobile-app-strategy.md
+  - Limitations: limitations.md
