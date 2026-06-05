@@ -58,6 +58,52 @@ class OIDCAuthProvider(IAuthProvider):
             self._jwks_cache = resp.json()
         return self._jwks_cache
 
+    async def _exchange_and_verify_token(self, code: str) -> dict[str, Any]:
+        """Exchange an authorization code for tokens and verify the ID token.
+
+        Returns the decoded claims from the ID token. Raises on any
+        transport, exchange, or signature-verification failure so the
+        caller can translate the failure into a uniform
+        ``"OIDC authentication failed"`` :class:`AuthResult`.
+        """
+        import httpx
+
+        discovery = await self._get_discovery()
+        token_endpoint = discovery["token_endpoint"]
+
+        async with httpx.AsyncClient() as client:
+            token_resp = await client.post(
+                token_endpoint,
+                data={
+                    "code": code,
+                    "client_id": settings.oidc_client_id,
+                    "client_secret": settings.oidc_client_secret,
+                    "redirect_uri": settings.oidc_redirect_uri,
+                    "grant_type": "authorization_code",
+                },
+            )
+            token_resp.raise_for_status()
+            tokens = token_resp.json()
+
+        id_token = tokens.get("id_token", "")
+        jwks = await self._get_jwks()
+        unverified_header = jwt.get_unverified_header(id_token)
+        kid = unverified_header.get("kid")
+        signing_key = None
+        for key_data in jwks.get("keys", []):
+            if key_data.get("kid") == kid:
+                signing_key = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
+                break
+        if signing_key is None:
+            msg = f"No matching key found for kid={kid}"
+            raise ValueError(msg)
+        return jwt.decode(
+            id_token,
+            signing_key,
+            algorithms=["RS256"],
+            audience=settings.oidc_client_id,
+        )
+
     async def authenticate(self, **kwargs: Any) -> AuthResult:
         code = kwargs.get("code")
         db: AsyncSession | None = kwargs.get("db")
@@ -65,44 +111,7 @@ class OIDCAuthProvider(IAuthProvider):
             return AuthResult(success=False, error="Authorization code and db session required")
 
         try:
-            import httpx
-
-            discovery = await self._get_discovery()
-            token_endpoint = discovery["token_endpoint"]
-
-            async with httpx.AsyncClient() as client:
-                token_resp = await client.post(
-                    token_endpoint,
-                    data={
-                        "code": code,
-                        "client_id": settings.oidc_client_id,
-                        "client_secret": settings.oidc_client_secret,
-                        "redirect_uri": settings.oidc_redirect_uri,
-                        "grant_type": "authorization_code",
-                    },
-                )
-                token_resp.raise_for_status()
-                tokens = token_resp.json()
-
-            id_token = tokens.get("id_token", "")
-            jwks = await self._get_jwks()
-            unverified_header = jwt.get_unverified_header(id_token)
-            kid = unverified_header.get("kid")
-            signing_key = None
-            for key_data in jwks.get("keys", []):
-                if key_data.get("kid") == kid:
-                    signing_key = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
-                    break
-            if signing_key is None:
-                msg = f"No matching key found for kid={kid}"
-                raise ValueError(msg)
-            claims_data = jwt.decode(
-                id_token,
-                signing_key,
-                algorithms=["RS256"],
-                audience=settings.oidc_client_id,
-            )
-
+            claims_data = await self._exchange_and_verify_token(code)
         except Exception as exc:
             logger.exception("auth.oidc.failed", error=str(exc))
             return AuthResult(success=False, error="OIDC authentication failed")
@@ -130,9 +139,17 @@ class OIDCAuthProvider(IAuthProvider):
                     success=False, error="Email already registered with a different provider"
                 )
 
-            mapped_role = "user"
-            if isinstance(raw_roles, list):
-                mapped_role = self.map_roles(raw_roles)
+            # Note: the OIDC provider's default when the upstream role
+            # claim is missing / not a list is left as ``"user"`` for
+            # backward compatibility — the least-privilege default of
+            # ``"viewer"`` only applies to the ``map_roles`` fallback
+            # itself (see SEV-741 follow-up).
+            mapping = (
+                self.map_roles_with_metadata(raw_roles)
+                if isinstance(raw_roles, list)
+                else None
+            )
+            mapped_role = mapping.role if mapping is not None else "user"
 
             user = User(
                 email=email,
@@ -148,8 +165,19 @@ class OIDCAuthProvider(IAuthProvider):
             await db.refresh(user)
             logger.info("auth.oidc.user_created", user_id=str(user.id))
 
+        else:
+            mapping = None
+
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")
+
+        # Surface any unrecognized upstream roles on AuthResult.metadata so
+        # callers / auditors can detect IdP misconfigurations without
+        # scraping log lines (medium-severity follow-up to SEV-741).
+        metadata: dict[str, Any] = {}
+        if mapping is not None and mapping.unrecognized:
+            metadata["unrecognized_roles"] = list(mapping.unrecognized)
+            metadata["recognized_roles"] = list(mapping.recognized)
 
         return AuthResult(
             success=True,
@@ -161,6 +189,7 @@ class OIDCAuthProvider(IAuthProvider):
                 roles=[user.role],
                 raw_claims=claims_data,
             ),
+            metadata=metadata,
         )
 
     async def get_authorize_url(self, state: str = "") -> str:

@@ -131,12 +131,21 @@ class TestNoImplicitPromotion:
             == "admin"
         )
 
-    def test_empty_input_returns_user(self):
-        assert _ConcreteProvider().map_roles([]) == "user"
+    def test_empty_input_returns_viewer(self):
+        """Least-privilege default: an empty external_roles list must map
+        to ``"viewer"`` (the lowest-privilege recognized role), not
+        ``"user"``. Previously this fell back to ``"user"``, which
+        granted more privilege than necessary when the upstream IdP
+        asserted nothing."""
+        assert _ConcreteProvider().map_roles([]) == "viewer"
 
-    def test_all_unrecognized_falls_back_to_user(self):
+    def test_all_unrecognized_falls_back_to_viewer(self):
+        """Least-privilege default: when every external role is
+        unrecognized, the user must receive ``"viewer"`` rather than
+        ``"user"`` — this is the safe default when the upstream IdP
+        assertion cannot be interpreted."""
         assert (
-            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "user"
+            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "viewer"
         )
 
     def test_partial_unrecognized_still_uses_recognized(self):
@@ -153,9 +162,9 @@ class TestNoImplicitPromotion:
 
     def test_whitespace_only_role_is_unrecognized(self):
         """A whitespace-only string is normalized to the empty string,
-        which is not a known role.  Should fall through to user without
-        crashing."""
-        assert _ConcreteProvider().map_roles(["   "]) == "user"
+        which is not a known role.  Should fall through to viewer
+        (least-privilege) without crashing."""
+        assert _ConcreteProvider().map_roles(["   "]) == "viewer"
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +205,7 @@ class TestUnrecognizedRoleWarning:
     def test_warning_fires_for_purely_unrecognized_set(self, monkeypatch):
         calls = self._patch(monkeypatch)
         p = _ConcreteProvider()
-        assert p.map_roles(["totally_bogus"]) == "user"
+        assert p.map_roles(["totally_bogus"]) == "viewer"
         assert any(c["event"] == "auth.map_roles.unrecognized_roles" for c in calls)
 
     def test_warning_fires_when_any_role_is_unrecognized(self, monkeypatch):
@@ -220,7 +229,7 @@ class TestUnrecognizedRoleWarning:
     def test_warning_does_not_fire_for_empty_input(self, monkeypatch):
         calls = self._patch(monkeypatch)
         p = _ConcreteProvider()
-        assert p.map_roles([]) == "user"
+        assert p.map_roles([]) == "viewer"
         assert calls == []
 
     def test_warning_includes_provider_name(self, monkeypatch):
@@ -441,3 +450,184 @@ class TestMappedRoleFlowsToRequireRole:
                 f"minimum={minimum_required}; expected {expected_status}, "
                 f"got {resp.status_code}"
             )
+
+
+# ---------------------------------------------------------------------------
+# 7. Least-privilege fallback (viewer) — SEV-741 follow-up
+# ---------------------------------------------------------------------------
+
+
+class TestLeastPrivilegeFallback:
+    """The fallback when no recognized role can be derived must be
+    ``"viewer"`` (the lowest-privilege role in ``ROLE_PRIORITY``) rather
+    than ``"user"``. This applies in three scenarios:
+
+    1. The caller passes an empty ``external_roles`` list.
+    2. The caller passes a list in which *every* entry is unrecognized.
+    3. The caller passes a list that becomes empty after normalization
+       (e.g. only whitespace-only strings).
+    """
+
+    def test_empty_external_roles_returns_viewer(self):
+        """(1) Empty list -> viewer (not user)."""
+        assert _ConcreteProvider().map_roles([]) == "viewer"
+
+    def test_all_unrecognized_returns_viewer(self):
+        """(2) Every role unrecognized -> viewer (not user)."""
+        assert (
+            _ConcreteProvider().map_roles(["bogus_a", "bogus_b"]) == "viewer"
+        )
+
+    def test_whitespace_only_input_returns_viewer(self):
+        """(3) All entries normalize to empty (unrecognized) -> viewer."""
+        assert _ConcreteProvider().map_roles(["   ", "\t", "  "]) == "viewer"
+
+    def test_mixed_recognized_and_unrecognized_returns_only_recognized_role(self):
+        """Recognized roles win even when unrecognized roles are present;
+        the unrecognized roles must NEVER contribute to the mapped role.
+
+        Concretely: ``["admin", "bogus_root", "superuser"]`` must yield
+        ``"admin"`` — the unrecognized entries do not promote beyond
+        ``admin`` and do not demote below it.
+        """
+        assert (
+            _ConcreteProvider().map_roles(["admin", "bogus_root", "superuser"])
+            == "admin"
+        )
+
+    def test_mixed_lower_recognized_with_bogus_high_role_does_not_escalate(self):
+        """A bogus role that *looks* privileged (e.g. ``"superuser"``)
+        must not be treated as more privileged than a real recognized
+        role. ``"viewer"`` + ``"superuser"`` must yield ``"viewer"``,
+        not anything higher."""
+        assert (
+            _ConcreteProvider().map_roles(["viewer", "superuser"]) == "viewer"
+        )
+
+    def test_lowest_privilege_role_constant_is_viewer(self):
+        """Pin the constant — operators / auditors rely on this being
+        ``"viewer"``."""
+        from engine.api.auth.base import LOWEST_PRIVILEGE_ROLE
+
+        assert LOWEST_PRIVILEGE_ROLE == "viewer"
+
+
+# ---------------------------------------------------------------------------
+# 8. map_roles_with_metadata — surfaces unrecognized roles for AuthResult
+# ---------------------------------------------------------------------------
+
+
+class TestMapRolesWithMetadata:
+    """``map_roles_with_metadata`` returns a structured result so that
+    callers (e.g. OIDC / LDAP providers) can populate
+    :attr:`AuthResult.metadata` for audit purposes."""
+
+    def test_returns_role_mapping_result(self):
+        from engine.api.auth.base import RoleMappingResult
+
+        result = _ConcreteProvider().map_roles_with_metadata(["admin"])
+        assert isinstance(result, RoleMappingResult)
+
+    def test_role_field_matches_map_roles(self):
+        p = _ConcreteProvider()
+        for external in [
+            [],
+            ["viewer"],
+            ["user"],
+            ["admin"],
+            ["bogus"],
+            ["admin", "bogus"],
+            ["viewer", "quant_dev"],
+        ]:
+            mapped = p.map_roles(external)
+            detailed = p.map_roles_with_metadata(external)
+            assert mapped == detailed.role, (
+                f"map_roles and map_roles_with_metadata disagree on "
+                f"{external}: {mapped} vs {detailed.role}"
+            )
+
+    def test_recognized_list_excludes_unrecognized(self):
+        result = _ConcreteProvider().map_roles_with_metadata(
+            ["admin", "bogus", "user"]
+        )
+        assert "admin" in result.recognized
+        assert "user" in result.recognized
+        assert "bogus" not in result.recognized
+
+    def test_unrecognized_list_excludes_recognized(self):
+        result = _ConcreteProvider().map_roles_with_metadata(
+            ["admin", "bogus_a", "bogus_b"]
+        )
+        assert "bogus_a" in result.unrecognized
+        assert "bogus_b" in result.unrecognized
+        assert "admin" not in result.unrecognized
+
+    def test_empty_input_yields_empty_lists_and_viewer(self):
+        result = _ConcreteProvider().map_roles_with_metadata([])
+        assert result.role == "viewer"
+        assert result.recognized == []
+        assert result.unrecognized == []
+
+    def test_all_unrecognized_yields_viewer_and_populated_unrecognized(self):
+        result = _ConcreteProvider().map_roles_with_metadata(
+            ["weird1", "weird2"]
+        )
+        assert result.role == "viewer"
+        assert result.recognized == []
+        assert result.unrecognized == ["weird1", "weird2"]
+
+    def test_preserves_unrecognized_role_original_casing(self):
+        """The unrecognized list keeps the original raw string (with
+        original casing) so operators can correlate with upstream IdP
+        logs."""
+        result = _ConcreteProvider().map_roles_with_metadata(
+            ["Admin", "WeirdRole", "Quant_Dev"]
+        )
+        # "Admin" and "Quant_Dev" are recognized (case-insensitively);
+        # "WeirdRole" stays with its original casing in unrecognized.
+        assert result.unrecognized == ["WeirdRole"]
+        assert result.recognized == ["admin", "quant_dev"]
+
+
+# ---------------------------------------------------------------------------
+# 9. AuthResult.metadata surfacing — medium-severity follow-up
+# ---------------------------------------------------------------------------
+
+
+class TestAuthResultMetadataField:
+    """``AuthResult`` must expose a ``metadata`` dict so that callers can
+    propagate structured audit information (notably, unrecognized roles)
+    without scraping log lines."""
+
+    def test_auth_result_has_metadata_default(self):
+        r = AuthResult()
+        assert hasattr(r, "metadata")
+        assert r.metadata == {}
+
+    def test_auth_result_metadata_can_be_provided(self):
+        r = AuthResult(metadata={"unrecognized_roles": ["bogus"]})
+        assert r.metadata == {"unrecognized_roles": ["bogus"]}
+
+    def test_each_auth_result_has_independent_metadata(self):
+        """Default factory must yield a fresh dict per instance
+        (no shared mutable state)."""
+        a = AuthResult()
+        b = AuthResult()
+        a.metadata["foo"] = "bar"
+        assert "foo" not in b.metadata
+
+    def test_map_roles_with_metadata_can_drive_authresult_metadata(self):
+        """End-to-end: the result of ``map_roles_with_metadata`` can be
+        used to populate ``AuthResult.metadata`` — exactly the pattern
+        the LDAP/OIDC providers use."""
+        p = _ConcreteProvider()
+        mapping = p.map_roles_with_metadata(
+            ["admin", "bogus_a", "bogus_b"]
+        )
+        metadata: dict[str, object] = {}
+        if mapping.unrecognized:
+            metadata["unrecognized_roles"] = list(mapping.unrecognized)
+            metadata["recognized_roles"] = list(mapping.recognized)
+        r = AuthResult(success=True, metadata=metadata)
+        assert r.metadata["unrecognized_roles"] == ["bogus_a", "bogus_b"]
+        assert r.metadata["recognized_roles"] == ["admin"]

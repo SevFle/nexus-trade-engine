@@ -461,6 +461,11 @@ class TestOIDCAuthenticateEdgeCases:
     async def test_new_user_creation_with_no_roles(
         self, oidc_provider, mock_settings, rsa_keys
     ):
+        """When the upstream IdP asserts no roles (empty list / claim
+        missing), the new user must receive the least-privilege
+        ``"viewer"`` role rather than ``"user"``. This is the
+        ``map_roles`` least-privilege fallback flowing through the
+        OIDC provider end-to-end."""
         client = _full_client(
             rsa_keys,
             {"sub": "no-role-user", "email": "norole@test.com", "name": "No Role"},
@@ -480,7 +485,7 @@ class TestOIDCAuthenticateEdgeCases:
 
         assert result.success is True
         assert len(created) == 1
-        assert created[0].role == "user"
+        assert created[0].role == "viewer"
 
     async def test_custom_role_claim(self, monkeypatch, rsa_keys):
         _settings(monkeypatch, oidc_role_claim="groups")
@@ -561,11 +566,11 @@ class TestIAuthProviderBase:
 
     def test_map_roles_empty_list(self):
         p = _ConcreteProvider()
-        assert p.map_roles([]) == "user"
+        assert p.map_roles([]) == "viewer"
 
     def test_map_roles_unknown_roles(self):
         p = _ConcreteProvider()
-        assert p.map_roles(["superadmin", "guest"]) == "user"
+        assert p.map_roles(["superadmin", "guest"]) == "viewer"
 
     def test_map_roles_case_insensitive(self):
         p = _ConcreteProvider()

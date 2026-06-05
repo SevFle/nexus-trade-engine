@@ -21,6 +21,40 @@ class LDAPAuthProvider(IAuthProvider):
     def name(self) -> str:
         return "ldap"
 
+    def _ldap_bind_and_search(
+        self, username: str, password: str
+    ) -> dict[str, list[bytes]] | None:
+        """Bind to LDAP and search for the user.
+
+        Returns the user's LDAP attributes on success, ``None`` when the
+        user is not found. Any other failure raises so the caller can
+        translate it into an "Invalid credentials" :class:`AuthResult`.
+        """
+        import ldap
+        from ldap.filter import escape_filter_chars
+
+        conn = ldap.initialize(settings.ldap_server_url)
+        conn.set_option(ldap.OPT_NETWORK_TIMEOUT, 10)
+        conn.set_option(ldap.OPT_TIMEOUT, 10)
+
+        safe_username = escape_filter_chars(username)
+        user_dn = f"{settings.ldap_bind_dn.replace('{{username}}', safe_username)}"
+        conn.simple_bind_s(user_dn, password)
+
+        search_filter = f"(uid={safe_username})"
+        results = conn.search_s(
+            settings.ldap_search_base,
+            ldap.SCOPE_SUBTREE,
+            search_filter,
+            ["uid", "mail", "cn", "memberOf"],
+        )
+        conn.unbind_s()
+
+        if not results:
+            return None
+        _, ldap_attrs = results[0]
+        return ldap_attrs
+
     async def authenticate(self, **kwargs: Any) -> AuthResult:
         username = kwargs.get("username", "")
         password = kwargs.get("password", "")
@@ -30,34 +64,14 @@ class LDAPAuthProvider(IAuthProvider):
             return AuthResult(success=False, error="Username, password, and db session required")
 
         try:
-            import ldap
-            from ldap.filter import escape_filter_chars
-
-            conn = ldap.initialize(settings.ldap_server_url)
-            conn.set_option(ldap.OPT_NETWORK_TIMEOUT, 10)
-            conn.set_option(ldap.OPT_TIMEOUT, 10)
-
-            safe_username = escape_filter_chars(username)
-            user_dn = f"{settings.ldap_bind_dn.replace('{{username}}', safe_username)}"
-            conn.simple_bind_s(user_dn, password)
-
-            search_filter = f"(uid={safe_username})"
-            results = conn.search_s(
-                settings.ldap_search_base,
-                ldap.SCOPE_SUBTREE,
-                search_filter,
-                ["uid", "mail", "cn", "memberOf"],
-            )
-            conn.unbind_s()
-
+            ldap_attrs = self._ldap_bind_and_search(username, password)
         except Exception as exc:
             logger.exception("auth.ldap.bind_failed", error=str(exc))
             return AuthResult(success=False, error="Invalid credentials")
 
-        if not results:
+        if ldap_attrs is None:
             return AuthResult(success=False, error="User not found in LDAP")
 
-        _, ldap_attrs = results[0]
         ldap_uid = ldap_attrs.get("uid", [b""])[0].decode()
         ldap_mail = ldap_attrs.get("mail", [b""])[0].decode() or f"{username}@ldap"
         ldap_cn = ldap_attrs.get("cn", [b""])[0].decode() or username
@@ -75,7 +89,8 @@ class LDAPAuthProvider(IAuthProvider):
         if not mapped_roles:
             mapped_roles = ["user"]
 
-        mapped_role = self.map_roles(mapped_roles)
+        mapping = self.map_roles_with_metadata(mapped_roles)
+        mapped_role = mapping.role
 
         result = await db.execute(
             select(User).where(User.auth_provider == "ldap", User.external_id == ldap_uid)
@@ -109,6 +124,14 @@ class LDAPAuthProvider(IAuthProvider):
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")
 
+        # Surface any unrecognized upstream roles on AuthResult.metadata so
+        # callers / auditors can detect IdP misconfigurations without
+        # scraping log lines (medium-severity follow-up to SEV-741).
+        metadata: dict[str, Any] = {}
+        if mapping.unrecognized:
+            metadata["unrecognized_roles"] = list(mapping.unrecognized)
+            metadata["recognized_roles"] = list(mapping.recognized)
+
         return AuthResult(
             success=True,
             user_info=UserInfo(
@@ -118,4 +141,5 @@ class LDAPAuthProvider(IAuthProvider):
                 provider="ldap",
                 roles=[user.role],
             ),
+            metadata=metadata,
         )

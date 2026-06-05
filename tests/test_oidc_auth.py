@@ -650,10 +650,14 @@ class TestOIDCRoleMapping:
         assert oidc_provider.map_roles(["user"]) == "user"
 
     def test_map_roles_unknown_role(self, oidc_provider):
-        assert oidc_provider.map_roles(["unknown_role"]) == "user"
+        """Least-privilege default: an unrecognized external role must
+        fall back to ``"viewer"`` (not ``"user"``)."""
+        assert oidc_provider.map_roles(["unknown_role"]) == "viewer"
 
     def test_map_roles_empty_list(self, oidc_provider):
-        assert oidc_provider.map_roles([]) == "user"
+        """Least-privilege default: an empty external_roles list must
+        yield ``"viewer"``."""
+        assert oidc_provider.map_roles([]) == "viewer"
 
     def test_map_roles_case_insensitive(self, oidc_provider):
         assert oidc_provider.map_roles(["ADMIN"]) == "admin"
