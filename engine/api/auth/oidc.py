@@ -122,6 +122,13 @@ class OIDCAuthProvider(IAuthProvider):
         )
         user = result.scalar_one_or_none()
 
+        # Compute the IdP-asserted mapped role once; it is used both for
+        # new-user creation and for the optional role-overwrite path on
+        # existing federated logins (SEV-741).
+        mapped_role = "viewer"
+        if isinstance(raw_roles, list):
+            mapped_role = self.map_roles(raw_roles)
+
         if user is None:
             existing = await db.execute(select(User).where(User.email == email))
             existing_user = existing.scalar_one_or_none()
@@ -129,10 +136,6 @@ class OIDCAuthProvider(IAuthProvider):
                 return AuthResult(
                     success=False, error="Email already registered with a different provider"
                 )
-
-            mapped_role = "user"
-            if isinstance(raw_roles, list):
-                mapped_role = self.map_roles(raw_roles)
 
             user = User(
                 email=email,
@@ -147,6 +150,28 @@ class OIDCAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.oidc.user_created", user_id=str(user.id))
+        elif user.role != mapped_role:
+            # SEV-741: only mutate the existing user's role when the
+            # operator has explicitly opted in via
+            # ``auth_overwrite_role_on_login``. Default is False so a
+            # misconfigured or compromised upstream IdP cannot
+            # downgrade or escalate a previously-granted local role.
+            if settings.auth_overwrite_role_on_login:
+                logger.info(
+                    "auth.oidc.role_overwritten",
+                    user_id=str(user.id),
+                    previous_role=user.role,
+                    new_role=mapped_role,
+                )
+                user.role = mapped_role
+                await db.flush()
+            else:
+                logger.warning(
+                    "auth.oidc.role_overwrite_skipped",
+                    user_id=str(user.id),
+                    current_role=user.role,
+                    idp_asserted_role=mapped_role,
+                )
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")

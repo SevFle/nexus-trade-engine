@@ -205,7 +205,10 @@ class TestBaseProviderMapRoles:
 
     def test_map_roles_unknown_roles_ignored(self):
         p = self._make_provider()
-        assert p.map_roles(["superuser", "god"]) == "user"
+        # SEV-741 follow-up: empty / all-unrecognized inputs now fall
+        # back to the least-privileged role ``viewer`` rather than
+        # ``user``, closing a silent privilege floor escalation.
+        assert p.map_roles(["superuser", "god"]) == "viewer"
 
     def test_map_roles_new_domain_roles(self):
         p = self._make_provider()
@@ -219,9 +222,11 @@ class TestBaseProviderMapRoles:
         assert p.map_roles(["retail_trader"]) == "retail_trader"
         assert p.map_roles(["portfolio_manager"]) == "portfolio_manager"
 
-    def test_map_roles_empty_list_returns_user(self):
+    def test_map_roles_empty_list_returns_viewer(self):
         p = self._make_provider()
-        assert p.map_roles([]) == "user"
+        # SEV-741 follow-up: empty input falls back to ``viewer`` (the
+        # least-privileged role), not ``user``.
+        assert p.map_roles([]) == "viewer"
 
 
 class TestAuthExports:

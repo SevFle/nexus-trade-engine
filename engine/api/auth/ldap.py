@@ -103,8 +103,27 @@ class LDAPAuthProvider(IAuthProvider):
             await db.refresh(user)
             logger.info("auth.ldap.user_created", user_id=str(user.id))
         elif user.role != mapped_role:
-            user.role = mapped_role
-            await db.flush()
+            # SEV-741: Only mutate the existing user's role when the
+            # operator has explicitly opted in via
+            # ``auth_overwrite_role_on_login``. Default is False so a
+            # misconfigured or compromised upstream IdP cannot downgrade
+            # or escalate a previously-granted local role.
+            if settings.auth_overwrite_role_on_login:
+                logger.info(
+                    "auth.ldap.role_overwritten",
+                    user_id=str(user.id),
+                    previous_role=user.role,
+                    new_role=mapped_role,
+                )
+                user.role = mapped_role
+                await db.flush()
+            else:
+                logger.warning(
+                    "auth.ldap.role_overwrite_skipped",
+                    user_id=str(user.id),
+                    current_role=user.role,
+                    idp_asserted_role=mapped_role,
+                )
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")

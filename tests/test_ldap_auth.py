@@ -399,9 +399,12 @@ class TestLDAPAuthenticateExistingUser:
         assert result.user_info.email == "testuser@example.com"
         mock_db.add.assert_not_called()
 
-    async def test_existing_user_role_updated(
+    async def test_existing_user_role_not_updated_when_overwrite_disabled(
         self, ldap_provider, mock_settings
     ):
+        """SEV-741 follow-up: with ``auth_overwrite_role_on_login=False``
+        (the new default), an existing user's role must NOT be mutated
+        by an upstream IdP claim, even when the claim diverges."""
         from engine.db.models import User
 
         attrs = _make_ldap_attrs(
@@ -420,6 +423,51 @@ class TestLDAPAuthenticateExistingUser:
             external_id="testuser",
         )
 
+        # ``mock_settings`` does not touch auth_overwrite_role_on_login,
+        # so it inherits the in-source default of False.
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="testuser", password="correctpass", db=mock_db
+            )
+
+        assert result.success is True
+        # Role is preserved — IdP assertion ignored.
+        assert existing_user.role == "user"
+        mock_db.flush.assert_not_called()
+
+    async def test_existing_user_role_updated_when_overwrite_enabled(
+        self, ldap_provider, mock_settings
+    ):
+        """SEV-741 follow-up: when an operator explicitly opts in via
+        ``auth_overwrite_role_on_login=True``, the existing user's role
+        IS mutated to reflect the IdP-asserted role."""
+        from engine.db.models import User
+
+        attrs = _make_ldap_attrs(
+            member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
+        )
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=promoted,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        existing_user = User(
+            email="testuser@example.com",
+            display_name="Test User",
+            is_active=True,
+            role="user",
+            auth_provider="ldap",
+            external_id="testuser",
+        )
+
+        # Explicitly opt-in to role overwrite.
+        mock_settings.auth_overwrite_role_on_login = True
+
         mock_db = AsyncMock(spec=AsyncSession)
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = existing_user
@@ -434,6 +482,45 @@ class TestLDAPAuthenticateExistingUser:
         assert result.success is True
         assert existing_user.role == "admin"
         mock_db.flush.assert_called()
+
+    async def test_existing_user_role_preserved_when_unchanged(
+        self, ldap_provider, mock_settings
+    ):
+        """When the IdP-asserted role matches the current role, no
+        overwrite happens regardless of the setting — the equality
+        short-circuit prevents the warning/info logs from firing."""
+        from engine.db.models import User
+
+        attrs = _make_ldap_attrs(
+            member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
+        )
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=stable,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        existing_user = User(
+            email="stable@example.com",
+            display_name="Stable User",
+            is_active=True,
+            role="admin",
+            auth_provider="ldap",
+            external_id="stable",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="stable", password="correctpass", db=mock_db
+            )
+
+        assert result.success is True
+        assert existing_user.role == "admin"
+        mock_db.flush.assert_not_called()
 
 
 class TestLDAPAuthenticateEmailConflict:
@@ -559,8 +646,11 @@ class TestLDAPInheritedMethods:
     def test_map_roles_developer(self, ldap_provider):
         assert ldap_provider.map_roles(["developer"]) == "developer"
 
-    def test_map_roles_unknown_defaults_user(self, ldap_provider):
-        assert ldap_provider.map_roles(["unknown_role"]) == "user"
+    def test_map_roles_unknown_defaults_viewer(self, ldap_provider):
+        # SEV-741 follow-up: all-unrecognized input falls back to
+        # ``viewer`` (least-privileged) rather than ``user``.
+        assert ldap_provider.map_roles(["unknown_role"]) == "viewer"
 
     def test_map_roles_empty_list(self, ldap_provider):
-        assert ldap_provider.map_roles([]) == "user"
+        # SEV-741 follow-up: empty input falls back to ``viewer``.
+        assert ldap_provider.map_roles([]) == "viewer"
