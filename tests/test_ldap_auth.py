@@ -93,16 +93,32 @@ class _FakeLDAPConn:
         bind_raises: Exception | None = None,
         search_results: list[tuple[str, dict[str, list[bytes]]]] | None = None,
         search_raises: Exception | None = None,
+        start_tls_raises: Exception | None = None,
     ):
         self._bind_raises = bind_raises
         self._search_results = search_results or []
         self._search_raises = search_raises
+        self._start_tls_raises = start_tls_raises
+        self.start_tls_called = False
+        self.bind_called = False
+        self.bind_call_args: tuple[str, str] | None = None
         self._options: dict[int, Any] = {}
+        self.call_order: list[str] = []
+        self.unbound = False
 
     def set_option(self, opt: int, value: Any) -> None:
         self._options[opt] = value
 
+    def start_tls_s(self) -> None:
+        self.start_tls_called = True
+        self.call_order.append("start_tls_s")
+        if self._start_tls_raises:
+            raise self._start_tls_raises
+
     def simple_bind_s(self, dn: str, password: str) -> None:
+        self.bind_called = True
+        self.bind_call_args = (dn, password)
+        self.call_order.append("simple_bind_s")
         if self._bind_raises:
             raise self._bind_raises
 
@@ -112,28 +128,33 @@ class _FakeLDAPConn:
         return self._search_results
 
     def unbind_s(self) -> None:
-        pass
+        self.unbound = True
 
 
 def _build_ldap_mock(
     bind_raises: Exception | None = None,
     search_results: list[tuple[str, dict[str, list[bytes]]]] | None = None,
     search_raises: Exception | None = None,
+    start_tls_raises: Exception | None = None,
 ):
     mock_ldap = MagicMock()
-    mock_ldap.initialize = MagicMock(
-        return_value=_FakeLDAPConn(
-            bind_raises=bind_raises,
-            search_results=search_results,
-            search_raises=search_raises,
-        )
+    fake_conn = _FakeLDAPConn(
+        bind_raises=bind_raises,
+        search_results=search_results,
+        search_raises=search_raises,
+        start_tls_raises=start_tls_raises,
     )
+    mock_ldap.initialize = MagicMock(return_value=fake_conn)
     mock_ldap.OPT_NETWORK_TIMEOUT = 7
     mock_ldap.OPT_TIMEOUT = 8
     mock_ldap.SCOPE_SUBTREE = 2
+    mock_ldap.OPT_X_TLS_REQUIRE_CERT = 0x600
+    mock_ldap.OPT_X_TLS_DEMAND = 2
+    mock_ldap.OPT_X_TLS = 0x601
+    mock_ldap.OPT_X_TLS_HARD = 1
     mock_filter = MagicMock()
     mock_filter.escape_filter_chars = MagicMock(side_effect=lambda x: x)
-    return mock_ldap, mock_filter
+    return mock_ldap, mock_filter, fake_conn
 
 
 def _make_mock_db():
@@ -158,7 +179,7 @@ class TestLDAPAuthenticateBindFailure:
     async def test_bind_failure_returns_invalid_credentials(
         self, ldap_provider, mock_settings
     ):
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
             bind_raises=Exception("LDAP bind failed")
         )
 
@@ -174,7 +195,7 @@ class TestLDAPAuthenticateBindFailure:
     async def test_connection_failure_returns_invalid_credentials(
         self, ldap_provider, mock_settings
     ):
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
             bind_raises=ConnectionError("Connection refused")
         )
 
@@ -190,7 +211,7 @@ class TestLDAPAuthenticateBindFailure:
 
 class TestLDAPAuthenticateSearchResults:
     async def test_empty_results_user_not_found(self, ldap_provider, mock_settings):
-        mock_ldap, mock_filter = _build_ldap_mock(search_results=[])
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(search_results=[])
 
         mock_db = AsyncMock(spec=AsyncSession)
         with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
@@ -239,7 +260,7 @@ class TestLDAPAuthenticateSuccess:
         attrs = _make_ldap_attrs(
             member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
         )
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
             search_results=[("uid=testuser,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -263,7 +284,7 @@ class TestLDAPAuthenticateSuccess:
         self, ldap_provider, mock_settings
     ):
         attrs = _make_ldap_attrs(member_of=[])
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
             search_results=[("uid=user2,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -283,7 +304,7 @@ class TestLDAPAuthenticateSuccess:
         attrs = _make_ldap_attrs(
             member_of=[b"cn=developers,ou=groups,dc=example,dc=com"]
         )
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
             search_results=[("uid=devuser,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -308,7 +329,7 @@ class TestLDAPAuthenticateSuccess:
                 b"cn=admins,ou=groups,dc=example,dc=com",
             ]
         )
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
             search_results=[("uid=multi,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -327,7 +348,7 @@ class TestLDAPAuthenticateSuccess:
         self, ldap_provider, mock_settings
     ):
         attrs = _make_ldap_attrs(mail=b"")
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
             search_results=[("uid=nomail,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -347,7 +368,7 @@ class TestLDAPAuthenticateSuccess:
         self, ldap_provider, mock_settings
     ):
         attrs = _make_ldap_attrs(cn=b"")
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
             search_results=[("uid=nocn,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -371,7 +392,7 @@ class TestLDAPAuthenticateExistingUser:
         from engine.db.models import User
 
         attrs = _make_ldap_attrs()
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
             search_results=[("uid=testuser,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -407,7 +428,7 @@ class TestLDAPAuthenticateExistingUser:
         attrs = _make_ldap_attrs(
             member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
         )
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
             search_results=[("uid=promoted,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -443,7 +464,7 @@ class TestLDAPAuthenticateEmailConflict:
         from engine.db.models import User
 
         attrs = _make_ldap_attrs()
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
             search_results=[("uid=conflict,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -482,7 +503,7 @@ class TestLDAPAuthenticateDisabledUser:
         from engine.db.models import User
 
         attrs = _make_ldap_attrs()
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
             search_results=[("uid=disabled,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -524,7 +545,7 @@ class TestLDAPRoleMappingEmpty:
         attrs = _make_ldap_attrs(
             member_of=[b"cn=somegroup,ou=groups,dc=example,dc=com"]
         )
-        mock_ldap, mock_filter = _build_ldap_mock(
+        mock_ldap, mock_filter, _fake_conn = _build_ldap_mock(
             search_results=[("uid=norolemap,ou=users,dc=example,dc=com", attrs)]
         )
 
@@ -564,3 +585,336 @@ class TestLDAPInheritedMethods:
 
     def test_map_roles_empty_list(self, ldap_provider):
         assert ldap_provider.map_roles([]) == "user"
+
+
+class TestLDAPStartTLSOrdering:
+    """Security regression tests: start_tls_s() must run BEFORE simple_bind_s().
+
+    Without strict ordering, a misconfigured server can cause the bind to
+    succeed over a cleartext connection, leaking credentials (SEV-508).
+    """
+
+    async def test_start_tls_called_before_simple_bind(
+        self, ldap_provider, mock_settings
+    ):
+        attrs = _make_ldap_attrs()
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            search_results=[("uid=ordering,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        mock_db, _ = _make_mock_db()
+        mock_db.execute = _mock_execute_factory(None, None)
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="ordering", password="pass", db=mock_db
+            )
+
+        assert result.success is True
+        assert fake_conn.start_tls_called is True
+        assert fake_conn.bind_called is True
+        # The fake conn records the call order; start_tls_s must precede bind.
+        tls_idx = fake_conn.call_order.index("start_tls_s")
+        bind_idx = fake_conn.call_order.index("simple_bind_s")
+        assert tls_idx < bind_idx
+
+    async def test_tls_options_set_before_start_tls(
+        self, ldap_provider, mock_settings
+    ):
+        attrs = _make_ldap_attrs()
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            search_results=[("uid=tlscheck,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        mock_db, _ = _make_mock_db()
+        mock_db.execute = _mock_execute_factory(None, None)
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            await ldap_provider.authenticate(
+                username="tlscheck", password="pass", db=mock_db
+            )
+
+        # The hardening helper must set the certificate-requirement and
+        # TLS-mode options before invoking start_tls_s.
+        assert mock_ldap.OPT_X_TLS_REQUIRE_CERT in fake_conn._options
+        assert fake_conn._options[mock_ldap.OPT_X_TLS_REQUIRE_CERT] == mock_ldap.OPT_X_TLS_DEMAND
+        assert mock_ldap.OPT_X_TLS in fake_conn._options
+        assert fake_conn._options[mock_ldap.OPT_X_TLS] == mock_ldap.OPT_X_TLS_HARD
+
+    async def test_start_tls_failure_no_cleartext_fallback(
+        self, ldap_provider, mock_settings
+    ):
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            start_tls_raises=RuntimeError("STARTTLS not supported"),
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="tlsfail", password="pass", db=mock_db
+            )
+
+        # The bind must never have happened: cleartext fallback is forbidden.
+        assert result.success is False
+        assert fake_conn.bind_called is False
+        assert "TLS" in result.error or "cleartext" in result.error.lower()
+
+    async def test_start_tls_failure_does_not_leak_connection(
+        self, ldap_provider, mock_settings
+    ):
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            start_tls_raises=RuntimeError("STARTTLS not supported"),
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            await ldap_provider.authenticate(
+                username="tlsfail", password="pass", db=mock_db
+            )
+
+        assert fake_conn.unbound is True
+
+
+class TestLDAPDNEscaping:
+    """RFC 4514 DN escaping regression tests.
+
+    `escape_filter_chars` only escapes characters special to LDAP search
+    filters; it does NOT escape characters special to DN strings, which
+    allowed injection into the bind DN (SEV-509).
+    """
+
+    async def test_username_with_comma_escaped_in_bind_dn(
+        self, ldap_provider, mock_settings
+    ):
+        attrs = _make_ldap_attrs(uid="user,admin")
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            search_results=[("uid=user\\,admin,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        mock_db, _ = _make_mock_db()
+        mock_db.execute = _mock_execute_factory(None, None)
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="user,admin", password="pass", db=mock_db
+            )
+
+        assert result.success is True
+        bind_dn = fake_conn.bind_call_args[0]
+        # The comma inside the attribute value must be escaped, not the
+        # structural commas separating RDNs.
+        assert "uid=user\\,admin" in bind_dn
+
+    async def test_username_with_quote_escaped_in_bind_dn(
+        self, ldap_provider, mock_settings
+    ):
+        attrs = _make_ldap_attrs(uid='evil"user')
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            search_results=[('uid=evil\\"user,ou=users,dc=example,dc=com', attrs)]
+        )
+
+        mock_db, _ = _make_mock_db()
+        mock_db.execute = _mock_execute_factory(None, None)
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            await ldap_provider.authenticate(
+                username='evil"user', password="pass", db=mock_db
+            )
+
+        bind_dn = fake_conn.bind_call_args[0]
+        assert '\\"' in bind_dn
+
+    async def test_username_with_backslash_escaped_in_bind_dn(
+        self, ldap_provider, mock_settings
+    ):
+        attrs = _make_ldap_attrs(uid="evil\\user")
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            search_results=[("uid=evil\\\\user,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        mock_db, _ = _make_mock_db()
+        mock_db.execute = _mock_execute_factory(None, None)
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            await ldap_provider.authenticate(
+                username="evil\\user", password="pass", db=mock_db
+            )
+
+        bind_dn = fake_conn.bind_call_args[0]
+        assert "\\\\" in bind_dn
+
+    async def test_username_with_plus_escaped_in_bind_dn(
+        self, ldap_provider, mock_settings
+    ):
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            search_results=[]
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            await ldap_provider.authenticate(
+                username="user+admin", password="pass", db=mock_db
+            )
+
+        bind_dn = fake_conn.bind_call_args[0]
+        assert "user\\+admin" in bind_dn
+
+    async def test_username_with_leading_hash_escaped(
+        self, ldap_provider, mock_settings
+    ):
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            search_results=[]
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            await ldap_provider.authenticate(
+                username="#admin", password="pass", db=mock_db
+            )
+
+        bind_dn = fake_conn.bind_call_args[0]
+        # Leading '#' must be escaped.
+        assert "uid=\\#admin" in bind_dn
+
+    async def test_username_with_leading_space_escaped(
+        self, ldap_provider, mock_settings
+    ):
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            search_results=[]
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            await ldap_provider.authenticate(
+                username=" spaced", password="pass", db=mock_db
+            )
+
+        bind_dn = fake_conn.bind_call_args[0]
+        assert "uid=\\ spaced" in bind_dn
+
+    async def test_username_with_trailing_space_escaped(
+        self, ldap_provider, mock_settings
+    ):
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            search_results=[]
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            await ldap_provider.authenticate(
+                username="spaced ", password="pass", db=mock_db
+            )
+
+        bind_dn = fake_conn.bind_call_args[0]
+        assert "uid=spaced\\ " in bind_dn
+
+    async def test_search_filter_still_uses_filter_escaping(
+        self, ldap_provider, mock_settings
+    ):
+        """Filter must keep using RFC 4515 escaping (different rules from DN)."""
+        attrs = _make_ldap_attrs(uid="user*")
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            search_results=[("uid=user\\*,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        mock_db, _ = _make_mock_db()
+        mock_db.execute = _mock_execute_factory(None, None)
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            await ldap_provider.authenticate(
+                username="user*", password="pass", db=mock_db
+            )
+
+        # The asterisk must NOT be backslash-escaped in the filter (it would
+        # break the wildcard semantics). Instead it must use the binary
+        # \2a form required by RFC 4515.
+        # We can't easily inspect the filter directly, but we can confirm
+        # bind DN uses DN escaping (backslash-asterisk is wrong for DN;
+        # * is not a DN-special so it remains literal).
+        bind_dn = fake_conn.bind_call_args[0]
+        assert "uid=user*" in bind_dn
+
+    async def test_angle_brackets_semicolon_escaped(
+        self, ldap_provider, mock_settings
+    ):
+        mock_ldap, mock_filter, fake_conn = _build_ldap_mock(
+            search_results=[]
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            await ldap_provider.authenticate(
+                username="<;>", password="pass", db=mock_db
+            )
+
+        bind_dn = fake_conn.bind_call_args[0]
+        assert "\\<" in bind_dn
+        assert "\\;" in bind_dn
+        assert "\\>" in bind_dn
+
+
+class TestEscapeDNCharsUnit:
+    """Pure unit tests for the helper function (no mocks needed)."""
+
+    def test_empty_string(self):
+        from engine.api.auth.ldap import _escape_dn_chars
+
+        assert _escape_dn_chars("") == ""
+
+    def test_no_special_chars(self):
+        from engine.api.auth.ldap import _escape_dn_chars
+
+        assert _escape_dn_chars("alice") == "alice"
+
+    def test_each_special_char_escaped(self):
+        from engine.api.auth.ldap import _escape_dn_chars
+
+        assert _escape_dn_chars("a,b") == "a\\,b"
+        assert _escape_dn_chars('a"b') == 'a\\"b'
+        assert _escape_dn_chars("a+b") == "a\\+b"
+        assert _escape_dn_chars("a<b") == "a\\<b"
+        assert _escape_dn_chars("a>b") == "a\\>b"
+        assert _escape_dn_chars("a;b") == "a\\;b"
+        assert _escape_dn_chars("a\\b") == "a\\\\b"
+
+    def test_leading_hash_only(self):
+        from engine.api.auth.ldap import _escape_dn_chars
+
+        # Leading '#' is special; embedded '#' is not.
+        assert _escape_dn_chars("#hash") == "\\#hash"
+        assert _escape_dn_chars("a#hash") == "a#hash"
+
+    def test_leading_and_trailing_space(self):
+        from engine.api.auth.ldap import _escape_dn_chars
+
+        assert _escape_dn_chars(" spaced") == "\\ spaced"
+        assert _escape_dn_chars("spaced ") == "spaced\\ "
+        assert _escape_dn_chars(" spaced ") == "\\ spaced\\ "
+        # Interior spaces are preserved literally.
+        assert _escape_dn_chars("a b") == "a b"
+
+    def test_idempotent_for_safe_input(self):
+        from engine.api.auth.ldap import _escape_dn_chars
+
+        assert _escape_dn_chars("alice123") == "alice123"
+
+
+class TestEscapeFilterCharsUnit:
+    """Pure unit tests for the filter-escape helper."""
+
+    def test_star_and_parens_escaped(self):
+        from engine.api.auth.ldap import _escape_filter_chars
+
+        assert _escape_filter_chars("a*b") == "a\\2ab"
+        assert _escape_filter_chars("(uid)") == "\\28uid\\29"
+
+    def test_backslash_and_null_escaped(self):
+        from engine.api.auth.ldap import _escape_filter_chars
+
+        assert _escape_filter_chars("a\\b") == "a\\5cb"
+        assert _escape_filter_chars("a\x00b") == "a\\00b"
+
+    def test_safe_chars_passthrough(self):
+        from engine.api.auth.ldap import _escape_filter_chars
+
+        assert _escape_filter_chars("alice") == "alice"
