@@ -73,7 +73,7 @@ class LDAPAuthProvider(IAuthProvider):
                     mapped_roles.append(nexus_role)
 
         if not mapped_roles:
-            mapped_roles = ["user"]
+            mapped_roles = ["viewer"]
 
         mapped_role = self.map_roles(mapped_roles)
 
@@ -102,7 +102,19 @@ class LDAPAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.ldap.user_created", user_id=str(user.id))
-        elif user.role != mapped_role:
+        # SEV-741: by default an existing user's role is **not**
+        # overwritten by upstream IdP claims on each login — a
+        # misconfigured or compromised IdP could otherwise downgrade
+        # or escalate a previously-granted local role. Operators can
+        # opt in to the legacy "always reflect IdP" behavior by
+        # setting ``auth_overwrite_role_on_login=true``.
+        elif settings.auth_overwrite_role_on_login and user.role != mapped_role:
+            logger.info(
+                "auth.ldap.role_overwritten",
+                user_id=str(user.id),
+                previous_role=user.role,
+                new_role=mapped_role,
+            )
             user.role = mapped_role
             await db.flush()
 

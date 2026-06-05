@@ -130,7 +130,7 @@ class OIDCAuthProvider(IAuthProvider):
                     success=False, error="Email already registered with a different provider"
                 )
 
-            mapped_role = "user"
+            mapped_role = "viewer"
             if isinstance(raw_roles, list):
                 mapped_role = self.map_roles(raw_roles)
 
@@ -147,6 +147,12 @@ class OIDCAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.oidc.user_created", user_id=str(user.id))
+        else:
+            # SEV-741: existing users are handled in a dedicated helper
+            # so the default path (no overwrite) is just a pass.
+            await self._maybe_overwrite_existing_user_role(
+                user, raw_roles, db
+            )
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")
@@ -162,6 +168,39 @@ class OIDCAuthProvider(IAuthProvider):
                 raw_claims=claims_data,
             ),
         )
+
+    async def _maybe_overwrite_existing_user_role(
+        self,
+        user: User,
+        raw_roles: Any,
+        db: AsyncSession,
+    ) -> None:
+        """SEV-741: by default an existing user's role is **not**
+        overwritten by upstream IdP claims on each login — a
+        misconfigured or compromised IdP could otherwise downgrade
+        or escalate a previously-granted local role. Operators can
+        opt in to the legacy "always reflect IdP" behavior by
+        setting ``auth_overwrite_role_on_login=true``.
+
+        Extracted from ``authenticate`` to keep that method under
+        ruff's PLR0915 statement-count limit and to make the
+        overwrite semantics independently testable.
+        """
+        if not settings.auth_overwrite_role_on_login:
+            return
+        if not isinstance(raw_roles, list):
+            return
+        new_role = self.map_roles(raw_roles)
+        if user.role == new_role:
+            return
+        logger.info(
+            "auth.oidc.role_overwritten",
+            user_id=str(user.id),
+            previous_role=user.role,
+            new_role=new_role,
+        )
+        user.role = new_role
+        await db.flush()
 
     async def get_authorize_url(self, state: str = "") -> str:
         discovery = await self._get_discovery()

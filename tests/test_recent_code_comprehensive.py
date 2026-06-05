@@ -480,7 +480,10 @@ class TestOIDCAuthenticateEdgeCases:
 
         assert result.success is True
         assert len(created) == 1
-        assert created[0].role == "user"
+        # SEV-741 follow-up: when no roles claim is present, the new
+        # user is provisioned with the least-privilege ``viewer``
+        # role rather than ``user``.
+        assert created[0].role == "viewer"
 
     async def test_custom_role_claim(self, monkeypatch, rsa_keys):
         _settings(monkeypatch, oidc_role_claim="groups")
@@ -561,11 +564,13 @@ class TestIAuthProviderBase:
 
     def test_map_roles_empty_list(self):
         p = _ConcreteProvider()
-        assert p.map_roles([]) == "user"
+        # SEV-741 follow-up: least-privilege fallback is now ``viewer``.
+        assert p.map_roles([]) == "viewer"
 
     def test_map_roles_unknown_roles(self):
         p = _ConcreteProvider()
-        assert p.map_roles(["superadmin", "guest"]) == "user"
+        # SEV-741 follow-up: least-privilege fallback is now ``viewer``.
+        assert p.map_roles(["superadmin", "guest"]) == "viewer"
 
     def test_map_roles_case_insensitive(self):
         p = _ConcreteProvider()

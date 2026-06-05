@@ -131,12 +131,18 @@ class TestNoImplicitPromotion:
             == "admin"
         )
 
-    def test_empty_input_returns_user(self):
-        assert _ConcreteProvider().map_roles([]) == "user"
+    def test_empty_input_returns_viewer(self):
+        """SEV-741 follow-up: least-privilege fallback.  An empty
+        external role set must collapse to ``viewer`` (read-only) and
+        **not** ``user``, which grants write access."""
+        assert _ConcreteProvider().map_roles([]) == "viewer"
 
-    def test_all_unrecognized_falls_back_to_user(self):
+    def test_all_unrecognized_falls_back_to_viewer(self):
+        """SEV-741 follow-up: when no external role matches a known
+        internal role, we must fall back to ``viewer`` (least privilege)
+        instead of ``user``."""
         assert (
-            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "user"
+            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "viewer"
         )
 
     def test_partial_unrecognized_still_uses_recognized(self):
@@ -153,9 +159,9 @@ class TestNoImplicitPromotion:
 
     def test_whitespace_only_role_is_unrecognized(self):
         """A whitespace-only string is normalized to the empty string,
-        which is not a known role.  Should fall through to user without
-        crashing."""
-        assert _ConcreteProvider().map_roles(["   "]) == "user"
+        which is not a known role.  Should fall through to ``viewer``
+        without crashing."""
+        assert _ConcreteProvider().map_roles(["   "]) == "viewer"
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +202,7 @@ class TestUnrecognizedRoleWarning:
     def test_warning_fires_for_purely_unrecognized_set(self, monkeypatch):
         calls = self._patch(monkeypatch)
         p = _ConcreteProvider()
-        assert p.map_roles(["totally_bogus"]) == "user"
+        assert p.map_roles(["totally_bogus"]) == "viewer"
         assert any(c["event"] == "auth.map_roles.unrecognized_roles" for c in calls)
 
     def test_warning_fires_when_any_role_is_unrecognized(self, monkeypatch):
@@ -220,8 +226,14 @@ class TestUnrecognizedRoleWarning:
     def test_warning_does_not_fire_for_empty_input(self, monkeypatch):
         calls = self._patch(monkeypatch)
         p = _ConcreteProvider()
-        assert p.map_roles([]) == "user"
-        assert calls == []
+        # Least-privilege fallback still applies; the unrecognized-role
+        # warning must NOT fire (no roles were unrecognized — there
+        # were no roles at all).  A separate ``fallback_to_least_*
+        # warning is emitted by the fallback path (covered elsewhere).
+        assert p.map_roles([]) == "viewer"
+        assert not any(
+            c["event"] == "auth.map_roles.unrecognized_roles" for c in calls
+        )
 
     def test_warning_includes_provider_name(self, monkeypatch):
         """Operators need to know which provider surfaced the

@@ -84,7 +84,7 @@ class GitHubAuthProvider(IAuthProvider):
                 email=email,
                 hashed_password=None,
                 display_name=name,
-                role="user",
+                role="viewer",
                 auth_provider="github",
                 external_id=github_id,
             )
@@ -92,6 +92,22 @@ class GitHubAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.github.user_created", user_id=str(user.id))
+        # SEV-741: existing federated users keep their previously
+        # granted role unless the operator has explicitly opted in
+        # to per-login role reflection via
+        # ``auth_overwrite_role_on_login``.  GitHub IdP does not
+        # surface internal roles in this implementation, so the
+        # only effect of opting in here is to log a notice — there
+        # is no upstream role claim to apply.  The guard is kept
+        # for symmetry with the OIDC / LDAP paths and to ensure
+        # that if a future change adds GitHub role extraction the
+        # safety check is already in place.
+        elif settings.auth_overwrite_role_on_login:
+            logger.info(
+                "auth.github.role_overwrite_noop",
+                user_id=str(user.id),
+                role=user.role,
+            )
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")

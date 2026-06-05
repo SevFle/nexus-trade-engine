@@ -277,7 +277,10 @@ class TestLDAPAuthenticateSuccess:
 
         assert result.success is True
         assert result.user_info is not None
-        assert "user" in result.user_info.roles
+        # SEV-741 follow-up: when no LDAP groups match the role
+        # mapping, the new user gets the least-privilege ``viewer``
+        # fallback rather than ``user``.
+        assert "viewer" in result.user_info.roles
 
     async def test_developer_role_mapping(self, ldap_provider, mock_settings):
         attrs = _make_ldap_attrs(
@@ -399,9 +402,14 @@ class TestLDAPAuthenticateExistingUser:
         assert result.user_info.email == "testuser@example.com"
         mock_db.add.assert_not_called()
 
-    async def test_existing_user_role_updated(
+    async def test_existing_user_role_not_updated_by_default(
         self, ldap_provider, mock_settings
     ):
+        """SEV-741: existing user role must NOT be overwritten by IdP
+        claims on each login when ``auth_overwrite_role_on_login`` is
+        False (the default).  This guards against a misconfigured or
+        compromised IdP escalating or downgrading a previously-granted
+        local role."""
         from engine.db.models import User
 
         attrs = _make_ldap_attrs(
@@ -432,8 +440,9 @@ class TestLDAPAuthenticateExistingUser:
             )
 
         assert result.success is True
-        assert existing_user.role == "admin"
-        mock_db.flush.assert_called()
+        # Default: role overwrite is OFF — IdP claim is ignored.
+        assert existing_user.role == "user"
+        mock_db.flush.assert_not_called()
 
 
 class TestLDAPAuthenticateEmailConflict:
@@ -538,7 +547,8 @@ class TestLDAPRoleMappingEmpty:
 
         assert result.success is True
         assert result.user_info is not None
-        assert "user" in result.user_info.roles
+        # SEV-741 follow-up: least-privilege fallback is now ``viewer``.
+        assert "viewer" in result.user_info.roles
 
 
 class TestLDAPInheritedMethods:
@@ -559,8 +569,10 @@ class TestLDAPInheritedMethods:
     def test_map_roles_developer(self, ldap_provider):
         assert ldap_provider.map_roles(["developer"]) == "developer"
 
-    def test_map_roles_unknown_defaults_user(self, ldap_provider):
-        assert ldap_provider.map_roles(["unknown_role"]) == "user"
+    def test_map_roles_unknown_defaults_viewer(self, ldap_provider):
+        # SEV-741 follow-up: least-privilege fallback is now ``viewer``.
+        assert ldap_provider.map_roles(["unknown_role"]) == "viewer"
 
     def test_map_roles_empty_list(self, ldap_provider):
-        assert ldap_provider.map_roles([]) == "user"
+        # SEV-741 follow-up: least-privilege fallback is now ``viewer``.
+        assert ldap_provider.map_roles([]) == "viewer"
