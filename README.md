@@ -6,6 +6,35 @@ Nexus is a modular, plugin-driven algorithmic trading platform designed for stea
 
 ---
 
+## Documentation
+
+The full engineering documentation set lives in [`docs/`](docs/README.md).
+Start there if you are new to the codebase. Highlights:
+
+- [Architecture overview](docs/architecture/overview.md) — system
+  shape, request lifecycle, module boundaries.
+- [Architecture decisions (ADRs)](docs/architecture/decisions.md) —
+  why we chose what we chose.
+- [API reference](docs/api/reference.md) — every HTTP / WebSocket
+  route, its payload, its auth requirement.
+- [Data model](docs/api/data-model.md) — entity-relationship view of
+  the Postgres schema.
+- [Development setup](docs/development/setup.md) — env vars, commands,
+  how to run tests.
+- [Deployment](docs/deployment/overview.md) — what production looks
+  like and how code gets there.
+- [Operations runbooks](docs/operations/runbooks.md) — diagnosis
+  playbooks for the failures you will actually see.
+- [Known limitations & tech debt](docs/tech-debt.md) — honest,
+  prioritised list of what is not done.
+- [Plugin developer guide](docs/PLUGIN_DEV_GUIDE.md) — authoring
+  third-party strategies.
+
+The `/docs` directory is plain Markdown (no build pipeline), so it
+renders correctly in GitHub, in any editor preview, and in forked
+repositories without configuration. The choice is justified in
+[`docs/README.md`](docs/README.md).
+
 ## Architecture
 
 Nexus is built on a five-layer architecture where every component is independently scalable and replaceable:
@@ -18,7 +47,8 @@ Nexus is built on a five-layer architecture where every component is independent
 | **Plugin System** | Strategy marketplace | SDK, registry, sandboxed runtime |
 | **Data Layer** | Storage & market feeds | TimescaleDB, PostgreSQL, Redis |
 
-Interactive architecture diagrams are available in [`docs/architecture/`](docs/architecture/).
+Interactive architecture diagrams and an end-to-end Mermaid diagram
+are in [`docs/architecture/overview.md`](docs/architecture/overview.md).
 
 ## Core Concepts
 
