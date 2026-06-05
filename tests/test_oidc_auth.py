@@ -650,11 +650,146 @@ class TestOIDCRoleMapping:
         assert oidc_provider.map_roles(["user"]) == "user"
 
     def test_map_roles_unknown_role(self, oidc_provider):
-        assert oidc_provider.map_roles(["unknown_role"]) == "user"
+        # SEV-741: unknown roles collapse to lowest-privilege ``viewer``.
+        assert oidc_provider.map_roles(["unknown_role"]) == "viewer"
 
     def test_map_roles_empty_list(self, oidc_provider):
-        assert oidc_provider.map_roles([]) == "user"
+        # SEV-741: empty role list maps to lowest-privilege ``viewer``.
+        assert oidc_provider.map_roles([]) == "viewer"
 
     def test_map_roles_case_insensitive(self, oidc_provider):
         assert oidc_provider.map_roles(["ADMIN"]) == "admin"
         assert oidc_provider.map_roles(["  Admin  "]) == "admin"
+
+
+class TestOIDCRoleOverwriteGuard:
+    """SEV-741: ``auth_overwrite_role_on_login`` must gate role mutation
+    on existing-user federated login.
+
+    Default (False): a re-login must NOT overwrite a previously-granted
+    local role.  Opt-in (True): the upstream-asserted role wins.
+    """
+
+    async def test_existing_user_role_preserved_when_setting_disabled(
+        self, oidc_provider, mock_settings, rsa_keys
+    ):
+        from engine.db.models import User
+
+        # Explicitly assert the SEV-741 default.
+        assert mock_settings.auth_overwrite_role_on_login is False
+
+        fake_client = _build_full_mock_client(
+            rsa_keys,
+            {
+                "sub": "oidc-preserve-001",
+                "email": "preserve@example.com",
+                "name": "Preserve User",
+                "roles": ["admin"],
+            },
+        )
+
+        existing_user = User(
+            email="preserve@example.com",
+            display_name="Preserve User",
+            is_active=True,
+            role="user",
+            auth_provider="oidc",
+            external_id="oidc-preserve-001",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+        assert result.success is True
+        # Role must NOT be overwritten with "admin" since the operator has
+        # not opted in.
+        assert existing_user.role == "user"
+        mock_db.flush.assert_not_called()
+
+    async def test_existing_user_role_overwritten_when_setting_enabled(
+        self, oidc_provider, mock_settings, rsa_keys
+    ):
+        from engine.db.models import User
+
+        # Operator opt-in.
+        mock_settings.auth_overwrite_role_on_login = True
+
+        fake_client = _build_full_mock_client(
+            rsa_keys,
+            {
+                "sub": "oidc-overwrite-001",
+                "email": "overwrite@example.com",
+                "name": "Overwrite User",
+                "roles": ["admin"],
+            },
+        )
+
+        existing_user = User(
+            email="overwrite@example.com",
+            display_name="Overwrite User",
+            is_active=True,
+            role="user",
+            auth_provider="oidc",
+            external_id="oidc-overwrite-001",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+        assert result.success is True
+        assert existing_user.role == "admin"
+        mock_db.flush.assert_called()
+
+    async def test_existing_user_role_unchanged_when_already_matches(
+        self, oidc_provider, mock_settings, rsa_keys
+    ):
+        """Even when overwrites are opted-in, we must not flush if the
+        role already matches (avoids spurious DB writes and audit
+        noise)."""
+        from engine.db.models import User
+
+        mock_settings.auth_overwrite_role_on_login = True
+
+        fake_client = _build_full_mock_client(
+            rsa_keys,
+            {
+                "sub": "oidc-same-001",
+                "email": "same@example.com",
+                "name": "Same Role",
+                "roles": ["admin"],
+            },
+        )
+
+        existing_user = User(
+            email="same@example.com",
+            display_name="Same Role",
+            is_active=True,
+            role="admin",
+            auth_provider="oidc",
+            external_id="oidc-same-001",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+        assert result.success is True
+        assert existing_user.role == "admin"
+        mock_db.flush.assert_not_called()

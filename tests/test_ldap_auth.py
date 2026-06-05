@@ -38,10 +38,12 @@ def mock_settings(monkeypatch):
         ldap_server_url="ldap://ldap.example.com:389",
         ldap_bind_dn="uid={{username}},ou=users,dc=example,dc=com",
         ldap_search_base="ou=users,dc=example,dc=com",
-        ldap_role_mapping=json.dumps({
-            "cn=admins,ou=groups,dc=example,dc=com": "admin",
-            "cn=developers,ou=groups,dc=example,dc=com": "developer",
-        }),
+        ldap_role_mapping=json.dumps(
+            {
+                "cn=admins,ou=groups,dc=example,dc=com": "admin",
+                "cn=developers,ou=groups,dc=example,dc=com": "developer",
+            }
+        ),
     )
     monkeypatch.setattr("engine.api.auth.ldap.settings", s)
     return s
@@ -155,12 +157,8 @@ def _make_mock_db():
 
 
 class TestLDAPAuthenticateBindFailure:
-    async def test_bind_failure_returns_invalid_credentials(
-        self, ldap_provider, mock_settings
-    ):
-        mock_ldap, mock_filter = _build_ldap_mock(
-            bind_raises=Exception("LDAP bind failed")
-        )
+    async def test_bind_failure_returns_invalid_credentials(self, ldap_provider, mock_settings):
+        mock_ldap, mock_filter = _build_ldap_mock(bind_raises=Exception("LDAP bind failed"))
 
         mock_db = AsyncMock(spec=AsyncSession)
         with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
@@ -233,12 +231,8 @@ def _mock_execute_factory(*results):
 
 
 class TestLDAPAuthenticateSuccess:
-    async def test_new_user_created_with_mapped_role(
-        self, ldap_provider, mock_settings
-    ):
-        attrs = _make_ldap_attrs(
-            member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
-        )
+    async def test_new_user_created_with_mapped_role(self, ldap_provider, mock_settings):
+        attrs = _make_ldap_attrs(member_of=[b"cn=admins,ou=groups,dc=example,dc=com"])
         mock_ldap, mock_filter = _build_ldap_mock(
             search_results=[("uid=testuser,ou=users,dc=example,dc=com", attrs)]
         )
@@ -259,9 +253,7 @@ class TestLDAPAuthenticateSuccess:
         assert result.user_info.external_id == "testuser"
         assert len(added_users) == 1
 
-    async def test_new_user_default_role_when_no_groups(
-        self, ldap_provider, mock_settings
-    ):
+    async def test_new_user_default_role_when_no_groups(self, ldap_provider, mock_settings):
         attrs = _make_ldap_attrs(member_of=[])
         mock_ldap, mock_filter = _build_ldap_mock(
             search_results=[("uid=user2,ou=users,dc=example,dc=com", attrs)]
@@ -280,9 +272,7 @@ class TestLDAPAuthenticateSuccess:
         assert "user" in result.user_info.roles
 
     async def test_developer_role_mapping(self, ldap_provider, mock_settings):
-        attrs = _make_ldap_attrs(
-            member_of=[b"cn=developers,ou=groups,dc=example,dc=com"]
-        )
+        attrs = _make_ldap_attrs(member_of=[b"cn=developers,ou=groups,dc=example,dc=com"])
         mock_ldap, mock_filter = _build_ldap_mock(
             search_results=[("uid=devuser,ou=users,dc=example,dc=com", attrs)]
         )
@@ -299,9 +289,7 @@ class TestLDAPAuthenticateSuccess:
         assert len(added_users) == 1
         assert added_users[0].role == "developer"
 
-    async def test_multiple_groups_maps_highest_role(
-        self, ldap_provider, mock_settings
-    ):
+    async def test_multiple_groups_maps_highest_role(self, ldap_provider, mock_settings):
         attrs = _make_ldap_attrs(
             member_of=[
                 b"cn=developers,ou=groups,dc=example,dc=com",
@@ -323,9 +311,7 @@ class TestLDAPAuthenticateSuccess:
         assert result.success is True
         assert added_users[0].role == "admin"
 
-    async def test_email_fallback_when_mail_empty(
-        self, ldap_provider, mock_settings
-    ):
+    async def test_email_fallback_when_mail_empty(self, ldap_provider, mock_settings):
         attrs = _make_ldap_attrs(mail=b"")
         mock_ldap, mock_filter = _build_ldap_mock(
             search_results=[("uid=nomail,ou=users,dc=example,dc=com", attrs)]
@@ -343,9 +329,7 @@ class TestLDAPAuthenticateSuccess:
         assert result.user_info is not None
         assert result.user_info.email == "nomail@ldap"
 
-    async def test_cn_fallback_when_empty(
-        self, ldap_provider, mock_settings
-    ):
+    async def test_cn_fallback_when_empty(self, ldap_provider, mock_settings):
         attrs = _make_ldap_attrs(cn=b"")
         mock_ldap, mock_filter = _build_ldap_mock(
             search_results=[("uid=nocn,ou=users,dc=example,dc=com", attrs)]
@@ -355,9 +339,7 @@ class TestLDAPAuthenticateSuccess:
         mock_db.execute = _mock_execute_factory(None, None)
 
         with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
-            result = await ldap_provider.authenticate(
-                username="nocn", password="pass", db=mock_db
-            )
+            result = await ldap_provider.authenticate(username="nocn", password="pass", db=mock_db)
 
         assert result.success is True
         assert result.user_info is not None
@@ -365,9 +347,7 @@ class TestLDAPAuthenticateSuccess:
 
 
 class TestLDAPAuthenticateExistingUser:
-    async def test_existing_ldap_user_logs_in(
-        self, ldap_provider, mock_settings
-    ):
+    async def test_existing_ldap_user_logs_in(self, ldap_provider, mock_settings):
         from engine.db.models import User
 
         attrs = _make_ldap_attrs()
@@ -399,14 +379,16 @@ class TestLDAPAuthenticateExistingUser:
         assert result.user_info.email == "testuser@example.com"
         mock_db.add.assert_not_called()
 
-    async def test_existing_user_role_updated(
-        self, ldap_provider, mock_settings
-    ):
+    async def test_existing_user_role_updated(self, ldap_provider, mock_settings):
+        """When ``auth_overwrite_role_on_login=True`` the LDAP provider
+        MUST overwrite an existing user's role on each login with the
+        freshly-mapped role."""
         from engine.db.models import User
 
-        attrs = _make_ldap_attrs(
-            member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
-        )
+        # SEV-741: opt-in to role overwrites.
+        mock_settings.auth_overwrite_role_on_login = True
+
+        attrs = _make_ldap_attrs(member_of=[b"cn=admins,ou=groups,dc=example,dc=com"])
         mock_ldap, mock_filter = _build_ldap_mock(
             search_results=[("uid=promoted,ou=users,dc=example,dc=com", attrs)]
         )
@@ -435,11 +417,51 @@ class TestLDAPAuthenticateExistingUser:
         assert existing_user.role == "admin"
         mock_db.flush.assert_called()
 
-
-class TestLDAPAuthenticateEmailConflict:
-    async def test_email_registered_with_different_provider(
+    async def test_existing_user_role_not_updated_when_setting_disabled(
         self, ldap_provider, mock_settings
     ):
+        """SEV-741 regression guard: when
+        ``auth_overwrite_role_on_login=False`` (the default) an existing
+        user's role must NOT be mutated by an upstream IdP re-login,
+        even if the freshly-mapped role differs."""
+        from engine.db.models import User
+
+        # Explicitly set the SEV-741 default.
+        assert mock_settings.auth_overwrite_role_on_login is False
+
+        attrs = _make_ldap_attrs(member_of=[b"cn=admins,ou=groups,dc=example,dc=com"])
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=preserved,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        existing_user = User(
+            email="preserved@example.com",
+            display_name="Preserved User",
+            is_active=True,
+            role="user",
+            auth_provider="ldap",
+            external_id="preserved",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="preserved", password="correctpass", db=mock_db
+            )
+
+        assert result.success is True
+        # Role must be preserved (not overwritten with admin).
+        assert existing_user.role == "user"
+        mock_db.flush.assert_not_called()
+
+
+class TestLDAPAuthenticateEmailConflict:
+    async def test_email_registered_with_different_provider(self, ldap_provider, mock_settings):
         from engine.db.models import User
 
         attrs = _make_ldap_attrs()
@@ -510,9 +532,7 @@ class TestLDAPAuthenticateDisabledUser:
 
 
 class TestLDAPRoleMappingEmpty:
-    async def test_no_role_mapping_configured(
-        self, ldap_provider, monkeypatch
-    ):
+    async def test_no_role_mapping_configured(self, ldap_provider, monkeypatch):
         s = Settings(
             ldap_server_url="ldap://ldap.example.com:389",
             ldap_bind_dn="uid={{username}},ou=users,dc=example,dc=com",
@@ -521,9 +541,7 @@ class TestLDAPRoleMappingEmpty:
         )
         monkeypatch.setattr("engine.api.auth.ldap.settings", s)
 
-        attrs = _make_ldap_attrs(
-            member_of=[b"cn=somegroup,ou=groups,dc=example,dc=com"]
-        )
+        attrs = _make_ldap_attrs(member_of=[b"cn=somegroup,ou=groups,dc=example,dc=com"])
         mock_ldap, mock_filter = _build_ldap_mock(
             search_results=[("uid=norolemap,ou=users,dc=example,dc=com", attrs)]
         )
@@ -547,9 +565,7 @@ class TestLDAPInheritedMethods:
         assert result is None
 
     async def test_create_user_not_supported(self, ldap_provider):
-        result = await ldap_provider.create_user(
-            _user_info=MagicMock()
-        )
+        result = await ldap_provider.create_user(_user_info=MagicMock())
         assert result.success is False
         assert "not supported" in result.error.lower()
 
@@ -559,8 +575,10 @@ class TestLDAPInheritedMethods:
     def test_map_roles_developer(self, ldap_provider):
         assert ldap_provider.map_roles(["developer"]) == "developer"
 
-    def test_map_roles_unknown_defaults_user(self, ldap_provider):
-        assert ldap_provider.map_roles(["unknown_role"]) == "user"
+    def test_map_roles_unknown_defaults_viewer(self, ldap_provider):
+        # SEV-741: unknown roles collapse to lowest-privilege ``viewer``.
+        assert ldap_provider.map_roles(["unknown_role"]) == "viewer"
 
     def test_map_roles_empty_list(self, ldap_provider):
-        assert ldap_provider.map_roles([]) == "user"
+        # SEV-741: empty role list maps to lowest-privilege ``viewer``.
+        assert ldap_provider.map_roles([]) == "viewer"

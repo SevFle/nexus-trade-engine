@@ -58,6 +58,15 @@ class OIDCAuthProvider(IAuthProvider):
             self._jwks_cache = resp.json()
         return self._jwks_cache
 
+    def _resolve_signing_key(self, id_token: str, jwks: dict[str, Any]) -> Any:
+        unverified_header = jwt.get_unverified_header(id_token)
+        kid = unverified_header.get("kid")
+        for key_data in jwks.get("keys", []):
+            if key_data.get("kid") == kid:
+                return jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
+        msg = f"No matching key found for kid={kid}"
+        raise ValueError(msg)
+
     async def authenticate(self, **kwargs: Any) -> AuthResult:
         code = kwargs.get("code")
         db: AsyncSession | None = kwargs.get("db")
@@ -86,16 +95,7 @@ class OIDCAuthProvider(IAuthProvider):
 
             id_token = tokens.get("id_token", "")
             jwks = await self._get_jwks()
-            unverified_header = jwt.get_unverified_header(id_token)
-            kid = unverified_header.get("kid")
-            signing_key = None
-            for key_data in jwks.get("keys", []):
-                if key_data.get("kid") == kid:
-                    signing_key = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
-                    break
-            if signing_key is None:
-                msg = f"No matching key found for kid={kid}"
-                raise ValueError(msg)
+            signing_key = self._resolve_signing_key(id_token, jwks)
             claims_data = jwt.decode(
                 id_token,
                 signing_key,
@@ -147,6 +147,22 @@ class OIDCAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.oidc.user_created", user_id=str(user.id))
+        elif settings.auth_overwrite_role_on_login and isinstance(raw_roles, list):
+            # SEV-741 defense-in-depth: only mutate an existing user's role
+            # on each federated login when the operator has explicitly
+            # opted in via ``auth_overwrite_role_on_login``.  Default False
+            # prevents a misconfigured or compromised upstream IdP from
+            # silently escalating or downgrading previously-granted roles.
+            mapped_role = self.map_roles(raw_roles)
+            if user.role != mapped_role:
+                logger.info(
+                    "auth.oidc.role_overwritten",
+                    user_id=str(user.id),
+                    previous_role=user.role,
+                    new_role=mapped_role,
+                )
+                user.role = mapped_role
+                await db.flush()
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")

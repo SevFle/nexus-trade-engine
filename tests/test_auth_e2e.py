@@ -29,6 +29,7 @@ from sqlalchemy import (
     Uuid,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from engine.api.auth.jwt import (
     create_access_token,
@@ -92,7 +93,17 @@ def _build_metadata() -> MetaData:
 
 @pytest.fixture
 async def e2e_engine():
-    engine = create_async_engine("sqlite+aiosqlite://", echo=False)
+    # SEV-494: sqlite+aiosqlite:// (in-memory) gives each connection its
+    # own private database.  We must use StaticPool so the test session,
+    # the FastAPI override_get_db(), and any inner-session queries all
+    # see the same rows.  Otherwise users pre-created in e2e_db are
+    # invisible to the OAuth callback handler.
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        echo=False,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     metadata = _build_metadata()
     async with engine.begin() as conn:
         await conn.run_sync(metadata.create_all)
@@ -504,7 +515,26 @@ class TestRouteProtection:
 # ─── OAuth Flow (mocked) ─────────────────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="OAuth callback tests pre-date the state-cookie requirement; rewrite needed to plumb state + cookie through the mock client")
+async def _obtain_oauth_state(
+    client: AsyncClient, provider: str
+) -> tuple[str, str]:
+    """Hit the ``/authorize`` endpoint and return ``(state, cookie_header)``.
+
+    The authorize endpoint sets the ``oauth_state_{provider}`` cookie on
+    the response; the test client retains it for the subsequent
+    ``/callback`` call (so we can read it back from ``client.cookies``).
+    """
+    resp = await client.get(f"/api/v1/auth/{provider}/authorize")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    state = data["state"]
+    cookie_name = f"oauth_state_{provider}"
+    assert cookie_name in client.cookies, (
+        f"authorize did not set {cookie_name}; got cookies={list(client.cookies.keys())}"
+    )
+    return state, client.cookies[cookie_name]
+
+
 class TestOAuthFlowMocked:
     async def test_authorize_returns_url_for_configured_provider(self, e2e_db: AsyncSession):
         from engine.api.auth.google import GoogleAuthProvider
@@ -526,6 +556,9 @@ class TestOAuthFlowMocked:
             data = resp.json()
             assert "authorize_url" in data
             assert "accounts.google.com" in data["authorize_url"]
+            # SEV-741: the authorize endpoint must also issue the state cookie.
+            assert "oauth_state_google" in client.cookies
+            assert data["state"] == client.cookies["oauth_state_google"]
         app.dependency_overrides.clear()
 
     async def test_authorize_unknown_provider_404(self, e2e_client: AsyncClient):
@@ -576,8 +609,13 @@ class TestOAuthFlowMocked:
             ),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/v1/auth/google/callback?code=mock-auth-code")
-                assert resp.status_code == 200
+                # SEV-741: first hit /authorize to establish the state cookie.
+                state, _ = await _obtain_oauth_state(client, "google")
+                resp = await client.get(
+                    "/api/v1/auth/google/callback",
+                    params={"code": "mock-auth-code", "state": state},
+                )
+                assert resp.status_code == 200, resp.text
                 data = resp.json()
                 assert "access_token" in data
                 assert "refresh_token" in data
@@ -587,7 +625,9 @@ class TestOAuthFlowMocked:
                 assert decode["provider"] == "google"
         app.dependency_overrides.clear()
 
-    async def test_callback_missing_code_401(self, e2e_db: AsyncSession):
+    async def test_callback_missing_code_422(self, e2e_db: AsyncSession):
+        """Without a ``code`` query parameter FastAPI returns 422
+        (validation error) before the state check fires."""
         from engine.api.auth.google import GoogleAuthProvider
         from engine.api.auth.registry import AuthProviderRegistry
 
@@ -603,7 +643,58 @@ class TestOAuthFlowMocked:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/v1/auth/google/callback")
-            assert resp.status_code in (401, 422)
+            assert resp.status_code == 422
+        app.dependency_overrides.clear()
+
+    async def test_callback_invalid_state_401(self, e2e_db: AsyncSession):
+        """An incorrect or missing ``state`` (relative to the cookie)
+        must produce 401 — protects against CSRF during OAuth."""
+        from engine.api.auth.google import GoogleAuthProvider
+        from engine.api.auth.registry import AuthProviderRegistry
+
+        app = create_app()
+        registry = AuthProviderRegistry()
+        registry.register(GoogleAuthProvider())
+        app.state.auth_registry = registry
+
+        async def override_get_db():
+            yield e2e_db
+
+        app.dependency_overrides[get_db] = override_get_db
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Hit /authorize first to set a valid cookie.
+            await _obtain_oauth_state(client, "google")
+            # Now submit a *different* state in the query string.
+            resp = await client.get(
+                "/api/v1/auth/google/callback",
+                params={"code": "some-code", "state": "mismatched-state"},
+            )
+            assert resp.status_code == 401
+        app.dependency_overrides.clear()
+
+    async def test_callback_missing_state_cookie_401(self, e2e_db: AsyncSession):
+        """When the cookie is absent (e.g. user cleared cookies between
+        authorize and callback) the request must be rejected."""
+        from engine.api.auth.google import GoogleAuthProvider
+        from engine.api.auth.registry import AuthProviderRegistry
+
+        app = create_app()
+        registry = AuthProviderRegistry()
+        registry.register(GoogleAuthProvider())
+        app.state.auth_registry = registry
+
+        async def override_get_db():
+            yield e2e_db
+
+        app.dependency_overrides[get_db] = override_get_db
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get(
+                "/api/v1/auth/google/callback",
+                params={"code": "some-code", "state": "orphan-state"},
+            )
+            assert resp.status_code == 401
         app.dependency_overrides.clear()
 
     async def test_callback_invalid_code_401(self, e2e_db: AsyncSession):
@@ -630,7 +721,11 @@ class TestOAuthFlowMocked:
             return_value=AuthResult(success=False, error="Invalid authorization code"),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/v1/auth/google/callback?code=bad-code")
+                state, _ = await _obtain_oauth_state(client, "google")
+                resp = await client.get(
+                    "/api/v1/auth/google/callback",
+                    params={"code": "bad-code", "state": state},
+                )
                 assert resp.status_code == 401
         app.dependency_overrides.clear()
 
@@ -638,6 +733,10 @@ class TestOAuthFlowMocked:
         ext_id = f"google-new-{uuid.uuid4().hex[:8]}"
         new_email = f"new-{uuid.uuid4().hex[:8]}@google-mock.com"
 
+        # The callback handler relies on the provider's ``authenticate``
+        # to have persisted the user record (which the real Google
+        # provider does on first login).  We mock ``authenticate`` below,
+        # so we materialize the would-be-created user up front.
         oauth_user = User(
             email=new_email,
             hashed_password=None,
@@ -682,8 +781,12 @@ class TestOAuthFlowMocked:
             ),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/v1/auth/google/callback?code=first-code")
-                assert resp.status_code == 200
+                state, _ = await _obtain_oauth_state(client, "google")
+                resp = await client.get(
+                    "/api/v1/auth/google/callback",
+                    params={"code": "first-code", "state": state},
+                )
+                assert resp.status_code == 200, resp.text
 
         from sqlalchemy import select
 
@@ -751,12 +854,20 @@ class TestOAuthFlowMocked:
             return_value=auth_result,
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                first = await client.get("/api/v1/auth/google/callback?code=first-code")
-                assert first.status_code == 200
+                state1, _ = await _obtain_oauth_state(client, "google")
+                first = await client.get(
+                    "/api/v1/auth/google/callback",
+                    params={"code": "first-code", "state": state1},
+                )
+                assert first.status_code == 200, first.text
                 first_data = first.json()
 
-                second = await client.get("/api/v1/auth/google/callback?code=second-code")
-                assert second.status_code == 200
+                state2, _ = await _obtain_oauth_state(client, "google")
+                second = await client.get(
+                    "/api/v1/auth/google/callback",
+                    params={"code": "second-code", "state": state2},
+                )
+                assert second.status_code == 200, second.text
                 second_data = second.json()
 
                 first_decode = decode_token(first_data["access_token"])

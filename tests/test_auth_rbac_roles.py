@@ -205,23 +205,25 @@ class TestBaseProviderMapRoles:
 
     def test_map_roles_unknown_roles_ignored(self):
         p = self._make_provider()
-        assert p.map_roles(["superuser", "god"]) == "user"
+        # SEV-741 defense-in-depth: unknown roles fall back to ``viewer``
+        # (the lowest-privilege role) rather than ``user``.
+        assert p.map_roles(["superuser", "god"]) == "viewer"
 
     def test_map_roles_new_domain_roles(self):
         p = self._make_provider()
         # SEV-741: map_roles no longer silently promotes domain roles.
         # ``quant_dev`` must remain ``quant_dev`` (not ``developer``) and
         # ``viewer`` must remain ``viewer`` (not ``user``). Only when an
-        # external role is unrecognized do we fall back to ``user``.
+        # external role is unrecognized do we fall back to ``viewer``.
         assert p.map_roles(["retail_trader", "quant_dev"]) == "quant_dev"
         assert p.map_roles(["portfolio_manager", "quant_dev"]) == "portfolio_manager"
         assert p.map_roles(["viewer"]) == "viewer"
         assert p.map_roles(["retail_trader"]) == "retail_trader"
         assert p.map_roles(["portfolio_manager"]) == "portfolio_manager"
 
-    def test_map_roles_empty_list_returns_user(self):
+    def test_map_roles_empty_list_returns_viewer(self):
         p = self._make_provider()
-        assert p.map_roles([]) == "user"
+        assert p.map_roles([]) == "viewer"
 
 
 class TestAuthExports:

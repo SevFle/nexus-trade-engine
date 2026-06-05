@@ -102,7 +102,18 @@ class LDAPAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.ldap.user_created", user_id=str(user.id))
-        elif user.role != mapped_role:
+        elif settings.auth_overwrite_role_on_login and user.role != mapped_role:
+            # SEV-741 defense-in-depth: only mutate an existing user's role
+            # on each federated login when the operator has explicitly
+            # opted in via ``auth_overwrite_role_on_login``.  Default False
+            # prevents a misconfigured or compromised upstream IdP from
+            # silently escalating or downgrading previously-granted roles.
+            logger.info(
+                "auth.ldap.role_overwritten",
+                user_id=str(user.id),
+                previous_role=user.role,
+                new_role=mapped_role,
+            )
             user.role = mapped_role
             await db.flush()
 

@@ -131,12 +131,18 @@ class TestNoImplicitPromotion:
             == "admin"
         )
 
-    def test_empty_input_returns_user(self):
-        assert _ConcreteProvider().map_roles([]) == "user"
+    def test_empty_input_returns_viewer(self):
+        """SEV-741 defense-in-depth: an empty external role list must map
+        to the lowest-privilege role ``viewer`` (not ``user``) so a
+        misconfigured IdP that omits the role claim cannot accidentally
+        grant ordinary-user rights."""
+        assert _ConcreteProvider().map_roles([]) == "viewer"
 
-    def test_all_unrecognized_falls_back_to_user(self):
+    def test_all_unrecognized_falls_back_to_viewer(self):
+        """All-unrecognized input must collapse to ``viewer`` — the
+        minimum-privilege internal role."""
         assert (
-            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "user"
+            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "viewer"
         )
 
     def test_partial_unrecognized_still_uses_recognized(self):
@@ -153,9 +159,9 @@ class TestNoImplicitPromotion:
 
     def test_whitespace_only_role_is_unrecognized(self):
         """A whitespace-only string is normalized to the empty string,
-        which is not a known role.  Should fall through to user without
+        which is not a known role.  Should fall through to viewer without
         crashing."""
-        assert _ConcreteProvider().map_roles(["   "]) == "user"
+        assert _ConcreteProvider().map_roles(["   "]) == "viewer"
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +202,7 @@ class TestUnrecognizedRoleWarning:
     def test_warning_fires_for_purely_unrecognized_set(self, monkeypatch):
         calls = self._patch(monkeypatch)
         p = _ConcreteProvider()
-        assert p.map_roles(["totally_bogus"]) == "user"
+        assert p.map_roles(["totally_bogus"]) == "viewer"
         assert any(c["event"] == "auth.map_roles.unrecognized_roles" for c in calls)
 
     def test_warning_fires_when_any_role_is_unrecognized(self, monkeypatch):
@@ -220,7 +226,7 @@ class TestUnrecognizedRoleWarning:
     def test_warning_does_not_fire_for_empty_input(self, monkeypatch):
         calls = self._patch(monkeypatch)
         p = _ConcreteProvider()
-        assert p.map_roles([]) == "user"
+        assert p.map_roles([]) == "viewer"
         assert calls == []
 
     def test_warning_includes_provider_name(self, monkeypatch):
@@ -285,6 +291,110 @@ class TestUnrecognizedRoleWarning:
         p = _ConcreteProvider()
         p.map_roles(["bogus"])
         assert calls[0]["event"] == "auth.map_roles.unrecognized_roles"
+
+
+class TestUnrecognizedRoleSanitization:
+    """The ``unrecognized`` payload of the warning log must be sanitized:
+
+    * Control characters (newline / tab / ANSI escapes / Unicode line
+      separators) are stripped to prevent log injection.
+    * Each entry is capped at 128 characters to bound log line length.
+    """
+
+    def _patch(self, monkeypatch):
+        calls: list[dict[str, object]] = []
+
+        class _Stub:
+            def warning(self, _event, **kwargs):
+                calls.append({"event": _event, **kwargs})
+
+            def info(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, "level": "info", **kwargs})
+
+            def error(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, "level": "error", **kwargs})
+
+        from engine.api.auth import base
+
+        monkeypatch.setattr(base, "logger", _Stub())
+        return calls
+
+    def test_newline_stripped_from_unrecognized_role(self, monkeypatch):
+        calls = self._patch(monkeypatch)
+        _ConcreteProvider().map_roles(
+            ["admin", "attacker\n角色"]
+        )
+        assert calls
+        unrecognized = calls[0]["unrecognized"]
+        # Newline must be stripped to prevent log-injection.
+        assert all("\n" not in r for r in unrecognized)
+        # The non-control portion must be preserved.
+        joined = "".join(unrecognized)
+        assert "attacker" in joined
+        assert "角色" in joined
+
+    def test_carriage_return_and_tab_stripped(self, monkeypatch):
+        calls = self._patch(monkeypatch)
+        _ConcreteProvider().map_roles(["bad\rrole\tname"])
+        assert calls
+        unrecognized = calls[0]["unrecognized"]
+        assert all("\r" not in r for r in unrecognized)
+        assert all("\t" not in r for r in unrecognized)
+
+    def test_ansi_escape_sequence_stripped(self, monkeypatch):
+        """An ANSI color-code escape sequence must not survive into the
+        log payload — it could be replayed against a terminal viewer."""
+        calls = self._patch(monkeypatch)
+        _ConcreteProvider().map_roles(["\x1b[31mred-role\x1b[0m"])
+        assert calls
+        unrecognized = calls[0]["unrecognized"]
+        assert all("\x1b" not in r for r in unrecognized)
+        # Visible portion remains.
+        joined = "".join(unrecognized)
+        assert "red-role" in joined
+
+    def test_long_role_truncated_to_128_chars(self, monkeypatch):
+        calls = self._patch(monkeypatch)
+        long_role = "A" * 500
+        _ConcreteProvider().map_roles([long_role])
+        assert calls
+        unrecognized = calls[0]["unrecognized"]
+        assert len(unrecognized[0]) <= 128
+        # Sanity: truncation preserves the prefix.
+        assert unrecognized[0] == "A" * 128
+
+    def test_unicode_line_separators_stripped(self, monkeypatch):
+        calls = self._patch(monkeypatch)
+        _ConcreteProvider().map_roles(["bad\u2028role\u2029name"])
+        assert calls
+        unrecognized = calls[0]["unrecognized"]
+        assert all("\u2028" not in r for r in unrecognized)
+        assert all("\u2029" not in r for r in unrecognized)
+
+    def test_sanitization_module_function_unit(self):
+        """Direct unit test for ``_sanitize_role_for_log``."""
+        from engine.api.auth.base import _sanitize_role_for_log
+
+        assert _sanitize_role_for_log("hello") == "hello"
+        assert _sanitize_role_for_log("a\nb") == "ab"
+        assert _sanitize_role_for_log("a\rb\tc") == "abc"
+        assert _sanitize_role_for_log("\x1b[31mfoo\x1b[0m") == "[31mfoo[0m"
+        assert _sanitize_role_for_log("A" * 500) == "A" * 128
+        assert _sanitize_role_for_log("   spaced   ") == "spaced"
+        # Non-string input is coerced to str.
+        assert _sanitize_role_for_log(12345) == "12345"
+        assert _sanitize_role_for_log(None) == "None"
+        assert _sanitize_role_for_log(["nested"]) == "['nested']"
+
+    def test_sanitization_does_not_mutate_call_result(self, monkeypatch):
+        """Sanitization is for the log payload only — the actual
+        ``map_roles`` return value is unaffected (it's the recognized
+        best role, or ``viewer`` fallback)."""
+        p = _ConcreteProvider()
+        # The bad role never influences the return value; it's only
+        # reflected in the warning log.
+        assert p.map_roles(["admin", "\x1b[31mevil\x1b[0m"]) == "admin"
+        assert p.map_roles(["\x1b[31monly-evil\x1b[0m"]) == "viewer"
 
 
 # ---------------------------------------------------------------------------
