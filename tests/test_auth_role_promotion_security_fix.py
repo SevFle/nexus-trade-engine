@@ -21,6 +21,10 @@ This module pins the new behavior:
 2. ``auth_overwrite_role_on_login`` defaults to ``False``.
 3. A warning is emitted for **any** unrecognized external role (not
    only when the entire set is unrecognized).
+4. Fallback role is ``viewer`` (least privilege) when no recognized
+   role is present, instead of ``user`` (which grants trading).
+5. Unrecognized roles are sanitized (control chars stripped, length
+   capped) before logging — see :func:`sanitize_role`.
 """
 
 from __future__ import annotations
@@ -131,12 +135,12 @@ class TestNoImplicitPromotion:
             == "admin"
         )
 
-    def test_empty_input_returns_user(self):
-        assert _ConcreteProvider().map_roles([]) == "user"
+    def test_empty_input_returns_viewer(self):
+        assert _ConcreteProvider().map_roles([]) == "viewer"
 
-    def test_all_unrecognized_falls_back_to_user(self):
+    def test_all_unrecognized_falls_back_to_viewer(self):
         assert (
-            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "user"
+            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "viewer"
         )
 
     def test_partial_unrecognized_still_uses_recognized(self):
@@ -153,9 +157,9 @@ class TestNoImplicitPromotion:
 
     def test_whitespace_only_role_is_unrecognized(self):
         """A whitespace-only string is normalized to the empty string,
-        which is not a known role.  Should fall through to user without
+        which is not a known role.  Should fall through to viewer without
         crashing."""
-        assert _ConcreteProvider().map_roles(["   "]) == "user"
+        assert _ConcreteProvider().map_roles(["   "]) == "viewer"
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +200,7 @@ class TestUnrecognizedRoleWarning:
     def test_warning_fires_for_purely_unrecognized_set(self, monkeypatch):
         calls = self._patch(monkeypatch)
         p = _ConcreteProvider()
-        assert p.map_roles(["totally_bogus"]) == "user"
+        assert p.map_roles(["totally_bogus"]) == "viewer"
         assert any(c["event"] == "auth.map_roles.unrecognized_roles" for c in calls)
 
     def test_warning_fires_when_any_role_is_unrecognized(self, monkeypatch):
@@ -220,7 +224,7 @@ class TestUnrecognizedRoleWarning:
     def test_warning_does_not_fire_for_empty_input(self, monkeypatch):
         calls = self._patch(monkeypatch)
         p = _ConcreteProvider()
-        assert p.map_roles([]) == "user"
+        assert p.map_roles([]) == "viewer"
         assert calls == []
 
     def test_warning_includes_provider_name(self, monkeypatch):
@@ -441,3 +445,258 @@ class TestMappedRoleFlowsToRequireRole:
                 f"minimum={minimum_required}; expected {expected_status}, "
                 f"got {resp.status_code}"
             )
+
+
+# ---------------------------------------------------------------------------
+# 7. Least-privilege fallback: empty / all-unrecognized -> ``viewer``
+# ---------------------------------------------------------------------------
+
+
+class TestLeastPrivilegeFallback:
+    """SEV-741 follow-up: when no recognized role is present, the
+    internal role must fall back to ``viewer`` (the lowest privileged
+    role) rather than ``user`` (which grants trading capabilities).
+
+    Rationale: an unrecognized / missing upstream role claim should
+    not silently confer trading capabilities. Operators can grant
+    additional privileges explicitly via the standard admin tools.
+    """
+
+    def test_empty_list_falls_back_to_viewer(self):
+        assert _ConcreteProvider().map_roles([]) == "viewer"
+
+    def test_all_unrecognized_falls_back_to_viewer(self):
+        assert (
+            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "viewer"
+        )
+
+    def test_whitespace_only_falls_back_to_viewer(self):
+        assert _ConcreteProvider().map_roles(["   "]) == "viewer"
+
+    def test_fallback_viewer_does_not_allow_user_actions(self):
+        """The mapped ``viewer`` role must not satisfy a ``require_role('user')``
+        gate — this is the whole point of the least-privilege fallback."""
+        mapped = _ConcreteProvider().map_roles(["bogus_role"])
+        assert mapped == "viewer"
+        # Mirror ROLE_HIERARCHY from engine/api/auth/dependency.py
+        role_hierarchy = {
+            "viewer": 0,
+            "user": 1,
+            "retail_trader": 2,
+            "quant_dev": 3,
+            "developer": 4,
+            "portfolio_manager": 5,
+            "admin": 6,
+        }
+        assert role_hierarchy[mapped] < role_hierarchy["user"]
+
+    def test_recognized_viewer_is_returned_verbatim(self):
+        """``viewer`` is a recognized role, so a list of just ``viewer``
+        must return ``viewer`` (not be silently promoted)."""
+        assert _ConcreteProvider().map_roles(["viewer"]) == "viewer"
+
+    def test_viewer_alone_is_not_promoted_to_user(self):
+        """Sanity: when ``viewer`` is the only recognized role and
+        other entries are unrecognized, we still return ``viewer``."""
+        assert (
+            _ConcreteProvider().map_roles(["viewer", "made_up_role"]) == "viewer"
+        )
+
+
+# ---------------------------------------------------------------------------
+# 8. Sanitization of unrecognized roles in log warnings
+# ---------------------------------------------------------------------------
+
+
+class TestUnrecognizedRoleSanitization:
+    """Log-injection defense: the ``unrecognized=`` payload emitted by
+    :meth:`IAuthProvider.map_roles` must be sanitized via
+    :func:`sanitize_role` so that a malicious upstream IdP cannot
+    embed control characters (CR/LF, terminal escape sequences) or
+    unbounded-length strings into log records."""
+
+    def test_sanitize_role_strips_newlines(self):
+        from engine.api.auth.base import sanitize_role
+
+        assert sanitize_role("ev\nil") == "evil"
+        assert sanitize_role("ev\ril") == "evil"
+        assert sanitize_role("ev\r\nil") == "evil"
+
+    def test_sanitize_role_strips_tabs(self):
+        from engine.api.auth.base import sanitize_role
+
+        assert sanitize_role("ev\til") == "evil"
+
+    def test_sanitize_role_strips_null_bytes(self):
+        from engine.api.auth.base import sanitize_role
+
+        # Null bytes are a classic log-injection / C-string-truncation
+        # attack vector.
+        assert sanitize_role("ev\x00il") == "evil"
+
+    def test_sanitize_role_strips_bel_and_escape(self):
+        from engine.api.auth.base import sanitize_role
+
+        # BEL and ESC are terminal-control characters; they must not
+        # reach log streams verbatim.
+        assert sanitize_role("ev\x07il") == "evil"
+        assert sanitize_role("ev\x1bil") == "evil"
+
+    def test_sanitize_role_strips_c1_control_range(self):
+        from engine.api.auth.base import sanitize_role
+
+        # 0x80-0x9F is the C1 control range; strip those too.
+        assert sanitize_role("ev\x80il") == "evil"
+        assert sanitize_role("ev\x9fil") == "evil"
+
+    def test_sanitize_role_strips_multiple_control_chars(self):
+        from engine.api.auth.base import sanitize_role
+
+        assert sanitize_role("\x00e\x01v\x02i\x03l\x04") == "evil"
+
+    def test_sanitize_role_caps_length(self):
+        from engine.api.auth.base import _SANITIZED_ROLE_MAX_LENGTH, sanitize_role
+
+        huge = "A" * (_SANITIZED_ROLE_MAX_LENGTH * 4)
+        result = sanitize_role(huge)
+        assert len(result) == _SANITIZED_ROLE_MAX_LENGTH
+        assert result == "A" * _SANITIZED_ROLE_MAX_LENGTH
+
+    def test_sanitize_role_caps_length_after_stripping_controls(self):
+        from engine.api.auth.base import _SANITIZED_ROLE_MAX_LENGTH, sanitize_role
+
+        # The cap is applied AFTER stripping controls, so an attacker
+        # cannot pad with control chars to "push" the meaningful
+        # content past the truncation point.
+        huge = "A" * (_SANITIZED_ROLE_MAX_LENGTH * 2) + "\n" + "B" * 100
+        result = sanitize_role(huge)
+        assert len(result) == _SANITIZED_ROLE_MAX_LENGTH
+        assert "\n" not in result
+        # The first chunk of A's wins (control chars are stripped first,
+        # then the resulting string is truncated).
+        assert result.startswith("A" * _SANITIZED_ROLE_MAX_LENGTH)
+
+    def test_sanitize_role_preserves_safe_strings(self):
+        from engine.api.auth.base import sanitize_role
+
+        # A normal ASCII role name passes through unchanged.
+        assert sanitize_role("stale_group_name") == "stale_group_name"
+        assert sanitize_role("CN=Admins,DC=example,DC=com") == "CN=Admins,DC=example,DC=com"
+
+    def test_sanitize_role_preserves_unicode(self):
+        from engine.api.auth.base import sanitize_role
+
+        # Non-ASCII printable characters are preserved; only control
+        # characters are stripped.
+        assert sanitize_role("rolé") == "rolé"
+        assert sanitize_role("管理者") == "管理者"
+
+    def test_sanitize_role_handles_non_string_input(self):
+        from engine.api.auth.base import sanitize_role
+
+        # Defensive: callers should pass strings, but bad input must
+        # not crash the auth path.
+        assert sanitize_role(123) == "123"
+        assert sanitize_role(None) == "None"
+
+    def test_sanitize_role_empty_string_returns_empty(self):
+        from engine.api.auth.base import sanitize_role
+
+        assert sanitize_role("") == ""
+
+    def test_sanitize_role_only_control_chars_returns_empty(self):
+        from engine.api.auth.base import sanitize_role
+
+        # All-control input sanitizes to the empty string (not None,
+        # not a crash).
+        assert sanitize_role("\x00\x01\x02\x03") == ""
+
+    def test_map_roles_uses_sanitized_form_in_log(self, monkeypatch):
+        """End-to-end: ``map_roles`` must run unrecognized roles
+        through ``sanitize_role`` before emitting them in the warning
+        payload."""
+        from engine.api.auth import base
+
+        captured: list[dict[str, object]] = []
+
+        class _Stub:
+            def warning(self, _event, **kwargs):
+                captured.append({"event": _event, **kwargs})
+
+            def info(self, _event, **kwargs):  # pragma: no cover
+                captured.append({"event": _event, "level": "info", **kwargs})
+
+            def error(self, _event, **kwargs):  # pragma: no cover
+                captured.append({"event": _event, "level": "error", **kwargs})
+
+        monkeypatch.setattr(base, "logger", _Stub())
+
+        p = _ConcreteProvider()
+        p.map_roles(["ev\nil", "be\tnign", "nor\x00mal"])
+
+        assert len(captured) == 1
+        unrecognized = captured[0]["unrecognized"]
+        assert unrecognized == ["evil", "benign", "normal"], (
+            "Expected control characters to be stripped before logging; "
+            f"got {unrecognized!r}"
+        )
+
+    def test_map_roles_caps_overlong_unrecognized_role_in_log(self, monkeypatch):
+        """A multi-kB role name must be truncated in the log payload."""
+        from engine.api.auth import base
+
+        captured: list[dict[str, object]] = []
+
+        class _Stub:
+            def warning(self, _event, **kwargs):
+                captured.append({"event": _event, **kwargs})
+
+            def info(self, _event, **kwargs):  # pragma: no cover
+                captured.append({"event": _event, "level": "info", **kwargs})
+
+            def error(self, _event, **kwargs):  # pragma: no cover
+                captured.append({"event": _event, "level": "error", **kwargs})
+
+        monkeypatch.setattr(base, "logger", _Stub())
+
+        huge = "X" * (base._SANITIZED_ROLE_MAX_LENGTH * 4)
+        p = _ConcreteProvider()
+        p.map_roles([huge])
+
+        assert len(captured) == 1
+        unrecognized = captured[0]["unrecognized"]
+        assert len(unrecognized) == 1
+        assert len(unrecognized[0]) == base._SANITIZED_ROLE_MAX_LENGTH
+
+    def test_sanitize_role_is_public_api(self):
+        """``sanitize_role`` must be importable from the public auth
+        base module — operators / integrators rely on it for custom
+        logging pipelines."""
+        from engine.api.auth import base
+
+        assert hasattr(base, "sanitize_role")
+        assert callable(base.sanitize_role)
+
+
+# ---------------------------------------------------------------------------
+# 9. ``auth_overwrite_role_on_login`` integration with LDAP provider
+# ---------------------------------------------------------------------------
+
+
+class TestAuthOverwriteRoleOnLoginWiring:
+    """SEV-741 follow-up: the LDAP federated-login role-mutation path
+    must honor ``auth_overwrite_role_on_login``. When False (the
+    default), the IdP cannot mutate a previously granted local role on
+    subsequent logins. When True, it can — operators opt in."""
+
+    def test_setting_default_is_false(self):
+        from engine.config import Settings
+
+        s = Settings(_env_file=None)
+        assert s.auth_overwrite_role_on_login is False
+
+    def test_setting_can_be_enabled(self):
+        from engine.config import Settings
+
+        s = Settings(_env_file=None, auth_overwrite_role_on_login=True)
+        assert s.auth_overwrite_role_on_login is True

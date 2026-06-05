@@ -29,6 +29,40 @@ class LDAPAuthProvider(IAuthProvider):
         if not username or not password or db is None:
             return AuthResult(success=False, error="Username, password, and db session required")
 
+        ldap_attrs = self._bind_and_search(username, password)
+        if ldap_attrs is None:
+            return AuthResult(success=False, error="Invalid credentials")
+        if not ldap_attrs:
+            return AuthResult(success=False, error="User not found in LDAP")
+
+        ldap_uid = ldap_attrs.get("uid", [b""])[0].decode()
+        ldap_mail = ldap_attrs.get("mail", [b""])[0].decode() or f"{username}@ldap"
+        ldap_cn = ldap_attrs.get("cn", [b""])[0].decode() or username
+        member_of_raw = ldap_attrs.get("memberOf", [])
+        ldap_groups = [g.decode() for g in member_of_raw]
+
+        mapped_role = self._resolve_role(ldap_groups)
+
+        user = await self._upsert_user(db, ldap_uid, ldap_mail, ldap_cn, mapped_role)
+        if isinstance(user, AuthResult):
+            return user
+
+        if not user.is_active:
+            return AuthResult(success=False, error="Account is disabled")
+
+        return AuthResult(
+            success=True,
+            user_info=UserInfo(
+                external_id=ldap_uid,
+                email=user.email,
+                display_name=user.display_name,
+                provider="ldap",
+                roles=[user.role],
+            ),
+        )
+
+    @staticmethod
+    def _bind_and_search(username: str, password: str) -> dict[str, list[bytes]] | None:
         try:
             import ldap
             from ldap.filter import escape_filter_chars
@@ -49,22 +83,16 @@ class LDAPAuthProvider(IAuthProvider):
                 ["uid", "mail", "cn", "memberOf"],
             )
             conn.unbind_s()
-
         except Exception as exc:
             logger.exception("auth.ldap.bind_failed", error=str(exc))
-            return AuthResult(success=False, error="Invalid credentials")
+            return None
 
         if not results:
-            return AuthResult(success=False, error="User not found in LDAP")
+            return {}
+        return results[0][1]
 
-        _, ldap_attrs = results[0]
-        ldap_uid = ldap_attrs.get("uid", [b""])[0].decode()
-        ldap_mail = ldap_attrs.get("mail", [b""])[0].decode() or f"{username}@ldap"
-        ldap_cn = ldap_attrs.get("cn", [b""])[0].decode() or username
-
-        member_of_raw = ldap_attrs.get("memberOf", [])
-        ldap_groups = [g.decode() for g in member_of_raw]
-
+    @staticmethod
+    def _resolve_role(ldap_groups: list[str]) -> str:
         role_mapping = json.loads(settings.ldap_role_mapping) if settings.ldap_role_mapping else {}
         mapped_roles: list[str] = []
         for group_dn in ldap_groups:
@@ -74,9 +102,16 @@ class LDAPAuthProvider(IAuthProvider):
 
         if not mapped_roles:
             mapped_roles = ["user"]
+        return LDAPAuthProvider.map_roles(mapped_roles)
 
-        mapped_role = self.map_roles(mapped_roles)
-
+    @staticmethod
+    async def _upsert_user(
+        db: AsyncSession,
+        ldap_uid: str,
+        ldap_mail: str,
+        ldap_cn: str,
+        mapped_role: str,
+    ) -> User | AuthResult:
         result = await db.execute(
             select(User).where(User.auth_provider == "ldap", User.external_id == ldap_uid)
         )
@@ -102,20 +137,24 @@ class LDAPAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.ldap.user_created", user_id=str(user.id))
-        elif user.role != mapped_role:
-            user.role = mapped_role
-            await db.flush()
+            return user
 
-        if not user.is_active:
-            return AuthResult(success=False, error="Account is disabled")
+        if user.role != mapped_role:
+            # SEV-741 defense-in-depth: only mutate an existing user's
+            # role on subsequent federated logins if the operator has
+            # explicitly opted in via ``auth_overwrite_role_on_login``.
+            # Defaulting to no-op prevents a misconfigured or compromised
+            # upstream IdP from downgrading or escalating a role that
+            # was previously granted locally.
+            if settings.auth_overwrite_role_on_login:
+                user.role = mapped_role
+                await db.flush()
+            else:
+                logger.info(
+                    "auth.ldap.role_overwrite_skipped",
+                    user_id=str(user.id),
+                    current_role=user.role,
+                    idp_role=mapped_role,
+                )
 
-        return AuthResult(
-            success=True,
-            user_info=UserInfo(
-                external_id=ldap_uid,
-                email=user.email,
-                display_name=user.display_name,
-                provider="ldap",
-                roles=[user.role],
-            ),
-        )
+        return user
