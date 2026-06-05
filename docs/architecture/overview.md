@@ -1,12 +1,72 @@
-# System overview
+# Architecture overview
 
 Nexus Trade Engine is a Python service that backtests algorithmic
 trading strategies, runs them against live or paper broker
 connections, and exposes the results via a REST API and a React
-frontend. This document describes the moving pieces and how a request
-flows through them.
+frontend. This document describes the moving pieces, the boundaries
+between them, and how a request flows through the system.
 
-## Components
+## Component graph
+
+```mermaid
+flowchart LR
+    subgraph Clients
+        UI[React dashboard<br/>frontend/]
+        SDK[Python SDK<br/>sdk/nexus_sdk]
+        CLI[3rd-party scripts<br/>API key]
+    end
+
+    subgraph Engine["FastAPI engine (engine/)"]
+        direction TB
+        MW[Middleware stack<br/>CORS · security headers · rate<br/>limit · body size · correlation<br/>id · HTTP metrics]
+        AUTH[Auth dependency<br/>JWT or X-API-Key]
+        ROUTES[Route handlers<br/>engine/api/routes]
+        DOMAIN[Core domain<br/>engine/core]
+        BUS[EventBus + WebhookDispatcher<br/>engine/events]
+        PLUGINS[Plugin registry + sandbox<br/>engine/plugins]
+    end
+
+    subgraph Workers
+        TASK[TaskIQ worker<br/>engine/tasks]
+    end
+
+    subgraph Storage
+        PG[(PostgreSQL 16<br/>+ TimescaleDB)]
+        VK[(Valkey / Redis<br/>cache + broker)]
+    end
+
+    subgraph External
+        PROV[Market-data providers<br/>Yahoo · Polygon · Alpaca<br/>CoinGecko · OANDA · Binance]
+        IDP[IdPs<br/>Local · Google · GitHub<br/>· OIDC · LDAP]
+        BROKER[Brokers<br/>paper · live roadmap]
+        HOOK[Operator webhooks<br/>HMAC-signed]
+    end
+
+    UI -- HTTPS / WebSocket --> MW
+    SDK -- HTTPS --> MW
+    CLI -- HTTPS + X-API-Key --> MW
+
+    MW --> AUTH
+    AUTH --> ROUTES
+    ROUTES --> DOMAIN
+    ROUTES --> PG
+    ROUTES --> BUS
+    ROUTES -.enqueue.-> TASK
+
+    TASK --> DOMAIN
+    TASK --> PG
+    TASK --> BUS
+    BUS --> HOOK
+
+    DOMAIN --> PROV
+    DOMAIN -- paper/live --> BROKER
+    DOMAIN --> PLUGINS
+    AUTH --> IDP
+    AUTH --> VK
+```
+
+The ASCII diagram below is the same information in a copy-paste-safe
+form for terminals or markdown viewers without Mermaid:
 
 ```
 ┌──────────────────┐        HTTPS         ┌──────────────────┐
@@ -14,7 +74,7 @@ flows through them.
 │   (frontend/)    │ ◀─────────────────── │  (engine/api)    │
 └──────────────────┘    JSON / WebSocket  └────────┬─────────┘
                                                    │
-                          enqueue / dispatch       │
+                           enqueue / dispatch       │
                                                    ▼
                                           ┌──────────────────┐
                                           │  TaskIQ workers  │
@@ -26,7 +86,7 @@ flows through them.
                                   ┌────────────┐     ┌──────────────┐
                                   │  Postgres  │     │ Valkey/Redis │
                                   │ (asyncpg + │     │ (TaskIQ      │
-                                  │  TimescaleDB)    │  broker, cache)│
+                                  │ TimescaleDB)    │  broker, cache)│
                                   └────────────┘     └──────────────┘
 ```
 
@@ -143,3 +203,88 @@ without reading the source.
   database.
 - Live trading is intentionally optional. The engine works end-to-end
   on backtests + paper trading without any broker credentials.
+
+## Architectural boundaries
+
+These are the load-bearing seams in the codebase. Crossing one
+should require a conscious design choice, not a casual edit.
+
+### 1. Presentation ↔ Engine (HTTP/WebSocket)
+
+The frontend and any third-party clients are **outside** the engine
+process. The only contract they get is the REST + WebSocket API
+surface in `engine/api/routes/`. Anything not reachable through that
+surface is internal. Concretely:
+
+- The frontend never reads Postgres directly. The dashboard's
+  data-views go through `GET /api/v1/...` routes.
+- Internal helpers in `engine/core/` are not part of the API even
+  if they are importable.
+
+### 2. Engine ↔ Workers (TaskIQ broker)
+
+Long-running work (backtests, scheduled jobs, export bundles) runs
+out-of-band via TaskIQ. The HTTP handler's job is to validate,
+persist a placeholder row, enqueue the job, and return `202`. The
+worker is responsible for the computation and for writing the
+result back to the same row.
+
+This keeps p99 request latency bounded by Postgres write latency
+rather than backtest runtime. The cost is operational: workers
+must be healthy for the system to make progress — see
+[task-pipeline runbook](../operations/runbooks/task-pipeline.md).
+
+### 3. Engine ↔ Strategies (plugin sandbox)
+
+Strategies are third-party code. The seam is the `IStrategy`
+interface in `sdk/nexus_sdk/strategy.py` plus the manifest format
+declared in `engine/plugins/manifest.py`. Everything outside that
+interface (DB access, internal helpers, broker clients) is
+**off-limits** to plugins. The sandbox in
+`engine/plugins/sandbox.py` enforces this at runtime via a
+restricted-importer policy.
+
+### 4. Engine ↔ External data (provider registry)
+
+The data layer is pluggable so we can swap Yahoo for Polygon,
+Alpaca, etc. without touching strategies or routes. The
+`ProviderRegistration` registry in
+`engine/data/providers/registry.py` picks the right provider per
+asset class at request time. See [data model](database.md) for how
+attribution rows are persisted for compliance.
+
+### 5. Engine ↔ Operators (webhooks + legal)
+
+Operators subscribe to engine events via webhooks
+(`engine/events/webhook_dispatcher.py`). The contract is
+**outbound-only** and HMAC-signed; operators never get credentials
+into the engine. Legal-document acceptance is the inbound
+counterpart — see `engine/legal/` and
+[ADR-0002](../adr/0002-auth-rbac.md).
+
+## Performance & scaling model
+
+Nexus is designed for **single-operator self-hosting**, not
+multi-tenant SaaS scale. Concretely:
+
+- One uvicorn process per host is fine for typical load (a few
+  hundred req/s). Scale horizontally by adding app containers
+  behind a load balancer; sessions live in Valkey, not in process
+  memory.
+- The asyncpg pool defaults to `database_pool_size=5` with
+  `database_max_overflow=10`. Tune for your workload; do **not**
+  raise it past what Postgres `max_connections` allows.
+- TaskIQ workers are independently scalable. Backtests are
+  CPU-bound; run as many worker processes as you have cores.
+- Postgres is the SPOF. Read replicas are fine for analytics
+  queries; writes always go to primary. See
+  [deployment](../operations/deployment.md) for the recommended
+  topology.
+
+## Where to put new code
+
+The "Where to put new code" table near the end of this document is
+the operational version of these boundaries. When in doubt:
+**route handlers stay thin, domain logic stays in `engine/core/`,
+and any new external system gets a provider-style registry rather
+than a direct import.**

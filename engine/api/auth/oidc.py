@@ -130,7 +130,13 @@ class OIDCAuthProvider(IAuthProvider):
                     success=False, error="Email already registered with a different provider"
                 )
 
-            mapped_role = "user"
+            # SEV-741 follow-up: when no roles claim is supplied at all
+            # (e.g. ``roles`` key absent, or not a list), fall back to
+            # ``viewer`` — the lowest-privilege recognized role — for
+            # consistency with ``map_roles``'s empty/unrecognized-input
+            # behavior. Previously this defaulted to ``user``, which
+            # was a higher-privilege role than ``viewer``.
+            mapped_role = "viewer"
             if isinstance(raw_roles, list):
                 mapped_role = self.map_roles(raw_roles)
 

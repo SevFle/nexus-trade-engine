@@ -547,7 +547,10 @@ class TestOIDCAuthenticate:
 
         assert result.success is True
         assert len(created_users) == 1
-        assert created_users[0].role == "user"
+        # SEV-741 follow-up: a non-list roles claim (e.g. a bare string)
+        # is treated as "no roles" and lands at ``viewer`` — the
+        # lowest-privilege recognized role — not ``user``.
+        assert created_users[0].role == "viewer"
 
     async def test_authenticate_raw_claims_included_in_user_info(
         self, oidc_provider, mock_settings, rsa_keys
@@ -650,10 +653,14 @@ class TestOIDCRoleMapping:
         assert oidc_provider.map_roles(["user"]) == "user"
 
     def test_map_roles_unknown_role(self, oidc_provider):
-        assert oidc_provider.map_roles(["unknown_role"]) == "user"
+        """SEV-741 follow-up: an unrecognized role should fall back to
+        ``viewer`` (the lowest-privilege recognized role), not ``user``."""
+        assert oidc_provider.map_roles(["unknown_role"]) == "viewer"
 
     def test_map_roles_empty_list(self, oidc_provider):
-        assert oidc_provider.map_roles([]) == "user"
+        """SEV-741 follow-up: an empty roles claim should fall back to
+        ``viewer`` (the lowest-privilege recognized role), not ``user``."""
+        assert oidc_provider.map_roles([]) == "viewer"
 
     def test_map_roles_case_insensitive(self, oidc_provider):
         assert oidc_provider.map_roles(["ADMIN"]) == "admin"

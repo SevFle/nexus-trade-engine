@@ -131,12 +131,22 @@ class TestNoImplicitPromotion:
             == "admin"
         )
 
-    def test_empty_input_returns_user(self):
-        assert _ConcreteProvider().map_roles([]) == "user"
+    def test_empty_input_returns_viewer(self):
+        """When no roles are claimed at all, the user should land at the
+        lowest-privilege recognized role (``viewer``), not at ``user``.
+        Previously a missing/empty roles claim silently upgraded the
+        user to ``user`` (a higher-privilege role than ``viewer``)."""
+        assert _ConcreteProvider().map_roles([]) == "viewer"
 
-    def test_all_unrecognized_falls_back_to_user(self):
+    def test_all_unrecognized_falls_back_to_viewer(self):
+        """When *every* external role is unrecognized, we must fall back
+        to the lowest-privilege recognized role (``viewer``) rather than
+        ``user``. This is a defense-in-depth measure: an upstream IdP
+        that supplies only garbage (or that has been misconfigured)
+        should never silently grant a higher-privilege role than the
+        ``viewer`` floor."""
         assert (
-            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "user"
+            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "viewer"
         )
 
     def test_partial_unrecognized_still_uses_recognized(self):
@@ -153,9 +163,9 @@ class TestNoImplicitPromotion:
 
     def test_whitespace_only_role_is_unrecognized(self):
         """A whitespace-only string is normalized to the empty string,
-        which is not a known role.  Should fall through to user without
-        crashing."""
-        assert _ConcreteProvider().map_roles(["   "]) == "user"
+        which is not a known role.  Should fall through to ``viewer``
+        without crashing — the lowest-privilege recognized role."""
+        assert _ConcreteProvider().map_roles(["   "]) == "viewer"
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +206,7 @@ class TestUnrecognizedRoleWarning:
     def test_warning_fires_for_purely_unrecognized_set(self, monkeypatch):
         calls = self._patch(monkeypatch)
         p = _ConcreteProvider()
-        assert p.map_roles(["totally_bogus"]) == "user"
+        assert p.map_roles(["totally_bogus"]) == "viewer"
         assert any(c["event"] == "auth.map_roles.unrecognized_roles" for c in calls)
 
     def test_warning_fires_when_any_role_is_unrecognized(self, monkeypatch):
@@ -220,7 +230,10 @@ class TestUnrecognizedRoleWarning:
     def test_warning_does_not_fire_for_empty_input(self, monkeypatch):
         calls = self._patch(monkeypatch)
         p = _ConcreteProvider()
-        assert p.map_roles([]) == "user"
+        # Empty input still falls back to ``viewer`` (the lowest-privilege
+        # recognized role) but does not emit a warning because no
+        # *unrecognized* role was supplied.
+        assert p.map_roles([]) == "viewer"
         assert calls == []
 
     def test_warning_includes_provider_name(self, monkeypatch):

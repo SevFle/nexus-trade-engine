@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
@@ -7,6 +8,41 @@ from typing import Any
 import structlog
 
 logger = structlog.get_logger()
+
+# Maximum length of an unrecognized role string that we will retain
+# for logging. Anything longer is truncated to avoid bloating log
+# payloads (and to defang log-injection attempts that rely on
+# arbitrary-length payloads). Mirrors typical field-length guards
+# in audit pipelines.
+_UNRECOGNIZED_ROLE_MAX_LEN = 128
+
+# Match ASCII control characters (0x00-0x1F and 0x7F), including
+# newlines, tabs, and the DEL character. Used to sanitize raw
+# role strings before they are persisted to logs.
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _sanitize_unrecognized_role(role: str) -> str:
+    """Strip ASCII control characters and cap length on an arbitrary
+    external role string before it is logged or otherwise reflected
+    back to operators.
+
+    This is a **defensive** sanitization layer — unrecognized role
+    strings never reach the database (they are dropped before
+    being mapped to an internal role), but they are emitted in
+    warning log payloads so that operators can detect IdP
+    misconfigurations. Without sanitization, a malicious or
+    misconfigured upstream could inject newline / ANSI-escape
+    sequences into log streams in order to forge log lines or
+    tamper with terminal output. Capping the length bounds the
+    size of the log payload (defending against log-flooding).
+    """
+    if role is None:
+        return ""
+    cleaned = _CONTROL_CHARS_RE.sub("", str(role))
+    if len(cleaned) > _UNRECOGNIZED_ROLE_MAX_LEN:
+        cleaned = cleaned[:_UNRECOGNIZED_ROLE_MAX_LEN]
+    return cleaned
 
 
 @dataclass
@@ -51,6 +87,21 @@ class IAuthProvider(ABC):
         misconfigurations. Previously ``viewer`` was silently promoted to
         ``user`` and ``quant_dev`` to ``developer``, which constituted a
         silent privilege escalation (SEV-741).
+
+        Defense-in-depth note: when *no* recognized role is present in
+        the upstream claim (either because the claim is empty or because
+        every entry is unrecognized), the function falls back to
+        ``viewer`` — the **least-privileged** role in the priority table.
+        Previously this fallback was ``user``, which silently granted
+        a higher privilege than necessary to anyone whose IdP supplied
+        an empty or wholly-unknown roles claim. (Follow-up to SEV-741.)
+
+        Sanitization: unrecognized role strings are stripped of ASCII
+        control characters and capped at 128 characters before being
+        appended to the ``unrecognized`` list and emitted in the
+        warning payload. This prevents a misconfigured or hostile IdP
+        from injecting newlines / escape sequences into operator log
+        streams or ballooning log record sizes.
         """
         role_priority: dict[str, int] = {
             "viewer": 0,
@@ -71,7 +122,13 @@ class IAuthProvider(ABC):
                 if best is None or role_priority[normalized] > role_priority[best]:
                     best = normalized
             else:
-                unrecognized.append(role)
+                # Defensive sanitization before the string is reflected
+                # back to operators via the warning payload. The raw
+                # external claim is never persisted to the database —
+                # only ``best`` (an entry from ``role_priority``) is —
+                # but log injection is still a concern.
+                sanitized = _sanitize_unrecognized_role(role)
+                unrecognized.append(sanitized)
         # Broaden the warning: fire on ANY unrecognized external role, not
         # only when the entire set is unrecognized. This surfaces partial
         # misconfigurations (e.g. one stale group name alongside valid ones).
@@ -81,6 +138,11 @@ class IAuthProvider(ABC):
                 provider=self.name,
                 unrecognized=unrecognized,
                 recognized=recognized,
-                mapped=best if best is not None else "user",
+                mapped=best if best is not None else "viewer",
             )
-        return best if best is not None else "user"
+        # Fall back to ``viewer`` (the lowest-privilege recognized role)
+        # rather than ``user``. This ensures that a user whose IdP
+        # supplies an empty or wholly-unrecognized roles claim receives
+        # only the minimum privilege required to authenticate, rather
+        # than an implicit upgrade to ``user``.
+        return best if best is not None else "viewer"

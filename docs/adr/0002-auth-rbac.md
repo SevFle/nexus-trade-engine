@@ -1,6 +1,8 @@
 # ADR-0002: Authentication & Role-Based Access Control
 
-**Status:** Proposed
+**Status:** Superseded by [ADR-0004](0004-multi-provider-auth.md)
+(provider layer) on 2026-05-20. RBAC role model below is still
+canonical.
 **Date:** 2026-04-17
 **Tracks:** SEV-233 (gh#86), SEV-273 (gh#9) — closed as duplicate of this ADR
 **Owner:** TBD

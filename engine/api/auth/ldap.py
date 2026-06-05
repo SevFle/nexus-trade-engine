@@ -21,14 +21,7 @@ class LDAPAuthProvider(IAuthProvider):
     def name(self) -> str:
         return "ldap"
 
-    async def authenticate(self, **kwargs: Any) -> AuthResult:
-        username = kwargs.get("username", "")
-        password = kwargs.get("password", "")
-        db: AsyncSession | None = kwargs.get("db")
-
-        if not username or not password or db is None:
-            return AuthResult(success=False, error="Username, password, and db session required")
-
+    def _ldap_bind_and_search(self, username: str, password: str) -> list | None:
         try:
             import ldap
             from ldap.filter import escape_filter_chars
@@ -49,11 +42,34 @@ class LDAPAuthProvider(IAuthProvider):
                 ["uid", "mail", "cn", "memberOf"],
             )
             conn.unbind_s()
-
         except Exception as exc:
             logger.exception("auth.ldap.bind_failed", error=str(exc))
-            return AuthResult(success=False, error="Invalid credentials")
+            return None
+        else:
+            return results
 
+    def _map_ldap_roles(self, ldap_groups: list[str]) -> list[str]:
+        role_mapping = json.loads(settings.ldap_role_mapping) if settings.ldap_role_mapping else {}
+        mapped_roles: list[str] = []
+        for group_dn in ldap_groups:
+            for ldap_group, nexus_role in role_mapping.items():
+                if ldap_group in group_dn:
+                    mapped_roles.append(nexus_role)
+        if not mapped_roles:
+            mapped_roles = ["user"]
+        return mapped_roles
+
+    async def authenticate(self, **kwargs: Any) -> AuthResult:
+        username = kwargs.get("username", "")
+        password = kwargs.get("password", "")
+        db: AsyncSession | None = kwargs.get("db")
+
+        if not username or not password or db is None:
+            return AuthResult(success=False, error="Username, password, and db session required")
+
+        results = self._ldap_bind_and_search(username, password)
+        if results is None:
+            return AuthResult(success=False, error="Invalid credentials")
         if not results:
             return AuthResult(success=False, error="User not found in LDAP")
 
@@ -64,18 +80,7 @@ class LDAPAuthProvider(IAuthProvider):
 
         member_of_raw = ldap_attrs.get("memberOf", [])
         ldap_groups = [g.decode() for g in member_of_raw]
-
-        role_mapping = json.loads(settings.ldap_role_mapping) if settings.ldap_role_mapping else {}
-        mapped_roles: list[str] = []
-        for group_dn in ldap_groups:
-            for ldap_group, nexus_role in role_mapping.items():
-                if ldap_group in group_dn:
-                    mapped_roles.append(nexus_role)
-
-        if not mapped_roles:
-            mapped_roles = ["user"]
-
-        mapped_role = self.map_roles(mapped_roles)
+        mapped_role = self.map_roles(self._map_ldap_roles(ldap_groups))
 
         result = await db.execute(
             select(User).where(User.auth_provider == "ldap", User.external_id == ldap_uid)
@@ -103,8 +108,23 @@ class LDAPAuthProvider(IAuthProvider):
             await db.refresh(user)
             logger.info("auth.ldap.user_created", user_id=str(user.id))
         elif user.role != mapped_role:
-            user.role = mapped_role
-            await db.flush()
+            # SEV-741 follow-up: only overwrite an existing user's role
+            # when the operator has explicitly opted in via the
+            # ``auth_overwrite_role_on_login`` setting. Default is False,
+            # which prevents a misconfigured or compromised upstream
+            # IdP from silently downgrading or escalating a previously
+            # granted local role on every federated login.
+            if settings.auth_overwrite_role_on_login:
+                user.role = mapped_role
+                await db.flush()
+            else:
+                logger.info(
+                    "auth.ldap.role_overwrite_skipped",
+                    user_id=str(user.id),
+                    current_role=user.role,
+                    idp_role=mapped_role,
+                    reason="auth_overwrite_role_on_login=False",
+                )
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")
