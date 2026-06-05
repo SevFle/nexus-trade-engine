@@ -402,7 +402,14 @@ class TestLDAPAuthenticateExistingUser:
     async def test_existing_user_role_updated(
         self, ldap_provider, mock_settings
     ):
+        """SEV-741 follow-up: existing-user role overwrite is gated by
+        ``auth_overwrite_role_on_login``. With the flag enabled, the
+        upstream LDAP groups re-map and overwrite the persisted role.
+        Default-False is asserted in ``test_auth_explicit_role_deny``.
+        """
         from engine.db.models import User
+
+        mock_settings.auth_overwrite_role_on_login = True
 
         attrs = _make_ldap_attrs(
             member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]

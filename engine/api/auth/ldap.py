@@ -102,9 +102,22 @@ class LDAPAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.ldap.user_created", user_id=str(user.id))
-        elif user.role != mapped_role:
+        elif settings.auth_overwrite_role_on_login and user.role != mapped_role:
+            logger.info(
+                "auth.ldap.role_overwritten",
+                user_id=str(user.id),
+                previous_role=user.role,
+                new_role=mapped_role,
+            )
             user.role = mapped_role
             await db.flush()
+        elif user.role != mapped_role:
+            logger.info(
+                "auth.ldap.role_preserved",
+                user_id=str(user.id),
+                asserted_role=mapped_role,
+                persisted_role=user.role,
+            )
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")

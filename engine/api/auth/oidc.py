@@ -58,7 +58,7 @@ class OIDCAuthProvider(IAuthProvider):
             self._jwks_cache = resp.json()
         return self._jwks_cache
 
-    async def authenticate(self, **kwargs: Any) -> AuthResult:
+    async def authenticate(self, **kwargs: Any) -> AuthResult:  # noqa: PLR0912, PLR0915
         code = kwargs.get("code")
         db: AsyncSession | None = kwargs.get("db")
         if not code or db is None:
@@ -147,6 +147,19 @@ class OIDCAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.oidc.user_created", user_id=str(user.id))
+        elif settings.auth_overwrite_role_on_login:
+            new_role: str | None = None
+            if isinstance(raw_roles, list):
+                new_role = self.map_roles_detailed(raw_roles)
+            if new_role is not None and new_role != user.role:
+                logger.info(
+                    "auth.oidc.role_overwritten",
+                    user_id=str(user.id),
+                    previous_role=user.role,
+                    new_role=new_role,
+                )
+                user.role = new_role
+                await db.flush()
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")
