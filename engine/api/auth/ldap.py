@@ -102,7 +102,11 @@ class LDAPAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.ldap.user_created", user_id=str(user.id))
-        elif user.role != mapped_role:
+        elif self.should_overwrite_existing_role(user.role, mapped_role):
+            # SEV-741 guard: only overwrite the stored role when the
+            # operator has explicitly opted in via
+            # ``settings.auth_overwrite_role_on_login``. The default
+            # (False) preserves any previously-granted local role.
             user.role = mapped_role
             await db.flush()
 

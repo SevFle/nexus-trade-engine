@@ -480,7 +480,9 @@ class TestOIDCAuthenticateEdgeCases:
 
         assert result.success is True
         assert len(created) == 1
-        assert created[0].role == "user"
+        # SEV-741 follow-up: a federated user with no role claim is
+        # provisioned at the least-privilege ``viewer`` level.
+        assert created[0].role == "viewer"
 
     async def test_custom_role_claim(self, monkeypatch, rsa_keys):
         _settings(monkeypatch, oidc_role_claim="groups")
@@ -560,12 +562,16 @@ class TestIAuthProviderBase:
         assert p.map_roles(["user"]) == "user"
 
     def test_map_roles_empty_list(self):
+        # SEV-741 follow-up: empty input now falls back to the
+        # least-privilege ``viewer`` role.
         p = _ConcreteProvider()
-        assert p.map_roles([]) == "user"
+        assert p.map_roles([]) == "viewer"
 
     def test_map_roles_unknown_roles(self):
+        # SEV-741 follow-up: fully unrecognized role sets fall back
+        # to the least-privilege ``viewer`` role.
         p = _ConcreteProvider()
-        assert p.map_roles(["superadmin", "guest"]) == "user"
+        assert p.map_roles(["superadmin", "guest"]) == "viewer"
 
     def test_map_roles_case_insensitive(self):
         p = _ConcreteProvider()

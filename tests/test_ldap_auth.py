@@ -400,9 +400,32 @@ class TestLDAPAuthenticateExistingUser:
         mock_db.add.assert_not_called()
 
     async def test_existing_user_role_updated(
-        self, ldap_provider, mock_settings
+        self, ldap_provider, monkeypatch
     ):
+        """SEV-741 follow-up: existing-user role overwrite is now gated
+        on ``settings.auth_overwrite_role_on_login``. The default
+        (False) preserves the stored role; opt-in (True) re-enables
+        the historical overwrite-on-each-login behavior. This test
+        pins the opt-in path."""
         from engine.db.models import User
+
+        # Build a Settings instance with the overwrite flag explicitly
+        # enabled, so the historical "admin group promotes a user-role
+        # account" path is exercised.
+        s = Settings(
+            ldap_server_url="ldap://ldap.example.com:389",
+            ldap_bind_dn="uid={{username}},ou=users,dc=example,dc=com",
+            ldap_search_base="ou=users,dc=example,dc=com",
+            ldap_role_mapping=json.dumps({
+                "cn=admins,ou=groups,dc=example,dc=com": "admin",
+                "cn=developers,ou=groups,dc=example,dc=com": "developer",
+            }),
+            auth_overwrite_role_on_login=True,
+        )
+        monkeypatch.setattr("engine.api.auth.ldap.settings", s)
+        # The overwrite guard lives in engine.api.auth.base and reads
+        # its own settings import — patch that too.
+        monkeypatch.setattr("engine.api.auth.base.settings", s)
 
         attrs = _make_ldap_attrs(
             member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
@@ -434,6 +457,49 @@ class TestLDAPAuthenticateExistingUser:
         assert result.success is True
         assert existing_user.role == "admin"
         mock_db.flush.assert_called()
+
+    async def test_existing_user_role_preserved_when_flag_off(
+        self, ldap_provider, mock_settings
+    ):
+        """SEV-741 follow-up: when ``auth_overwrite_role_on_login`` is
+        False (the default), a returning LDAP user's stored role must
+        be preserved regardless of what the IdP asserts."""
+        from engine.db.models import User
+
+        # mock_settings uses Settings() defaults, which means the
+        # overwrite flag is False — the historical overwrite must NOT
+        # fire even though the IdP now claims the admin group.
+        attrs = _make_ldap_attrs(
+            member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
+        )
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=keepadmin,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        existing_user = User(
+            email="keepadmin@example.com",
+            display_name="Keep Admin",
+            is_active=True,
+            role="user",  # current stored role
+            auth_provider="ldap",
+            external_id="keepadmin",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="keepadmin", password="correctpass", db=mock_db
+            )
+
+        assert result.success is True
+        # Stored role preserved — IdP "admin" claim was ignored.
+        assert existing_user.role == "user"
+        mock_db.flush.assert_not_called()
 
 
 class TestLDAPAuthenticateEmailConflict:
@@ -559,8 +625,11 @@ class TestLDAPInheritedMethods:
     def test_map_roles_developer(self, ldap_provider):
         assert ldap_provider.map_roles(["developer"]) == "developer"
 
-    def test_map_roles_unknown_defaults_user(self, ldap_provider):
-        assert ldap_provider.map_roles(["unknown_role"]) == "user"
+    def test_map_roles_unknown_defaults_viewer(self, ldap_provider):
+        # SEV-741 follow-up: an unrecognized role set falls back to
+        # least-privilege ``viewer``, not ``user``.
+        assert ldap_provider.map_roles(["unknown_role"]) == "viewer"
 
     def test_map_roles_empty_list(self, ldap_provider):
-        assert ldap_provider.map_roles([]) == "user"
+        # SEV-741 follow-up: empty role claim yields ``viewer``.
+        assert ldap_provider.map_roles([]) == "viewer"
