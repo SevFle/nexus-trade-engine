@@ -97,6 +97,17 @@ class Settings(BaseSettings):
     ldap_bind_password: str = ""
     ldap_search_base: str = ""
     ldap_role_mapping: str = "{}"
+    # Path to a PEM-encoded CA certificate bundle used to validate the
+    # LDAP server's TLS certificate. When set, this is applied via the
+    # global ``ldap.set_option(OPT_X_TLS_CACERTFILE, ...)`` call before
+    # ``ldap.initialize()`` runs. Empty defers to the system trust store.
+    ldap_ca_cert_file: str = ""
+    # Whether to require a valid server certificate on TLS-secured LDAP
+    # connections. Defaults to True (``OPT_X_TLS_DEMAND``); operators who
+    # need to talk to a server with a self-signed cert can flip this to
+    # False (``OPT_X_TLS_NEVER``) but should prefer installing the CA
+    # into the trust store instead.
+    ldap_tls_require_cert: bool = True
 
     @property
     def is_production(self) -> bool:
