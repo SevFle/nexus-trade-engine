@@ -41,8 +41,10 @@ export function setup() {
 }
 
 export default function (data) {
-  // 1. Health check — should be sub-200ms.
-  const health = http.get(`${data.baseUrl}/api/v1/health`, {
+  // 1. Health check — mounted at the top level (no /api/v1 prefix), so it
+  //    exercises the framework + middleware stack without touching auth, DB
+  //    or any business logic. Should be sub-200ms.
+  const health = http.get(`${data.baseUrl}/health`, {
     tags: { name: 'health' },
   });
   check(health, { 'health 200': (r) => r.status === 200 });
@@ -60,10 +62,10 @@ export default function (data) {
     },
   });
 
-  // 3. Reference data — instruments / exchanges (cheap GET).
-  const ref = http.get(`${data.baseUrl}/api/v1/reference/exchanges`, {
+  // 3. Reference data — instrument search (cache-backed read).
+  const ref = http.get(`${data.baseUrl}/api/v1/reference/suggest?q=AAPL`, {
     headers: authHeaders(data.token),
-    tags: { name: 'reference_exchanges' },
+    tags: { name: 'reference_suggest' },
   });
   check(ref, { 'reference 200': (r) => r.status === 200 });
 

@@ -74,11 +74,12 @@ The baseline thresholds are deliberately a bit tighter than the SLOs
 in [`slos.md`](slos.md): we want this test to fail before the SLO
 budget is consumed, not after.
 
-| Threshold (baseline)                              | Related SLO                  |
-|---------------------------------------------------|------------------------------|
-| `http_req_failed < 0.5%`                          | API availability (99.5%)     |
-| `http_req_duration{portfolio_list} p(95) < 800ms` | API latency (99% < 1.0s)     |
-| `http_req_duration{backtest_submit} p(95) < 1.5s` | Backtest submit (99%)        |
+| Threshold (baseline)                                | Related SLO                  |
+|-----------------------------------------------------|------------------------------|
+| `http_req_failed < 0.5%`                            | API availability (99.5%)     |
+| `http_req_duration{portfolio_list} p(95) < 800ms`   | API latency (99% < 1.0s)     |
+| `http_req_duration{reference_suggest} p(95) < 400ms`| Cache read latency (99%)     |
+| `http_req_duration{backtest_submit} p(95) < 1500ms` | Backtest submit (99%)        |
 
 If you tighten or relax a threshold in the scripts, update this table
 in the same PR.
@@ -103,7 +104,8 @@ in the same PR.
   intentionally hit the flat `/login` path; an MFA-enabled user will
   get an `mfa_required: true` response. Disable MFA on the test user.
 - **Backtest endpoint returns 422** — the Pydantic model changed.
-  Update `BACKTEST_BODY` in `tests/load/api-baseline.js` to match.
+  Update `BACKTEST_BODY` in `tests/load/api-baseline.js` to match
+  the current `BacktestRequest` in `engine/api/routes/backtest.py`.
 - **`Frontend Lint` fails on the JS** — lint scope intentionally
   doesn't include `tests/load/`. If you see this, check the lint
   config wasn't accidentally widened.

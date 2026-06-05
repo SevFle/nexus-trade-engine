@@ -43,7 +43,8 @@ retention) so regressions can be diffed.
 - **Use the helpers in `lib/auth.js`** for login / Authorization
   headers. Don't re-implement the login flow per script.
 - **No destructive writes.** The baseline writes via the async-
-  backtest path (returns 202; worker may or may not run it). Don't
+  backtest path (POST `/api/v1/backtest/run`, returns immediately
+  with a `backtest_id`; the worker may or may not run it). Don't
   add scripts that mutate prod-shaped data without a separate
   destructive-OK env flag.
 - **No MFA-enabled users.** The load-test user must be a flat
