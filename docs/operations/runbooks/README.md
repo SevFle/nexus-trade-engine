@@ -12,6 +12,7 @@ The `runbook` annotation on every alert points back here.
 | [backtest-submit.md](backtest-submit.md)  | `BacktestSubmitSlowBurn`, `BacktestSubmitBudgetExhaustion`                          |
 | [webhook-delivery.md](webhook-delivery.md) | `WebhookDeliverySlowBurn`, `WebhookDeliveryBudgetExhaustion`                        |
 | [task-pipeline.md](task-pipeline.md)      | `TaskPipelineSlowBurn`, `TaskPipelineBudgetExhaustion`                              |
+| [plugin-load-failure.md](plugin-load-failure.md) | (no alert today — operator-reported or 500 on `/api/v1/strategies/{id}/activate`) |
 
 ## Runbook structure
 

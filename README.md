@@ -127,17 +127,37 @@ nexus-trade-engine/
 
 See the [Plugin Developer Guide](docs/PLUGIN_DEV_GUIDE.md) for full documentation.
 
+## Documentation
+
+Full engineering documentation lives in [`docs/`](docs/README.md). Key
+entry points:
+
+| Audience | Start here |
+|---|---|
+| New contributors | [`docs/architecture/overview.md`](docs/architecture/overview.md) |
+| Operators / on-call | [`docs/operations/runbooks/`](docs/operations/runbooks/README.md) |
+| API consumers | [`docs/api-reference.md`](docs/api-reference.md) |
+| Strategy authors | [`docs/PLUGIN_DEV_GUIDE.md`](docs/PLUGIN_DEV_GUIDE.md) |
+| Deploying | [`docs/deployment.md`](docs/deployment.md) |
+| Why it's built this way | [`docs/adr/`](docs/adr/README.md) |
+| What's not built yet | [`docs/known-limitations.md`](docs/known-limitations.md) |
+
+The doc tree uses plain Markdown and renders natively on GitHub;
+in-editor preview and `cat docs/foo.md` both work without a build
+step. See [`docs/README.md`](docs/README.md) for the stack-choice
+rationale.
+
 ## Tech Stack
 
 | Component | Technology |
 |-----------|-----------|
-| Engine | Python 3.11, FastAPI, Celery |
+| Engine | Python 3.11, FastAPI, TaskIQ |
 | Database | PostgreSQL 16, TimescaleDB |
-| Cache | Redis 7 |
+| Cache / broker | Valkey 7 (Redis-compatible) |
 | Frontend | React 18, Vite, Tailwind CSS |
-| Task Queue | Celery + Redis broker |
+| Task Queue | TaskIQ + Valkey broker |
 | Containerization | Docker, Docker Compose |
-| Testing | pytest, pytest-asyncio |
+| Testing | pytest, pytest-asyncio, hypothesis |
 
 ## Roadmap
 
