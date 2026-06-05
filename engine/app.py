@@ -18,6 +18,7 @@ from engine.api.security_headers import (
     SecurityHeadersConfig,
     SecurityHeadersMiddleware,
 )
+from engine.api.websocket import lifecycle as ws_lifecycle
 from engine.config import settings
 from engine.data.providers import (
     AssetClass,
@@ -146,7 +147,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.info("legal.sync_complete", documents_synced=count)
     except Exception:
         logger.exception("legal.sync_failed")
+
+    # SEV-275: start the WebSocket ConnectionManager + Redis bridge.
+    # Bridge is only enabled when valkey is reachable — we use the
+    # connection already opened above as our availability signal.
+    bridge_enabled = True
+    try:
+        await app.state.valkey.ping()
+    except Exception:
+        bridge_enabled = False
+        logger.warning("ws_v2.bridge_skipped", reason="valkey_unreachable")
+    if bridge_enabled:
+        await ws_lifecycle.startup(app, redis_url=settings.valkey_url)
+    else:
+        await ws_lifecycle.startup(app, redis_url=None)
+
     yield
+
+    await ws_lifecycle.shutdown(app)
     await app.state.valkey.aclose()
     await dispose_engine()
 

@@ -21,6 +21,8 @@ from engine.api.routes.system import router as system_router
 from engine.api.routes.tax import router as tax_router
 from engine.api.routes.webhooks import router as webhooks_router
 from engine.api.routes.websocket import router as websocket_router
+from engine.api.websocket.health import router as websocket_health_router
+from engine.api.websocket.router import router as websocket_v2_router
 from engine.legal.dependencies import require_legal_acceptance
 
 api_router = APIRouter()
@@ -32,6 +34,8 @@ api_router.include_router(api_keys_router, prefix="/api/v1", tags=["auth"])
 api_router.include_router(system_router, prefix="/api/v1", tags=["system"])
 api_router.include_router(privacy_router, prefix="/api/v1", tags=["privacy"])
 api_router.include_router(websocket_router, prefix="/api/v1", tags=["websocket"])
+api_router.include_router(websocket_v2_router, prefix="/api/v1", tags=["websocket"])
+api_router.include_router(websocket_health_router, tags=["health", "websocket"])
 api_router.include_router(
     backtest_router,
     prefix="/api/v1/backtest",
