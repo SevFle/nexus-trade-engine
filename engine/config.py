@@ -97,6 +97,16 @@ class Settings(BaseSettings):
     ldap_bind_password: str = ""
     ldap_search_base: str = ""
     ldap_role_mapping: str = "{}"
+    # LDAP TLS hardening (SEV-508).  When ``ldap_tls_demand`` is True
+    # the LDAP provider sets ``OPT_X_TLS_REQUIRE_CERT`` to
+    # ``OPT_X_TLS_DEMAND`` so that a spoofed / MITM LDAP endpoint with
+    # an untrusted certificate is rejected.  ``ldap_ca_cert_path``
+    # optionally points at a PEM bundle used to verify the server
+    # certificate; when empty the system trust store is used.  These
+    # knobs make TLS enforcement operator-configurable while
+    # defaulting to the secure posture.
+    ldap_tls_demand: bool = True
+    ldap_ca_cert_path: str = ""
 
     @property
     def is_production(self) -> bool:

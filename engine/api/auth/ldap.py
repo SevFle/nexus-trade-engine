@@ -21,6 +21,39 @@ class LDAPAuthProvider(IAuthProvider):
     def name(self) -> str:
         return "ldap"
 
+    @staticmethod
+    def _apply_tls_hardening(
+        conn: Any,
+        ldap_module: Any,
+        *,
+        tls_demand: bool,
+        ca_cert_path: str,
+    ) -> None:
+        """Apply SEV-508 TLS hardening options to a fresh connection.
+
+        - Sets ``OPT_X_TLS_REQUIRE_CERT = OPT_X_TLS_DEMAND`` when the
+          operator has not opted out, forcing python-ldap to reject
+          servers with untrusted / expired / wrong-hostname
+          certificates.
+        - Forwards ``OPT_X_TLS_CACERTFILE`` when an operator-supplied
+          CA bundle path is configured, overriding the system trust
+          store.
+
+        Robust to legacy python-ldap builds that do not export the
+        TLS constants — the bind proceeds with whatever default
+        policy the legacy library uses.
+        """
+        if tls_demand:
+            tls_demand_val = getattr(ldap_module, "OPT_X_TLS_DEMAND", None)
+            tls_require_opt = getattr(ldap_module, "OPT_X_TLS_REQUIRE_CERT", None)
+            if tls_demand_val is not None and tls_require_opt is not None:
+                conn.set_option(tls_require_opt, tls_demand_val)
+
+        if ca_cert_path:
+            cacert_opt = getattr(ldap_module, "OPT_X_TLS_CACERTFILE", None)
+            if cacert_opt is not None:
+                conn.set_option(cacert_opt, ca_cert_path)
+
     async def authenticate(self, **kwargs: Any) -> AuthResult:
         username = kwargs.get("username", "")
         password = kwargs.get("password", "")
@@ -36,6 +69,15 @@ class LDAPAuthProvider(IAuthProvider):
             conn = ldap.initialize(settings.ldap_server_url)
             conn.set_option(ldap.OPT_NETWORK_TIMEOUT, 10)
             conn.set_option(ldap.OPT_TIMEOUT, 10)
+
+            # SEV-508: enforce certificate verification + optional CA
+            # pinning before any bind attempt is made.
+            self._apply_tls_hardening(
+                conn,
+                ldap,
+                tls_demand=getattr(settings, "ldap_tls_demand", True),
+                ca_cert_path=getattr(settings, "ldap_ca_cert_path", "") or "",
+            )
 
             safe_username = escape_filter_chars(username)
             user_dn = f"{settings.ldap_bind_dn.replace('{{username}}', safe_username)}"
