@@ -1,4 +1,4 @@
-"""Unit tests for the EventBus → ConnectionManager bridge (gh#7 follow-up)."""
+"""Unit tests for the EventBus → ConnectionManager bridge (gh#7 + SEV-275)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import pytest
 
 from engine.api.websocket.bridge import (
     EventToWebSocketBridge,
+    extract_correlation_id,
     extract_user_id,
     topic_for_event_type,
 )
@@ -31,6 +32,9 @@ class TestTopicMapping:
 
     def test_alert_prefix(self):
         assert topic_for_event_type("alert.triggered") == Topic.ALERT
+
+    def test_market_data_prefix(self):
+        assert topic_for_event_type("market.data.update") == Topic.MARKET_DATA
 
     def test_unknown_prefix_returns_none(self):
         assert topic_for_event_type("system.heartbeat") is None
@@ -62,6 +66,48 @@ class TestExtractUserId:
     def test_unparseable_returns_none(self):
         assert extract_user_id({"user_id": "not-a-uuid"}) is None
         assert extract_user_id({"user_id": 123}) is None
+
+
+# ---------------------------------------------------------------------------
+# extract_correlation_id
+# ---------------------------------------------------------------------------
+
+
+class TestExtractCorrelationId:
+    def test_outer_envelope(self):
+        assert extract_correlation_id({"correlation_id": "abc"}) == "abc"
+
+    def test_camel_case_envelope(self):
+        assert extract_correlation_id({"correlationId": "abc"}) == "abc"
+
+    def test_inner_data(self):
+        assert (
+            extract_correlation_id({"data": {"correlation_id": "inner"}}) == "inner"
+        )
+
+    def test_inner_camel_case(self):
+        assert (
+            extract_correlation_id({"data": {"correlationId": "inner"}}) == "inner"
+        )
+
+    def test_outer_wins_over_inner(self):
+        assert (
+            extract_correlation_id(
+                {
+                    "correlation_id": "outer",
+                    "data": {"correlation_id": "inner"},
+                }
+            )
+            == "outer"
+        )
+
+    def test_missing_returns_none(self):
+        assert extract_correlation_id({}) is None
+        assert extract_correlation_id({"data": {}}) is None
+
+    def test_non_string_returns_none(self):
+        assert extract_correlation_id({"correlation_id": 42}) is None
+        assert extract_correlation_id({"correlation_id": ""}) is None
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +159,7 @@ async def setup():
     bus = _FakeBus()
     manager = ConnectionManager()
     bridge = EventToWebSocketBridge(bus=bus, manager=manager)
-    bridge.attach(["order.filled", "portfolio.updated"])
+    bridge.attach(["order.filled", "portfolio.updated", "market.data.update"])
     return bus, manager, bridge
 
 
@@ -133,7 +179,9 @@ class TestBridge:
             },
         )
         assert len(ws.sent) == 1
-        assert ws.sent[0]["topic"] == "order"
+        # SEV-275 envelope shape — payload wrapped with channel/event/seq.
+        assert ws.sent[0]["channel"] == "order"
+        assert ws.sent[0]["event"] == "order.filled"
         assert ws.sent[0]["data"]["event_type"] == "order.filled"
 
     async def test_drops_event_without_user_id(self, setup):
@@ -156,8 +204,9 @@ class TestBridge:
         await manager.attach(user_id, ws)
         await manager.subscribe(user_id, ws, ["order"])
 
-        # Bridge is attached only to order.filled / portfolio.updated;
-        # delivering a different type via the bus does nothing.
+        # Bridge is attached only to order.filled / portfolio.updated /
+        # market.data.update; delivering a different type via the bus
+        # does nothing.
         await bus.deliver(
             "system.heartbeat",
             {"event_type": "system.heartbeat", "data": {"user_id": str(user_id)}},
@@ -191,3 +240,43 @@ class TestBridge:
             {"event_type": "order.filled", "data": {"user_id": str(user_id)}},
         )
         assert ws.sent == []
+
+    async def test_correlation_id_propagates_through_envelope(self, setup):
+        bus, manager, _bridge = setup
+        user_id = uuid.uuid4()
+        ws = _FakeWS()
+        await manager.attach(user_id, ws)
+        await manager.subscribe(user_id, ws, ["order"])
+
+        await bus.deliver(
+            "order.filled",
+            {
+                "event_type": "order.filled",
+                "correlation_id": "req-abc-123",
+                "data": {"user_id": str(user_id), "qty": 5},
+            },
+        )
+        assert len(ws.sent) == 1
+        assert ws.sent[0]["correlation_id"] == "req-abc-123"
+
+    async def test_market_data_broadcast_to_multiple_users(self, setup):
+        bus, manager, _bridge = setup
+        u1, u2 = uuid.uuid4(), uuid.uuid4()
+        ws1, ws2 = _FakeWS(), _FakeWS()
+        await manager.attach(u1, ws1)
+        await manager.attach(u2, ws2)
+        await manager.subscribe(u1, ws1, ["market_data"])
+        await manager.subscribe(u2, ws2, ["market_data"])
+
+        await bus.deliver(
+            "market.data.update",
+            {
+                "event_type": "market.data.update",
+                # No user_id → fan-out to all listeners.
+                "data": {"symbol": "AAPL", "price": 191.50},
+            },
+        )
+        assert len(ws1.sent) == 1
+        assert len(ws2.sent) == 1
+        assert ws1.sent[0]["event"] == "market.data.update"
+        assert ws2.sent[0]["event"] == "market.data.update"

@@ -1,4 +1,4 @@
-"""EventBus → ConnectionManager bridge (gh#7 follow-up).
+"""EventBus → ConnectionManager bridge (gh#7 + SEV-275).
 
 Subscribes to domain events on the engine's :class:`EventBus` and
 forwards them to the per-user :class:`ConnectionManager` that backs
@@ -6,16 +6,28 @@ the WebSocket route. The bridge maps an :class:`EventType` to a
 :class:`Topic` and a per-event ``user_id`` so each connection only
 sees the events it asked for *and* is entitled to.
 
+SEV-275 changes
+---------------
+- Propagates an optional ``correlation_id`` from the event ``data``
+  dict into the outbound envelope so a client's request id survives
+  the round trip.
+- Forwards the canonical event type as the envelope's ``event`` field
+  (previously the envelope dropped the event type into ``data``).
+
 Routing rules
 -------------
 - ``order.*``        → Topic.ORDER       — requires ``user_id`` in event data.
 - ``portfolio.*``    → Topic.PORTFOLIO   — requires ``user_id`` in event data.
 - ``backtest.*``     → Topic.BACKTEST    — requires ``user_id`` in event data.
 - ``alert.*``        → Topic.ALERT       — requires ``user_id`` in event data.
+- ``market.data.*``  → Topic.MARKET_DATA — optional ``user_id`` (broadcasts
+                                            to every subscribed user when
+                                            absent — system-wide market
+                                            updates).
 
-Events without a ``user_id`` are dropped at the bridge with a warning;
-they likely belong on a system-wide channel that ``Topic`` does not
-yet model. Adding one is a follow-up.
+Events without a ``user_id`` are dropped at the bridge for the per-
+user topics with a warning; they likely belong on a system-wide
+channel that ``Topic`` does not yet model.
 
 Single-process today
 --------------------
@@ -40,8 +52,11 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 
-# Prefix-based mapping. The first matching prefix wins.
+# Prefix-based mapping. The first matching prefix wins. ``market.data.``
+# is *first* so the more-specific prefix wins over any future generic
+# matcher.
 _PREFIX_MAP: tuple[tuple[str, Topic], ...] = (
+    ("market.data.", Topic.MARKET_DATA),
     ("order.", Topic.ORDER),
     ("portfolio.", Topic.PORTFOLIO),
     ("backtest.", Topic.BACKTEST),
@@ -80,6 +95,30 @@ def extract_user_id(event_data: dict[str, Any] | None) -> uuid.UUID | None:
         return uuid.UUID(str(raw))
     except (ValueError, AttributeError, TypeError):
         return None
+
+
+def extract_correlation_id(event_payload: dict[str, Any]) -> str | None:
+    """Pull a correlation id out of either the envelope or the data dict.
+
+    The EventBus carries correlation ids at two layers:
+
+    - The outer event envelope (``payload["correlation_id"]``) — preferred.
+    - The inner ``data`` dict (``payload["data"]["correlation_id"]``) —
+      used by older emitters that pre-date the envelope field.
+
+    Both accept ``correlationId`` (camelCase) for symmetry with
+    :func:`extract_user_id`.
+    """
+    outer = event_payload.get("correlation_id") or event_payload.get(
+        "correlationId"
+    )
+    if isinstance(outer, str) and outer:
+        return outer
+    data = event_payload.get("data") or {}
+    inner = data.get("correlation_id") or data.get("correlationId")
+    if isinstance(inner, str) and inner:
+        return inner
+    return None
 
 
 class EventToWebSocketBridge:
@@ -128,28 +167,44 @@ class EventToWebSocketBridge:
         """Single bus-handler entry point.
 
         ``payload`` is the dict produced by ``Event.to_dict()`` — it
-        carries ``event_type``, ``data``, ``source``, ``timestamp``.
+        carries ``event_type`` (or legacy ``type``), ``data``,
+        ``source``, ``timestamp``.
         """
         et_raw = payload.get("event_type") or payload.get("type")
         if not et_raw:
-            logger.warning("ws_bridge.event_missing_type", payload_keys=list(payload.keys()))
+            logger.warning(
+                "ws_bridge.event_missing_type", payload_keys=list(payload.keys())
+            )
             return
         topic = topic_for_event_type(et_raw)
         if topic is None:
             logger.debug("ws_bridge.event_unrouted", event_type=et_raw)
             return
+
         user_id = extract_user_id(payload.get("data"))
+        cid = extract_correlation_id(payload)
+
         if user_id is None:
+            # Market data is the one channel that's fan-out-to-everyone;
+            # for per-user channels a missing user_id is a wiring bug.
+            if topic == Topic.MARKET_DATA:
+                await self._broadcast_to_all(
+                    topic=topic, event=et_raw, payload=payload, correlation_id=cid
+                )
+                return
             logger.warning(
                 "ws_bridge.event_no_user_id",
                 event_type=et_raw,
                 data_keys=list((payload.get("data") or {}).keys()),
             )
             return
+
         recipients = await self._manager.broadcast(
             user_id=user_id,
             topic=topic.value,
             payload=payload,
+            event=et_raw,
+            correlation_id=cid,
         )
         logger.debug(
             "ws_bridge.broadcast",
@@ -159,9 +214,38 @@ class EventToWebSocketBridge:
             recipients=recipients,
         )
 
+    async def _broadcast_to_all(
+        self,
+        *,
+        topic: Topic,
+        event: str,
+        payload: dict[str, Any],
+        correlation_id: str | None,
+    ) -> None:
+        """Fan a market-data event out to every user that's listening."""
+        # ``_conns`` is the manager's user-indexed registry; we walk it
+        # without taking the async lock because iteration over a dict
+        # is safe under CPython for the duration of a single bytecode
+        # and ``broadcast`` takes its own lock for the per-user fan-out.
+        total = 0
+        for user_id in list(self._manager._conns.keys()):  # noqa: SLF001
+            total += await self._manager.broadcast(
+                user_id=user_id,
+                topic=topic.value,
+                payload=payload,
+                event=event,
+                correlation_id=correlation_id,
+            )
+        logger.debug(
+            "ws_bridge.broadcast_market_data",
+            event_type=event,
+            recipients=total,
+        )
+
 
 __all__ = [
     "EventToWebSocketBridge",
+    "extract_correlation_id",
     "extract_user_id",
     "topic_for_event_type",
 ]

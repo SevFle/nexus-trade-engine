@@ -1,4 +1,4 @@
-"""Unit tests for the WebSocket connection manager (gh#7)."""
+"""Unit tests for the WebSocket connection manager (gh#7 + SEV-275)."""
 
 from __future__ import annotations
 
@@ -50,7 +50,10 @@ class TestTopicEnum:
         assert frozenset(t.value for t in Topic) == VALID_TOPICS
 
     def test_documented_topics(self):
-        assert frozenset({"portfolio", "backtest", "order", "alert"}) == VALID_TOPICS
+        # SEV-275 added ``market_data`` to the canonical channel set.
+        assert frozenset(
+            {"portfolio", "backtest", "order", "alert", "market_data"}
+        ) == VALID_TOPICS
 
 
 class TestAttachDetach:
@@ -119,7 +122,13 @@ class TestBroadcast:
             user_id=user_id, topic="portfolio", payload={"v": 1}
         )
         assert n == 1
-        assert a.sent == [{"topic": "portfolio", "data": {"v": 1}}]
+        # SEV-275: payload is wrapped in a WSMessage envelope.
+        assert a.sent[0]["channel"] == "portfolio"
+        assert a.sent[0]["event"] == "portfolio"
+        assert a.sent[0]["data"] == {"v": 1}
+        assert "seq" in a.sent[0]
+        assert "correlation_id" in a.sent[0]
+        assert a.sent[0]["version"]
         assert b.sent == []
 
     async def test_unknown_topic_yields_zero(self, manager, user_id):
@@ -155,7 +164,7 @@ class TestBroadcast:
         # Both were recipients — broadcast counts them; only the working
         # one received.
         assert n == 2
-        assert good.sent == [{"topic": "portfolio", "data": {"v": 7}}]
+        assert good.sent[0]["data"] == {"v": 7}
         assert bad.sent == []  # failed silently
 
     async def test_broadcast_to_unknown_user_returns_zero(self, manager):
@@ -163,6 +172,30 @@ class TestBroadcast:
             user_id=uuid.uuid4(), topic="portfolio", payload={"v": 1}
         )
         assert n == 0
+
+    async def test_seq_monotonic_per_connection(self, manager, user_id):
+        ws = _FakeWS()
+        await manager.attach(user_id, ws)
+        await manager.subscribe(user_id, ws, ["portfolio"])
+        await manager.broadcast(user_id=user_id, topic="portfolio", payload={"i": 1})
+        await manager.broadcast(user_id=user_id, topic="portfolio", payload={"i": 2})
+        await manager.broadcast(user_id=user_id, topic="portfolio", payload={"i": 3})
+        seqs = [m["seq"] for m in ws.sent]
+        assert seqs == [0, 1, 2]
+
+    async def test_correlation_id_propagates(self, manager, user_id):
+        ws = _FakeWS()
+        await manager.attach(user_id, ws)
+        await manager.subscribe(user_id, ws, ["portfolio"])
+        await manager.broadcast(
+            user_id=user_id,
+            topic="portfolio",
+            payload={"v": 1},
+            correlation_id="abc-123",
+            event="portfolio.updated",
+        )
+        assert ws.sent[0]["correlation_id"] == "abc-123"
+        assert ws.sent[0]["event"] == "portfolio.updated"
 
 
 class TestSingleton:
