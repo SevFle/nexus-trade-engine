@@ -402,7 +402,12 @@ class TestLDAPAuthenticateExistingUser:
     async def test_existing_user_role_updated(
         self, ldap_provider, mock_settings
     ):
+        """When ``auth_overwrite_role_on_login`` is enabled the existing
+        user's role is overwritten with the freshly-mapped one."""
         from engine.db.models import User
+
+        # Opt-in: enable role overwrite on federated login.
+        mock_settings.auth_overwrite_role_on_login = True
 
         attrs = _make_ldap_attrs(
             member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
@@ -434,6 +439,93 @@ class TestLDAPAuthenticateExistingUser:
         assert result.success is True
         assert existing_user.role == "admin"
         mock_db.flush.assert_called()
+
+    async def test_existing_user_role_not_overwritten_by_default(
+        self, ldap_provider, mock_settings
+    ):
+        """SEV-741 defense-in-depth: ``auth_overwrite_role_on_login``
+        defaults to False, so a freshly-mapped role from the IdP must
+        NOT overwrite the existing local role."""
+        from engine.db.models import User
+
+        # Sanity check on the default.
+        assert mock_settings.auth_overwrite_role_on_login is False
+
+        attrs = _make_ldap_attrs(
+            member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
+        )
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=promoted,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        existing_user = User(
+            email="testuser@example.com",
+            display_name="Test User",
+            is_active=True,
+            role="user",
+            auth_provider="ldap",
+            external_id="testuser",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="testuser", password="correctpass", db=mock_db
+            )
+
+        assert result.success is True
+        # Existing role is preserved — IdP cannot downgrade/escalate.
+        assert existing_user.role == "user"
+        mock_db.flush.assert_not_called()
+
+    async def test_existing_user_role_overwrite_emits_info_log(
+        self, ldap_provider, mock_settings, caplog
+    ):
+        """When overwrite is skipped, an info log is emitted for audit."""
+        from engine.db.models import User
+
+        attrs = _make_ldap_attrs(
+            member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
+        )
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=audit,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        existing_user = User(
+            email="audit@example.com",
+            display_name="Audit",
+            is_active=True,
+            role="user",
+            auth_provider="ldap",
+            external_id="audit",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        with (
+            patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}),
+            patch("engine.api.auth.ldap.logger") as mock_logger,
+        ):
+            await ldap_provider.authenticate(
+                username="audit", password="pass", db=mock_db
+            )
+
+        # The skip log must be emitted so audit pipelines can catch it.
+        skip_calls = [
+            c for c in mock_logger.info.call_args_list
+            if c.args and c.args[0] == "auth.ldap.role_overwrite_skipped"
+        ]
+        assert skip_calls, "Expected auth.ldap.role_overwrite_skipped log"
+        assert existing_user.role == "user"
 
 
 class TestLDAPAuthenticateEmailConflict:
@@ -559,8 +651,8 @@ class TestLDAPInheritedMethods:
     def test_map_roles_developer(self, ldap_provider):
         assert ldap_provider.map_roles(["developer"]) == "developer"
 
-    def test_map_roles_unknown_defaults_user(self, ldap_provider):
-        assert ldap_provider.map_roles(["unknown_role"]) == "user"
+    def test_map_roles_unknown_defaults_viewer(self, ldap_provider):
+        assert ldap_provider.map_roles(["unknown_role"]) == "viewer"
 
     def test_map_roles_empty_list(self, ldap_provider):
-        assert ldap_provider.map_roles([]) == "user"
+        assert ldap_provider.map_roles([]) == "viewer"

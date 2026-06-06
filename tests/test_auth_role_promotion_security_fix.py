@@ -131,12 +131,17 @@ class TestNoImplicitPromotion:
             == "admin"
         )
 
-    def test_empty_input_returns_user(self):
-        assert _ConcreteProvider().map_roles([]) == "user"
+    def test_empty_input_returns_viewer(self):
+        """With no external roles to consider, the least-privileged
+        internal role (``viewer``) is the safe fallback."""
+        assert _ConcreteProvider().map_roles([]) == "viewer"
 
-    def test_all_unrecognized_falls_back_to_user(self):
+    def test_all_unrecognized_falls_back_to_viewer(self):
+        """When every external role is unrecognized, the function
+        falls back to ``viewer`` — the minimum-privilege internal role
+        — rather than ``user``."""
         assert (
-            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "user"
+            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "viewer"
         )
 
     def test_partial_unrecognized_still_uses_recognized(self):
@@ -153,9 +158,9 @@ class TestNoImplicitPromotion:
 
     def test_whitespace_only_role_is_unrecognized(self):
         """A whitespace-only string is normalized to the empty string,
-        which is not a known role.  Should fall through to user without
-        crashing."""
-        assert _ConcreteProvider().map_roles(["   "]) == "user"
+        which is not a known role.  Should fall through to viewer
+        without crashing."""
+        assert _ConcreteProvider().map_roles(["   "]) == "viewer"
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +201,7 @@ class TestUnrecognizedRoleWarning:
     def test_warning_fires_for_purely_unrecognized_set(self, monkeypatch):
         calls = self._patch(monkeypatch)
         p = _ConcreteProvider()
-        assert p.map_roles(["totally_bogus"]) == "user"
+        assert p.map_roles(["totally_bogus"]) == "viewer"
         assert any(c["event"] == "auth.map_roles.unrecognized_roles" for c in calls)
 
     def test_warning_fires_when_any_role_is_unrecognized(self, monkeypatch):
@@ -220,8 +225,12 @@ class TestUnrecognizedRoleWarning:
     def test_warning_does_not_fire_for_empty_input(self, monkeypatch):
         calls = self._patch(monkeypatch)
         p = _ConcreteProvider()
-        assert p.map_roles([]) == "user"
-        assert calls == []
+        assert p.map_roles([]) == "viewer"
+        # The unrecognized-roles warning must NOT fire for an empty
+        # input — there are no external roles to flag.
+        assert not any(
+            c["event"] == "auth.map_roles.unrecognized_roles" for c in calls
+        )
 
     def test_warning_includes_provider_name(self, monkeypatch):
         """Operators need to know which provider surfaced the
@@ -285,6 +294,232 @@ class TestUnrecognizedRoleWarning:
         p = _ConcreteProvider()
         p.map_roles(["bogus"])
         assert calls[0]["event"] == "auth.map_roles.unrecognized_roles"
+
+
+# ---------------------------------------------------------------------------
+# 3b. Fallback-to-viewer dedicated warning
+# ---------------------------------------------------------------------------
+
+
+class TestFallbackToViewerWarning:
+    """A dedicated ``auth.map_roles.fallback_to_viewer`` warning must
+    fire whenever the least-privilege fallback is actually applied —
+    i.e. when no recognized role was found in the input. This lets
+    operators alert on the silent privilege floor being applied
+    separately from misconfiguration alerts."""
+
+    def _patch(self, monkeypatch):
+        calls: list[dict[str, object]] = []
+
+        class _Stub:
+            def warning(self, _event, **kwargs):
+                calls.append({"event": _event, **kwargs})
+
+            def info(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, "level": "info", **kwargs})
+
+            def error(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, "level": "error", **kwargs})
+
+        from engine.api.auth import base
+
+        monkeypatch.setattr(base, "logger", _Stub())
+        return calls
+
+    def test_fallback_warning_fires_on_empty_input(self, monkeypatch):
+        calls = self._patch(monkeypatch)
+        p = _ConcreteProvider()
+        assert p.map_roles([]) == "viewer"
+        assert any(
+            c["event"] == "auth.map_roles.fallback_to_viewer" for c in calls
+        ), "fallback_to_viewer warning must fire when no roles are provided"
+
+    def test_fallback_warning_fires_when_all_unrecognized(self, monkeypatch):
+        calls = self._patch(monkeypatch)
+        p = _ConcreteProvider()
+        assert p.map_roles(["bogus", "another_bogus"]) == "viewer"
+        assert any(
+            c["event"] == "auth.map_roles.fallback_to_viewer" for c in calls
+        )
+
+    def test_fallback_warning_does_not_fire_when_recognized_present(
+        self, monkeypatch
+    ):
+        calls = self._patch(monkeypatch)
+        p = _ConcreteProvider()
+        # Mix of recognized + unrecognized → still get a recognized role
+        # back, so the fallback path must NOT fire.
+        assert p.map_roles(["admin", "bogus"]) == "admin"
+        assert not any(
+            c["event"] == "auth.map_roles.fallback_to_viewer" for c in calls
+        )
+
+    def test_fallback_warning_does_not_fire_for_pure_recognized(
+        self, monkeypatch
+    ):
+        calls = self._patch(monkeypatch)
+        p = _ConcreteProvider()
+        assert p.map_roles(["viewer", "user"]) == "user"
+        assert not any(
+            c["event"] == "auth.map_roles.fallback_to_viewer" for c in calls
+        )
+
+    def test_fallback_warning_includes_provider(self, monkeypatch):
+        calls = self._patch(monkeypatch)
+        p = _AnotherConcrete()
+        p.map_roles([])
+        fb = [c for c in calls if c["event"] == "auth.map_roles.fallback_to_viewer"]
+        assert fb, "fallback warning must fire on empty input"
+        assert fb[0]["provider"] == "test-other"
+
+    def test_fallback_warning_includes_sanitized_external_roles(
+        self, monkeypatch
+    ):
+        """The ``external_roles`` payload must list the (sanitized)
+        inputs that produced the fallback — needed for triage."""
+        calls = self._patch(monkeypatch)
+        p = _ConcreteProvider()
+        p.map_roles(["bogus_a", "bogus_b"])
+        fb = [c for c in calls if c["event"] == "auth.map_roles.fallback_to_viewer"]
+        assert fb
+        external = fb[0]["external_roles"]
+        assert "bogus_a" in external
+        assert "bogus_b" in external
+
+
+# ---------------------------------------------------------------------------
+# 3c. _sanitize_role() helper
+# ---------------------------------------------------------------------------
+
+
+class TestSanitizeRole:
+    """Tests for the ``_sanitize_role`` helper that defends the
+    warning payload against log-injection / oversized-blob attacks
+    originating from upstream IdP role claims."""
+
+    def test_sanitize_strips_newlines(self):
+        from engine.api.auth.base import _sanitize_role
+
+        # ``\\nadmin\\n`` would otherwise smuggle line breaks into the
+        # log payload — operators reading the log tail would see two
+        # fake log lines.
+        assert _sanitize_role("\nadmin\n") == "admin"
+
+    def test_sanitize_strips_carriage_return(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("admin\r") == "admin"
+
+    def test_sanitize_strips_tab(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("ad\tmin") == "admin"
+
+    def test_sanitize_strips_null_byte(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("admin\x00") == "admin"
+
+    def test_sanitize_strips_del(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("admin\x7f") == "admin"
+
+    def test_sanitize_strips_multiple_control_chars(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("\x00\x01\x02root\x03\x04") == "root"
+
+    def test_sanitize_strips_terminal_escape_prefix(self):
+        """ANSI / terminal-escape attacks must be neutralized — the
+        escape char (0x1b) is in the C0 control range."""
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("\x1b[31madmin\x1b[0m") == "[31madmin[0m"
+
+    def test_sanitize_caps_length(self):
+        from engine.api.auth.base import _MAX_ROLE_LENGTH, _sanitize_role
+
+        long_role = "a" * (_MAX_ROLE_LENGTH + 100)
+        result = _sanitize_role(long_role)
+        assert len(result) == _MAX_ROLE_LENGTH
+
+    def test_sanitize_caps_length_exact_boundary(self):
+        from engine.api.auth.base import _MAX_ROLE_LENGTH, _sanitize_role
+
+        role_at_limit = "x" * _MAX_ROLE_LENGTH
+        assert _sanitize_role(role_at_limit) == role_at_limit
+
+    def test_sanitize_strips_then_caps(self):
+        """Control-char stripping happens before length capping —
+        the result must not contain controls and must respect the
+        length cap."""
+        from engine.api.auth.base import _MAX_ROLE_LENGTH, _sanitize_role
+
+        long_with_controls = "a\n" * (_MAX_ROLE_LENGTH + 50)
+        result = _sanitize_role(long_with_controls)
+        assert "\n" not in result
+        assert len(result) <= _MAX_ROLE_LENGTH
+
+    def test_sanitize_returns_empty_for_empty_input(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("") == ""
+
+    def test_sanitize_returns_empty_for_non_string(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role(None) == ""  # type: ignore[arg-type]
+        assert _sanitize_role(123) == ""  # type: ignore[arg-type]
+        assert _sanitize_role(["a", "b"]) == ""  # type: ignore[arg-type]
+
+    def test_sanitize_returns_empty_for_only_controls(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("\n\r\t\x00\x7f") == ""
+
+    def test_sanitize_preserves_normal_role(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("admin") == "admin"
+        assert _sanitize_role("portfolio_manager") == "portfolio_manager"
+
+    def test_sanitize_preserves_unicode(self):
+        """Non-ASCII characters that are NOT control chars (e.g.
+        letters with diacritics) must be preserved — only ASCII
+        controls (C0 + DEL) are stripped."""
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("café") == "café"
+
+    def test_sanitize_used_in_unrecognized_payload(self, monkeypatch):
+        """End-to-end: control characters in unrecognized roles must
+        NOT appear in the warning payload."""
+        calls: list[dict[str, object]] = []
+
+        class _Stub:
+            def warning(self, _event, **kwargs):
+                calls.append({"event": _event, **kwargs})
+
+            def info(self, _event, **kwargs):  # pragma: no cover
+                pass
+
+            def error(self, _event, **kwargs):  # pragma: no cover
+                pass
+
+        from engine.api.auth import base
+
+        monkeypatch.setattr(base, "logger", _Stub())
+        p = _ConcreteProvider()
+        # ``admin`` is recognized; ``\\nadmin_evil\\n`` is not — and its
+        # raw form must not leak into the warning payload.
+        assert p.map_roles(["\nadmin_evil\n", "admin"]) == "admin"
+        unrec = [c for c in calls if c["event"] == "auth.map_roles.unrecognized_roles"]
+        assert unrec
+        for role in unrec[0]["unrecognized"]:
+            assert "\n" not in role
+            assert "\x00" not in role
+            assert "\x7f" not in role
 
 
 # ---------------------------------------------------------------------------
