@@ -6,7 +6,13 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from sqlalchemy import select
 
-from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo, _should_overwrite_role
+from engine.api.auth.base import (
+    AuthResult,
+    IAuthProvider,
+    UserInfo,
+    _apply_role_mapping,
+    _sanitize_role,
+)
 from engine.config import settings
 from engine.db.models import User
 
@@ -75,7 +81,7 @@ class LDAPAuthProvider(IAuthProvider):
         if not mapped_roles:
             mapped_roles = ["user"]
 
-        mapped_role = self.map_roles(mapped_roles)
+        mapped_role = _sanitize_role(self.map_roles(mapped_roles))
 
         result = await db.execute(
             select(User).where(User.auth_provider == "ldap", User.external_id == ldap_uid)
@@ -102,21 +108,21 @@ class LDAPAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.ldap.user_created", user_id=str(user.id))
-        elif _should_overwrite_role(user.role, mapped_role, settings):
-            # SEV-741: only overwrite an existing local role when the
-            # operator has explicitly opted in via
-            # ``auth_overwrite_role_on_login``.
-            logger.info(
-                "auth.ldap.role_overwritten",
-                user_id=str(user.id),
-                previous_role=user.role,
-                new_role=mapped_role,
+        else:
+            # SEV-741 follow-up: ``is_active`` must be checked BEFORE
+            # any role-mutation path. Mutating the role of a disabled
+            # account would silently pre-stage an escalation the
+            # moment the account is reactivated.
+            if not user.is_active:
+                return AuthResult(success=False, error="Account is disabled")
+            await _apply_role_mapping(
+                user,
+                mapped_role,
+                settings,
+                is_new_user=False,
+                provider_name=self.name,
+                db=db,
             )
-            user.role = mapped_role
-            await db.flush()
-
-        if not user.is_active:
-            return AuthResult(success=False, error="Account is disabled")
 
         return AuthResult(
             success=True,
