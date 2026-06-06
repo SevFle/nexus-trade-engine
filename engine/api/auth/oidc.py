@@ -58,6 +58,49 @@ class OIDCAuthProvider(IAuthProvider):
             self._jwks_cache = resp.json()
         return self._jwks_cache
 
+    async def _exchange_code_for_claims(self, code: str) -> dict[str, Any]:
+        """Exchange an authorization code for verified ID-token claims.
+
+        Raises on any failure (network error, JWT verification, missing key, etc.).
+        """
+        import httpx
+
+        discovery = await self._get_discovery()
+        token_endpoint = discovery["token_endpoint"]
+
+        async with httpx.AsyncClient() as client:
+            token_resp = await client.post(
+                token_endpoint,
+                data={
+                    "code": code,
+                    "client_id": settings.oidc_client_id,
+                    "client_secret": settings.oidc_client_secret,
+                    "redirect_uri": settings.oidc_redirect_uri,
+                    "grant_type": "authorization_code",
+                },
+            )
+            token_resp.raise_for_status()
+            tokens = token_resp.json()
+
+        id_token = tokens.get("id_token", "")
+        jwks = await self._get_jwks()
+        unverified_header = jwt.get_unverified_header(id_token)
+        kid = unverified_header.get("kid")
+        signing_key = None
+        for key_data in jwks.get("keys", []):
+            if key_data.get("kid") == kid:
+                signing_key = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
+                break
+        if signing_key is None:
+            msg = f"No matching key found for kid={kid}"
+            raise ValueError(msg)
+        return jwt.decode(
+            id_token,
+            signing_key,
+            algorithms=["RS256"],
+            audience=settings.oidc_client_id,
+        )
+
     async def authenticate(self, **kwargs: Any) -> AuthResult:
         code = kwargs.get("code")
         db: AsyncSession | None = kwargs.get("db")
@@ -65,44 +108,7 @@ class OIDCAuthProvider(IAuthProvider):
             return AuthResult(success=False, error="Authorization code and db session required")
 
         try:
-            import httpx
-
-            discovery = await self._get_discovery()
-            token_endpoint = discovery["token_endpoint"]
-
-            async with httpx.AsyncClient() as client:
-                token_resp = await client.post(
-                    token_endpoint,
-                    data={
-                        "code": code,
-                        "client_id": settings.oidc_client_id,
-                        "client_secret": settings.oidc_client_secret,
-                        "redirect_uri": settings.oidc_redirect_uri,
-                        "grant_type": "authorization_code",
-                    },
-                )
-                token_resp.raise_for_status()
-                tokens = token_resp.json()
-
-            id_token = tokens.get("id_token", "")
-            jwks = await self._get_jwks()
-            unverified_header = jwt.get_unverified_header(id_token)
-            kid = unverified_header.get("kid")
-            signing_key = None
-            for key_data in jwks.get("keys", []):
-                if key_data.get("kid") == kid:
-                    signing_key = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
-                    break
-            if signing_key is None:
-                msg = f"No matching key found for kid={kid}"
-                raise ValueError(msg)
-            claims_data = jwt.decode(
-                id_token,
-                signing_key,
-                algorithms=["RS256"],
-                audience=settings.oidc_client_id,
-            )
-
+            claims_data = await self._exchange_code_for_claims(code)
         except Exception as exc:
             logger.exception("auth.oidc.failed", error=str(exc))
             return AuthResult(success=False, error="OIDC authentication failed")
@@ -117,6 +123,10 @@ class OIDCAuthProvider(IAuthProvider):
         if not oidc_id or not email:
             return AuthResult(success=False, error="Incomplete OIDC profile")
 
+        mapped_role = "user"
+        if isinstance(raw_roles, list):
+            mapped_role = self.map_roles(raw_roles)
+
         result = await db.execute(
             select(User).where(User.auth_provider == "oidc", User.external_id == oidc_id)
         )
@@ -129,10 +139,6 @@ class OIDCAuthProvider(IAuthProvider):
                 return AuthResult(
                     success=False, error="Email already registered with a different provider"
                 )
-
-            mapped_role = "user"
-            if isinstance(raw_roles, list):
-                mapped_role = self.map_roles(raw_roles)
 
             user = User(
                 email=email,
@@ -147,6 +153,17 @@ class OIDCAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.oidc.user_created", user_id=str(user.id))
+        elif user.role != mapped_role:
+            if settings.auth_overwrite_role_on_login:
+                user.role = mapped_role
+                await db.flush()
+            else:
+                logger.warning(
+                    "auth.oidc.role_overwrite_skipped",
+                    user_id=str(user.id),
+                    local_role=user.role,
+                    idp_role=mapped_role,
+                )
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")

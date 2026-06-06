@@ -404,6 +404,11 @@ class TestLDAPAuthenticateExistingUser:
     ):
         from engine.db.models import User
 
+        # SEV-741: role overwrite on login is now opt-in via
+        # ``auth_overwrite_role_on_login``. Enable it here to preserve
+        # the historical "role is updated" expectation of this test.
+        mock_settings.auth_overwrite_role_on_login = True
+
         attrs = _make_ldap_attrs(
             member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
         )
