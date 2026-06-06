@@ -9,8 +9,8 @@ The schema is owned by the Alembic migration chain in
 
 - **One revision per logical change.** The chain is numbered
   sequentially: `001_initial_schema.py`, `002_additional_tables.py`,
-  `003_bt_result_nullable_pid.py`, …, `010_webhooks.py`. Pick the next
-  number when adding a migration.
+  `003_bt_result_nullable_pid.py`, … Run `alembic history` for the
+  source of truth (the chain has grown past `010_webhooks.py`).
 - Every migration must define both `upgrade()` and `downgrade()`. If a
   step is genuinely irreversible (data loss), make `downgrade()` an
   explicit `op.execute("...")` that destroys what was created — but
@@ -20,6 +20,10 @@ The schema is owned by the Alembic migration chain in
   reversible steps so they can be rolled out without locking writes.
 - Models live in [`engine/db/models.py`](../../engine/db/models.py).
   Keep them and the migration that creates them in the same PR.
+- For a per-entity breakdown (every table, every constraint, every
+  relationship), see [`data-model.md`](data-model.md). This document
+  stays focused on *operational* concerns: migration mechanics,
+  access patterns, TimescaleDB usage.
 
 ## Current chain
 
@@ -42,6 +46,7 @@ Run `alembic history` for the source of truth.
 
 These are the rows you must protect during a restore. See the backup
 runbook at [`docs/operations/backup-and-recovery.md`](../operations/backup-and-recovery.md).
+For the full schema see [`data-model.md`](data-model.md).
 
 - **`users`** — primary identity. Password hashes are bcrypt; MFA
   TOTP secrets are Fernet-encrypted with the engine's

@@ -12,14 +12,16 @@ For *why* we made specific structural choices, see
 1. **[overview.md](overview.md)** — high-level component map, request
    lifecycle, key dependencies. Start here if you've never opened the
    repo before.
-2. **[database.md](database.md)** — table inventory, migration policy,
-   data ownership.
-3. **[plugins.md](plugins.md)** — plugin SDK and the registry that
+2. **[data-model.md](data-model.md)** — every entity, every constraint,
+   every relationship. The ER reference for backend work.
+3. **[database.md](database.md)** — migration policy, async access
+   patterns, TimescaleDB usage.
+4. **[plugins.md](plugins.md)** — plugin SDK and the registry that
    loads strategies / data providers / execution backends at runtime.
-4. **[`docs/operations/`](../operations/)** — how the running system is
+5. **[`docs/operations/`](../operations/)** — how the running system is
    monitored, backed up, and recovered. Lives next to the runbooks
    that on-call uses.
-5. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
+6. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
    Read these before proposing a change that contradicts them.
 
 ## Existing diagrams

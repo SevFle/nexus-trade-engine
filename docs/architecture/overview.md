@@ -8,26 +8,60 @@ flows through them.
 
 ## Components
 
-```
-┌──────────────────┐        HTTPS         ┌──────────────────┐
-│   React frontend │ ───────────────────▶ │  FastAPI engine  │
-│   (frontend/)    │ ◀─────────────────── │  (engine/api)    │
-└──────────────────┘    JSON / WebSocket  └────────┬─────────┘
-                                                   │
-                          enqueue / dispatch       │
-                                                   ▼
-                                          ┌──────────────────┐
-                                          │  TaskIQ workers  │
-                                          │  (engine/tasks)  │
-                                          └────────┬─────────┘
-                                                   │
-                                          ┌────────┴─────────┐
-                                          ▼                  ▼
-                                  ┌────────────┐     ┌──────────────┐
-                                  │  Postgres  │     │ Valkey/Redis │
-                                  │ (asyncpg + │     │ (TaskIQ      │
-                                  │  TimescaleDB)    │  broker, cache)│
-                                  └────────────┘     └──────────────┘
+```mermaid
+flowchart LR
+    subgraph Client
+        UI["React frontend<br/>(frontend/, Vite + react-query)"]
+        SDK["nexus-trade-sdk<br/>(sdk/)"]
+    end
+
+    subgraph Edge
+        PROXY["Reverse proxy<br/>(nginx / Caddy)"]
+    end
+
+    subgraph Engine["FastAPI engine (engine/)"]
+        AUTH["Auth layer<br/>(engine/api/auth)"]
+        RL["Rate limit + body-size<br/>+ security headers"]
+        ROUTES["Routers<br/>(engine/api/routes)"]
+        WS["WebSocket manager<br/>(engine/api/websocket)"]
+        EVENTS["EventBus + WebhookDispatcher<br/>(engine/events)"]
+        DOMAIN["Domain core<br/>(engine/core)"]
+        REF["Reference data<br/>(engine/reference)"]
+        LEGAL["Legal acceptance<br/>(engine/legal)"]
+        PRIV["Privacy / DSR<br/>(engine/privacy)"]
+        PLUGINS["Plugin registry + sandbox<br/>(engine/plugins)"]
+    end
+
+    subgraph Workers["TaskIQ workers (engine/tasks)"]
+        W1["worker process 1"]
+        W2["worker process N"]
+    end
+
+    subgraph DataPlane
+        PG[("PostgreSQL 16<br/>+ TimescaleDB")]
+        VK[("Valkey / Redis")]
+        YF["Yahoo / Polygon /<br/>Alpaca / Binance /<br/>CoinGecko / OANDA"]
+    end
+
+    UI -- "HTTPS / WSS" --> PROXY
+    SDK -- "HTTPS" --> PROXY
+    PROXY --> AUTH
+    AUTH --> RL --> ROUTES
+    ROUTES --> DOMAIN
+    ROUTES --> EVENTS
+    ROUTES --> LEGAL
+    ROUTES --> PRIV
+    ROUTES --> REF
+    ROUTES --> WS
+    ROUTES -- "enqueue" --> VK
+    DOMAIN --> PLUGINS
+    DOMAIN --> YF
+    EVENTS -- "fan-out<br/>(HMAC-signed)" --> UI
+    W1 & W2 -- "dequeue" --> VK
+    W1 & W2 --> DOMAIN
+    W1 & W2 --> PG
+    ROUTES --> PG
+    REF --> PG
 ```
 
 The full service is one Python package (`engine/`) with sub-packages
@@ -70,6 +104,17 @@ React app under `frontend/`.
 | Crypto                 | `bcrypt`, `cryptography` (Fernet for MFA secrets) |
 
 The full pinned set is in [`pyproject.toml`](../../pyproject.toml).
+Notable operator-facing knobs the table does not show:
+
+- **Auth**: JWT (HS256 today; RS256 is one config swap) + pluggable
+  OAuth / OIDC / LDAP providers, plus TOTP MFA with Fernet-at-rest and
+  long-lived scoped API keys (`nxs_<env>_<rand>` shape).
+- **Webhook outbound**: HMAC-signed fan-out with exponential back-off
+  and four built-in body templates (`generic`, `discord`, `slack`,
+  `telegram`).
+- **Privacy / DSR**: in-process GDPR Art. 12 SLA enforcement
+  (default 30-day grace before hard-delete) and a synchronous
+  self-export endpoint.
 
 ## Request lifecycle (HTTP)
 
