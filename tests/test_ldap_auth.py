@@ -399,10 +399,64 @@ class TestLDAPAuthenticateExistingUser:
         assert result.user_info.email == "testuser@example.com"
         mock_db.add.assert_not_called()
 
-    async def test_existing_user_role_updated(
+    async def test_existing_user_role_preserved_by_default(
         self, ldap_provider, mock_settings
     ):
+        """SEV-741: with ``auth_overwrite_role_on_login`` disabled (the
+        default), an existing user's local role is NOT replaced with the
+        IdP-mapped role on federated login."""
         from engine.db.models import User
+
+        attrs = _make_ldap_attrs(
+            member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]
+        )
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=promoted,ou=users,dc=example,dc=com", attrs)]
+        )
+
+        existing_user = User(
+            email="testuser@example.com",
+            display_name="Test User",
+            is_active=True,
+            role="user",
+            auth_provider="ldap",
+            external_id="testuser",
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_user
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="testuser", password="correctpass", db=mock_db
+            )
+
+        assert result.success is True
+        # Default: do NOT overwrite the previously-granted local role.
+        assert existing_user.role == "user"
+        mock_db.flush.assert_not_called()
+
+    async def test_existing_user_role_overwritten_when_opted_in(
+        self, ldap_provider, monkeypatch
+    ):
+        """SEV-741: with ``auth_overwrite_role_on_login=True``, the
+        IdP-mapped role replaces the existing local role on federated
+        login."""
+        from engine.db.models import User
+
+        s = Settings(
+            ldap_server_url="ldap://ldap.example.com:389",
+            ldap_bind_dn="uid={{username}},ou=users,dc=example,dc=com",
+            ldap_search_base="ou=users,dc=example,dc=com",
+            ldap_role_mapping=json.dumps({
+                "cn=admins,ou=groups,dc=example,dc=com": "admin",
+            }),
+            auth_overwrite_role_on_login=True,
+        )
+        monkeypatch.setattr("engine.api.auth.ldap.settings", s)
 
         attrs = _make_ldap_attrs(
             member_of=[b"cn=admins,ou=groups,dc=example,dc=com"]

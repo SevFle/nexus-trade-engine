@@ -9,6 +9,34 @@ import structlog
 logger = structlog.get_logger()
 
 
+def _should_overwrite_role(
+    current_role: str | None,
+    mapped_role: str,
+    config: Any,
+) -> bool:
+    """Return True if an existing user's role should be replaced with the
+    IdP-mapped role on this federated login.
+
+    Centralizes the ``auth_overwrite_role_on_login`` policy so every
+    provider makes the same decision (SEV-741). A misconfigured or
+    compromised upstream Identity Provider must not be able to silently
+    downgrade or escalate a previously-granted local role on each
+    federated login — operators opt in explicitly via the setting.
+
+    - ``current_role is None`` (new user, no prior local role): always
+      True. There is nothing to preserve.
+    - ``current_role == mapped_role``: False (no-op write would be
+      wasted work and would emit a misleading audit event).
+    - Otherwise: True iff ``config.auth_overwrite_role_on_login`` is
+      truthy.
+    """
+    if current_role is None:
+        return True
+    if current_role == mapped_role:
+        return False
+    return bool(getattr(config, "auth_overwrite_role_on_login", False))
+
+
 @dataclass
 class UserInfo:
     external_id: str | None = None

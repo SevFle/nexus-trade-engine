@@ -441,3 +441,121 @@ class TestMappedRoleFlowsToRequireRole:
                 f"minimum={minimum_required}; expected {expected_status}, "
                 f"got {resp.status_code}"
             )
+
+
+# ---------------------------------------------------------------------------
+# 7. _should_overwrite_role helper (SEV-741 follow-up)
+# ---------------------------------------------------------------------------
+
+
+class _SettingsStub:
+    """Minimal stand-in for ``engine.config.Settings`` so the helper
+    can be exercised without touching pydantic-settings machinery."""
+
+    def __init__(self, *, overwrite: bool) -> None:
+        self.auth_overwrite_role_on_login = overwrite
+
+
+class TestShouldOverwriteRoleHelper:
+    """``_should_overwrite_role`` centralizes the opt-in policy that
+    guards every federated provider from silently mutating
+    ``user.role`` on each login. Pinned here in isolation so the
+    policy can be reviewed independently of the providers that
+    consume it."""
+
+    def _call(self, current_role, mapped_role, *, overwrite: bool):
+        from engine.api.auth.base import _should_overwrite_role
+
+        return _should_overwrite_role(
+            current_role, mapped_role, _SettingsStub(overwrite=overwrite)
+        )
+
+    def test_new_user_always_returns_true_when_opted_in(self):
+        """First-time user creation: no prior role to preserve."""
+        assert self._call(None, "user", overwrite=True) is True
+
+    def test_new_user_always_returns_true_when_opted_out(self):
+        """Even when overwrite is disabled, brand-new users must still
+        receive an initial role — ``None`` short-circuits the policy."""
+        assert self._call(None, "admin", overwrite=False) is True
+
+    def test_same_role_returns_false_when_opted_in(self):
+        """No-op write would just create audit noise; helper returns
+        False so providers skip the flush."""
+        assert self._call("admin", "admin", overwrite=True) is False
+
+    def test_same_role_returns_false_when_opted_out(self):
+        assert self._call("user", "user", overwrite=False) is False
+
+    def test_different_role_returns_false_when_opted_out(self):
+        """SEV-741: default policy is to PRESERVE the previously-granted
+        local role — operators must opt in to IdP-driven sync."""
+        assert self._call("user", "admin", overwrite=False) is False
+
+    def test_different_role_returns_true_when_opted_in(self):
+        """When the operator has opted in, the helper allows the
+        overwrite so providers can sync the IdP-asserted role."""
+        assert self._call("user", "admin", overwrite=True) is True
+
+    def test_demotion_blocked_when_opted_out(self):
+        """IdP must not be able to *downgrade* a privileged user
+        without operator opt-in either (the SEV-741 setting guards
+        both escalation and demotion)."""
+        assert self._call("admin", "user", overwrite=False) is False
+
+    def test_demotion_allowed_when_opted_in(self):
+        assert self._call("admin", "user", overwrite=True) is True
+
+    def test_missing_setting_attribute_defaults_to_false(self):
+        """Defence-in-depth: a config object that doesn't expose the
+        setting at all must fall back to the safe default (no
+        overwrite)."""
+        from engine.api.auth.base import _should_overwrite_role
+
+        class _BareConfig:
+            pass
+
+        assert _should_overwrite_role("user", "admin", _BareConfig()) is False
+
+    def test_non_bool_truthy_setting_allows_overwrite(self):
+        """Pydantic coerces ``"true"``/``1``; the helper just calls
+        ``bool()`` so any truthy value enables the policy."""
+        from engine.api.auth.base import _should_overwrite_role
+
+        class _TruthyConfig:
+            auth_overwrite_role_on_login = 1  # truthy, not bool
+
+        assert _should_overwrite_role("user", "admin", _TruthyConfig()) is True
+
+
+# ---------------------------------------------------------------------------
+# 8. Cross-provider: every federated provider goes through the helper
+# ---------------------------------------------------------------------------
+
+
+class TestEveryProviderGoesThroughHelper:
+    """Static-analysis style guard: each federated provider module must
+    import the helper. Catches accidental revert / re-implementation
+    that bypasses the centralized SEV-741 policy."""
+
+    @pytest.mark.parametrize(
+        ("module_path", "class_name"),
+        [
+            ("engine.api.auth.ldap", "LDAPAuthProvider"),
+            ("engine.api.auth.oidc", "OIDCAuthProvider"),
+            ("engine.api.auth.google", "GoogleAuthProvider"),
+            ("engine.api.auth.github_oauth", "GitHubAuthProvider"),
+        ],
+    )
+    def test_provider_imports_should_overwrite_role(self, module_path, class_name):
+        import importlib
+        import inspect
+
+        mod = importlib.import_module(module_path)
+        # Import is reflected in the module's source text.
+        assert "_should_overwrite_role" in inspect.getsource(mod), (
+            f"{module_path} must import _should_overwrite_role from "
+            "engine.api.auth.base (SEV-741)."
+        )
+        # The provider class still exists.
+        assert hasattr(mod, class_name)

@@ -14,9 +14,16 @@ tight per-route rate limit configured in ``engine/app.py``.
 Sanitization (defence-in-depth even though structlog's default JSON
 renderer would already escape these):
 
-- CRLF and ANSI escape sequences are stripped from every inbound
-  string before logging — guards against log-line forging in plain-
-  text renderers and terminal-escape injection when humans tail logs.
+- ASCII control characters (CR, LF, NUL, ESC, DEL, etc.) **and** the
+  Unicode C1 control-character range (U+0080-U+009F) are stripped from
+  every inbound string before logging. The C1 range covers terminal-
+  control sequences that some terminals interpret even when the ESC
+  byte is not present (e.g. ``\u009b`` is a legacy CSI lead byte on
+  8-bit-clean terminals). Both are collapsed to a single space so
+  human-readable text remains legible.
+- ANSI CSI / OSC escape sequences (which depend on the ESC byte
+  remaining intact to match) are dropped first; the broader control-
+  character sweep runs second.
 - Caller-supplied ``error_id`` must parse as a UUID; arbitrary opaque
   strings are rejected so an attacker cannot collide with a real
   server-generated correlation id.
@@ -42,17 +49,24 @@ logger = structlog.get_logger()
 
 _MAX_TEXT = 64 * 1024  # 64 KiB cap per text field — guard against log-bombing.
 
-# Strips ASCII control chars (CR, LF, NUL, etc.) and CSI / OSC ANSI
-# escape sequences. Pre-compiled at import time.
+# Strips ASCII control chars (CR, LF, NUL, DEL, etc.), Unicode C1
+# control chars (U+0080-U+009F), and CSI / OSC ANSI escape sequences.
+# Pre-compiled at import time. The C1 range matters because some
+# 8-bit-clean terminals interpret U+0080-U+009F as terminal-control
+# bytes (e.g. U+009B acts as CSI) - dropping them is defence-in-depth
+# against terminal-escape injection when humans tail raw logs.
 _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
-_CTRL_RE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f]")  # keep \t, drop LF/CR/etc.
+# Keep \t (useful in stack traces), drop the rest of C0 (U+0000-U+001F
+# minus \t) and DEL (U+007F) plus the C1 range (U+0080-U+009F).
+_CTRL_RE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f]")
 
 
 def _scrub(value: str | None) -> str | None:
     if value is None:
         return None
     # Drop ANSI sequences first (need the ESC byte intact to match),
-    # then collapse remaining control characters into spaces.
+    # then collapse remaining ASCII + Unicode C1 control characters
+    # into spaces.
     return _CTRL_RE.sub(" ", _ANSI_RE.sub("", value))
 
 

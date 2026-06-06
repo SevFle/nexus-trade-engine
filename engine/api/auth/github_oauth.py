@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from sqlalchemy import select
 
-from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo
+from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo, _should_overwrite_role
 from engine.config import settings
 from engine.db.models import User
 
@@ -67,6 +67,13 @@ class GitHubAuthProvider(IAuthProvider):
         if not github_id:
             return AuthResult(success=False, error="Incomplete GitHub profile")
 
+        # GitHub's OAuth scope (``user:email``) does not surface
+        # privilege claims; every GitHub user begins life as the
+        # default "user" role. The mapped_role is computed
+        # unconditionally so the ``_should_overwrite_role`` policy
+        # below has a consistent input.
+        mapped_role = "user"
+
         result = await db.execute(
             select(User).where(User.auth_provider == "github", User.external_id == github_id)
         )
@@ -84,7 +91,7 @@ class GitHubAuthProvider(IAuthProvider):
                 email=email,
                 hashed_password=None,
                 display_name=name,
-                role="user",
+                role=mapped_role,
                 auth_provider="github",
                 external_id=github_id,
             )
@@ -92,6 +99,18 @@ class GitHubAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.github.user_created", user_id=str(user.id))
+        elif _should_overwrite_role(user.role, mapped_role, settings):
+            # SEV-741: only overwrite an existing local role when the
+            # operator has explicitly opted in via
+            # ``auth_overwrite_role_on_login``.
+            logger.info(
+                "auth.github.role_overwritten",
+                user_id=str(user.id),
+                previous_role=user.role,
+                new_role=mapped_role,
+            )
+            user.role = mapped_role
+            await db.flush()
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")

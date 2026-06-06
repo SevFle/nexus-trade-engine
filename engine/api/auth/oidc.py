@@ -7,7 +7,7 @@ import jwt
 import structlog
 from sqlalchemy import select
 
-from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo
+from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo, _should_overwrite_role
 from engine.config import settings
 from engine.db.models import User
 
@@ -117,6 +117,10 @@ class OIDCAuthProvider(IAuthProvider):
         if not oidc_id or not email:
             return AuthResult(success=False, error="Incomplete OIDC profile")
 
+        mapped_role = "user"
+        if isinstance(raw_roles, list):
+            mapped_role = self.map_roles(raw_roles)
+
         result = await db.execute(
             select(User).where(User.auth_provider == "oidc", User.external_id == oidc_id)
         )
@@ -129,10 +133,6 @@ class OIDCAuthProvider(IAuthProvider):
                 return AuthResult(
                     success=False, error="Email already registered with a different provider"
                 )
-
-            mapped_role = "user"
-            if isinstance(raw_roles, list):
-                mapped_role = self.map_roles(raw_roles)
 
             user = User(
                 email=email,
@@ -147,6 +147,18 @@ class OIDCAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.oidc.user_created", user_id=str(user.id))
+        elif _should_overwrite_role(user.role, mapped_role, settings):
+            # SEV-741: only overwrite an existing local role when the
+            # operator has explicitly opted in via
+            # ``auth_overwrite_role_on_login``.
+            logger.info(
+                "auth.oidc.role_overwritten",
+                user_id=str(user.id),
+                previous_role=user.role,
+                new_role=mapped_role,
+            )
+            user.role = mapped_role
+            await db.flush()
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")

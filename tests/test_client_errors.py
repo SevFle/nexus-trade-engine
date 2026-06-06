@@ -160,3 +160,41 @@ class TestSanitization:
             == "https://app.example/dash"
         )
         assert _strip_query(None) is None
+
+    def test_scrub_strips_unicode_c1_control_chars(self):
+        """The C1 range (U+0080-U+009F) is interpreted as terminal-
+        control bytes by some 8-bit-clean terminals (notably U+009B
+        acting as CSI). The scrubber must collapse them to spaces
+        alongside the ASCII C0 range."""
+        from engine.api.routes.client_errors import _scrub
+
+        # U+009B is the legacy CSI lead byte. The two-byte ESC+'[' form
+        # is handled by the ANSI regex; the single-byte form must be
+        # collapsed by the C1-aware _CTRL_RE.
+        assert "\u009b" not in _scrub("before\u009bafter")
+        # Full C1 sweep: each of the 6 control bytes becomes one space.
+        assert _scrub("a\x80\x81\x82\x83\x9e\x9fb") == "a" + (" " * 6) + "b"
+        # Mixed ASCII + C1 + ANSI: the ESC-prefixed sequence is dropped
+        # by _ANSI_RE, the lone C1 byte by _CTRL_RE. The trailing literal
+        # "[0m" has no ESC byte to bind to so it survives (harmlessly).
+        assert _scrub("\x1b[31m\x85red") == " red"
+        # Tab is still preserved.
+        assert "\t" in _scrub("keep\ttabs")
+
+    def test_ctrl_regex_covers_c1_range(self):
+        """Programmatic guard: ``_CTRL_RE`` must match every codepoint
+        in U+0080-U+009F so a future refactor can't silently narrow
+        the regex back to ASCII-only."""
+        from engine.api.routes.client_errors import _CTRL_RE
+
+        for codepoint in range(0x80, 0xA0):
+            assert _CTRL_RE.search(chr(codepoint)) is not None, (
+                f"U+{codepoint:04X} must be matched by _CTRL_RE"
+            )
+
+    def test_ctrl_regex_preserves_tab(self):
+        """Tabs in stack traces are useful; the regex must not strip
+        them."""
+        from engine.api.routes.client_errors import _CTRL_RE
+
+        assert _CTRL_RE.search("\t") is None
