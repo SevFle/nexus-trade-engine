@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
@@ -7,6 +8,37 @@ from typing import Any
 import structlog
 
 logger = structlog.get_logger()
+
+
+# Maximum length for any single role string included in log payloads.
+# External Identity-Provider (IdP) group DN strings can be arbitrarily
+# long; capping the logged value prevents log-injection / disk-exhaustion
+# attacks where a malicious IdP feeds oversized payloads.
+_MAX_LOGGED_ROLE_LEN = 256
+
+# Pattern that matches ASCII control characters (0x00-0x1F and 0x7F)
+# excluding the horizontal tab (0x09) which is generally benign inside
+# log payloads. Used to scrub CR/LF and similar control characters that
+# could be used for log injection / terminal escape attacks.
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f]")
+
+
+def _sanitize_role_for_log(role: str) -> str:
+    """Sanitize a single role string before including it in log records.
+
+    - Strip ASCII control characters (CR/LF, NUL, etc.) so that a
+      malicious upstream IdP cannot perform log injection by embedding
+      line breaks or terminal escape sequences in a role/group name.
+    - Cap the length to ``_MAX_LOGGED_ROLE_LEN`` to bound log volume and
+      protect downstream aggregators from pathologically long inputs.
+
+    Non-string inputs are coerced to ``str`` and then sanitized.
+    """
+    text = role if isinstance(role, str) else str(role)
+    text = _CONTROL_CHARS_RE.sub("", text)
+    if len(text) > _MAX_LOGGED_ROLE_LEN:
+        text = text[:_MAX_LOGGED_ROLE_LEN] + "…"
+    return text
 
 
 @dataclass
@@ -51,6 +83,13 @@ class IAuthProvider(ABC):
         misconfigurations. Previously ``viewer`` was silently promoted to
         ``user`` and ``quant_dev`` to ``developer``, which constituted a
         silent privilege escalation (SEV-741).
+
+        Least-privilege fallback: when the input list is empty or every
+        supplied role is unrecognized, the function returns ``viewer``
+        (the lowest-privilege role in the hierarchy). Returning ``user``
+        here would have granted write privileges to an attacker who
+        controls upstream role assertions without ever having a
+        recognized role claim validated.
         """
         role_priority: dict[str, int] = {
             "viewer": 0,
@@ -76,11 +115,14 @@ class IAuthProvider(ABC):
         # only when the entire set is unrecognized. This surfaces partial
         # misconfigurations (e.g. one stale group name alongside valid ones).
         if unrecognized:
+            # Sanitize each raw role string before logging to prevent log
+            # injection (CR/LF, terminal escapes) and bound log volume.
+            sanitized_unrecognized = [_sanitize_role_for_log(r) for r in unrecognized]
             logger.warning(
                 "auth.map_roles.unrecognized_roles",
                 provider=self.name,
-                unrecognized=unrecognized,
+                unrecognized=sanitized_unrecognized,
                 recognized=recognized,
-                mapped=best if best is not None else "user",
+                mapped=best if best is not None else "viewer",
             )
-        return best if best is not None else "user"
+        return best if best is not None else "viewer"

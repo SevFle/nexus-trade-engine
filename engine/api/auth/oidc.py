@@ -58,65 +58,64 @@ class OIDCAuthProvider(IAuthProvider):
             self._jwks_cache = resp.json()
         return self._jwks_cache
 
-    async def authenticate(self, **kwargs: Any) -> AuthResult:
-        code = kwargs.get("code")
-        db: AsyncSession | None = kwargs.get("db")
-        if not code or db is None:
-            return AuthResult(success=False, error="Authorization code and db session required")
+    async def _exchange_and_verify(self, code: str) -> dict[str, Any]:
+        """Exchange an authorization code for an id_token and verify it.
 
-        try:
-            import httpx
+        Returns the verified JWT claims on success and raises on any
+        token-exchange or signature-verification failure.
+        """
+        import httpx
 
-            discovery = await self._get_discovery()
-            token_endpoint = discovery["token_endpoint"]
+        discovery = await self._get_discovery()
+        token_endpoint = discovery["token_endpoint"]
 
-            async with httpx.AsyncClient() as client:
-                token_resp = await client.post(
-                    token_endpoint,
-                    data={
-                        "code": code,
-                        "client_id": settings.oidc_client_id,
-                        "client_secret": settings.oidc_client_secret,
-                        "redirect_uri": settings.oidc_redirect_uri,
-                        "grant_type": "authorization_code",
-                    },
-                )
-                token_resp.raise_for_status()
-                tokens = token_resp.json()
-
-            id_token = tokens.get("id_token", "")
-            jwks = await self._get_jwks()
-            unverified_header = jwt.get_unverified_header(id_token)
-            kid = unverified_header.get("kid")
-            signing_key = None
-            for key_data in jwks.get("keys", []):
-                if key_data.get("kid") == kid:
-                    signing_key = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
-                    break
-            if signing_key is None:
-                msg = f"No matching key found for kid={kid}"
-                raise ValueError(msg)
-            claims_data = jwt.decode(
-                id_token,
-                signing_key,
-                algorithms=["RS256"],
-                audience=settings.oidc_client_id,
+        async with httpx.AsyncClient() as client:
+            token_resp = await client.post(
+                token_endpoint,
+                data={
+                    "code": code,
+                    "client_id": settings.oidc_client_id,
+                    "client_secret": settings.oidc_client_secret,
+                    "redirect_uri": settings.oidc_redirect_uri,
+                    "grant_type": "authorization_code",
+                },
             )
+            token_resp.raise_for_status()
+            tokens = token_resp.json()
 
-        except Exception as exc:
-            logger.exception("auth.oidc.failed", error=str(exc))
-            return AuthResult(success=False, error="OIDC authentication failed")
-
-        oidc_id = claims_data.get("sub")
-        email = claims_data.get("email", "")
-        name = claims_data.get("name") or claims_data.get(
-            "preferred_username", email.split("@")[0]
+        id_token = tokens.get("id_token", "")
+        jwks = await self._get_jwks()
+        unverified_header = jwt.get_unverified_header(id_token)
+        kid = unverified_header.get("kid")
+        signing_key = None
+        for key_data in jwks.get("keys", []):
+            if key_data.get("kid") == kid:
+                signing_key = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
+                break
+        if signing_key is None:
+            msg = f"No matching key found for kid={kid}"
+            raise ValueError(msg)
+        return jwt.decode(
+            id_token,
+            signing_key,
+            algorithms=["RS256"],
+            audience=settings.oidc_client_id,
         )
-        raw_roles = claims_data.get(settings.oidc_role_claim, [])
 
-        if not oidc_id or not email:
-            return AuthResult(success=False, error="Incomplete OIDC profile")
+    async def _resolve_oidc_user(
+        self,
+        db: AsyncSession,
+        oidc_id: str,
+        email: str,
+        name: str,
+        raw_roles: Any,
+    ) -> User | str:
+        """Find or create the local user for an OIDC subject.
 
+        Returns the resolved :class:`User` on success, or an error string
+        if the user could not be created (e.g. email collision with a
+        different provider).
+        """
         result = await db.execute(
             select(User).where(User.auth_provider == "oidc", User.external_id == oidc_id)
         )
@@ -126,11 +125,9 @@ class OIDCAuthProvider(IAuthProvider):
             existing = await db.execute(select(User).where(User.email == email))
             existing_user = existing.scalar_one_or_none()
             if existing_user is not None:
-                return AuthResult(
-                    success=False, error="Email already registered with a different provider"
-                )
+                return "Email already registered with a different provider"
 
-            mapped_role = "user"
+            mapped_role = "viewer"
             if isinstance(raw_roles, list):
                 mapped_role = self.map_roles(raw_roles)
 
@@ -147,6 +144,62 @@ class OIDCAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.oidc.user_created", user_id=str(user.id))
+            return user
+
+        # Existing user path: optionally re-map and overwrite the
+        # stored role based on the latest IdP assertion.  This is
+        # gated on ``auth_overwrite_role_on_login`` (default False)
+        # so that a misconfigured or compromised upstream provider
+        # cannot silently downgrade or escalate a previously-granted
+        # local role on the next federated login (SEV-741).
+        idp_role: str | None = None
+        if isinstance(raw_roles, list):
+            idp_role = self.map_roles(raw_roles)
+        if idp_role is not None and idp_role != user.role:
+            if settings.auth_overwrite_role_on_login:
+                logger.info(
+                    "auth.oidc.role_overwritten",
+                    user_id=str(user.id),
+                    previous_role=user.role,
+                    new_role=idp_role,
+                )
+                user.role = idp_role
+                await db.flush()
+            else:
+                logger.info(
+                    "auth.oidc.role_overwrite_skipped",
+                    user_id=str(user.id),
+                    existing_role=user.role,
+                    idp_role=idp_role,
+                )
+        return user
+
+    async def authenticate(self, **kwargs: Any) -> AuthResult:
+        code = kwargs.get("code")
+        db: AsyncSession | None = kwargs.get("db")
+        if not code or db is None:
+            return AuthResult(success=False, error="Authorization code and db session required")
+
+        try:
+            claims_data = await self._exchange_and_verify(code)
+        except Exception as exc:
+            logger.exception("auth.oidc.failed", error=str(exc))
+            return AuthResult(success=False, error="OIDC authentication failed")
+
+        oidc_id = claims_data.get("sub")
+        email = claims_data.get("email", "")
+        name = claims_data.get("name") or claims_data.get(
+            "preferred_username", email.split("@")[0]
+        )
+        raw_roles = claims_data.get(settings.oidc_role_claim, [])
+
+        if not oidc_id or not email:
+            return AuthResult(success=False, error="Incomplete OIDC profile")
+
+        resolved = await self._resolve_oidc_user(db, oidc_id, email, name, raw_roles)
+        if isinstance(resolved, str):
+            return AuthResult(success=False, error=resolved)
+        user: User = resolved
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")
