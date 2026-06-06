@@ -7,7 +7,7 @@ import jwt
 import structlog
 from sqlalchemy import select
 
-from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo
+from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo, sanitize_role_for_log
 from engine.config import settings
 from engine.db.models import User
 
@@ -147,6 +147,12 @@ class OIDCAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.oidc.user_created", user_id=str(user.id))
+        else:
+            # SEV-741: existing-user role sync is gated on the
+            # ``auth_overwrite_role_on_login`` setting. Default False
+            # preserves the previously-granted local role; operators who
+            # want strict IdP-authoritative roles must opt in.
+            await self._maybe_sync_existing_user_role(user, raw_roles, db)
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")
@@ -162,6 +168,46 @@ class OIDCAuthProvider(IAuthProvider):
                 raw_claims=claims_data,
             ),
         )
+
+    async def _maybe_sync_existing_user_role(
+        self,
+        user: User,
+        raw_roles: object,
+        db: AsyncSession,
+    ) -> None:
+        """Apply ``auth_overwrite_role_on_login`` to an existing user.
+
+        Extracted from :meth:`authenticate` so the conditional-overwrite
+        branching does not push the main handler over ruff's complexity
+        budget.  The IdP must have asserted a non-empty list of roles;
+        otherwise no sync attempt is made (the absence of a claim is
+        not an assertion of "no roles"). When the operator flag is True
+        the user's role is overwritten and a ``role_overwritten`` info
+        event is logged; otherwise the current role is preserved and a
+        ``role_preserved`` debug event is logged.
+        """
+        if not isinstance(raw_roles, list) or not raw_roles:
+            return
+        idp_role = self.map_roles(raw_roles)
+        if idp_role == user.role:
+            return
+        if settings.auth_overwrite_role_on_login:
+            previous_role = user.role
+            user.role = idp_role
+            await db.flush()
+            logger.info(
+                "auth.oidc.role_overwritten",
+                user_id=str(user.id),
+                previous_role=sanitize_role_for_log(previous_role),
+                new_role=sanitize_role_for_log(idp_role),
+            )
+        else:
+            logger.debug(
+                "auth.oidc.role_preserved",
+                user_id=str(user.id),
+                preserved_role=sanitize_role_for_log(user.role),
+                idp_role=sanitize_role_for_log(idp_role),
+            )
 
     async def get_authorize_url(self, state: str = "") -> str:
         discovery = await self._get_discovery()

@@ -21,6 +21,8 @@ This module pins the new behavior:
 2. ``auth_overwrite_role_on_login`` defaults to ``False``.
 3. A warning is emitted for **any** unrecognized external role (not
    only when the entire set is unrecognized).
+4. Fallback role is ``"viewer"`` (lowest-privilege) — see
+   test_auth_role_security_hardening.py for the dedicated suite.
 """
 
 from __future__ import annotations
@@ -131,12 +133,12 @@ class TestNoImplicitPromotion:
             == "admin"
         )
 
-    def test_empty_input_returns_user(self):
-        assert _ConcreteProvider().map_roles([]) == "user"
+    def test_empty_input_returns_viewer(self):
+        assert _ConcreteProvider().map_roles([]) == "viewer"
 
-    def test_all_unrecognized_falls_back_to_user(self):
+    def test_all_unrecognized_falls_back_to_viewer(self):
         assert (
-            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "user"
+            _ConcreteProvider().map_roles(["superuser", "root", "god"]) == "viewer"
         )
 
     def test_partial_unrecognized_still_uses_recognized(self):
@@ -153,9 +155,9 @@ class TestNoImplicitPromotion:
 
     def test_whitespace_only_role_is_unrecognized(self):
         """A whitespace-only string is normalized to the empty string,
-        which is not a known role.  Should fall through to user without
+        which is not a known role.  Should fall through to viewer without
         crashing."""
-        assert _ConcreteProvider().map_roles(["   "]) == "user"
+        assert _ConcreteProvider().map_roles(["   "]) == "viewer"
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +187,9 @@ class TestUnrecognizedRoleWarning:
             def info(self, _event, **kwargs):  # pragma: no cover
                 calls.append({"event": _event, "level": "info", **kwargs})
 
+            def debug(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, "level": "debug", **kwargs})
+
             def error(self, _event, **kwargs):  # pragma: no cover
                 calls.append({"event": _event, "level": "error", **kwargs})
 
@@ -196,7 +201,7 @@ class TestUnrecognizedRoleWarning:
     def test_warning_fires_for_purely_unrecognized_set(self, monkeypatch):
         calls = self._patch(monkeypatch)
         p = _ConcreteProvider()
-        assert p.map_roles(["totally_bogus"]) == "user"
+        assert p.map_roles(["totally_bogus"]) == "viewer"
         assert any(c["event"] == "auth.map_roles.unrecognized_roles" for c in calls)
 
     def test_warning_fires_when_any_role_is_unrecognized(self, monkeypatch):
@@ -218,10 +223,17 @@ class TestUnrecognizedRoleWarning:
         assert calls == []
 
     def test_warning_does_not_fire_for_empty_input(self, monkeypatch):
+        """The unrecognized-role warning must NOT fire for an empty
+        external list (no role was "unrecognized"; nothing was inspected).
+        The dedicated ``fallback_role`` warning covers this case."""
         calls = self._patch(monkeypatch)
         p = _ConcreteProvider()
-        assert p.map_roles([]) == "user"
-        assert calls == []
+        assert p.map_roles([]) == "viewer"
+        # No unrecognized_roles event; fallback_role event is tested in
+        # the dedicated suite.
+        assert not any(
+            c["event"] == "auth.map_roles.unrecognized_roles" for c in calls
+        )
 
     def test_warning_includes_provider_name(self, monkeypatch):
         """Operators need to know which provider surfaced the

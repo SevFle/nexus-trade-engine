@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from sqlalchemy import select
 
-from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo
+from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo, sanitize_role_for_log
 from engine.config import settings
 from engine.db.models import User
 
@@ -103,8 +103,12 @@ class LDAPAuthProvider(IAuthProvider):
             await db.refresh(user)
             logger.info("auth.ldap.user_created", user_id=str(user.id))
         elif user.role != mapped_role:
-            user.role = mapped_role
-            await db.flush()
+            # SEV-741: only overwrite the existing user's role when the
+            # operator has explicitly opted in via
+            # ``auth_overwrite_role_on_login``. Default False preserves
+            # the previously-granted local role against a misconfigured
+            # or compromised upstream IdP.
+            await self._sync_existing_user_role(user, mapped_role, db)
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")
@@ -119,3 +123,37 @@ class LDAPAuthProvider(IAuthProvider):
                 roles=[user.role],
             ),
         )
+
+    async def _sync_existing_user_role(
+        self,
+        user: User,
+        idp_role: str,
+        db: AsyncSession,
+    ) -> None:
+        """Apply ``auth_overwrite_role_on_login`` to a single user.
+
+        Extracted from :meth:`authenticate` so the branching complexity
+        of the conditional-overwrite logic does not bloat the main
+        request handler.  When the operator flag is True the user's
+        role is overwritten with the IdP-asserted role and an
+        ``auth.ldap.role_overwritten`` info event is logged; otherwise
+        the current role is preserved and a ``role_preserved`` debug
+        event is logged.
+        """
+        if settings.auth_overwrite_role_on_login:
+            previous_role = user.role
+            user.role = idp_role
+            await db.flush()
+            logger.info(
+                "auth.ldap.role_overwritten",
+                user_id=str(user.id),
+                previous_role=sanitize_role_for_log(previous_role),
+                new_role=sanitize_role_for_log(idp_role),
+            )
+        else:
+            logger.debug(
+                "auth.ldap.role_preserved",
+                user_id=str(user.id),
+                preserved_role=sanitize_role_for_log(user.role),
+                idp_role=sanitize_role_for_log(idp_role),
+            )
