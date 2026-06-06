@@ -21,6 +21,17 @@ renderer would already escape these):
   byte is not present (e.g. ``\u009b`` is a legacy CSI lead byte on
   8-bit-clean terminals). Both are collapsed to a single space so
   human-readable text remains legible.
+- Bidirectional-formatting overrides (``U+202A-U+202E`` — including
+  the well-known RTL override ``U+202E``) and the directional isolates
+  ``U+2066-U+2069`` are also stripped. A leading ``\u202E`` would
+  otherwise cause many terminal emulators and web-based log viewers
+  to render the rest of the line right-to-left, hiding a payload
+  behind legitimate-looking text (Trojan Source / CVE-2021-42574
+  style). Removing them eliminates that class of visual deception.
+- Zero-width characters (``\u200B`` ZWSP, ``\u200C`` ZWNJ, ``\u200D``
+  ZWJ) and the byte-order mark / ZWNBSP (``\uFEFF``) are dropped too:
+  they are invisible to humans, can carry steganographic payloads,
+  and can confuse downstream substring search / dedup logic.
 - ANSI CSI / OSC escape sequences (which depend on the ESC byte
   remaining intact to match) are dropped first; the broader control-
   character sweep runs second.
@@ -49,24 +60,42 @@ logger = structlog.get_logger()
 
 _MAX_TEXT = 64 * 1024  # 64 KiB cap per text field — guard against log-bombing.
 
-# Strips ASCII control chars (CR, LF, NUL, DEL, etc.), Unicode C1
-# control chars (U+0080-U+009F), and CSI / OSC ANSI escape sequences.
-# Pre-compiled at import time. The C1 range matters because some
-# 8-bit-clean terminals interpret U+0080-U+009F as terminal-control
-# bytes (e.g. U+009B acts as CSI) - dropping them is defence-in-depth
-# against terminal-escape injection when humans tail raw logs.
+# Strips ASCII control chars (CR, LF, NUL, DEL, etc.), the Unicode C1
+# control range (U+0080-U+009F), Unicode directional overrides /
+# isolates (U+202A-U+202E, U+2066-U+2069), zero-width chars
+# (U+200B-U+200D), the BOM / ZWNBSP (U+FEFF), and CSI / OSC ANSI
+# escape sequences. Pre-compiled at import time.
+#
+# The C1 range matters because some 8-bit-clean terminals interpret
+# U+0080-U+009F as terminal-control bytes (e.g. U+009B acts as CSI)
+# — dropping them is defence-in-depth against terminal-escape
+# injection when humans tail raw logs. The directional / zero-width
+# extensions close Trojan-Source-style (CVE-2021-42574) visual-
+# deception and steganographic-payload vectors.
 _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
-# Keep \t (useful in stack traces), drop the rest of C0 (U+0000-U+001F
-# minus \t) and DEL (U+007F) plus the C1 range (U+0080-U+009F).
-_CTRL_RE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f]")
+# Keep \t (useful in stack traces). Drop:
+#   - the rest of C0 (U+0000-U+001F minus \t) and DEL (U+007F)
+#   - the C1 range (U+0080-U+009F) — 8-bit-clean terminals may
+#     interpret these as terminal-control bytes (U+009B = CSI)
+#   - directional overrides (U+202A-U+202E, including the RTL
+#     override U+202E) and directional isolates (U+2066-U+2069)
+#     — these silently change render direction in terminals and
+#     web-based log viewers (Trojan Source / CVE-2021-42574)
+#   - zero-width chars (U+200B-U+200D) and BOM / ZWNBSP (U+FEFF)
+#     — invisible, useful for steganography and dedup-evading
+#     collisions in downstream consumers
+_CTRL_RE = re.compile(
+    r"[\x00-\x08\x0a-\x1f\x7f-\x9f\u200b-\u200d\u202a-\u202e\u2066-\u2069\ufeff]"
+)
 
 
 def _scrub(value: str | None) -> str | None:
     if value is None:
         return None
     # Drop ANSI sequences first (need the ESC byte intact to match),
-    # then collapse remaining ASCII + Unicode C1 control characters
-    # into spaces.
+    # then collapse remaining ASCII + Unicode C1 control characters,
+    # directional overrides, and zero-width / BOM characters into
+    # spaces.
     return _CTRL_RE.sub(" ", _ANSI_RE.sub("", value))
 
 
