@@ -535,7 +535,9 @@ class TestShouldOverwriteRoleHelper:
 
 class TestEveryProviderGoesThroughHelper:
     """Static-analysis style guard: each federated provider module must
-    import the helper. Catches accidental revert / re-implementation
+    delegate role-overwrite decisions to the centralized
+    ``IAuthProvider.apply_role_mapping`` helper instead of mutating
+    ``user.role`` directly. Catches accidental revert / re-implementation
     that bypasses the centralized SEV-741 policy."""
 
     @pytest.mark.parametrize(
@@ -547,15 +549,23 @@ class TestEveryProviderGoesThroughHelper:
             ("engine.api.auth.github_oauth", "GitHubAuthProvider"),
         ],
     )
-    def test_provider_imports_should_overwrite_role(self, module_path, class_name):
+    def test_provider_calls_apply_role_mapping(self, module_path, class_name):
         import importlib
         import inspect
 
         mod = importlib.import_module(module_path)
-        # Import is reflected in the module's source text.
-        assert "_should_overwrite_role" in inspect.getsource(mod), (
-            f"{module_path} must import _should_overwrite_role from "
-            "engine.api.auth.base (SEV-741)."
+        src = inspect.getsource(mod)
+        # The provider must invoke the centralized helper rather than
+        # assigning to ``user.role`` directly.
+        assert "self.apply_role_mapping" in src, (
+            f"{module_path} must call self.apply_role_mapping(...) for "
+            "role-overwrite decisions (SEV-741)."
+        )
+        # And must no longer mutate user.role directly outside of new-
+        # user construction.
+        assert "user.role = mapped_role" not in src, (
+            f"{module_path} must not assign user.role = mapped_role "
+            "directly; route through self.apply_role_mapping (SEV-741)."
         )
         # The provider class still exists.
         assert hasattr(mod, class_name)

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from sqlalchemy import select
 
-from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo, _should_overwrite_role
+from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo
 from engine.config import settings
 from engine.db.models import User
 
@@ -99,18 +99,11 @@ class GitHubAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.github.user_created", user_id=str(user.id))
-        elif _should_overwrite_role(user.role, mapped_role, settings):
-            # SEV-741: only overwrite an existing local role when the
-            # operator has explicitly opted in via
-            # ``auth_overwrite_role_on_login``.
-            logger.info(
-                "auth.github.role_overwritten",
-                user_id=str(user.id),
-                previous_role=user.role,
-                new_role=mapped_role,
-            )
-            user.role = mapped_role
-            await db.flush()
+        else:
+            # SEV-741: existing-user role mutation is delegated to the
+            # centralized helper so every federated provider applies
+            # the same opt-in policy.
+            await self.apply_role_mapping(user, mapped_role, settings, db)
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")
