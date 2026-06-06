@@ -535,7 +535,8 @@ class TestShouldOverwriteRoleHelper:
 
 class TestEveryProviderGoesThroughHelper:
     """Static-analysis style guard: each federated provider module must
-    import the helper. Catches accidental revert / re-implementation
+    import the centralized role-mapping helper and must not mutate
+    ``user.role`` directly. Catches accidental revert / re-implementation
     that bypasses the centralized SEV-741 policy."""
 
     @pytest.mark.parametrize(
@@ -547,15 +548,288 @@ class TestEveryProviderGoesThroughHelper:
             ("engine.api.auth.github_oauth", "GitHubAuthProvider"),
         ],
     )
-    def test_provider_imports_should_overwrite_role(self, module_path, class_name):
+    def test_provider_imports_apply_role_mapping(self, module_path, class_name):
         import importlib
         import inspect
 
         mod = importlib.import_module(module_path)
         # Import is reflected in the module's source text.
-        assert "_should_overwrite_role" in inspect.getsource(mod), (
-            f"{module_path} must import _should_overwrite_role from "
-            "engine.api.auth.base (SEV-741)."
+        assert "_apply_role_mapping" in inspect.getsource(mod), (
+            f"{module_path} must import _apply_role_mapping from "
+            "engine.api.auth.base (SEV-741 centralized policy)."
         )
         # The provider class still exists.
         assert hasattr(mod, class_name)
+
+    @pytest.mark.parametrize(
+        ("module_path", "class_name"),
+        [
+            ("engine.api.auth.ldap", "LDAPAuthProvider"),
+            ("engine.api.auth.oidc", "OIDCAuthProvider"),
+            ("engine.api.auth.google", "GoogleAuthProvider"),
+            ("engine.api.auth.github_oauth", "GitHubAuthProvider"),
+        ],
+    )
+    def test_provider_does_not_directly_mutate_user_role(
+        self, module_path, class_name
+    ):
+        """After the SEV-741 refactor, providers must not assign to
+        ``user.role`` on the existing-user path — the centralized
+        helper owns the mutation. (New-user creation via the ``User()``
+        constructor is excluded; that path legitimately sets the
+        initial role.)"""
+        import importlib
+        import inspect
+        import re
+
+        mod = importlib.import_module(module_path)
+        source = inspect.getsource(mod)
+
+        # Strip any new-user ``User(role=mapped_role, ...)`` block
+        # before grepping — the constructor legitimately sets the
+        # initial role and is out of scope for this guard.
+        sanitized = re.sub(r"User\([^)]*\)", "User(...)", source, flags=re.DOTALL)
+
+        assert "user.role =" not in sanitized, (
+            f"{module_path} must not assign to user.role directly; route "
+            "the overwrite through _apply_role_mapping instead."
+        )
+        assert hasattr(mod, class_name)
+
+
+# ---------------------------------------------------------------------------
+# 9. Centralized _apply_role_mapping helper (SEV-741 follow-up)
+# ---------------------------------------------------------------------------
+
+
+class _UserStub:
+    """Minimal stand-in for ``engine.db.models.User`` so the helper
+    can be exercised without spinning up SQLAlchemy."""
+
+    def __init__(
+        self,
+        *,
+        role: str | None = "user",
+        auth_provider: str = "test",
+        user_id: int = 1,
+    ) -> None:
+        self.role = role
+        self.auth_provider = auth_provider
+        self.id = user_id
+
+
+class TestApplyRoleMappingHelper:
+    """``_apply_role_mapping`` is the single entry point providers use
+    to mutate ``user.role`` on a federated login. Pinned here in
+    isolation so the policy can be reviewed independently of the
+    providers that consume it."""
+
+    def _call(self, user, mapped_role, *, overwrite: bool):
+        from engine.api.auth.base import _apply_role_mapping
+
+        return _apply_role_mapping(
+            user, mapped_role, _SettingsStub(overwrite=overwrite)
+        )
+
+    def test_returns_true_and_mutates_when_overwrite_allowed(self):
+        u = _UserStub(role="user")
+        assert self._call(u, "admin", overwrite=True) is True
+        assert u.role == "admin"
+
+    def test_returns_false_and_preserves_when_overwrite_blocked(self):
+        u = _UserStub(role="user")
+        assert self._call(u, "admin", overwrite=False) is False
+        assert u.role == "user"
+
+    def test_same_role_is_a_noop_even_when_opted_in(self):
+        """Skip the audit event + write when nothing would change."""
+        u = _UserStub(role="admin")
+        assert self._call(u, "admin", overwrite=True) is False
+        assert u.role == "admin"
+
+    def test_emits_audit_event_when_overwriting(self, monkeypatch):
+        """Successful overwrites must emit the structured log event so
+        operators can audit / alert on IdP-driven role changes."""
+        calls: list[dict[str, object]] = []
+
+        class _Stub:
+            def info(self, _event, **kwargs):
+                calls.append({"event": _event, **kwargs})
+
+            def warning(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, "level": "warning", **kwargs})
+
+        from engine.api.auth import base
+
+        monkeypatch.setattr(base, "logger", _Stub())
+
+        u = _UserStub(role="user", auth_provider="ldap", user_id=42)
+        assert self._call(u, "admin", overwrite=True) is True
+        assert calls, "expected an audit event"
+        event = calls[0]
+        assert event["event"] == "auth.role_overwritten"
+        assert event["previous_role"] == "user"
+        assert event["new_role"] == "admin"
+        assert event["provider"] == "ldap"
+        assert event["user_id"] == "42"
+
+    def test_no_audit_event_when_blocked(self, monkeypatch):
+        calls: list[dict[str, object]] = []
+
+        class _Stub:
+            def info(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, **kwargs})
+
+            def warning(self, _event, **kwargs):  # pragma: no cover
+                calls.append({"event": _event, **kwargs})
+
+        from engine.api.auth import base
+
+        monkeypatch.setattr(base, "logger", _Stub())
+
+        u = _UserStub(role="user")
+        assert self._call(u, "admin", overwrite=False) is False
+        assert calls == []
+
+    def test_demotion_allowed_when_opted_in(self):
+        u = _UserStub(role="admin")
+        assert self._call(u, "user", overwrite=True) is True
+        assert u.role == "user"
+
+    def test_demotion_blocked_when_opted_out(self):
+        u = _UserStub(role="admin")
+        assert self._call(u, "user", overwrite=False) is False
+        assert u.role == "admin"
+
+
+# ---------------------------------------------------------------------------
+# 10. Role sanitization: _CONTROL_CHARS_RE / _MAX_ROLE_LENGTH
+# ---------------------------------------------------------------------------
+
+
+class TestRoleSanitization:
+    """Defence-in-depth on IdP-asserted role strings: control chars
+    are stripped and over-long strings are truncated before the role
+    is considered for persistence. Prevents log-bombing and hidden
+    character smuggling through the audit trail."""
+
+    def test_control_chars_regex_matches_c0_range(self):
+        from engine.api.auth.base import _CONTROL_CHARS_RE
+
+        # NUL through US (0x00..0x1F) — every byte in the C0 range.
+        for code in range(0x20):
+            assert _CONTROL_CHARS_RE.search(chr(code)), (
+                f"C0 control U+{code:04X} must match _CONTROL_CHARS_RE"
+            )
+
+    def test_control_chars_regex_matches_del_and_c1_range(self):
+        from engine.api.auth.base import _CONTROL_CHARS_RE
+
+        # DEL (U+007F) and C1 controls (U+0080..U+009F).
+        for code in range(0x7F, 0xA0):
+            assert _CONTROL_CHARS_RE.search(chr(code)), (
+                f"DEL/C1 control U+{code:04X} must match _CONTROL_CHARS_RE"
+            )
+
+    def test_control_chars_regex_matches_common_invisibles(self):
+        from engine.api.auth.base import _CONTROL_CHARS_RE
+
+        # Zero-width / bidi-override characters enumerated in the regex.
+        for code in (0x200B, 0x200C, 0x200D, 0x200E, 0x200F,
+                     0x202E, 0xFEFF):
+            assert _CONTROL_CHARS_RE.search(chr(code)), (
+                f"Unicode invisible U+{code:04X} must match _CONTROL_CHARS_RE"
+            )
+
+    def test_control_chars_regex_does_not_match_printable_ascii(self):
+        from engine.api.auth.base import _CONTROL_CHARS_RE
+
+        # Printable ASCII (space..tilde) must pass through unchanged.
+        for code in range(0x20, 0x7F):
+            assert not _CONTROL_CHARS_RE.search(chr(code))
+
+    def test_control_chars_regex_does_not_match_normal_letters(self):
+        from engine.api.auth.base import _CONTROL_CHARS_RE
+
+        assert not _CONTROL_CHARS_RE.search("admin")
+        assert not _CONTROL_CHARS_RE.search("portfolio_manager")
+        # Non-ASCII printable letters (e.g. accented Latin) must NOT
+        # match — they are legitimate in some IdP role names.
+        assert not _CONTROL_CHARS_RE.search("rôle")
+
+    def test_sanitize_strips_control_characters(self):
+        from engine.api.auth.base import _sanitize_role
+
+        # NUL embedded between two valid bytes — must be stripped.
+        assert _sanitize_role("ad\x00min") == "admin"
+        # Tab + LF injection attempt — must be stripped.
+        assert _sanitize_role("admin\t\n") == "admin"
+        # Zero-width space prepended — must be stripped.
+        assert _sanitize_role("\u200badmin") == "admin"
+        # BOM + RTL override — must be stripped.
+        assert _sanitize_role("\ufeff\u202eadmin") == "admin"
+
+    def test_sanitize_truncates_overlong_strings(self):
+        from engine.api.auth.base import _MAX_ROLE_LENGTH, _sanitize_role
+
+        # _MAX_ROLE_LENGTH is the cap; verify the constant is sensible
+        # (it must comfortably exceed the longest legitimate role).
+        assert len("portfolio_manager") <= _MAX_ROLE_LENGTH
+        # An input longer than the cap is truncated.
+        long_input = "x" * (_MAX_ROLE_LENGTH + 10)
+        assert len(_sanitize_role(long_input)) == _MAX_ROLE_LENGTH
+        # An input at exactly the cap survives intact.
+        exact = "y" * _MAX_ROLE_LENGTH
+        assert _sanitize_role(exact) == exact
+
+    def test_sanitize_collapses_whitespace_only_to_default(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("   ") == "user"
+        assert _sanitize_role("\t\n") == "user"
+
+    def test_sanitize_handles_non_string_input_defensively(self):
+        from engine.api.auth.base import _sanitize_role
+
+        # A misconfigured IdP could push a list / int / None — collapse
+        # to the safe default instead of raising.
+        assert _sanitize_role(None) == "user"
+        assert _sanitize_role(123) == "user"
+        assert _sanitize_role(["admin"]) == "user"
+
+    def test_sanitize_strips_then_truncates(self):
+        from engine.api.auth.base import _MAX_ROLE_LENGTH, _sanitize_role
+
+        # Control chars embedded inside an overlong string: both
+        # transformations apply, in the right order (strip first,
+        # then truncate).
+        noisy = ("a\x00" * (_MAX_ROLE_LENGTH + 5)) + "tail"
+        cleaned = _sanitize_role(noisy)
+        assert len(cleaned) == _MAX_ROLE_LENGTH
+        assert "\x00" not in cleaned
+
+    def test_apply_role_mapping_sanitizes_before_deciding(self):
+        """Sanitization runs *before* the overwrite-or-skip decision,
+        so a hostile IdP cannot smuggle a hidden byte past the
+        same-role short-circuit."""
+        from engine.api.auth.base import _apply_role_mapping
+
+        u = _UserStub(role="admin")
+        # Same visible bytes as ``u.role`` but with a NUL injected —
+        # must NOT short-circuit as 'same role'; after sanitization
+        # the role still matches, so no overwrite fires. The point is
+        # that the comparison happens on the cleaned value.
+        assert _apply_role_mapping(u, "admin\x00", _SettingsStub(overwrite=True)) is False
+        assert u.role == "admin"
+
+    def test_apply_role_mapping_persists_sanitized_value(self):
+        from engine.api.auth.base import _apply_role_mapping
+
+        u = _UserStub(role="user")
+        # A role with embedded control chars must be cleaned before
+        # being persisted to user.role.
+        assert _apply_role_mapping(
+            u, "ad\x00min", _SettingsStub(overwrite=True)
+        ) is True
+        assert u.role == "admin"
+

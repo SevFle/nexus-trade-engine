@@ -7,7 +7,12 @@ import jwt
 import structlog
 from sqlalchemy import select
 
-from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo, _should_overwrite_role
+from engine.api.auth.base import (
+    AuthResult,
+    IAuthProvider,
+    UserInfo,
+    _apply_role_mapping,
+)
 from engine.config import settings
 from engine.db.models import User
 
@@ -147,17 +152,12 @@ class OIDCAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.oidc.user_created", user_id=str(user.id))
-        elif _should_overwrite_role(user.role, mapped_role, settings):
-            # SEV-741: only overwrite an existing local role when the
-            # operator has explicitly opted in via
-            # ``auth_overwrite_role_on_login``.
-            logger.info(
-                "auth.oidc.role_overwritten",
-                user_id=str(user.id),
-                previous_role=user.role,
-                new_role=mapped_role,
-            )
-            user.role = mapped_role
+        elif _apply_role_mapping(user, mapped_role, settings):
+            # SEV-741: role overwrite is centralized in
+            # ``_apply_role_mapping``; the helper honors
+            # ``auth_overwrite_role_on_login`` and emits the audit
+            # event. We still need to flush the session here so the
+            # mutation is persisted in the current transaction.
             await db.flush()
 
         if not user.is_active:
