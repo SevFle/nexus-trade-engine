@@ -131,24 +131,45 @@ See the [Plugin Developer Guide](docs/PLUGIN_DEV_GUIDE.md) for full documentatio
 
 | Component | Technology |
 |-----------|-----------|
-| Engine | Python 3.11, FastAPI, Celery |
+| Engine | Python 3.12, FastAPI, TaskIQ |
 | Database | PostgreSQL 16, TimescaleDB |
-| Cache | Redis 7 |
+| Cache / Broker | Valkey 8 (Redis-compatible) |
 | Frontend | React 18, Vite, Tailwind CSS |
-| Task Queue | Celery + Redis broker |
-| Containerization | Docker, Docker Compose |
-| Testing | pytest, pytest-asyncio |
+| Task Queue | TaskIQ + Valkey broker |
+| Containerization | Docker (distroless runtime), Docker Compose |
+| Testing | pytest, pytest-asyncio, ruff, basedpyright |
+
+## Documentation
+
+Full engineering documentation lives in [`docs/`](docs/README.md).
+Start there for anything beyond the elevator pitch in this README.
+
+| Audience | Start with |
+|---|---|
+| New engineers | [`docs/architecture/overview.md`](docs/architecture/overview.md) |
+| API consumers | [`docs/api/README.md`](docs/api/README.md) |
+| Operators | [`docs/deployment.md`](docs/deployment.md) → [`docs/operations/slos.md`](docs/operations/slos.md) |
+| Strategy authors | [`docs/PLUGIN_DEV_GUIDE.md`](docs/PLUGIN_DEV_GUIDE.md) |
+| Decision history | [`docs/adr/`](docs/adr/README.md) |
+| Honest gaps | [`docs/known-limitations.md`](docs/known-limitations.md) |
 
 ## Roadmap
 
-- [x] Core architecture scaffold
-- [ ] Plugin SDK v1.0
-- [ ] Backtest engine with full cost model
-- [ ] Paper trading with live data feeds
-- [ ] React dashboard MVP
-- [ ] Strategy marketplace
-- [ ] Live broker integration (Alpaca, IBKR)
-- [ ] Multi-asset support (crypto, forex, options)
+The live roadmap lives in [`STRATEGY.md`](STRATEGY.md). High-level
+status as of the last audit:
+
+- [x] Core architecture scaffold, plugin SDK, auth/RBAC, MFA, webhooks,
+      backtest engine with full cost model, paper trading, legal
+      acceptance, GDPR/CCPA DSR, multi-jurisdiction tax reports, k6
+      load tests, structured logging + OpenTelemetry tracing, API key
+      auth, WebSocket real-time push.
+- [ ] Live broker integration (Alpaca / IBKR) — see
+      [`docs/known-limitations.md`](docs/known-limitations.md).
+- [ ] Multi-strategy orchestration.
+- [ ] Strategy marketplace (registry + signing + install pipeline).
+- [ ] Multi-asset support (crypto, forex, options).
+- [ ] MCP server for LLM-driven strategy authoring.
+- [ ] React dashboard parity with the API surface.
 
 ## License
 
