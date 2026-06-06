@@ -26,10 +26,12 @@ class _ConcreteProvider(IAuthProvider):
 
 class TestRequireRoleEnforcement:
     async def test_quant_dev_accesses_developer_resource_denied(self):
-        """SEV-741: ``quant_dev`` is no longer silently promoted to
-        ``developer``. A user whose upstream IdP only asserts ``quant_dev``
-        must NOT be granted access to ``require_role("developer")``
-        resources — that would be a silent privilege escalation."""
+        """SEV-741 follow-up: ``quant_dev`` is no longer an
+        ALLOWED_ROLES member, so ``map_roles`` collapses it to
+        ``user``. A user whose upstream IdP only asserts
+        ``quant_dev`` must NOT be granted access to
+        ``require_role("developer")`` resources — that would be a
+        silent privilege escalation."""
         app = FastAPI()
 
         @app.get("/dev-only")
@@ -38,7 +40,7 @@ class TestRequireRoleEnforcement:
 
         provider = _ConcreteProvider()
         mapped = provider.map_roles(["quant_dev"])
-        assert mapped == "quant_dev"
+        assert mapped == "user"
 
         fake_user = User(
             id=FAKE_USER_ID,

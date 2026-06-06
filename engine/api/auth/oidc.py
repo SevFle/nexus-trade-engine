@@ -58,12 +58,19 @@ class OIDCAuthProvider(IAuthProvider):
             self._jwks_cache = resp.json()
         return self._jwks_cache
 
-    async def authenticate(self, **kwargs: Any) -> AuthResult:
-        code = kwargs.get("code")
-        db: AsyncSession | None = kwargs.get("db")
-        if not code or db is None:
-            return AuthResult(success=False, error="Authorization code and db session required")
+    def _find_signing_key(self, jwks: dict[str, Any], kid: str | None) -> Any:
+        """Return the JWK whose ``kid`` matches, or ``None``."""
+        for key_data in jwks.get("keys", []):
+            if key_data.get("kid") == kid:
+                return jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
+        return None
 
+    async def _resolve_claims(self, code: str) -> dict[str, Any] | None:
+        """Exchange the authorization code for an ID token and verify it.
+
+        Returns the decoded claims on success, or ``None`` (after
+        logging) if the token exchange or signature verification fails.
+        """
         try:
             import httpx
 
@@ -88,23 +95,28 @@ class OIDCAuthProvider(IAuthProvider):
             jwks = await self._get_jwks()
             unverified_header = jwt.get_unverified_header(id_token)
             kid = unverified_header.get("kid")
-            signing_key = None
-            for key_data in jwks.get("keys", []):
-                if key_data.get("kid") == kid:
-                    signing_key = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
-                    break
+            signing_key = self._find_signing_key(jwks, kid)
             if signing_key is None:
                 msg = f"No matching key found for kid={kid}"
                 raise ValueError(msg)
-            claims_data = jwt.decode(
+            return jwt.decode(
                 id_token,
                 signing_key,
                 algorithms=["RS256"],
                 audience=settings.oidc_client_id,
             )
-
         except Exception as exc:
             logger.exception("auth.oidc.failed", error=str(exc))
+            return None
+
+    async def authenticate(self, **kwargs: Any) -> AuthResult:
+        code = kwargs.get("code")
+        db: AsyncSession | None = kwargs.get("db")
+        if not code or db is None:
+            return AuthResult(success=False, error="Authorization code and db session required")
+
+        claims_data = await self._resolve_claims(code)
+        if claims_data is None:
             return AuthResult(success=False, error="OIDC authentication failed")
 
         oidc_id = claims_data.get("sub")
@@ -117,9 +129,17 @@ class OIDCAuthProvider(IAuthProvider):
         if not oidc_id or not email:
             return AuthResult(success=False, error="Incomplete OIDC profile")
 
-        mapped_role = "user"
-        if isinstance(raw_roles, list):
+        # Normalise the claim shape: a single string is a common IdP
+        # convention (e.g. Auth0 ``namespaces.roles``), wrap it as a
+        # one-element list. Anything that is neither list nor string
+        # (dict, int, …) is treated as an empty claim list and falls
+        # back to the default ``user`` role.
+        if isinstance(raw_roles, str):
+            mapped_role = self.map_roles([raw_roles])
+        elif isinstance(raw_roles, list):
             mapped_role = self.map_roles(raw_roles)
+        else:
+            mapped_role = "user"
 
         result = await db.execute(
             select(User).where(User.auth_provider == "oidc", User.external_id == oidc_id)
@@ -147,21 +167,29 @@ class OIDCAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.oidc.user_created", user_id=str(user.id))
-        elif _should_overwrite_role(user.role, mapped_role, settings):
-            # SEV-741: only overwrite an existing local role when the
-            # operator has explicitly opted in via
-            # ``auth_overwrite_role_on_login``.
-            logger.info(
-                "auth.oidc.role_overwritten",
-                user_id=str(user.id),
-                previous_role=user.role,
-                new_role=mapped_role,
-            )
-            user.role = mapped_role
-            await db.flush()
-
-        if not user.is_active:
-            return AuthResult(success=False, error="Account is disabled")
+        else:
+            # SEV-741 follow-up: gate role mutation on the
+            # ``is_active`` flag FIRST so a disabled account never
+            # produces a role-overwrite audit event (and never
+            # flushes through the DB). Order matters: the prior code
+            # mutated ``user.role`` and only then checked
+            # ``is_active``, which left stale audit trails and meant
+            # a re-activated user would silently pick up the
+            # attacker-controlled IdP role.
+            if not user.is_active:
+                return AuthResult(success=False, error="Account is disabled")
+            if _should_overwrite_role(user.role, mapped_role, settings):
+                # SEV-741: only overwrite an existing local role when the
+                # operator has explicitly opted in via
+                # ``auth_overwrite_role_on_login``.
+                logger.info(
+                    "auth.oidc.role_overwritten",
+                    user_id=str(user.id),
+                    previous_role=user.role,
+                    new_role=mapped_role,
+                )
+                user.role = mapped_role
+                await db.flush()
 
         return AuthResult(
             success=True,

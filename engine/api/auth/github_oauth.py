@@ -99,21 +99,26 @@ class GitHubAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.github.user_created", user_id=str(user.id))
-        elif _should_overwrite_role(user.role, mapped_role, settings):
-            # SEV-741: only overwrite an existing local role when the
-            # operator has explicitly opted in via
-            # ``auth_overwrite_role_on_login``.
-            logger.info(
-                "auth.github.role_overwritten",
-                user_id=str(user.id),
-                previous_role=user.role,
-                new_role=mapped_role,
-            )
-            user.role = mapped_role
-            await db.flush()
-
-        if not user.is_active:
-            return AuthResult(success=False, error="Account is disabled")
+        else:
+            # SEV-741 follow-up: gate role mutation on the
+            # ``is_active`` flag FIRST so a disabled account never
+            # produces a role-overwrite audit event. See
+            # ``engine.api.auth.oidc`` for the same guard with full
+            # rationale.
+            if not user.is_active:
+                return AuthResult(success=False, error="Account is disabled")
+            if _should_overwrite_role(user.role, mapped_role, settings):
+                # SEV-741: only overwrite an existing local role when the
+                # operator has explicitly opted in via
+                # ``auth_overwrite_role_on_login``.
+                logger.info(
+                    "auth.github.role_overwritten",
+                    user_id=str(user.id),
+                    previous_role=user.role,
+                    new_role=mapped_role,
+                )
+                user.role = mapped_role
+                await db.flush()
 
         return AuthResult(
             success=True,

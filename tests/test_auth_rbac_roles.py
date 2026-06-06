@@ -209,14 +209,16 @@ class TestBaseProviderMapRoles:
 
     def test_map_roles_new_domain_roles(self):
         p = self._make_provider()
-        # SEV-741: map_roles no longer silently promotes domain roles.
-        # ``quant_dev`` must remain ``quant_dev`` (not ``developer``) and
-        # ``viewer`` must remain ``viewer`` (not ``user``). Only when an
-        # external role is unrecognized do we fall back to ``user``.
-        assert p.map_roles(["retail_trader", "quant_dev"]) == "quant_dev"
+        # SEV-741 follow-up: the ALLOWED_ROLES closed set is now
+        # ``{user, viewer, developer, portfolio_manager, admin}``.
+        # Legacy / domain-specific roles ``retail_trader`` and
+        # ``quant_dev`` collapse to ``user``; ``viewer`` survives.
+        # ``portfolio_manager`` is in ALLOWED_ROLES so the precedence
+        # check between two valid roles still holds.
+        assert p.map_roles(["retail_trader", "quant_dev"]) == "user"
         assert p.map_roles(["portfolio_manager", "quant_dev"]) == "portfolio_manager"
         assert p.map_roles(["viewer"]) == "viewer"
-        assert p.map_roles(["retail_trader"]) == "retail_trader"
+        assert p.map_roles(["retail_trader"]) == "user"
         assert p.map_roles(["portfolio_manager"]) == "portfolio_manager"
 
     def test_map_roles_empty_list_returns_user(self):

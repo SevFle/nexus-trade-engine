@@ -87,14 +87,23 @@ class TestRolePromotionsRemoved:
 
 class TestNoImplicitPromotion:
     """Pin the new contract: map_roles returns the best **recognized**
-    role as-is, without applying any translation."""
+    role as-is, without applying any translation.
+
+    SEV-741 follow-up: the ALLOWED_ROLES closed set is now
+    ``{user, viewer, developer, portfolio_manager, admin}``. The
+    previously-recognised domain roles ``retail_trader`` and
+    ``quant_dev`` collapse to ``user`` — RBAC for legacy users that
+    already carry those roles still flows through
+    ``engine.api.auth.dependency.ROLE_HIERARCHY``."""
 
     @pytest.mark.parametrize(
         ("external", "expected"),
         [
             (["viewer"], "viewer"),
-            (["quant_dev"], "quant_dev"),
-            (["retail_trader"], "retail_trader"),
+            # ``quant_dev`` and ``retail_trader`` are no longer in
+            # ALLOWED_ROLES, so they collapse to ``user``.
+            (["quant_dev"], "user"),
+            (["retail_trader"], "user"),
             (["portfolio_manager"], "portfolio_manager"),
             (["developer"], "developer"),
             (["admin"], "admin"),
@@ -105,24 +114,27 @@ class TestNoImplicitPromotion:
         p = _ConcreteProvider()
         assert p.map_roles(external) == expected
 
-    def test_quant_dev_not_promoted_to_developer(self):
-        """SEV-741 regression guard: previously ``quant_dev`` was
-        silently escalated to ``developer``."""
-        assert _ConcreteProvider().map_roles(["quant_dev"]) == "quant_dev"
+    def test_quant_dev_collapsed_to_user(self):
+        """SEV-741 follow-up: ``quant_dev`` is outside ALLOWED_ROLES,
+        so it collapses to ``user`` rather than being persisted as
+        a non-allowlist role."""
+        assert _ConcreteProvider().map_roles(["quant_dev"]) == "user"
 
     def test_viewer_not_promoted_to_user(self):
         """SEV-741 regression guard: previously ``viewer`` was silently
-        escalated to ``user``."""
+        escalated to ``user``. ``viewer`` is in ALLOWED_ROLES so the
+        verbatim behaviour survives."""
         assert _ConcreteProvider().map_roles(["viewer"]) == "viewer"
 
-    def test_mixed_quant_dev_and_viewer_returns_quant_dev(self):
-        """The highest *recognized* role wins — no translation applied."""
+    def test_mixed_quant_dev_and_viewer_returns_viewer(self):
+        """The highest *recognized* ALLOWED_ROLES role wins —
+        ``quant_dev`` is collapsed out, leaving ``viewer``."""
         assert (
-            _ConcreteProvider().map_roles(["viewer", "quant_dev"]) == "quant_dev"
+            _ConcreteProvider().map_roles(["viewer", "quant_dev"]) == "viewer"
         )
 
     def test_admin_still_wins_against_lower_roles(self):
-        """The priority ordering between recognized roles is preserved."""
+        """The priority ordering between recognized ALLOWED_ROLES is preserved."""
         assert (
             _ConcreteProvider().map_roles(
                 ["viewer", "user", "retail_trader", "quant_dev", "developer",
@@ -149,7 +161,9 @@ class TestNoImplicitPromotion:
     def test_case_insensitive_input_is_normalized(self):
         assert _ConcreteProvider().map_roles(["ADMIN"]) == "admin"
         assert _ConcreteProvider().map_roles(["  Admin  "]) == "admin"
-        assert _ConcreteProvider().map_roles(["QuAnT_dEv"]) == "quant_dev"
+        # ``QuAnT_dEv`` is now outside ALLOWED_ROLES so it collapses
+        # to ``user``.
+        assert _ConcreteProvider().map_roles(["QuAnT_dEv"]) == "user"
 
     def test_whitespace_only_role_is_unrecognized(self):
         """A whitespace-only string is normalized to the empty string,
@@ -349,14 +363,16 @@ class TestMapRolesAcrossProviders:
 
         return LDAPAuthProvider()
 
-    def test_oidc_does_not_promote_quant_dev(self):
-        assert self._make_oidc().map_roles(["quant_dev"]) == "quant_dev"
+    def test_oidc_collapses_quant_dev(self):
+        """SEV-741 follow-up: ``quant_dev`` is outside ALLOWED_ROLES,
+        collapses to ``user`` on every provider."""
+        assert self._make_oidc().map_roles(["quant_dev"]) == "user"
 
     def test_oidc_does_not_promote_viewer(self):
         assert self._make_oidc().map_roles(["viewer"]) == "viewer"
 
-    def test_ldap_does_not_promote_quant_dev(self):
-        assert self._make_ldap().map_roles(["quant_dev"]) == "quant_dev"
+    def test_ldap_collapses_quant_dev(self):
+        assert self._make_ldap().map_roles(["quant_dev"]) == "user"
 
     def test_ldap_does_not_promote_viewer(self):
         assert self._make_ldap().map_roles(["viewer"]) == "viewer"
@@ -388,15 +404,17 @@ class TestMappedRoleFlowsToRequireRole:
         [
             (["viewer"], "viewer", 200),
             (["viewer"], "user", 403),
-            (["quant_dev"], "quant_dev", 200),
+            # SEV-741 follow-up: ``quant_dev`` is now outside
+            # ALLOWED_ROLES so it collapses to ``user``.
+            (["quant_dev"], "quant_dev", 403),
             (["quant_dev"], "developer", 403),
             (["developer"], "developer", 200),
             (["developer"], "portfolio_manager", 403),
             (["portfolio_manager"], "portfolio_manager", 200),
             (["portfolio_manager"], "admin", 403),
             (["admin"], "admin", 200),
-            # Mixed: highest recognized wins, no promotion in between.
-            (["viewer", "quant_dev"], "quant_dev", 200),
+            # Mixed: highest ALLOWED_ROLES wins, no promotion in between.
+            (["viewer", "quant_dev"], "quant_dev", 403),
             (["viewer", "quant_dev"], "developer", 403),
         ],
     )
@@ -461,7 +479,17 @@ class TestShouldOverwriteRoleHelper:
     guards every federated provider from silently mutating
     ``user.role`` on each login. Pinned here in isolation so the
     policy can be reviewed independently of the providers that
-    consume it."""
+    consume it.
+
+    SEV-741 follow-up: ``current_role is None`` is no longer a
+    short-circuit. The helper is only invoked on the *existing-user*
+    branch of every federated provider, so a ``None`` role at this
+    point means "we have a User row but no role" — typically a
+    legacy row that pre-dates the NOT NULL constraint. Allowing the
+    IdP to silently populate that role would be a privilege-
+    escalation vector; operators must opt in via the
+    ``auth_overwrite_role_on_login`` setting.
+    """
 
     def _call(self, current_role, mapped_role, *, overwrite: bool):
         from engine.api.auth.base import _should_overwrite_role
@@ -470,14 +498,17 @@ class TestShouldOverwriteRoleHelper:
             current_role, mapped_role, _SettingsStub(overwrite=overwrite)
         )
 
-    def test_new_user_always_returns_true_when_opted_in(self):
-        """First-time user creation: no prior role to preserve."""
+    def test_none_role_returns_true_when_opted_in(self):
+        """Existing user with no prior role: opt-in enables overwrite."""
         assert self._call(None, "user", overwrite=True) is True
 
-    def test_new_user_always_returns_true_when_opted_out(self):
-        """Even when overwrite is disabled, brand-new users must still
-        receive an initial role — ``None`` short-circuits the policy."""
-        assert self._call(None, "admin", overwrite=False) is True
+    def test_none_role_blocked_when_opted_out(self):
+        """SEV-741 follow-up: ``None`` on an *existing* user no longer
+        short-circuits to ``True``.  Operators must opt in or the
+        previously-empty role stays empty (and the user is refused
+        auth at a higher layer) — this stops a misconfigured IdP
+        from populating legacy rows with privileged roles."""
+        assert self._call(None, "admin", overwrite=False) is False
 
     def test_same_role_returns_false_when_opted_in(self):
         """No-op write would just create audit noise; helper returns
@@ -516,6 +547,17 @@ class TestShouldOverwriteRoleHelper:
             pass
 
         assert _should_overwrite_role("user", "admin", _BareConfig()) is False
+
+    def test_missing_setting_attribute_with_none_role_defaults_to_false(self):
+        """SEV-741 follow-up: even with a ``None`` current_role, a
+        config object that doesn't expose the setting falls back to
+        the safe default (no overwrite)."""
+        from engine.api.auth.base import _should_overwrite_role
+
+        class _BareConfig:
+            pass
+
+        assert _should_overwrite_role(None, "admin", _BareConfig()) is False
 
     def test_non_bool_truthy_setting_allows_overwrite(self):
         """Pydantic coerces ``"true"``/``1``; the helper just calls

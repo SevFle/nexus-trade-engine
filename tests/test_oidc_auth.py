@@ -523,12 +523,81 @@ class TestOIDCAuthenticate:
     async def test_authenticate_non_list_roles_gets_default(
         self, oidc_provider, mock_settings, rsa_keys
     ):
+        """SEV-741 follow-up: OIDC role claims that are neither a list
+        nor a string fall back to ``user``. (String claims are
+        wrapped to a one-element list — see
+        ``test_authenticate_string_role_wrapped_to_list``.)
+        """
         fake_client = _build_full_mock_client(
             rsa_keys,
             {
                 "sub": "oidc-nonlist-role",
                 "email": "nonlist@example.com",
+                "roles": {"not": "a-list"},
+            },
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+        mock_db.refresh = AsyncMock()
+
+        created_users = []
+        mock_db.add = MagicMock(side_effect=created_users.append)
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+        assert result.success is True
+        assert len(created_users) == 1
+        assert created_users[0].role == "user"
+
+    async def test_authenticate_string_role_wrapped_to_list(
+        self, oidc_provider, mock_settings, rsa_keys
+    ):
+        """SEV-741 follow-up: a single-string OIDC role claim (a
+        common IdP convention — e.g. Auth0 ``namespaces.roles``) is
+        wrapped to a one-element list before being passed to
+        ``map_roles``, instead of being silently dropped."""
+        fake_client = _build_full_mock_client(
+            rsa_keys,
+            {
+                "sub": "oidc-string-role",
+                "email": "stringrole@example.com",
                 "roles": "admin",
+            },
+        )
+
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_result
+        mock_db.flush = AsyncMock()
+        mock_db.refresh = AsyncMock()
+
+        created_users = []
+        mock_db.add = MagicMock(side_effect=created_users.append)
+
+        with patch("httpx.AsyncClient", return_value=fake_client):
+            result = await oidc_provider.authenticate(code="auth-code", db=mock_db)
+
+        assert result.success is True
+        assert len(created_users) == 1
+        assert created_users[0].role == "admin"
+
+    async def test_authenticate_int_role_claim_falls_back_to_user(
+        self, oidc_provider, mock_settings, rsa_keys
+    ):
+        """SEV-741 follow-up: an integer claim shape is rejected by
+        the normaliser and falls back to the default ``user``."""
+        fake_client = _build_full_mock_client(
+            rsa_keys,
+            {
+                "sub": "oidc-int-role",
+                "email": "introle@example.com",
+                "roles": 42,
             },
         )
 
