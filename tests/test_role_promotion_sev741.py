@@ -3,7 +3,7 @@
 
 The change introduced:
 
-1.  ``_ROLE_PROMOTIONS`` mapping: ``viewer`` -> ``user`` and ``quant_dev`` ->
+1.  ``_EXTERNAL_ROLE_ALIASES`` mapping: ``viewer`` -> ``user`` and ``quant_dev`` ->
     ``developer``.
 2.  ``IAuthProvider.map_roles`` applies that mapping to the highest-priority
     role it selects from the input list.
@@ -19,7 +19,7 @@ from __future__ import annotations
 import pytest
 
 from engine.api.auth.base import (
-    _ROLE_PROMOTIONS,
+    _EXTERNAL_ROLE_ALIASES,
     AuthResult,
     IAuthProvider,
     UserInfo,
@@ -43,7 +43,7 @@ def provider() -> _ConcreteProvider:
 
 
 # ---------------------------------------------------------------------------
-# _ROLE_PROMOTIONS constant
+# _EXTERNAL_ROLE_ALIASES constant
 # ---------------------------------------------------------------------------
 
 
@@ -51,26 +51,27 @@ class TestRolePromotionsConstant:
     """Guarantees the promotion table exposed by the module is correct."""
 
     def test_viewer_promoted_to_user(self):
-        assert _ROLE_PROMOTIONS["viewer"] == "user"
+        assert _EXTERNAL_ROLE_ALIASES["viewer"] == "user"
 
     def test_quant_dev_promoted_to_developer(self):
-        assert _ROLE_PROMOTIONS["quant_dev"] == "developer"
+        assert _EXTERNAL_ROLE_ALIASES["quant_dev"] == "developer"
 
     def test_only_two_promotions_defined(self):
-        assert set(_ROLE_PROMOTIONS.keys()) == {"viewer", "quant_dev"}
+        assert set(_EXTERNAL_ROLE_ALIASES.keys()) == {"viewer", "quant_dev"}
 
     def test_promotion_targets_are_canonical_roles(self):
         # Promoted values must themselves be valid (non-promoted) role names
         # so map_roles is idempotent.
-        for target in _ROLE_PROMOTIONS.values():
-            assert target not in _ROLE_PROMOTIONS
+        for target in _EXTERNAL_ROLE_ALIASES.values():
+            assert target not in _EXTERNAL_ROLE_ALIASES
 
     def test_promotion_targets_are_priority_roles(self):
         # Targets are real priority-table keys, not arbitrary strings.
 
         # Inspect the priority dict by calling map_roles with each target
         # alone — it must select itself.
-        for target in _ROLE_PROMOTIONS.values():
+        for target in _EXTERNAL_ROLE_ALIASES.values():
+
             class _P(IAuthProvider):
                 @property
                 def name(self) -> str:
@@ -88,7 +89,7 @@ class TestRolePromotionsConstant:
 
 
 class TestMapRolesPromotion:
-    """Direct coverage of the ``_ROLE_PROMOTIONS.get(best, best)`` line."""
+    """Direct coverage of the ``_EXTERNAL_ROLE_ALIASES.get(best, best)`` line."""
 
     def test_viewer_alone_is_promoted_to_user(self, provider):
         assert provider.map_roles(["viewer"]) == "user"
@@ -124,11 +125,9 @@ class TestMapRolesPromotion:
         # needed but the result still matches the promoted target.
         assert provider.map_roles(["quant_dev", "developer"]) == "developer"
 
-    def test_viewer_plus_user_picks_user_without_needing_promotion(
-        self, provider
-    ):
+    def test_viewer_plus_user_picks_user_without_needing_promotion(self, provider):
         # user (priority 1) > viewer (priority 0) — "best" becomes "user"
-        # which is not in _ROLE_PROMOTIONS.
+        # which is not in _EXTERNAL_ROLE_ALIASES.
         assert provider.map_roles(["viewer", "user"]) == "user"
 
     def test_promotion_is_idempotent(self, provider):
@@ -143,9 +142,7 @@ class TestMapRolesPromotion:
         second_q = provider.map_roles([first_q])
         assert second_q == "developer"
 
-    def test_promotion_respects_case_insensitive_normalisation(
-        self, provider
-    ):
+    def test_promotion_respects_case_insensitive_normalisation(self, provider):
         assert provider.map_roles(["VIEWER"]) == "user"
         assert provider.map_roles(["QUANT_DEV"]) == "developer"
         assert provider.map_roles(["Quant_Dev"]) == "developer"
@@ -199,26 +196,24 @@ class TestMapRolesPromotion:
         # and is the default starting value for ``best``).
         import engine.api.auth.base as base_mod
 
-        monkeypatch.setitem(
-            base_mod._ROLE_PROMOTIONS, "quant_dev", "portfolio_manager"
-        )
+        monkeypatch.setitem(base_mod._EXTERNAL_ROLE_ALIASES, "quant_dev", "portfolio_manager")
         assert provider.map_roles(["quant_dev"]) == "portfolio_manager"
 
     def test_viewer_promotion_entry_is_dead_code(self, provider):
         # Documents current behaviour: ``viewer`` has priority 0 while the
         # default ``best = "user"`` has priority 1, so best never becomes
-        # ``"viewer"`` and the viewer entry in _ROLE_PROMOTIONS is never
+        # ``"viewer"`` and the viewer entry in _EXTERNAL_ROLE_ALIASES is never
         # consulted. map_roles(["viewer"]) returns "user" by virtue of the
         # default, not the promotion.
         import engine.api.auth.base as base_mod
 
-        assert "viewer" in base_mod._ROLE_PROMOTIONS
+        assert "viewer" in base_mod._EXTERNAL_ROLE_ALIASES
         # Even when we remove the entry, the result is the same.
-        original = base_mod._ROLE_PROMOTIONS.pop("viewer")
+        original = base_mod._EXTERNAL_ROLE_ALIASES.pop("viewer")
         try:
             assert provider.map_roles(["viewer"]) == "user"
         finally:
-            base_mod._ROLE_PROMOTIONS["viewer"] = original
+            base_mod._EXTERNAL_ROLE_ALIASES["viewer"] = original
 
 
 # ---------------------------------------------------------------------------
@@ -275,9 +270,7 @@ class TestIAuthProviderDefaults:
         assert result.success is False
         assert "concrete-test" in (result.error or "")
 
-    async def test_create_user_default_error_mentions_provider_name(
-        self, provider
-    ):
+    async def test_create_user_default_error_mentions_provider_name(self, provider):
         result = await provider.create_user(UserInfo())
         assert result.error is not None
         assert provider.name in result.error

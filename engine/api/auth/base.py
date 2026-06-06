@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
@@ -50,6 +52,60 @@ _ROLE_PRIORITY: dict[str, int] = {
     "portfolio_manager": 5,
     "admin": 6,
 }
+
+
+# Roles that an untrusted upstream Identity Provider (IdP) may legitimately
+# assert for a single role string. This is the *strict* allowlist used by
+# :func:`_sanitize_role`; anything outside it collapses to ``"user"``.
+ALLOWED_ROLES: frozenset[str] = frozenset(
+    {"user", "viewer", "developer", "portfolio_manager", "admin"}
+)
+
+# Role names are short ASCII identifiers. Anything longer is either garbage
+# or a hostile payload; reject it *before* running any regex so a huge input
+# cannot trigger pathological backtracking (regex DoS hardening).
+_MAX_ROLE_LENGTH = 128
+
+# C0 (\x00-\x1f) and C1 (\x7f-\x9f) control characters. Stripped so they
+# cannot smuggle a role past a naive ``in`` check (e.g. ``"admin\x00"``).
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def _sanitize_role(role: str | None) -> str:
+    """Validate a single role string received from an untrusted source
+    (an upstream Identity Provider) against :data:`ALLOWED_ROLES`.
+
+    The pipeline is ordered for both safety and DoS resistance:
+
+    1. **Type / length guard** -- non-strings and oversize inputs collapse to
+       ``"user"`` immediately, *before* any regex work, defeating regex-based
+       denial of service.
+    2. **NFKC normalization** -- canonicalizes Unicode so look-alike sequences
+       become detectable.
+    3. **Control-character strip** -- removes C0/C1 control codes.
+    4. **Spoofing guard** -- if normalization or stripping altered the input
+       it was a look-alike spoof (e.g. a fullwidth-Unicode ``admin`` that NFKC
+       would otherwise turn into the real ``admin``); collapse to
+       ``"user"`` rather than accept it.
+    5. **Allowlist membership** -- only the exact strings in
+       :data:`ALLOWED_ROLES` survive; everything else collapses to ``"user"``.
+
+    This guarantees a hostile or misconfigured IdP cannot inject an arbitrary
+    or look-alike role (e.g. a spoofed ``admin``) into a local user account.
+    """
+    if not isinstance(role, str) or len(role) > _MAX_ROLE_LENGTH:
+        return "user"
+    normalized = unicodedata.normalize("NFKC", role)
+    cleaned = _CONTROL_CHARS_RE.sub("", normalized)
+    # Anti-spoofing: a legitimate role name is already in canonical form.
+    # If NFKC or control-char stripping changed the value, the caller sent a
+    # look-alike (e.g. fullwidth-Unicode "admin") -- never trust it with
+    # elevated privileges.
+    if cleaned != role:
+        return "user"
+    if cleaned in ALLOWED_ROLES:
+        return cleaned
+    return "user"
 
 
 class IAuthProvider(ABC):
