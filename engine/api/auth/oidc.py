@@ -7,7 +7,7 @@ import jwt
 import structlog
 from sqlalchemy import select
 
-from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo
+from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo, _apply_role_mapping
 from engine.config import settings
 from engine.db.models import User
 
@@ -147,6 +147,12 @@ class OIDCAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.oidc.user_created", user_id=str(user.id))
+        else:
+            mapped_role = "user"
+            if isinstance(raw_roles, list):
+                mapped_role = self.map_roles(raw_roles)
+            if _apply_role_mapping(user, mapped_role, settings):
+                await db.flush()
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")

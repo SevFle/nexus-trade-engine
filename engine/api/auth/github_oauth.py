@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from sqlalchemy import select
 
-from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo
+from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo, _apply_role_mapping
 from engine.config import settings
 from engine.db.models import User
 
@@ -92,6 +92,8 @@ class GitHubAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.github.user_created", user_id=str(user.id))
+        elif _apply_role_mapping(user, "user", settings):
+            await db.flush()
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")

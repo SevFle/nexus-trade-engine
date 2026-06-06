@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from sqlalchemy import select
 
-from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo
+from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo, _apply_role_mapping
 from engine.config import settings
 from engine.db.models import User
 
@@ -102,8 +102,7 @@ class LDAPAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.ldap.user_created", user_id=str(user.id))
-        elif user.role != mapped_role:
-            user.role = mapped_role
+        elif _apply_role_mapping(user, mapped_role, settings):
             await db.flush()
 
         if not user.is_active:
