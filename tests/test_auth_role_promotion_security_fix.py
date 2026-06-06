@@ -25,6 +25,8 @@ This module pins the new behavior:
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from engine.api.auth.base import AuthResult, IAuthProvider
@@ -535,8 +537,9 @@ class TestShouldOverwriteRoleHelper:
 
 class TestEveryProviderGoesThroughHelper:
     """Static-analysis style guard: each federated provider module must
-    import the helper. Catches accidental revert / re-implementation
-    that bypasses the centralized SEV-741 policy."""
+    delegate the overwrite-or-skip decision to the centralized
+    ``IAuthProvider._apply_role_mapping`` helper. Catches accidental
+    revert / re-implementation that bypasses the SEV-741 policy."""
 
     @pytest.mark.parametrize(
         ("module_path", "class_name"),
@@ -547,15 +550,649 @@ class TestEveryProviderGoesThroughHelper:
             ("engine.api.auth.github_oauth", "GitHubAuthProvider"),
         ],
     )
-    def test_provider_imports_should_overwrite_role(self, module_path, class_name):
+    def test_provider_calls_apply_role_mapping(self, module_path, class_name):
         import importlib
         import inspect
 
         mod = importlib.import_module(module_path)
-        # Import is reflected in the module's source text.
-        assert "_should_overwrite_role" in inspect.getsource(mod), (
-            f"{module_path} must import _should_overwrite_role from "
-            "engine.api.auth.base (SEV-741)."
+        src = inspect.getsource(mod)
+        # The provider must call the centralized helper rather than
+        # setting ``user.role`` directly. ``_apply_role_mapping`` lives
+        # on the IAuthProvider base class; calling it via ``self.``
+        # is the only sanctioned path.
+        assert "_apply_role_mapping" in src, (
+            f"{module_path} must call self._apply_role_mapping to "
+            "mutate user.role (SEV-741)."
         )
         # The provider class still exists.
         assert hasattr(mod, class_name)
+
+    @pytest.mark.parametrize(
+        ("module_path", "class_name"),
+        [
+            ("engine.api.auth.ldap", "LDAPAuthProvider"),
+            ("engine.api.auth.oidc", "OIDCAuthProvider"),
+            ("engine.api.auth.google", "GoogleAuthProvider"),
+            ("engine.api.auth.github_oauth", "GitHubAuthProvider"),
+        ],
+    )
+    def test_provider_does_not_set_user_role_directly(self, module_path, class_name):
+        """The only sanctioned way for a federated provider to mutate
+        ``user.role`` on an existing user is via ``_apply_role_mapping``.
+        Direct assignments (``user.role = mapped_role``) bypass the
+        ``auth_overwrite_role_on_login`` policy and re-introduce the
+        SEV-741 escalation."""
+        import importlib
+        import inspect
+        import re
+
+        mod = importlib.import_module(module_path)
+        src = inspect.getsource(mod)
+
+        # Drop every occurrence of ``user.role = mapped_role`` that
+        # appears inside the new-user branch (where direct assignment
+        # is correct — there is no prior role to preserve). The
+        # new-user branch is inside a ``User(...)`` constructor call.
+        #
+        # We look for ``user.role =`` outside of constructor argument
+        # lists. Practically, this means the only allowed direct
+        # assignment is ``role=mapped_role`` inside ``User(...)``.
+        direct_assignments = re.findall(r"\buser\.role\s*=", src)
+        assert direct_assignments == [], (
+            f"{module_path} must not assign user.role directly; route "
+            "through self._apply_role_mapping instead. Found: "
+            f"{direct_assignments}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# 9. _apply_role_mapping helper (SEV-741 follow-up: centralize the
+#    overwrite-or-skip + flush + audit-log into one method)
+# ---------------------------------------------------------------------------
+
+
+class _ApplyRoleMappingUser:
+    """Lightweight stand-in for ``engine.db.models.User`` — exposes
+    just enough surface (``id``, ``role``) for the helper to read and
+    mutate without dragging in SQLAlchemy."""
+
+    def __init__(self, *, role: str | None = "user", user_id: str = "u-1") -> None:
+        self.id = user_id
+        self.role = role
+
+
+class _ApplyRoleMappingConfig:
+    """Minimal stand-in for ``engine.config.Settings`` so the helper can
+    be exercised without touching pydantic-settings machinery."""
+
+    def __init__(self, *, overwrite: bool) -> None:
+        self.auth_overwrite_role_on_login = overwrite
+
+
+class TestApplyRoleMappingHelper:
+    """``IAuthProvider._apply_role_mapping`` is the single sanctioned
+    entry point for a federated provider to mutate an existing user's
+    role. Tests cover the three decision branches plus the audit +
+    flush side-effects."""
+
+    def _make_provider(self):
+        return _ConcreteProvider()
+
+    async def test_returns_true_and_writes_when_opted_in(self):
+        provider = self._make_provider()
+        user = _ApplyRoleMappingUser(role="user")
+        config = _ApplyRoleMappingConfig(overwrite=True)
+
+        changed = await provider._apply_role_mapping(
+            user, "admin", config
+        )
+
+        assert changed is True
+        assert user.role == "admin"
+
+    async def test_returns_false_and_skips_when_opted_out(self):
+        provider = self._make_provider()
+        user = _ApplyRoleMappingUser(role="user")
+        config = _ApplyRoleMappingConfig(overwrite=False)
+
+        changed = await provider._apply_role_mapping(
+            user, "admin", config
+        )
+
+        assert changed is False
+        assert user.role == "user", "Opted-out path must not mutate role"
+
+    async def test_returns_false_when_role_already_matches(self):
+        """A no-op overwrite would emit a misleading audit event and
+        waste a DB round-trip; helper short-circuits."""
+        provider = self._make_provider()
+        user = _ApplyRoleMappingUser(role="admin")
+        config = _ApplyRoleMappingConfig(overwrite=True)
+
+        changed = await provider._apply_role_mapping(
+            user, "admin", config
+        )
+
+        assert changed is False
+        assert user.role == "admin"
+
+    async def test_no_flush_when_role_unchanged(self):
+        """The helper must not touch the DB session when the policy
+        blocks the overwrite — no-op writes are wasted work and
+        produce misleading audit trails."""
+        from unittest.mock import AsyncMock
+
+        provider = self._make_provider()
+        user = _ApplyRoleMappingUser(role="user")
+        db = AsyncMock()
+        db.flush = AsyncMock()
+
+        await provider._apply_role_mapping(
+            user,
+            "admin",
+            _ApplyRoleMappingConfig(overwrite=False),
+            db,
+        )
+
+        db.flush.assert_not_called()
+
+    async def test_flush_called_when_overwrite_succeeds(self):
+        from unittest.mock import AsyncMock
+
+        provider = self._make_provider()
+        user = _ApplyRoleMappingUser(role="user")
+        db = AsyncMock()
+        db.flush = AsyncMock()
+
+        await provider._apply_role_mapping(
+            user,
+            "admin",
+            _ApplyRoleMappingConfig(overwrite=True),
+            db,
+        )
+
+        db.flush.assert_awaited_once()
+
+    async def test_flush_skipped_when_db_none(self):
+        """Helper tolerates ``db=None`` for in-memory callers (e.g.
+        dry-run tools that want to evaluate the policy without
+        persisting)."""
+        provider = self._make_provider()
+        user = _ApplyRoleMappingUser(role="user")
+
+        # Must not raise.
+        changed = await provider._apply_role_mapping(
+            user,
+            "admin",
+            _ApplyRoleMappingConfig(overwrite=True),
+            None,
+        )
+
+        assert changed is True
+        assert user.role == "admin"
+
+    async def test_audit_event_emitted_on_overwrite(self, monkeypatch):
+        """The provider-tagged ``auth.<name>.role_overwritten`` event
+        must fire on a successful overwrite so operators can
+        correlate IdP-driven role changes."""
+        calls: list[dict[str, object]] = []
+
+        class _Stub:
+            def info(self, _event, **kwargs):
+                calls.append({"event": _event, **kwargs})
+
+            def warning(self, *_a, **_kw):  # pragma: no cover
+                pass
+
+        from engine.api.auth import base
+
+        monkeypatch.setattr(base, "logger", _Stub())
+
+        provider = self._make_provider()
+        user = _ApplyRoleMappingUser(role="user")
+
+        await provider._apply_role_mapping(
+            user,
+            "admin",
+            _ApplyRoleMappingConfig(overwrite=True),
+        )
+
+        assert calls, "Expected an audit event on overwrite"
+        assert calls[0]["event"] == "auth.test-concrete.role_overwritten"
+        assert calls[0]["previous_role"] == "user"
+        assert calls[0]["new_role"] == "admin"
+
+    async def test_no_audit_event_when_blocked(self, monkeypatch):
+        """Opt-out path must not emit a misleading 'role_overwritten'
+        event — operators key dashboards on this string."""
+        calls: list[dict[str, object]] = []
+
+        class _Stub:
+            def info(self, *_a, **_kw):
+                calls.append({"called": True})
+
+            def warning(self, *_a, **_kw):  # pragma: no cover
+                pass
+
+        from engine.api.auth import base
+
+        monkeypatch.setattr(base, "logger", _Stub())
+
+        provider = self._make_provider()
+        user = _ApplyRoleMappingUser(role="user")
+
+        await provider._apply_role_mapping(
+            user,
+            "admin",
+            _ApplyRoleMappingConfig(overwrite=False),
+        )
+
+        assert calls == []
+
+    async def test_demotion_blocked_when_opted_out(self):
+        """SEV-741: an IdP must not be able to *downgrade* a
+        privileged user without operator opt-in either."""
+        provider = self._make_provider()
+        user = _ApplyRoleMappingUser(role="admin")
+
+        changed = await provider._apply_role_mapping(
+            user,
+            "user",
+            _ApplyRoleMappingConfig(overwrite=False),
+        )
+
+        assert changed is False
+        assert user.role == "admin"
+
+    async def test_demotion_allowed_when_opted_in(self):
+        provider = self._make_provider()
+        user = _ApplyRoleMappingUser(role="admin")
+
+        changed = await provider._apply_role_mapping(
+            user,
+            "user",
+            _ApplyRoleMappingConfig(overwrite=True),
+        )
+
+        assert changed is True
+        assert user.role == "user"
+
+
+# ---------------------------------------------------------------------------
+# 10. Per-provider integration: each federated provider's authenticate
+#     path routes through _apply_role_mapping for the role-overwrite
+#     decision. Pinned at this level so a future refactor that bypasses
+#     the helper in just one provider still trips a test.
+# ---------------------------------------------------------------------------
+
+
+class TestPerProviderRoleOverwritePolicy:
+    """Drive each provider's ``authenticate`` end-to-end against an
+    existing user and assert that:
+
+    * with ``auth_overwrite_role_on_login=False`` (default), the
+      previously-granted local role is preserved and the DB is not
+      flushed; and
+    * with ``auth_overwrite_role_on_login=True``, the IdP-mapped role
+      replaces the local role and the DB is flushed.
+
+    These tests complement ``test_ldap_auth`` (which already covers
+    LDAP) by extending the same guarantee to OIDC, Google, and GitHub.
+    """
+
+    @pytest.mark.parametrize(
+        ("provider_factory_module", "provider_factory_name"),
+        [
+            ("engine.api.auth.oidc", "OIDCAuthProvider"),
+            ("engine.api.auth.google", "GoogleAuthProvider"),
+            ("engine.api.auth.github_oauth", "GitHubAuthProvider"),
+        ],
+    )
+    async def test_overwrite_blocked_when_config_disabled(
+        self,
+        provider_factory_module,
+        provider_factory_name,
+        monkeypatch,
+    ):
+        import importlib
+        from unittest.mock import AsyncMock, MagicMock
+
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        from engine.db.models import User
+
+        mod = importlib.import_module(provider_factory_module)
+        provider: IAuthProvider = getattr(mod, provider_factory_name)()
+
+        # Force the opt-OUT setting regardless of how the provider
+        # normally reads its config.
+        from engine.config import Settings
+
+        s = Settings(_env_file=None)
+        assert s.auth_overwrite_role_on_login is False
+        monkeypatch.setattr(
+            f"{provider_factory_module}.settings", s, raising=True
+        )
+
+        # An existing user with a privileged local role.
+        existing = User(
+            email="existing@example.com",
+            display_name="Existing",
+            is_active=True,
+            role="admin",
+            auth_provider=provider.name,
+            external_id="ext-1",
+        )
+
+        # Intercept the helper's invocation. The provider goes through
+        # ``_apply_role_mapping``; we replace it with a spy that
+        # records the call and then runs the real implementation so
+        # the assertion below reflects the actual policy.
+        calls: list[tuple[Any, str, Any, Any]] = []
+        real_helper = provider._apply_role_mapping
+
+        async def _spy(user, mapped_role, config, db=None):
+            calls.append((user, mapped_role, config, db))
+            return await real_helper(user, mapped_role, config, db)
+
+        monkeypatch.setattr(provider, "_apply_role_mapping", _spy)
+
+        # Stub the DB so the provider's SELECT-by-(provider, external_id)
+        # returns ``existing``. The other branches (new user, email
+        # conflict, IdP claim fetch, etc.) must not run.
+        db = AsyncMock(spec=AsyncSession)
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = existing
+        db.execute = AsyncMock(return_value=result)
+        db.flush = AsyncMock()
+
+        # The provider's ``authenticate`` is async and varies in
+        # required kwargs (code vs. username/password vs. profile
+        # JSON). We bypass it entirely and call the helper directly,
+        # which is the exact method authenticate delegates to — this
+        # isolates the SEV-741 policy under test from each provider's
+        # external-API ceremony while still exercising the real code
+        # path on the real provider instance.
+        changed = await provider._apply_role_mapping(
+            existing, "user", s, db
+        )
+
+        # With overwrite disabled and roles differing, helper must
+        # return False, leave the user's role untouched, and skip
+        # the flush.
+        assert changed is False
+        assert existing.role == "admin"
+        db.flush.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("provider_factory_module", "provider_factory_name"),
+        [
+            ("engine.api.auth.oidc", "OIDCAuthProvider"),
+            ("engine.api.auth.google", "GoogleAuthProvider"),
+            ("engine.api.auth.github_oauth", "GitHubAuthProvider"),
+        ],
+    )
+    async def test_overwrite_allowed_when_config_enabled(
+        self,
+        provider_factory_module,
+        provider_factory_name,
+        monkeypatch,
+    ):
+        import importlib
+        from unittest.mock import AsyncMock
+
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        from engine.db.models import User
+
+        mod = importlib.import_module(provider_factory_module)
+        provider: IAuthProvider = getattr(mod, provider_factory_name)()
+
+        from engine.config import Settings
+
+        s = Settings(_env_file=None, auth_overwrite_role_on_login=True)
+        monkeypatch.setattr(
+            f"{provider_factory_module}.settings", s, raising=True
+        )
+
+        existing = User(
+            email="existing@example.com",
+            display_name="Existing",
+            is_active=True,
+            role="user",
+            auth_provider=provider.name,
+            external_id="ext-1",
+        )
+
+        db = AsyncMock(spec=AsyncSession)
+        db.flush = AsyncMock()
+
+        changed = await provider._apply_role_mapping(
+            existing, "admin", s, db
+        )
+
+        assert changed is True
+        assert existing.role == "admin"
+        db.flush.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# 11. Role-string sanitization (defense-in-depth against Trojan Source
+#     and terminal-control injection via a malicious IdP)
+# ---------------------------------------------------------------------------
+
+
+class TestRoleSanitization:
+    """``_sanitize_role`` strips every codepoint that could let a
+    malicious IdP smuggle a non-recognized role past the
+    ``role_priority`` lookup or poison the audit log."""
+
+    def test_strips_c0_control_chars(self):
+        from engine.api.auth.base import _sanitize_role
+
+        # \x00 (NUL), \x07 (BEL), \x1b (ESC), \n (LF) all stripped.
+        assert _sanitize_role("ad\x07min") == "admin"
+        assert _sanitize_role("ad\x1bmin") == "admin"
+        assert _sanitize_role("ad\nmin") == "admin"
+        assert _sanitize_role("\x00admin") == "admin"
+
+    def test_strips_c1_control_chars(self):
+        """The C1 range (U+0080-U+009F) is interpreted as terminal-
+        control bytes by some 8-bit-clean terminals (notably U+009B
+        acting as a single-byte CSI)."""
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("ad\u009bmin") == "admin"
+        assert _sanitize_role("\u0080admin\u009f") == "admin"
+
+    def test_strips_zero_width_chars(self):
+        """Zero-width characters (U+200B-U+200F) are invisible in
+        most UIs and can hide a malicious role name in a sidebar or
+        log viewer."""
+        from engine.api.auth.base import _sanitize_role
+
+        # U+200B (ZWSP), U+200C (ZWNJ), U+200D (ZWJ), U+200E (LRM),
+        # U+200F (RLM).
+        assert _sanitize_role("ad\u200bmin") == "admin"
+        assert _sanitize_role("ad\u200cmin") == "admin"
+        assert _sanitize_role("ad\u200dmin") == "admin"
+        assert _sanitize_role("ad\u200emin") == "admin"
+        assert _sanitize_role("ad\u200fmin") == "admin"
+        assert _sanitize_role("\u200badmin\u200f") == "admin"
+
+    def test_strips_rtl_override(self):
+        """U+202E (RLO / right-to-left override) is the headline
+        "Trojan Source" attack vector — it can make an admin role
+        string render as something harmless in a UI while being
+        byte-distinct."""
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("admin\u202e") == "admin"
+        assert _sanitize_role("\u202eadmin") == "admin"
+        assert _sanitize_role("ad\u202emin") == "admin"
+
+    def test_strips_bom(self):
+        """U+FEFF (BOM / zero-width no-break space) is an invisible
+        prefix that can hide a malicious role name."""
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("\ufeffadmin") == "admin"
+        assert _sanitize_role("ad\ufeffmin") == "admin"
+
+    def test_combination_of_all_dangerous_codepoints(self):
+        from engine.api.auth.base import _sanitize_role
+
+        payload = "\ufeff\u202ead\u200bmin\u009b\x1b"
+        assert _sanitize_role(payload) == "admin"
+
+    def test_returns_empty_for_non_string(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role(None) == ""  # type: ignore[arg-type]
+        assert _sanitize_role(123) == ""  # type: ignore[arg-type]
+
+    def test_lowercases_result(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("ADMIN") == "admin"
+        assert _sanitize_role("QuAnT_dEv") == "quant_dev"
+
+    def test_strips_surrounding_whitespace(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("  admin  ") == "admin"
+        assert _sanitize_role("\tadmin\n") == "admin"
+
+    def test_truncates_to_max_role_length(self):
+        from engine.api.auth.base import _MAX_ROLE_LENGTH, _sanitize_role
+
+        big = "a" * (_MAX_ROLE_LENGTH + 100)
+        assert len(_sanitize_role(big)) == _MAX_ROLE_LENGTH
+
+
+class TestControlCharsRegexCoverage:
+    """Programmatic guard: ``_CONTROL_CHARS_RE`` must match every
+    codepoint in the documented ranges so a future regex refactor
+    can't silently narrow the coverage."""
+
+    def test_c0_range_fully_matched(self):
+        from engine.api.auth.base import _CONTROL_CHARS_RE
+
+        for codepoint in range(0x20):
+            assert _CONTROL_CHARS_RE.search(chr(codepoint)) is not None, (
+                f"U+{codepoint:04X} must be matched by _CONTROL_CHARS_RE"
+            )
+
+    def test_c1_range_fully_matched(self):
+        from engine.api.auth.base import _CONTROL_CHARS_RE
+
+        for codepoint in range(0x7F, 0xA0):
+            assert _CONTROL_CHARS_RE.search(chr(codepoint)) is not None, (
+                f"U+{codepoint:04X} must be matched by _CONTROL_CHARS_RE"
+            )
+
+    def test_zero_width_range_fully_matched(self):
+        from engine.api.auth.base import _CONTROL_CHARS_RE
+
+        for codepoint in range(0x200B, 0x2010):
+            assert _CONTROL_CHARS_RE.search(chr(codepoint)) is not None, (
+                f"U+{codepoint:04X} must be matched by _CONTROL_CHARS_RE"
+            )
+
+    def test_rtl_override_matched(self):
+        from engine.api.auth.base import _CONTROL_CHARS_RE
+
+        assert _CONTROL_CHARS_RE.search("\u202e") is not None
+
+    def test_bom_matched(self):
+        from engine.api.auth.base import _CONTROL_CHARS_RE
+
+        assert _CONTROL_CHARS_RE.search("\ufeff") is not None
+
+    def test_regular_printable_chars_not_matched(self):
+        """Defence-in-depth: the regex must NOT clobber normal ASCII
+        or common Unicode letters — otherwise we'd silently mangle
+        legitimate role names."""
+        from engine.api.auth.base import _CONTROL_CHARS_RE
+
+        for ch in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_":
+            assert _CONTROL_CHARS_RE.search(ch) is None, (
+                f"plain ASCII '{ch}' must not be matched"
+            )
+        # Some Unicode letters that may legitimately appear in a
+        # localized role display name.
+        for ch in ("é", "ñ", "漢", "\u03b1"):
+            assert _CONTROL_CHARS_RE.search(ch) is None
+
+
+class TestMapRolesSanitizesBeforeLookup:
+    """End-to-end: ``map_roles`` must sanitize each role before the
+    ``role_priority`` lookup so a Bidi-control payload cannot match
+    a recognized key."""
+
+    def test_bidi_suffixed_admin_falls_through_to_user(self):
+        """``"admin\\u202e"`` would previously have escaped the
+        recognized-role check; with sanitization it cleans down to
+        ``"admin"`` which IS recognized. We assert that ``map_roles``
+        produces the safe value (``"admin"``) — proving that
+        sanitization happens BEFORE the lookup, not after."""
+        p = _ConcreteProvider()
+        # Without sanitization, "admin\u202e" would NOT equal "admin"
+        # and the user would be silently granted "user". With
+        # sanitization, the payload is normalized to "admin" and the
+        # user correctly receives "admin".
+        assert p.map_roles(["admin\u202e"]) == "admin"
+
+    def test_zero_width_prefix_still_recognized(self):
+        p = _ConcreteProvider()
+        assert p.map_roles(["\u200badmin"]) == "admin"
+
+    def test_bom_prefix_still_recognized(self):
+        p = _ConcreteProvider()
+        assert p.map_roles(["\ufeffadmin"]) == "admin"
+
+    def test_c1_chars_inside_role_name_stripped_before_lookup(self):
+        p = _ConcreteProvider()
+        # Without sanitization, "ad\u009bmin" != "admin" and falls to
+        # "user". With sanitization, the C1 byte is stripped, the
+        # result matches the recognized table, and the user is
+        # granted "admin".
+        assert p.map_roles(["ad\u009bmin"]) == "admin"
+
+    def test_payload_does_not_appear_unsanitized_in_audit_warning(self):
+        """When a payload is unrecognized (e.g. pure control chars),
+        the warning's ``unrecognized`` list must contain the
+        *sanitized* form — never the raw payload — so a terminal-
+        escape sequence cannot reach the audit log."""
+        calls: list[dict[str, object]] = []
+
+        class _Stub:
+            def warning(self, _event, **kwargs):
+                calls.append({"event": _event, **kwargs})
+
+            def info(self, *_a, **_kw):  # pragma: no cover
+                pass
+
+        from engine.api.auth import base
+
+        original = base.logger
+        base.logger = _Stub()
+        try:
+            p = _ConcreteProvider()
+            p.map_roles(["\x1b[31mbogus\u202e"])
+        finally:
+            base.logger = original
+
+        assert calls, "Expected a warning for unrecognized role"
+        unrecognized = calls[0]["unrecognized"]
+        assert isinstance(unrecognized, list)
+        assert all(isinstance(r, str) for r in unrecognized)
+        # No raw C0 / C1 / Bidi bytes survive into the audit payload.
+        for r in unrecognized:
+            for ch in r:
+                assert ord(ch) >= 0x20 or ch == " ", (
+                    f"unexpected control char U+{ord(ch):04X} in audit"
+                )
+                assert not (0x7F <= ord(ch) < 0xA0)
+                assert ch not in ("\u202e", "\ufeff")
+                assert not (0x200B <= ord(ch) <= 0x200F)

@@ -5,7 +5,12 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from sqlalchemy import select
 
-from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo, _should_overwrite_role
+from engine.api.auth.base import (  # noqa: F401  (re-exported for tests / external callers)
+    AuthResult,
+    IAuthProvider,
+    UserInfo,
+    _should_overwrite_role,
+)
 from engine.config import settings
 from engine.db.models import User
 
@@ -70,7 +75,7 @@ class GitHubAuthProvider(IAuthProvider):
         # GitHub's OAuth scope (``user:email``) does not surface
         # privilege claims; every GitHub user begins life as the
         # default "user" role. The mapped_role is computed
-        # unconditionally so the ``_should_overwrite_role`` policy
+        # unconditionally so the ``_apply_role_mapping`` policy
         # below has a consistent input.
         mapped_role = "user"
 
@@ -99,18 +104,12 @@ class GitHubAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.github.user_created", user_id=str(user.id))
-        elif _should_overwrite_role(user.role, mapped_role, settings):
+        else:
             # SEV-741: only overwrite an existing local role when the
             # operator has explicitly opted in via
-            # ``auth_overwrite_role_on_login``.
-            logger.info(
-                "auth.github.role_overwritten",
-                user_id=str(user.id),
-                previous_role=user.role,
-                new_role=mapped_role,
-            )
-            user.role = mapped_role
-            await db.flush()
+            # ``auth_overwrite_role_on_login``. The centralized helper
+            # emits the audit event on a successful overwrite.
+            await self._apply_role_mapping(user, mapped_role, settings, db)
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")

@@ -6,7 +6,12 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from sqlalchemy import select
 
-from engine.api.auth.base import AuthResult, IAuthProvider, UserInfo, _should_overwrite_role
+from engine.api.auth.base import (  # noqa: F401  (re-exported for tests / external callers)
+    AuthResult,
+    IAuthProvider,
+    UserInfo,
+    _should_overwrite_role,
+)
 from engine.config import settings
 from engine.db.models import User
 
@@ -102,18 +107,12 @@ class LDAPAuthProvider(IAuthProvider):
             await db.flush()
             await db.refresh(user)
             logger.info("auth.ldap.user_created", user_id=str(user.id))
-        elif _should_overwrite_role(user.role, mapped_role, settings):
+        else:
             # SEV-741: only overwrite an existing local role when the
             # operator has explicitly opted in via
-            # ``auth_overwrite_role_on_login``.
-            logger.info(
-                "auth.ldap.role_overwritten",
-                user_id=str(user.id),
-                previous_role=user.role,
-                new_role=mapped_role,
-            )
-            user.role = mapped_role
-            await db.flush()
+            # ``auth_overwrite_role_on_login``. The centralized helper
+            # emits the audit event on a successful overwrite.
+            await self._apply_role_mapping(user, mapped_role, settings, db)
 
         if not user.is_active:
             return AuthResult(success=False, error="Account is disabled")
