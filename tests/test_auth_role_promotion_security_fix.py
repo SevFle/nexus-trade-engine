@@ -559,3 +559,446 @@ class TestEveryProviderGoesThroughHelper:
         )
         # The provider class still exists.
         assert hasattr(mod, class_name)
+
+    @pytest.mark.parametrize(
+        "module_path",
+        [
+            "engine.api.auth.ldap",
+            "engine.api.auth.oidc",
+            "engine.api.auth.google",
+            "engine.api.auth.github_oauth",
+        ],
+    )
+    def test_provider_calls_helper_with_is_new_user_false(self, module_path):
+        """SEV-741 follow-up: every federated provider reaches the
+        helper only from its existing-user branch (the new-user branch
+        creates the row directly without consulting the helper). The
+        existing-user branch must pass ``is_new_user=False`` so that a
+        NULL ``role`` column on an existing row is treated as a data
+        anomaly requiring operator opt-in, not as "no prior role to
+        preserve"."""
+        import importlib
+        import inspect
+
+        mod = importlib.import_module(module_path)
+        src = inspect.getsource(mod)
+        assert "is_new_user=False" in src, (
+            f"{module_path} must call _should_overwrite_role with "
+            "is_new_user=False in its existing-user branch "
+            "(SEV-741 follow-up)."
+        )
+
+
+# ---------------------------------------------------------------------------
+# 9. ALLOWED_ROLES frozenset + _sanitize_role helper (SEV-741 follow-up)
+# ---------------------------------------------------------------------------
+
+
+class TestAllowedRolesFrozenSet:
+    """``ALLOWED_ROLES`` is the single source of truth for the set of
+    internal role names a federated login may assert. It must:
+
+    * be a ``frozenset`` (immutable, hashable, safe to default-arg);
+    * contain every key in ``map_roles``'s ``role_priority`` table;
+    * reject common attack payloads by their absence.
+    """
+
+    def test_allowed_roles_is_a_frozenset(self):
+        from engine.api.auth.base import ALLOWED_ROLES
+
+        assert isinstance(ALLOWED_ROLES, frozenset)
+
+    def test_allowed_roles_contains_all_priority_keys(self):
+        from engine.api.auth.base import ALLOWED_ROLES
+
+        # Must match the priority table inside ``map_roles`` — these
+        # are the only roles that can possibly be returned.
+        for role in (
+            "viewer",
+            "user",
+            "retail_trader",
+            "quant_dev",
+            "developer",
+            "portfolio_manager",
+            "admin",
+        ):
+            assert role in ALLOWED_ROLES, (
+                f"{role!r} must be in ALLOWED_ROLES — it is a key in "
+                "map_roles' role_priority table."
+            )
+
+    def test_dangerous_synonyms_are_excluded(self):
+        """Defence-in-depth: ``root``/``superuser``/``god``/``sysadmin``
+        must NOT be in the allow-list. If a future role expansion
+        accidentally grants one of these names, this test fires."""
+        from engine.api.auth.base import ALLOWED_ROLES
+
+        for poison in ("root", "superuser", "god", "sysadmin", "su"):
+            assert poison not in ALLOWED_ROLES
+
+
+class TestSanitizeRoleHappyPath:
+    """``_sanitize_role`` accepts every legitimate role spelling."""
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "viewer",
+            "user",
+            "retail_trader",
+            "quant_dev",
+            "developer",
+            "portfolio_manager",
+            "admin",
+        ],
+    )
+    def test_canonical_role_returned_verbatim(self, raw):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role(raw) == raw
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("ADMIN", "admin"),
+            ("Admin", "admin"),
+            ("  Admin  ", "admin"),
+            ("QuAnT_dEv", "quant_dev"),
+            ("Portfolio_Manager", "portfolio_manager"),
+        ],
+    )
+    def test_case_and_whitespace_tolerated(self, raw, expected):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role(raw) == expected
+
+
+class TestSanitizeRoleAttacksCollapseToUser:
+    """Every attack vector collapses safely to ``"user"``."""
+
+    def test_non_string_input_returns_user(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role(None) == "user"
+        assert _sanitize_role(123) == "user"
+        assert _sanitize_role(["admin"]) == "user"
+
+    def test_empty_string_returns_user(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("") == "user"
+
+    def test_whitespace_only_returns_user(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("   ") == "user"
+        assert _sanitize_role("\t") == "user"
+
+    @pytest.mark.parametrize(
+        "oversized",
+        [
+            "admin" + "x" * 28,  # 33 chars — just over the limit
+            "a" * 100,
+            "a" * 1024,
+            "a" * 65536,
+        ],
+    )
+    def test_oversized_input_rejected_before_regex(self, oversized):
+        """SEV-741 follow-up requirement #3: an oversized payload must
+        be rejected *immediately*, before the control-character regex
+        or NFKC normalization runs. Otherwise a multi-MiB IdP claim
+        could DoS the auth path."""
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role(oversized) == "user"
+
+    @pytest.mark.parametrize(
+        "control_char",
+        [
+            "\x00",  # NUL
+            "\x01",
+            "\x05",
+            "\n",  # LF — log-injection vector
+            "\r",  # CR — log-injection vector
+            "\t",  # HT
+            "\x1b",  # ESC — terminal escape
+            "\x7f",  # DEL
+            "\x9c",  # C1 (8-bit control)
+        ],
+    )
+    def test_control_characters_rejected(self, control_char):
+        """Any C0/DEL/C1 byte in the input causes rejection. We do
+        NOT silently strip — a payload that contained a control char
+        was crafted and must not pass."""
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role(f"admin{control_char}") == "user"
+        assert _sanitize_role(f"{control_char}admin") == "user"
+
+    def test_idp_asserting_admin_with_control_char_collapses_to_user(self):
+        """SEV-741 follow-up required test #1: an IdP asserting a
+        tampered ``admin`` (here with a NUL byte intended to confuse
+        downstream C-string handling) must collapse to ``user``, NOT
+        be silently accepted as ``admin`` after stripping."""
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("admin\x00") == "user"
+        assert _sanitize_role("\x00admin") == "user"
+        assert _sanitize_role("ad\x00min") == "user"
+
+    @pytest.mark.parametrize(
+        "fullwidth",
+        [
+            "ａｄｍｉｎ",  # U+FF41 U+FF44 U+FF4D U+FF49 U+FF4E
+            "ｕｓｅｒ",  # fullwidth "user"
+            "ｖｉｅｗｅｒ",  # fullwidth "viewer"
+            "ｄｅｖｅｌｏｐｅｒ",  # fullwidth "developer"
+            "ｑｕａｎｔ＿ｄｅｖ",  # fullwidth "quant_dev"
+        ],
+    )
+    def test_fullwidth_unicode_rejected(self, fullwidth):
+        """SEV-741 follow-up required test #2: fullwidth Unicode must
+        NOT be NFKC-normalized to its ASCII lookalike and accepted.
+        ``unicodedata.normalize("NFKC", "ａｄｍｉｎ") == "admin"``, but
+        accepting the normalized form would let an attacker bypass
+        log-matching / allow-list comparisons by visually-identical
+        strings. ``_sanitize_role`` must detect the NFKC change and
+        reject."""
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role(fullwidth) == "user"
+
+    @pytest.mark.parametrize(
+        "homoglyph",
+        [
+            "аdmin",  # Cyrillic 'а' (U+0430), looks like ASCII 'a'
+            "аdmіn",  # Cyrillic 'а' + 'і' (U+0456)
+            "admın",  # dotless Latin 'ı' (NFKC-stable — caught by allow-list)
+        ],
+    )
+    def test_other_homoglyphs_rejected(self, homoglyph):
+        """Defence in depth: Cyrillic lookalikes are either caught by
+        the NFKC-stability check or by the final allow-list match."""
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role(homoglyph) == "user"
+
+    def test_unrecognized_role_name_collapses_to_user(self):
+        from engine.api.auth.base import _sanitize_role
+
+        assert _sanitize_role("superuser") == "user"
+        assert _sanitize_role("root") == "user"
+        assert _sanitize_role("god") == "user"
+        assert _sanitize_role("sysadmin") == "user"
+
+
+class TestSanitizeRoleUsedByMapRoles:
+    """End-to-end: ``map_roles`` actually routes input through
+    ``_sanitize_role``. A tampered ``admin`` claim must collapse to
+    ``"user"`` at the API boundary, not be silently accepted."""
+
+    def test_admin_with_nul_collapses_to_user_via_map_roles(self):
+        from engine.api.auth.base import IAuthProvider
+
+        class _P(IAuthProvider):
+            @property
+            def name(self) -> str:
+                return "t"
+
+            async def authenticate(self, **_):
+                from engine.api.auth.base import AuthResult
+
+                return AuthResult()
+
+        assert _P().map_roles(["admin\x00"]) == "user"
+
+    def test_fullwidth_admin_collapses_to_user_via_map_roles(self):
+        from engine.api.auth.base import IAuthProvider
+
+        class _P(IAuthProvider):
+            @property
+            def name(self) -> str:
+                return "t"
+
+            async def authenticate(self, **_):
+                from engine.api.auth.base import AuthResult
+
+                return AuthResult()
+
+        assert _P().map_roles(["ａｄｍｉｎ"]) == "user"
+
+    def test_oversized_role_collapses_to_user_via_map_roles(self):
+        from engine.api.auth.base import IAuthProvider
+
+        class _P(IAuthProvider):
+            @property
+            def name(self) -> str:
+                return "t"
+
+            async def authenticate(self, **_):
+                from engine.api.auth.base import AuthResult
+
+                return AuthResult()
+
+        assert _P().map_roles(["admin" + "x" * 100]) == "user"
+
+    def test_tampered_admin_does_not_silently_overwrite_recognized(
+        self, monkeypatch
+    ):
+        """If a tampered ``admin`` is sent alongside a valid role, the
+        valid role still wins (the tampered string is unrecognized)."""
+        from engine.api.auth.base import IAuthProvider
+
+        class _P(IAuthProvider):
+            @property
+            def name(self) -> str:
+                return "t"
+
+            async def authenticate(self, **_):
+                from engine.api.auth.base import AuthResult
+
+                return AuthResult()
+
+        # "admin\x00" is unrecognized; "viewer" wins.
+        assert _P().map_roles(["admin\x00", "viewer"]) == "viewer"
+
+
+# ---------------------------------------------------------------------------
+# 10. _should_overwrite_role: NULL-role on an existing user (SEV-741 follow-up)
+# ---------------------------------------------------------------------------
+
+
+class TestShouldOverwriteRoleNullExistingUser:
+    """SEV-741 follow-up requirement #4: an existing user with a NULL
+    ``role`` column is *not* the same as a brand-new user. A NULL role
+    on an existing row is a data anomaly — it might be the result of a
+    botched migration, a manual DB edit, or an attacker who found a
+    way to clear the column. Letting a federated login silently fill
+    it in would hand the IdP a privileged escalation path.
+
+    The new ``is_new_user`` keyword distinguishes the two cases:
+
+    * ``is_new_user=True`` (default, backward compatible): brand-new
+      row being created right now, ``current_role is None`` is
+      expected, helper returns ``True`` unconditionally.
+    * ``is_new_user=False``: row already exists, ``current_role is
+      None`` is anomalous, helper defers to
+      ``auth_overwrite_role_on_login``.
+    """
+
+    def _call(self, current_role, mapped_role, *, overwrite: bool, is_new_user: bool = True):
+        from engine.api.auth.base import _should_overwrite_role
+
+        return _should_overwrite_role(
+            current_role,
+            mapped_role,
+            _SettingsStub(overwrite=overwrite),
+            is_new_user=is_new_user,
+        )
+
+    # --- backward compatibility: is_new_user defaults to True -------
+
+    def test_default_is_new_user_preserves_old_behavior_opted_in(self):
+        """Old call sites that don't pass ``is_new_user`` keep the
+        original semantics: ``None`` -> True."""
+        assert self._call(None, "admin", overwrite=True) is True
+
+    def test_default_is_new_user_preserves_old_behavior_opted_out(self):
+        assert self._call(None, "admin", overwrite=False) is True
+
+    # --- required test: NULL-role existing user blocked without opt-in
+
+    def test_null_role_existing_user_blocked_without_opt_in(self):
+        """SEV-741 follow-up required test #3: a row that already
+        exists but has ``role=None`` must NOT be silently repaired by
+        the IdP-mapped role when the operator hasn't opted in."""
+        assert (
+            self._call(None, "admin", overwrite=False, is_new_user=False)
+            is False
+        )
+
+    def test_null_role_existing_user_blocked_even_for_user_role(self):
+        """Even mapping to the lowest-privilege ``user`` role must
+        respect the opt-in — otherwise an IdP that asserts *anything*
+        could anchor itself into a previously-anomalous row."""
+        assert (
+            self._call(None, "user", overwrite=False, is_new_user=False)
+            is False
+        )
+
+    def test_null_role_existing_user_allowed_with_opt_in(self):
+        """With operator opt-in, the helper permits the repair — the
+        auditor can trace it back to the explicit setting."""
+        assert (
+            self._call(None, "admin", overwrite=True, is_new_user=False)
+            is True
+        )
+
+    def test_null_role_existing_user_demotion_blocked_without_opt_in(self):
+        """Same guard protects against demotion-style attacks: an
+        existing NULL row cannot be filled with ``user`` to lock in
+        a low-privilege foothold."""
+        assert (
+            self._call(None, "user", overwrite=False, is_new_user=False)
+            is False
+        )
+
+    def test_null_role_existing_user_missing_setting_blocks(self):
+        """If the config object doesn't expose the setting at all,
+        default to safe (block)."""
+        from engine.api.auth.base import _should_overwrite_role
+
+        class _Bare:
+            pass
+
+        assert (
+            _should_overwrite_role(None, "admin", _Bare(), is_new_user=False)
+            is False
+        )
+
+    def test_null_role_existing_user_truthy_setting_allows(self):
+        from engine.api.auth.base import _should_overwrite_role
+
+        class _Truthy:
+            auth_overwrite_role_on_login = 1
+
+        assert (
+            _should_overwrite_role(None, "admin", _Truthy(), is_new_user=False)
+            is True
+        )
+
+    def test_distinction_between_new_and_existing_with_null_role(self):
+        """Pin the semantic difference: same arguments, flip
+        ``is_new_user``, behavior flips."""
+        assert self._call(None, "admin", overwrite=False, is_new_user=True) is True
+        assert (
+            self._call(None, "admin", overwrite=False, is_new_user=False)
+            is False
+        )
+
+
+class TestProvidersPassIsNewUserFalse:
+    """Static guard: each federated provider's existing-user branch
+    must call ``_should_overwrite_role(..., is_new_user=False)`` so
+    that the NULL-role protection above is actually applied to real
+    logins."""
+
+    @pytest.mark.parametrize(
+        "module_path",
+        [
+            "engine.api.auth.ldap",
+            "engine.api.auth.oidc",
+            "engine.api.auth.google",
+            "engine.api.auth.github_oauth",
+        ],
+    )
+    def test_existing_user_branch_signals_existing_user(self, module_path):
+        import importlib
+        import inspect
+
+        mod = importlib.import_module(module_path)
+        src = inspect.getsource(mod)
+        assert "is_new_user=False" in src, (
+            f"{module_path} must pass is_new_user=False when calling "
+            "_should_overwrite_role from its existing-user branch."
+        )
