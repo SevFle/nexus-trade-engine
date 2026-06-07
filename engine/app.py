@@ -132,7 +132,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         msg = "NEXUS_SECRET_KEY must be set outside the test environment"
         raise ValueError(msg)
 
-    app.state.valkey = Valkey.from_url(settings.valkey_url)
+    # ``app.state.valkey`` is the same client the rate-limiter (when
+    # configured for the Valkey backend) and the rest of the app share,
+    # so we only close it once. The client is constructed in
+    # :func:`create_app` (sync; does not connect) so the middleware
+    # already has a reference here.
+    if not hasattr(app.state, "valkey"):
+        app.state.valkey = Valkey.from_url(settings.valkey_url)
     app.state.auth_registry = _build_auth_registry()
     logger.info("auth.providers_loaded", providers=list(app.state.auth_registry.providers.keys()))
     _configure_data_providers()
@@ -149,6 +155,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
     await app.state.valkey.aclose()
     await dispose_engine()
+
+
+def _build_rate_limit_backend(app: FastAPI):
+    """Construct the rate-limit bucket backend based on settings.
+
+    Returns ``None`` to fall back to the in-memory backend (single-pod /
+    tests). When ``rate_limit_backend == "valkey"`` we share the same
+    Valkey client the rest of the app uses so we don't open a second
+    connection pool.
+    """
+    if settings.rate_limit_backend != "valkey":
+        return None
+    from engine.api.rate_limit_valkey import ValkeyBucketBackend
+
+    if not hasattr(app.state, "valkey"):
+        app.state.valkey = Valkey.from_url(settings.valkey_url)
+    return ValkeyBucketBackend(
+        app.state.valkey,
+        state_ttl_sec=settings.rate_limit_valkey_ttl_sec,
+    )
 
 
 def create_app() -> FastAPI:
@@ -172,6 +198,7 @@ def create_app() -> FastAPI:
     exempt_paths = tuple(
         p.strip() for p in settings.rate_limit_exempt_paths.split(",") if p.strip()
     )
+    rate_backend = _build_rate_limit_backend(app)
     app.add_middleware(
         RateLimitMiddleware,
         config=RateLimitConfig(
@@ -188,6 +215,7 @@ def create_app() -> FastAPI:
                 "/api/v1/client/errors": (30, 30),
             },
         ),
+        backend=rate_backend,
     )
     # Hard cap on request body size — Starlette has no default. 1 MiB
     # is generous for every existing route and still well under the

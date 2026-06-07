@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from engine.api.auth.jwt import create_access_token
 from engine.api.rate_limit import (
     InMemoryBucketBackend,
     RateLimitConfig,
@@ -236,3 +238,369 @@ class TestConcurrency:
         )
         passed = sum(1 for ok, _, _ in results if ok)
         assert passed == 3
+
+
+# ---------------------------------------------------------------------------
+# Per-user keying (JWT + API key + IP fallback)
+# ---------------------------------------------------------------------------
+#
+# These tests exercise the ``user_or_ip`` key strategy: authenticated
+# requests share a per-principal bucket regardless of which IP they
+# come from, while anonymous requests fall back to IP-based keying.
+# Helper token issuers are inline so each test is self-contained.
+
+_USER_A = uuid.UUID("00000000-0000-0000-0000-00000000aaaa")
+_USER_B = uuid.UUID("00000000-0000-0000-0000-00000000bbbb")
+_TEST_SECRET = "test-secret-key-for-rate-limit-tests"
+
+
+@pytest.fixture(autouse=True)
+def _configure_jwt_secret():
+    """Pin the JWT secret so create_access_token produces tokens the
+    middleware can actually decode — production code reads
+    ``settings.secret_key`` at decode time, so we must set it for the
+    duration of each test in this module."""
+    from engine.config import settings
+
+    previous = settings.secret_key
+    settings.secret_key = _TEST_SECRET
+    try:
+        yield
+    finally:
+        settings.secret_key = previous
+
+
+def _build_keyed_app(config: RateLimitConfig | None = None) -> FastAPI:
+    app = FastAPI()
+    app.add_middleware(
+        RateLimitMiddleware,
+        config=config
+        or RateLimitConfig(
+            default_per_minute=60,
+            default_burst=2,
+            key_strategy="user_or_ip",
+        ),
+        backend=InMemoryBucketBackend(),
+    )
+
+    @app.get("/ping")
+    async def ping() -> dict:
+        return {"ok": True}
+
+    @app.get("/login")
+    async def login() -> dict:
+        # Stand-in for an unauthenticated endpoint — even if a token
+        # is presented we want to key on IP for the login route.
+        return {"ok": True}
+
+    return app
+
+
+class TestPerUserKeying:
+    """Cover the new authenticated-principal keying path."""
+
+    @pytest.mark.asyncio
+    async def test_jwt_authenticated_users_share_one_bucket(self):
+        """Two clients with the same JWT sub must share a bucket,
+        even though they appear to come from different IPs."""
+        token = create_access_token(
+            sub=str(_USER_A),
+            email="a@example.com",
+            role="user",
+        )
+        # Same user, two ASGI clients (two distinct client tuples)
+        app = _build_keyed_app()
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://client-a"
+        ) as a, AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://client-b"
+        ) as b:
+            await a.get("/ping", headers={"Authorization": f"Bearer {token}"})
+            await b.get("/ping", headers={"Authorization": f"Bearer {token}"})
+            # Both requests hit the same per-user bucket, so the third
+            # call (from either client) is rate-limited.
+            r = await a.get("/ping", headers={"Authorization": f"Bearer {token}"})
+            assert r.status_code == 429
+
+    @pytest.mark.asyncio
+    async def test_distinct_jwt_users_have_independent_buckets(self):
+        """Two distinct users sharing the same client IP each get the
+        full burst — they must not penalise each other."""
+        token_a = create_access_token(sub=str(_USER_A), email="a@example.com", role="user")
+        token_b = create_access_token(sub=str(_USER_B), email="b@example.com", role="user")
+        app = _build_keyed_app()
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            # User A consumes both A-tokens.
+            await ac.get("/ping", headers={"Authorization": f"Bearer {token_a}"})
+            await ac.get("/ping", headers={"Authorization": f"Bearer {token_a}"})
+            # User B's first request still passes — different bucket.
+            r = await ac.get("/ping", headers={"Authorization": f"Bearer {token_b}"})
+            assert r.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_anonymous_request_falls_back_to_ip(self):
+        """No credential → IP-based keying, same as the legacy default."""
+        app = _build_keyed_app()
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            await ac.get("/ping")
+            await ac.get("/ping")
+            r = await ac.get("/ping")
+            assert r.status_code == 429
+
+    @pytest.mark.asyncio
+    async def test_invalid_jwt_falls_back_to_ip(self):
+        """A malformed token must NOT crash the middleware and must
+        collapse back to IP-based keying."""
+        app = _build_keyed_app()
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            await ac.get(
+                "/ping",
+                headers={"Authorization": "Bearer not-a-real-jwt"},
+            )
+            await ac.get(
+                "/ping",
+                headers={"Authorization": "Bearer not-a-real-jwt"},
+            )
+            r = await ac.get(
+                "/ping",
+                headers={"Authorization": "Bearer not-a-real-jwt"},
+            )
+            # Falls through to IP keying → bucket exhausted.
+            assert r.status_code == 429
+
+    @pytest.mark.asyncio
+    async def test_api_key_via_x_api_key_header(self):
+        """Engine-issued API keys (nxs_*) presented via X-API-Key get
+        their own per-key bucket."""
+        # Real key shape: nxs_<env>_<32 hex>  (≥ 12 char prefix)
+        key_a = "nxs_live_" + "a" * 32
+        key_b = "nxs_live_" + "b" * 32
+        app = _build_keyed_app()
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            await ac.get("/ping", headers={"X-API-Key": key_a})
+            await ac.get("/ping", headers={"X-API-Key": key_a})
+            r = await ac.get("/ping", headers={"X-API-Key": key_a})
+            assert r.status_code == 429
+            # Different key → independent bucket.
+            r = await ac.get("/ping", headers={"X-API-Key": key_b})
+            assert r.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_api_key_via_bearer_header(self):
+        """API keys sent as Bearer tokens must also be recognised —
+        some clients (e.g. SDKs) put the engine key in Authorization."""
+        key = "nxs_test_" + "c" * 32
+        app = _build_keyed_app()
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            await ac.get("/ping", headers={"Authorization": f"Bearer {key}"})
+            await ac.get("/ping", headers={"Authorization": f"Bearer {key}"})
+            r = await ac.get("/ping", headers={"Authorization": f"Bearer {key}"})
+            assert r.status_code == 429
+
+    @pytest.mark.asyncio
+    async def test_malformed_api_key_falls_back_to_ip(self):
+        """A non-engine Bearer token whose JWT decode fails must fall
+        back to IP keying rather than 500."""
+        app = _build_keyed_app()
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            # Too short to be an engine key AND not a JWT.
+            await ac.get("/ping", headers={"X-API-Key": "nxs_short"})
+            await ac.get("/ping", headers={"X-API-Key": "nxs_short"})
+            r = await ac.get("/ping", headers={"X-API-Key": "nxs_short"})
+            assert r.status_code == 429
+
+    @pytest.mark.asyncio
+    async def test_unauthenticated_path_overrides_user_keying(self):
+        """Even with a valid JWT, the login endpoint must be keyed by
+        IP — otherwise a stolen token lets an attacker bypass the
+        anonymous rate limit on /login."""
+        token = create_access_token(
+            sub=str(_USER_A),
+            email="a@example.com",
+            role="user",
+        )
+        app = _build_keyed_app(
+            RateLimitConfig(
+                default_per_minute=60,
+                default_burst=2,
+                unauthenticated_paths=("/login",),
+            )
+        )
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            # Hit /login twice with the same token — these should be
+            # keyed by IP and therefore exhaust the IP bucket, not the
+            # user bucket.
+            await ac.get("/login", headers={"Authorization": f"Bearer {token}"})
+            await ac.get("/login", headers={"Authorization": f"Bearer {token}"})
+            r = await ac.get("/login", headers={"Authorization": f"Bearer {token}"})
+            assert r.status_code == 429
+            # A different caller (no token) hitting /login should also
+            # see the IP bucket drained, because they share the IP.
+            r2 = await ac.get("/login")
+            assert r2.status_code == 429
+            # But that user's per-user bucket on /ping is untouched.
+            r3 = await ac.get("/ping", headers={"Authorization": f"Bearer {token}"})
+            assert r3.status_code == 200
+
+
+class TestKeyStrategyIpOnly:
+    """Opt-in IP-only keying for callers that don't want per-user buckets."""
+
+    @pytest.mark.asyncio
+    async def test_ip_only_ignores_authentication(self):
+        token = create_access_token(
+            sub=str(_USER_A),
+            email="a@example.com",
+            role="user",
+        )
+        app = _build_keyed_app(
+            RateLimitConfig(
+                default_per_minute=60,
+                default_burst=2,
+                key_strategy="ip_only",
+            )
+        )
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            # Same caller: bucket fills regardless of token presence.
+            await ac.get("/ping", headers={"Authorization": f"Bearer {token}"})
+            await ac.get("/ping")  # no token — same IP
+            r = await ac.get("/ping", headers={"Authorization": f"Bearer {token}"})
+            assert r.status_code == 429
+
+
+class TestUserKeyExtractorUnit:
+    """Direct unit tests on the static helpers — fast feedback without
+    spinning up an ASGI client."""
+
+    def test_extract_bearer_token_returns_none_when_missing(self):
+        from engine.api.rate_limit import _extract_bearer_token
+
+        scope = {"headers": []}
+        assert _extract_bearer_token(scope) is None
+
+    def test_extract_bearer_token_handles_basic_auth(self):
+        """Authorization: Basic ... must not be mistaken for a bearer."""
+        from engine.api.rate_limit import _extract_bearer_token
+
+        scope = {"headers": [(b"authorization", b"Basic dXNlcjpwYXNz")]}
+        assert _extract_bearer_token(scope) is None
+
+    def test_extract_bearer_token_decodes_real_jwt(self):
+        """End-to-end: bearer header → user:<sub> key."""
+        token = create_access_token(
+            sub=str(_USER_A),
+            email="a@example.com",
+            role="user",
+        )
+        scope = {"headers": [(b"authorization", f"Bearer {token}".encode())]}
+        assert RateLimitMiddleware._user_key(scope) == f"user:{_USER_A}"
+
+    def test_extract_api_key(self):
+        from engine.api.rate_limit import _extract_api_key
+
+        scope = {"headers": [(b"x-api-key", b"nxs_live_aaaa")]}
+        assert _extract_api_key(scope) == "nxs_live_aaaa"
+
+    def test_api_key_prefix_short_token(self):
+        from engine.api.rate_limit import _api_key_prefix
+
+        # Too short to have a 12-char prefix → None
+        assert _api_key_prefix("nxs_ab") is None
+        # Wrong prefix family → None
+        assert _api_key_prefix("abc_live_aaaaaaaaaaaa") is None
+        # Real shape → first 12 chars
+        assert _api_key_prefix("nxs_live_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") == "nxs_live_aaa"
+
+    def test_jwt_subject_decodes_valid_token(self):
+        from engine.api.rate_limit import _jwt_subject
+
+        token = create_access_token(
+            sub=str(_USER_A),
+            email="a@example.com",
+            role="user",
+        )
+        assert _jwt_subject(token) == str(_USER_A)
+
+    def test_jwt_subject_returns_none_for_garbage(self):
+        from engine.api.rate_limit import _jwt_subject
+
+        assert _jwt_subject("not-a-jwt") is None
+        assert _jwt_subject("") is None
+
+    def test_user_key_priority_jwt_over_api_key(self):
+        """When both Authorization and X-API-Key are present, the JWT
+        wins (it carries a stronger identity assertion)."""
+        token = create_access_token(
+            sub=str(_USER_A),
+            email="a@example.com",
+            role="user",
+        )
+        scope = {
+            "headers": [
+                (b"authorization", f"Bearer {token}".encode()),
+                (b"x-api-key", b"nxs_live_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            ]
+        }
+        key = RateLimitMiddleware._user_key(scope)
+        assert key == f"user:{_USER_A}"
+
+    def test_user_key_falls_through_to_api_key_on_bad_jwt(self):
+        """Bad JWT in Authorization + valid X-API-Key → use the API key."""
+        scope = {
+            "headers": [
+                (b"authorization", b"Bearer garbage"),
+                (b"x-api-key", b"nxs_live_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            ]
+        }
+        key = RateLimitMiddleware._user_key(scope)
+        assert key == "apikey:nxs_live_aaa"
+
+    def test_user_key_returns_none_for_anonymous(self):
+        scope = {"headers": []}
+        assert RateLimitMiddleware._user_key(scope) is None
+
+
+class TestRateLimitConfigHelpers:
+    """Direct tests on the new config helpers."""
+
+    def test_is_unauthenticated_path_matches_exact(self):
+        cfg = RateLimitConfig(unauthenticated_paths=("/login",))
+        assert cfg.is_unauthenticated_path("/login") is True
+        assert cfg.is_unauthenticated_path("/loginx") is False
+
+    def test_is_unauthenticated_path_matches_subpaths(self):
+        cfg = RateLimitConfig(unauthenticated_paths=("/auth",))
+        assert cfg.is_unauthenticated_path("/auth/callback") is True
+        assert cfg.is_unauthenticated_path("/auth/") is True
+        assert cfg.is_unauthenticated_path("/authentication") is False
+
+    def test_for_path_returns_none_for_exempt(self):
+        cfg = RateLimitConfig(exempt_paths=("/health",))
+        assert cfg.for_path("/health") is None
+        assert cfg.for_path("/health/live") is None
+
+    def test_for_path_returns_overrides(self):
+        cfg = RateLimitConfig(
+            default_per_minute=100,
+            default_burst=10,
+            overrides={"/api/v1/expensive": (5, 1)},
+        )
+        assert cfg.for_path("/api/v1/expensive") == (5, 1)
+        assert cfg.for_path("/api/v1/expensive/sub") == (5, 1)
+        assert cfg.for_path("/api/v1/other") == (100, 10)

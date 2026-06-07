@@ -41,6 +41,16 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 600
     rate_limit_burst: int = 60
     rate_limit_exempt_paths: str = "/health,/metrics"
+    # Backend selection: "memory" (per-pod) or "valkey" (shared across
+    # workers). When "valkey" is selected the rate limiter uses
+    # ``valkey_url`` for its connection. Failures against Valkey are
+    # fail-open: a brief outage degrades to "no shared state" rather
+    # than taking the API offline.
+    rate_limit_backend: str = "memory"
+    # TTL for bucket state in Valkey. Should comfortably exceed the
+    # longest configured ``per_minute`` window so an idle user does not
+    # accidentally re-get a full bucket mid-window.
+    rate_limit_valkey_ttl_sec: int = 600
 
     # Data providers
     data_providers_config: str = ""
