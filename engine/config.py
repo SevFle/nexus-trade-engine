@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -41,6 +43,23 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 600
     rate_limit_burst: int = 60
     rate_limit_exempt_paths: str = "/health,/metrics"
+    # When True, the API uses a Valkey-backed token-bucket backend so
+    # the configured limits are enforced globally across every pod
+    # sharing the same Valkey. When False (default), each pod keeps a
+    # private in-memory bucket — fine for single-pod deployments and
+    # tests, but the effective limit becomes ``per_minute * pod_count``.
+    rate_limit_valkey_enabled: bool = False
+    # Per-role rate-limit overrides. JSON-encoded mapping
+    # ``{role: [per_minute, burst]}``. Applied when the request can be
+    # authenticated inline by the middleware (i.e. a Bearer JWT is
+    # present). Unknown roles fall back to the default tier.
+    #
+    # Example: ``NEXUS_RATE_LIMIT_ROLE_TIERS='{"viewer":[120,30],"admin":[6000,200]}'``
+    rate_limit_role_tiers: str = ""
+    # TTL (seconds) for per-key state stored in Valkey. After this many
+    # seconds of inactivity the key is reaped, bounding memory growth
+    # on the distributed backend even under a hostile key-space.
+    rate_limit_valkey_key_ttl_sec: int = 3600
 
     # Data providers
     data_providers_config: str = ""
@@ -103,6 +122,42 @@ class Settings(BaseSettings):
     @property
     def enabled_providers(self) -> list[str]:
         return [p.strip() for p in self.auth_providers.split(",") if p.strip()]
+
+    @property
+    def rate_limit_role_tiers_map(self) -> dict[str, tuple[int, int]]:
+        """Parse ``rate_limit_role_tiers`` into a typed mapping.
+
+        Format: ``{role: [per_minute, burst]}``. Malformed entries are
+        silently skipped so a bad operator env var cannot prevent the
+        process from starting — instead, the affected role falls back
+        to the default tier.
+        """
+        raw = (self.rate_limit_role_tiers or "").strip()
+        if not raw:
+            return {}
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        out: dict[str, tuple[int, int]] = {}
+        # Expected shape: [per_minute, burst].
+        _expected_limits_len = 2
+        for role, limits in parsed.items():
+            if not isinstance(role, str) or not isinstance(limits, (list, tuple)):
+                continue
+            if len(limits) != _expected_limits_len:
+                continue
+            try:
+                per_min = int(limits[0])
+                burst = int(limits[1])
+            except (TypeError, ValueError):
+                continue
+            if per_min <= 0 or burst <= 0:
+                continue
+            out[role] = (per_min, burst)
+        return out
 
 
 settings = Settings()
