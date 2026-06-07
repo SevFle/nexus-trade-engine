@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from fastapi import FastAPI
@@ -11,7 +11,12 @@ from valkey.asyncio import Valkey
 from engine.api.auth.local import LocalAuthProvider
 from engine.api.auth.registry import AuthProviderRegistry
 from engine.api.body_size_limit import BodySizeLimitMiddleware
-from engine.api.rate_limit import RateLimitConfig, RateLimitMiddleware
+from engine.api.rate_limit import (
+    InMemoryBucketBackend,
+    RateLimitConfig,
+    RateLimitMiddleware,
+    ValkeyBucketBackend,
+)
 from engine.api.router import api_router
 from engine.api.routes.reference import get_search_index
 from engine.api.security_headers import (
@@ -172,22 +177,45 @@ def create_app() -> FastAPI:
     exempt_paths = tuple(
         p.strip() for p in settings.rate_limit_exempt_paths.split(",") if p.strip()
     )
+    rate_limit_config = RateLimitConfig(
+        default_per_minute=settings.rate_limit_per_minute,
+        default_burst=settings.rate_limit_burst,
+        exempt_paths=exempt_paths,
+        role_tiers=settings.rate_limit_role_tiers_map,
+        # Tight per-route cap on client-error reporting so a buggy
+        # render loop in the frontend cannot accidentally DoS the
+        # log pipeline. 30 req / minute / IP is well above any
+        # legitimate ErrorBoundary trigger rate. ``trusted_proxy_depth``
+        # stays at the safe default of 0; only raise it after a
+        # trusted reverse proxy is verifiably the only path in.
+        overrides={
+            "/api/v1/client/errors": (30, 30),
+        },
+    )
+
+    def _build_rate_limit_backend(app: FastAPI) -> Any:
+        if not settings.rate_limit_valkey_enabled:
+            return InMemoryBucketBackend()
+        client = getattr(app.state, "valkey", None)
+        if client is None:
+            # Valkey not yet initialised (e.g. unit test building the
+            # app without a lifespan). Fall back to in-memory so the
+            # app stays usable; a warning is emitted so the operator
+            # notices the misconfiguration in multi-pod deploys.
+            logger.warning(
+                "rate_limit.valkey_enabled_but_no_client",
+                fallback="in_memory",
+            )
+            return InMemoryBucketBackend()
+        return ValkeyBucketBackend(
+            client=client,
+            key_ttl_sec=settings.rate_limit_valkey_key_ttl_sec,
+        )
+
     app.add_middleware(
         RateLimitMiddleware,
-        config=RateLimitConfig(
-            default_per_minute=settings.rate_limit_per_minute,
-            default_burst=settings.rate_limit_burst,
-            exempt_paths=exempt_paths,
-            # Tight per-route cap on client-error reporting so a buggy
-            # render loop in the frontend cannot accidentally DoS the
-            # log pipeline. 30 req / minute / IP is well above any
-            # legitimate ErrorBoundary trigger rate. ``trusted_proxy_depth``
-            # stays at the safe default of 0; only raise it after a
-            # trusted reverse proxy is verifiably the only path in.
-            overrides={
-                "/api/v1/client/errors": (30, 30),
-            },
-        ),
+        config=rate_limit_config,
+        backend=_build_rate_limit_backend(app),
     )
     # Hard cap on request body size — Starlette has no default. 1 MiB
     # is generous for every existing route and still well under the
