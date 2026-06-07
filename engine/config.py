@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 600
     rate_limit_burst: int = 60
     rate_limit_exempt_paths: str = "/health,/metrics"
+    # When true, the API uses a Valkey/Redis-backed token bucket so
+    # multi-pod deployments share a global limit. When false (default)
+    # the in-memory backend is used — fine for single-pod and tests.
+    rate_limit_use_valkey: bool = False
 
     # Data providers
     data_providers_config: str = ""

@@ -11,6 +11,7 @@ from valkey.asyncio import Valkey
 from engine.api.auth.local import LocalAuthProvider
 from engine.api.auth.registry import AuthProviderRegistry
 from engine.api.body_size_limit import BodySizeLimitMiddleware
+from engine.api.middleware.rate_limit import ValkeyRateLimitMiddleware
 from engine.api.rate_limit import RateLimitConfig, RateLimitMiddleware
 from engine.api.router import api_router
 from engine.api.routes.reference import get_search_index
@@ -172,23 +173,35 @@ def create_app() -> FastAPI:
     exempt_paths = tuple(
         p.strip() for p in settings.rate_limit_exempt_paths.split(",") if p.strip()
     )
-    app.add_middleware(
-        RateLimitMiddleware,
-        config=RateLimitConfig(
-            default_per_minute=settings.rate_limit_per_minute,
-            default_burst=settings.rate_limit_burst,
-            exempt_paths=exempt_paths,
-            # Tight per-route cap on client-error reporting so a buggy
-            # render loop in the frontend cannot accidentally DoS the
-            # log pipeline. 30 req / minute / IP is well above any
-            # legitimate ErrorBoundary trigger rate. ``trusted_proxy_depth``
-            # stays at the safe default of 0; only raise it after a
-            # trusted reverse proxy is verifiably the only path in.
-            overrides={
-                "/api/v1/client/errors": (30, 30),
-            },
-        ),
+    rate_limit_config = RateLimitConfig(
+        default_per_minute=settings.rate_limit_per_minute,
+        default_burst=settings.rate_limit_burst,
+        exempt_paths=exempt_paths,
+        # Tight per-route cap on client-error reporting so a buggy
+        # render loop in the frontend cannot accidentally DoS the
+        # log pipeline. 30 req / minute / IP is well above any
+        # legitimate ErrorBoundary trigger rate. ``trusted_proxy_depth``
+        # stays at the safe default of 0; only raise it after a
+        # trusted reverse proxy is verifiably the only path in.
+        overrides={
+            "/api/v1/client/errors": (30, 30),
+        },
     )
+    if settings.rate_limit_use_valkey:
+        # Multi-pod mode: bucket state lives in Valkey so all workers
+        # share the global cap. The middleware resolves the client from
+        # app.state.valkey on first request (after the lifespan opens
+        # the connection), and falls back to an unlimited pass-through
+        # for the brief startup window before the connection is bound.
+        app.add_middleware(
+            ValkeyRateLimitMiddleware,
+            config=rate_limit_config,
+        )
+    else:
+        app.add_middleware(
+            RateLimitMiddleware,
+            config=rate_limit_config,
+        )
     # Hard cap on request body size — Starlette has no default. 1 MiB
     # is generous for every existing route and still well under the
     # log-bombing limits the per-route Pydantic models impose.
