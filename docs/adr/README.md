@@ -16,6 +16,9 @@ We follow the [MADR](https://adr.github.io/madr/) format. See
 | 0001   | Accepted | [Scaffold technology choices](0001-scaffold-tech-choices.md) |
 | 0002   | Accepted | [Auth & RBAC model](0002-auth-rbac.md)        |
 | 0003   | Accepted | [Mobile experience strategy — PWA on top of the React frontend](0003-mobile-app-strategy.md) |
+| 0004   | Accepted | [Task queue — TaskIQ over Celery / RQ / arq](0004-task-queue-taskiq.md) |
+| 0005   | Accepted | [Valkey client + Valkey 8 broker (over redis-py / Redis)](0005-valkey-over-redis.md) |
+| 0006   | Accepted | [Password hashing (bcrypt) and MFA secret at rest (Fernet)](0006-bcrypt-fernet.md) |
 
 When you accept a new ADR, add a row to this table in the same PR.
 

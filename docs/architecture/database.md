@@ -35,8 +35,11 @@ The schema is owned by the Alembic migration chain in
 | 008   | `backtest_results.composite_score` + `score_breakdown` (gh#8). |
 | 009   | `users.{mfa_enabled, mfa_secret_encrypted, mfa_backup_codes}`. |
 | 010   | `webhook_configs` + `webhook_deliveries` (gh#80).              |
+| 011   | `api_keys` — long-lived scoped credentials for SDK / headless access (gh#94). |
+| 012   | `dsr_requests` — GDPR / CCPA data-subject-request audit log (gh#157). |
 
-Run `alembic history` for the source of truth.
+Run `alembic history` for the source of truth. The next free revision
+number is `013`.
 
 ## Critical tables
 
@@ -56,6 +59,27 @@ runbook at [`docs/operations/backup-and-recovery.md`](../operations/backup-and-r
   registry and a delivery audit trail. The `signing_secret` column is
   returned to the operator only on create; reads return null. **Do not
   log delivery payloads** — they may contain user data.
+- **`api_keys`** — long-lived bearer credentials for headless clients.
+  `key_hash` is bcrypt; the plaintext secret is shown once at create
+  time. Revocation is soft (`revoked_at`).
+- **`dsr_requests`** — append-only GDPR / CCPA audit row. The
+  `sla_due_at` column is the statutory clock. The application default
+  is **30 days** (see `SLA_DEFAULT_DAYS` in
+  [`engine/privacy/dsr.py`](../../engine/privacy/dsr.py)), chosen as
+  the strictest widely-applicable deadline we ship out of the box:
+
+  - **GDPR** (EU/UK) requires a response within **one calendar month**
+    of receipt (Art. 12(3)). "One month" is interpreted literally —
+    a request received on 15 January is due on 15 February — so a
+    flat 30-day timer is the safer side of the line and must be
+    revisited on a per-request basis when a 31-day month is in play.
+  - **CCPA / CPRA** (California) allows up to **45 days**, with a
+    single 45-day extension permitted on written notice. Our 30-day
+    default is well inside the CCPA ceiling; operators who need the
+    full 45 days (or the 45-day extension) should pass `sla_days=45`
+    to [`record_request`](../../engine/privacy/dsr.py).
+
+  Operators are expected to keep this table intact for regulators.
 
 ## TimescaleDB usage
 

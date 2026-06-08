@@ -53,13 +53,25 @@ that lack the required scope get `403`.
 
 ### Legal acceptance gate
 
-`backtest`, `scoring`, `market-data`, `marketplace`, `portfolio`,
-`strategies`, and `reference` routers are mounted with
+`backtest`, `scoring`, `market-data`, `marketplace`, `portfolio`, and
+`strategies` routers are mounted with
 `Depends(require_legal_acceptance)`. Callers without an
 `acceptances` row for the *current version* of every
 `requires_acceptance` document get `403`. Acceptance is recorded via
 `POST /api/v1/legal/accept`. See [`data-model.md`](data-model.md) for
 the immutable acceptance table.
+
+Legal acceptance is wired in two places: most routers declare it at
+the `APIRouter(dependencies=…)` level
+([`portfolio.py`](../engine/api/routes/portfolio.py),
+[`strategies.py`](../engine/api/routes/strategies.py),
+[`marketplace.py`](../engine/api/routes/marketplace.py),
+[`scoring.py`](../engine/api/routes/scoring.py)); `backtest` and
+`market-data` get it from the top-level include in
+[`router.py`](../engine/api/router.py). `reference`, `tax`, `webhooks`,
+`privacy`, and `auth` are **not** gated — they need to be reachable
+before the user has accepted anything (e.g. the legal docs UI itself
+calls `/reference/suggest` to render attributions).
 
 ---
 

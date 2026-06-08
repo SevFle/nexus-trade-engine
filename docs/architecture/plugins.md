@@ -83,20 +83,46 @@ shape:
 
 ## Sandboxing
 
-Plugins run in the same Python process as the engine; we do **not**
-sandbox them with subprocess / WASM today. That means a malicious
-plugin can read environment variables, the database, and the
-filesystem.
+Strategies run inside a layered sandbox defined in
+[`engine/plugins/sandbox.py`](../../engine/plugins/sandbox.py). Four of
+five layers are implemented today; process isolation is the production
+target and is tracked as a follow-up.
 
-Operators must therefore treat plugins as part of their trusted
-deployment surface. Two practical implications:
+> **Important — threat model.** Layers 1–4 are **best-effort
+> defense-in-depth, not a security boundary**. They narrow the
+> accidental-bug surface and raise the bar for casual misuse, but they
+> all run **in-process**, share the engine's memory and DB session,
+> and can be defeated by a determined attacker with the full Python
+> runtime available. **Only layer 5 (process / container isolation) is
+> a real security boundary**, because it puts the strategy in a
+> separate address space with the kernel enforcing the limits. Treat
+> the four in-process layers accordingly — helpful guardrails, not
+> something to stake a customer's data on.
+
+| Layer | Kind | Status | Mechanism |
+|---|---|---|---|
+| 1. Import restrictions | best-effort in-process | **shipped** | `RestrictedImporter` blocks `subprocess`, `os.system`, `socket`, etc. unless the manifest declares them. |
+| 2. Network whitelist | best-effort in-process | **shipped** | `SandboxedHttpClient` proxies every outbound call through an allowlist declared in the manifest (`requires_network: true` + URL prefixes). |
+| 3. Resource limits | best-effort in-process | **shipped** | `resource.setrlimit` for memory / file descriptors on Linux. |
+| 4. Filesystem isolation | best-effort in-process | **shipped** | Each evaluation runs in a fresh `tempfile.TemporaryDirectory`; the strategy only sees its own declared artifacts (read-only). |
+| 5. Process isolation | **security boundary** | **planned** | Subprocess / container per strategy, communicated with via pipes (serialized `MarketState` in, `Signal[]` out). Killed on timeout / memory pressure. |
+
+Because layers 1–4 are in-process, a malicious strategy that finds a
+path past them can read environment variables, the database session,
+and the filesystem. Operators must therefore treat plugins as part of
+their trusted deployment surface today:
 
 - Pin plugin versions in your operator config; do not auto-update.
 - Plugins that come from third parties should be code-reviewed before
   install.
+- For untrusted strategies, **do not rely on layers 1–4**. Run them
+  in an external sandbox (container, VM) and call the engine through
+  the SDK instead of loading them in-process.
 
-A future ADR (deferred) will revisit this with a sandbox proposal —
-likely WASI for strategies and a separate process for executors.
+Layer 5 is the production architecture — see the module docstring in
+[`sandbox.py`](../../engine/plugins/sandbox.py). An ADR covering the
+final isolation choice (likely WASI for strategies, separate process
+for executors) is deferred until that work is sequenced.
 
 ## Where the code lives
 
