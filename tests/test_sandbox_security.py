@@ -18,6 +18,7 @@ import asyncio
 import builtins
 import os
 import sys
+import unittest.mock
 from typing import Any
 
 import httpx
@@ -737,6 +738,142 @@ class TestPathPrefixMatching:
 
 
 # ── Integration ──────────────────────────────────────────────────────
+
+
+class _WriteToAllowedPathStrategy:
+    name = "write_allowed_path"
+    version = "1.0.0"
+
+    def __init__(self, target_path: str) -> None:
+        self._target = target_path
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        with open(self._target, "w") as f:
+            f.write("test")
+        return []
+
+
+class _AllowedHttpStrategy:
+    name = "allowed_http"
+    version = "1.0.0"
+
+    async def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        import httpx as hx
+
+        transport = hx.MockTransport(lambda r: hx.Response(200, json={"ok": True}))
+        async with hx.AsyncClient(transport=transport) as client:
+            await client.get("https://api.anthropic.com/v1/models")
+        return []
+
+
+class TestPlaceholderStrategy:
+    def test_on_bar_returns_empty_list(self) -> None:
+        from engine.plugins.sandbox import _PlaceholderStrategy
+
+        p = _PlaceholderStrategy()
+        assert p.on_bar(None, None) == []
+
+
+class TestResourceLimitsNoModule:
+    def test_apply_returns_early_without_resource_module(self, manifest: StrategyManifest) -> None:
+        import engine.plugins.sandbox as mod
+
+        sandbox = StrategySandbox(_GoodStrategy(), manifest)
+        original = mod.HAS_RESOURCE_MODULE
+        mod.HAS_RESOURCE_MODULE = False
+        try:
+            sandbox._apply_resource_limits()
+        finally:
+            mod.HAS_RESOURCE_MODULE = original
+            sandbox.cleanup()
+
+    def test_restore_returns_early_without_resource_module(self, manifest: StrategyManifest) -> None:
+        import engine.plugins.sandbox as mod
+
+        sandbox = StrategySandbox(_GoodStrategy(), manifest)
+        original = mod.HAS_RESOURCE_MODULE
+        mod.HAS_RESOURCE_MODULE = False
+        try:
+            sandbox._restore_resource_limits()
+        finally:
+            mod.HAS_RESOURCE_MODULE = original
+            sandbox.cleanup()
+
+
+class TestResourceLimitsErrors:
+    def test_handles_rlimit_as_error(self, manifest: StrategyManifest) -> None:
+        import engine.plugins.sandbox as mod
+
+        sandbox = StrategySandbox(_GoodStrategy(), manifest)
+        with unittest.mock.patch.object(mod._resource, "getrlimit", side_effect=ValueError):
+            sandbox._apply_resource_limits()
+        sandbox.cleanup()
+
+    def test_handles_rlimit_nofile_error(self, manifest: StrategyManifest) -> None:
+        import engine.plugins.sandbox as mod
+
+        sandbox = StrategySandbox(_GoodStrategy(), manifest)
+        real_getrlimit = mod._resource.getrlimit
+        call_count = 0
+
+        def _flaky_getrlimit(res):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return real_getrlimit(res)
+            raise OSError("mocked")
+
+        with unittest.mock.patch.object(mod._resource, "getrlimit", side_effect=_flaky_getrlimit):
+            sandbox._apply_resource_limits()
+        sandbox._restore_resource_limits()
+        sandbox.cleanup()
+
+
+class TestFilesystemIsolationWrite:
+    async def test_write_to_allowed_path_blocked(self, manifest: StrategyManifest, tmp_path: Any) -> None:
+        artifact_dir = tmp_path / "artifacts"
+        artifact_dir.mkdir()
+        target = artifact_dir / "data.txt"
+
+        write_manifest = StrategyManifest(
+            id="test",
+            name="test",
+            version="1.0.0",
+            resources={"max_cpu_seconds": 1},
+            artifacts=[str(artifact_dir)],
+        )
+        sandbox = StrategySandbox(_WriteToAllowedPathStrategy(str(target)), write_manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "Write access" in (sandbox.metrics.last_error or "")
+        finally:
+            sandbox.cleanup()
+
+
+class TestRestrictedNetworkSend:
+    async def test_allowed_endpoint_passes(self, networked_manifest: StrategyManifest) -> None:
+        sandbox = StrategySandbox(_AllowedHttpStrategy(), networked_manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 0
+        finally:
+            sandbox.cleanup()
+
+
+class TestCleanupWhileActive:
+    def test_cleanup_restores_builtins_when_restrictions_active(self, manifest: StrategyManifest) -> None:
+        import builtins as bi
+
+        sandbox = StrategySandbox(_GoodStrategy(), manifest)
+        original_open = bi.open
+        sandbox._activate_restrictions()
+        assert sandbox._original_open is not None
+        sandbox.cleanup()
+        assert bi.open is original_open
+        assert sandbox._original_open is None
 
 
 class TestSandboxSecurityIntegration:

@@ -21,7 +21,7 @@ from engine.reference.classification import (
     forex_pair_class,
     is_valid_gics_path,
 )
-from engine.reference.search import SearchIndex, Suggestion
+from engine.reference.search import SearchIndex, Suggestion, _within_one_edit
 
 
 def _aapl() -> RefInstrument:
@@ -129,6 +129,24 @@ class TestRefInstrumentModel:
         )
         assert a.id != b.id
 
+    def test_whitespace_ticker_rejected(self):
+        with pytest.raises(ValueError, match="trimmed"):
+            RefInstrument(
+                primary_ticker=" AAPL ",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Apple",
+            )
+
+    def test_empty_ticker_rejected(self):
+        with pytest.raises((ValueError, TypeError)):
+            RefInstrument(
+                primary_ticker=" ",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Apple",
+            )
+
     def test_validates_currency_iso_4217_length(self):
         with pytest.raises((ValueError, TypeError)):
             RefInstrument(
@@ -178,6 +196,12 @@ class TestResolverByTicker:
             r.resolve("SHOP")
         assert len(exc.value.candidates) == 2
 
+    def test_resolve_raises_type_error_for_invalid_type(self):
+        r = Resolver()
+        r.register(_aapl())
+        with pytest.raises(TypeError, match="must be str or dict"):
+            r.resolve(42)  # type: ignore[arg-type]
+
     def test_disambiguate_with_venue(self):
         r = Resolver()
         r.register(_shop_nyse())
@@ -219,6 +243,16 @@ class TestResolverByIdentifier:
         r.register(_aapl())
         out = r.resolve({"cik": "0000320193"})
         assert out is not None and out.primary_ticker == "AAPL"
+
+    def test_resolve_dict_garbage_ticker_returns_none(self):
+        r = Resolver()
+        r.register(_aapl())
+        assert r.resolve({"ticker": "<script>", "venue": "XNAS"}) is None
+
+    def test_resolve_dict_unknown_keys_returns_none(self):
+        r = Resolver()
+        r.register(_aapl())
+        assert r.resolve({"unknown_key": "value"}) is None
 
 
 class TestResolverFuzz:
@@ -268,6 +302,14 @@ class TestGICSValidation:
             "Health Care",
             "Software & Services",
             "Software",
+            "Application Software",
+        )
+
+    def test_invalid_industry_in_valid_sector_group(self):
+        assert not is_valid_gics_path(
+            "Information Technology",
+            "Software & Services",
+            "NonexistentIndustry",
             "Application Software",
         )
 
@@ -330,6 +372,26 @@ class TestSearchIndex:
             )
         results = idx.search("Test", limit=10)
         assert len(results) == 10
+
+    def test_empty_query_returns_empty(self):
+        idx = SearchIndex()
+        idx.add(_aapl())
+        assert idx.search("") == []
+        assert idx.search("   ") == []
+
+    def test_name_exact_match(self):
+        idx = SearchIndex()
+        idx.add(_aapl())
+        results = idx.search("apple inc.")
+        assert results
+        assert results[0].primary_ticker == "AAPL"
+
+    def test_ticker_contains_match(self):
+        idx = SearchIndex()
+        idx.add(_aapl())
+        results = idx.search("ppl")
+        assert results
+        assert results[0].primary_ticker == "AAPL"
 
 
 class TestSymbolAndNameSearch:
@@ -734,3 +796,53 @@ class TestTypeaheadSuggest:
         out = idx.suggest("App")  # prefix hits Apple
         assert out
         assert out[0].record.primary_ticker == "AAPL"
+
+    def test_oversize_query_returns_empty(self):
+        idx = self._idx()
+        assert idx.suggest("x" * 1000) == []
+
+    def test_name_exact_match_tier(self):
+        idx = SearchIndex()
+        idx.add(
+            RefInstrument(
+                primary_ticker="XYZ",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="UniqueCorp",
+            )
+        )
+        out = idx.suggest("uniquecorp")
+        assert out
+        assert out[0].record.primary_ticker == "XYZ"
+
+    def test_fuzzy_with_asset_class_filter(self):
+        idx = SearchIndex()
+        idx.add(
+            RefInstrument(
+                primary_ticker="AAPL",
+                primary_venue="XNAS",
+                asset_class="equity",
+                name="Apple Inc.",
+            )
+        )
+        idx.add(
+            RefInstrument(
+                primary_ticker="ETH",
+                primary_venue="XCRY",
+                asset_class="crypto",
+                name="Ethereum",
+            )
+        )
+        out = idx.suggest("ethereun", asset_class="crypto")
+        assert all(s.record.asset_class == "crypto" for s in out)
+
+
+class TestWithinOneEdit:
+    def test_exact_match_returns_true(self):
+        assert _within_one_edit("hello", "hello") is True
+
+    def test_trailing_insertion(self):
+        assert _within_one_edit("hello", "helloz") is True
+
+    def test_two_edits_returns_false(self):
+        assert _within_one_edit("abc", "xyz") is False
