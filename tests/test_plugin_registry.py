@@ -153,6 +153,28 @@ class TestPluginRegistry:
         assert registry.load_strategy("no_class") is None
 
 
+class TestIsScoringStrategyFallback:
+    def test_returns_false_when_scoring_module_unavailable(self):
+        import sys
+        from unittest.mock import patch
+
+        with patch.dict(sys.modules, {"nexus_sdk.scoring": None}):
+            from engine.plugins.registry import is_scoring_strategy
+
+            assert is_scoring_strategy(object()) is False
+
+
+class TestLoadStrategyClassNullSpec:
+    def test_raises_import_error_for_null_spec(self):
+        from unittest.mock import patch
+
+        with patch(
+            "engine.plugins.registry.importlib.util.spec_from_file_location",
+            return_value=None,
+        ), pytest.raises(ImportError, match="Cannot load strategy"):
+            load_strategy_class("/fake/path.py")
+
+
 @pytest.mark.integration
 class TestDiscoverRealStrategies:
     def test_discovers_mean_reversion_basic(self):
