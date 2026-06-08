@@ -17,8 +17,13 @@ The engine stores two kinds of secret material in the database:
    plaintext at verification time to compute the expected code) and
    the master key material for the engine's encrypted secret store
    ([`engine/core/secrets.py`](../../engine/core/secrets.py)). The
-   database must store these, but a read-only DB leak (SQL dump,
-   backup tape,Snapshot) must not be enough to recover them.
+   database must store these, but a *database-scoped* leak (SQL
+   injection that exfiltrates table rows, a stolen DB backup, a read
+   replica) must not be enough to recover them — because the
+   decryption key is held *outside* the database. This is scoped to a
+   SQL-injection-level DB leak, not a broad "read-only leak": an
+   attacker who also reaches the application host / env var still
+   recovers plaintext (see [Key Management](#key-management)).
 
 Two ADRs already cover adjacent decisions: ADR-0002 picked the
 `AuthBackend` / `RBAC` architecture, and ADR-0001 named Argon2id as
@@ -29,14 +34,39 @@ the conversation every PR.
 
 ## Decision Drivers
 
-- **Defense against a DB-only leak.** A read-only snapshot of
-  `users.hashed_password`, `users.mfa_secret_encrypted`,
-  `api_keys.key_hash`, or `secrets.ciphertext` must not give an
-  attacker an authentication path.
-- **Latency budget.** A login attempt goes through password verify
-  *and* (if MFA is on) TOTP verify. We can spend ~250 ms hashing on
-  registration / verify, not the multi-second cost of an aggressive
-  Argon2id profile.
+- **Defense against a DB-scoped leak.** A database-scoped leak (SQL
+  injection that exfiltrates table rows, a stolen DB backup, a read
+  replica) hands an attacker ciphertext only — the decryption key
+  lives outside the database — so `users.mfa_secret_encrypted` and
+  `secrets.ciphertext` must not yield plaintext, and
+  `users.hashed_password` / `api_keys.key_hash` must not be
+  crackable in useful time. The boundary is *DB-scoped*, not "any
+  read-only leak"; an attacker who also reaches the env var / host
+  still wins (see [Key Management](#key-management)).
+- **Latency budget.** A login attempt runs password verify *and* (if
+  MFA is on) TOTP verify, so we cap hashing at ~250 ms per attempt.
+  This does **not** distinguish bcrypt from Argon2id: an
+  OWASP-baseline Argon2id profile (time cost `t=2`, memory
+  `m=64 MiB`, parallelism `p=1`) measures ~100–250 ms on commodity
+  hardware — the same band as bcrypt cost factor 12 (~250 ms). Only
+  *aggressive* Argon2id (e.g. `m=1 GiB`) pushes into the multi-second
+  range, so latency alone is not a reason to prefer bcrypt; the
+  decision turns on the drivers below.
+- **Operational simplicity (reason to retain bcrypt).** bcrypt's cost
+  factor is per-hash and transparently upgrades on the next login via
+  `bcrypt.gensalt(rounds=N)`, so ratcheting cost upward is a lazy,
+  row-by-row migration with no schema change. Combined with the
+  login rate limiter (ADR-0005), which raises the cost of *online*
+  attacks far more than any KDF raises *offline* attack cost, bcrypt
+  is the cheapest safe default to operate today.
+- **bcrypt 72-byte input ceiling.** bcrypt silently truncates to the
+  first 72 bytes of a password, so any passphrase longer than that
+  collapses to a shared prefix. This is a real driver, not a
+  footnote: it weakens distinctness for long passphrases, and
+  Argon2id has no such ceiling. We accept it because inputs are
+  rejected at > 1 KiB at the request boundary and we pre-hash with
+  SHA-256 before bcrypt if/when long passphrases appear (see
+  Consequences).
 - **Implementation surface.** Both choices should be one import from
   the Python cryptography ecosystem, with no hand-rolled primitives.
 - **Rotation story.** Recoverable secrets need master-key rotation
@@ -116,10 +146,12 @@ migration window.
     hand-rolled crypto, no exotic C dependencies.
 - **Negative**
   - bcrypt is GPU-friendly compared to Argon2id. We accept the
-    trade-off because the latency budget is real and because rate
-    limiting on the login endpoint (see ADR-0005's Valkey-backed
-    limiter) raises the cost of online attacks far more than any KDF
-    can raise the cost of offline attacks.
+    trade-off not on latency grounds (a tuned Argon2id profile is
+    comparably fast — see Decision Drivers) but on operational ones:
+    per-hash cost-factor upgrades and the login rate limiter
+    (ADR-0005's Valkey-backed limiter), which raises the cost of
+    online attacks far more than any KDF raises the cost of offline
+    attacks.
   - Fernet is AES-128, not AES-256. We're comfortable with the
     128-bit security margin; if AES-128 falls, this project has
     bigger problems than MFA seeds.
@@ -130,6 +162,75 @@ migration window.
 - **Neutral**
   - Cost factor 12 will need bumping as CPUs improve. We track that
     in the [auth-mfa runbook](../operations/runbooks/auth-mfa.md).
+
+## Key Management
+
+This section makes the Fernet threat boundary and rotation procedure
+explicit so operators don't have to reverse-engineer them from code.
+
+### Where the keys live
+
+- **MFA key** — `settings.mfa_encryption_key`, a url-safe-base64
+  32-byte Fernet key. Loaded from the `MFA_ENCRYPTION_KEY`
+  environment variable; an empty value disables MFA enrollment (see
+  [`engine/config.py`](../../engine/config.py) and
+  [`engine/api/auth/mfa_service.py`](../../engine/api/auth/mfa_service.py)).
+- **Secret-store master key** — `settings.secrets_master_key`, same
+  encoding. Loaded from `SECRETS_MASTER_KEY` and wrapped in a
+  `MasterKey` (current + optional previous) in
+  [`engine/core/secrets.py`](../../engine/core/secrets.py).
+- **Production target.** Env-var injection is the default so a
+  self-hosted operator can run MFA without a cloud account. For
+  multi-tenant / hosted deployments the intended target is
+  KMS-backed envelope encryption: the Fernet key becomes a
+  data-encryption-key unwrapped at boot from a KMS (AWS KMS / GCP
+  KMS / Vault Transit), so the long-lived key never sits in a `.env`
+  file or container image. Tracked as a follow-up.
+
+### Rotation procedure
+
+The `MultiFernet` inside `SecretsService` is what makes rotation safe:
+
+1. Generate a new 32-byte Fernet key with
+   `engine.core.secrets.generate_master_key()`.
+2. Promote it to current and demote the old current to `previous` via
+   `SecretsService.rotate_master_key(new_current=…)`.
+   `rotate_master_key` refuses to run if a `previous` key is already
+   installed, so an unfinished migration cannot be silently orphaned.
+3. Migrate ciphertext with `await SecretsService.reencrypt_all()`.
+   This is two-phase: it decrypts *every* record first and aborts
+   *before any write* if any record fails under either key, then
+   re-encrypts under the new current and returns the count migrated.
+4. Once a full run completes without raising, drop the previous key
+   with `drop_previous_key()`. Do **not** drop `previous` earlier —
+   a crash mid-flush leaves a mix of old/new ciphertext, and the
+   previous key is the only thing that can still read the old ones.
+5. The MFA key (`mfa_encryption_key`) rotates the same way at the row
+   level: re-encrypt every `users.mfa_secret_encrypted` value with
+   the new Fernet key while both old and new are mounted.
+
+### Threat boundary (corrected)
+
+Fernet defends against a **database-scoped** leak — an attacker who
+exfiltrates database rows (SQL injection, a dumped `users` table, a
+stolen DB backup) gets ciphertext only, and the key lives outside the
+database, so plaintext is not recoverable from the dump alone.
+
+It does **not** defend against a broader compromise in which the
+attacker also obtains the key:
+
+- Application-host compromise (read access to the process env or
+  `/proc/<pid>/environ`).
+- A leaked `.env` file, a baked-in container-image secret, or a
+  config/secret-store read that exposes `MFA_ENCRYPTION_KEY` /
+  `SECRETS_MASTER_KEY` alongside the DB dump.
+
+In that combined scenario a DB dump + the env var is enough to
+recover every MFA seed and secret-store value (already noted under
+Negative Consequences). Scoping the claim to "SQL-injection-level DB
+leak" rather than the looser "read-only DB leak" keeps the protection
+honest; KMS-backed envelope encryption is the follow-up that narrows
+the boundary further (the key never touches host disk).
 
 ## Pros and Cons of the Options
 

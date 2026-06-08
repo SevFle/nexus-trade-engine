@@ -1,7 +1,14 @@
 # ADR-0001: Scaffold Technology Choices
 
-**Status:** Accepted
+**Status:** Accepted (partially superseded)
 **Date:** 2026-04-15
+
+> **Partially superseded by
+> [ADR-0006 — Password hashing (bcrypt) and MFA secret at rest
+> (Fernet)](0006-bcrypt-fernet.md)** for password hashing only. The
+> original scaffold named Argon2id as the intended password hash;
+> ADR-0006 records the bcrypt choice that actually shipped. Every
+> other scaffold decision below remains in force.
 
 ## Context
 
