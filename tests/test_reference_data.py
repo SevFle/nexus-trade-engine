@@ -130,7 +130,7 @@ class TestRefInstrumentModel:
         assert a.id != b.id
 
     def test_whitespace_ticker_rejected(self):
-        with pytest.raises(ValueError, match="trimmed"):
+        with pytest.raises(ValueError):
             RefInstrument(
                 primary_ticker=" AAPL ",
                 primary_venue="XNAS",

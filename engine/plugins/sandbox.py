@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import builtins
 import contextlib
+import contextvars
 import io as _io_module
 import os
 import shutil
@@ -63,6 +64,10 @@ _BLOCKED_ATTRS: frozenset[str] = frozenset(
 )
 
 _eval_lock: asyncio.Lock = asyncio.Lock()
+
+_in_sandbox_execution: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "_in_sandbox_execution", default=False,
+)
 
 
 class _RestrictedObject:
@@ -248,6 +253,8 @@ class StrategySandbox:
             stream: bool = False,
             **kwargs: Any,
         ) -> Any:
+            if not _in_sandbox_execution.get(False):
+                return await original_send(client, request, stream=stream, **kwargs)
             host = request.url.host
             if not any(host == ep or host.endswith(f".{ep}") for ep in allowed):
                 raise PermissionError(f"Network access to {host} is not allowed")
@@ -268,8 +275,10 @@ class StrategySandbox:
         self._original_open = builtins.open
         builtins.open = self._restricted_open  # type: ignore[assignment]
         self._apply_resource_limits()
+        _in_sandbox_execution.set(True)
 
     def _deactivate_restrictions(self) -> None:
+        _in_sandbox_execution.set(False)
         self._importer.uninstall()
         if self._original_object is not None:
             builtins.object = self._original_object
@@ -381,10 +390,7 @@ class StrategySandbox:
 
     def cleanup(self) -> None:
         """Release all sandbox resources (temp dir, hooks, HTTP client)."""
-        self._importer.uninstall()
-        if self._original_open is not None:
-            builtins.open = self._original_open
-            self._original_open = None
+        self._deactivate_restrictions()
         if self._work_dir and os.path.isdir(self._work_dir):
             shutil.rmtree(self._work_dir, ignore_errors=True)
             self._work_dir = None
