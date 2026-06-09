@@ -111,6 +111,15 @@ class Settings(BaseSettings):
     ldap_search_base: str = ""
     ldap_role_mapping: str = "{}"
 
+    ws_max_connections: int = 5000
+    ws_auth_timeout_seconds: float = 5.0
+    ws_heartbeat_interval_seconds: float = 30.0
+    ws_idle_timeout_seconds: float = 300.0
+    ws_send_queue_size: int = 256
+    ws_max_subscriptions_per_connection: int = 50
+    ws_event_bridge_concurrency: int = 32
+    ws_auth_rate_limit_per_minute: int = 10
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"

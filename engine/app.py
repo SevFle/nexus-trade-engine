@@ -23,6 +23,10 @@ from engine.api.security_headers import (
     SecurityHeadersConfig,
     SecurityHeadersMiddleware,
 )
+from engine.api.ws.auth import AuthRateLimiter
+from engine.api.ws.connection_manager import ConnectionManager
+from engine.api.ws.event_bridge import EventBusBridge
+from engine.api.ws.router import init_ws
 from engine.config import settings
 from engine.data.providers import (
     AssetClass,
@@ -151,7 +155,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.info("legal.sync_complete", documents_synced=count)
     except Exception:
         logger.exception("legal.sync_failed")
+
+    from engine.events.bus import EventBus
+
+    ws_manager = ConnectionManager(
+        max_connections=settings.ws_max_connections,
+        send_queue_size=settings.ws_send_queue_size,
+        max_subscriptions_per_connection=settings.ws_max_subscriptions_per_connection,
+        heartbeat_interval=settings.ws_heartbeat_interval_seconds,
+    )
+    ws_rate_limiter = AuthRateLimiter(max_attempts=settings.ws_auth_rate_limit_per_minute)
+    init_ws(ws_manager, rate_limiter=ws_rate_limiter)
+    app.state.ws_manager = ws_manager
+
+    event_bus = EventBus(redis_url=settings.valkey_url)
+    await event_bus.connect()
+    app.state.event_bus = event_bus
+
+    ws_bridge = EventBusBridge(
+        bus=event_bus,
+        manager=ws_manager,
+        concurrency=settings.ws_event_bridge_concurrency,
+    )
+    ws_bridge.start()
+    app.state.ws_bridge = ws_bridge
+    logger.info("ws.bridge_started")
+
     yield
+
+    logger.info("nexus.shutdown")
+    ws_bridge.stop()
+    await ws_manager.close_all(code=1000, reason="server_shutdown")
+    await event_bus.disconnect()
     await app.state.valkey.aclose()
     await dispose_engine()
 

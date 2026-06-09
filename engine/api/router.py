@@ -20,7 +20,7 @@ from engine.api.routes.strategies import router as strategies_router
 from engine.api.routes.system import router as system_router
 from engine.api.routes.tax import router as tax_router
 from engine.api.routes.webhooks import router as webhooks_router
-from engine.api.routes.websocket import router as websocket_router
+from engine.api.ws.router import router as websocket_router
 from engine.legal.dependencies import require_legal_acceptance
 
 api_router = APIRouter()
