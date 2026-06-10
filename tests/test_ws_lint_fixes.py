@@ -346,11 +346,20 @@ class TestCheckChannelAccess:
         ok, err = check_channel_access(
             "orders",
             ["read:orders"],
-            {"symbol": "AAPL"},
-            user_id="u_other",
+            {"account_id": "acct_other"},
+            user_id="acct_mine",
         )
         assert ok is False
         assert err == "403"
+
+    def test_orders_owner_match(self):
+        ok, _err = check_channel_access(
+            "orders",
+            ["read:orders"],
+            {"account_id": "acct_mine"},
+            user_id="acct_mine",
+        )
+        assert ok is True
 
     def test_strategies_owner_match(self):
         ok, _err = check_channel_access(
@@ -517,7 +526,7 @@ class TestGetRemoteIp:
     def test_trusted_proxy_forwarded(self):
         ws = _FakeWebSocket(
             client_host="10.0.0.1",
-            headers={"x-forwarded-for": "9.8.7.6, 10.0.0.1"},
+            headers={"x-forwarded-for": "10.0.0.1, 9.8.7.6"},
         )
         assert _get_remote_ip(ws) == "9.8.7.6"
 
@@ -547,6 +556,30 @@ class TestGetRemoteIp:
             headers={"x-forwarded-for": "9.8.7.6"},
         )
         assert _get_remote_ip(ws) == "10.0.0.2"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.1"}))
+    def test_trusted_proxy_forwarded_invalid_ip_falls_back(self):
+        ws = _FakeWebSocket(
+            client_host="10.0.0.1",
+            headers={"x-forwarded-for": "10.0.0.1, not-an-ip"},
+        )
+        assert _get_remote_ip(ws) == "10.0.0.1"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.1"}))
+    def test_trusted_proxy_real_ip_invalid_falls_back(self):
+        ws = _FakeWebSocket(
+            client_host="10.0.0.1",
+            headers={"x-real-ip": "!!!invalid"},
+        )
+        assert _get_remote_ip(ws) == "10.0.0.1"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.1"}))
+    def test_trusted_proxy_forwarded_multiple_hops(self):
+        ws = _FakeWebSocket(
+            client_host="10.0.0.1",
+            headers={"x-forwarded-for": "1.2.3.4, 5.6.7.8, 9.8.7.6"},
+        )
+        assert _get_remote_ip(ws) == "9.8.7.6"
 
     @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset())
     def test_empty_trusted_proxies(self):
