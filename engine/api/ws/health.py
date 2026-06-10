@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from engine.api.ws.connection_manager import ConnectionManager
+if TYPE_CHECKING:
+    from engine.api.ws.connection_manager import ConnectionManager
 
 
 def ws_health_snapshot(manager: ConnectionManager) -> dict[str, Any]:

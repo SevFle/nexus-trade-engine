@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import structlog
 
-from engine.api.ws.connection_manager import ConnectionManager
 from engine.api.ws.permissions import check_channel_access, resolve_room_name
 from engine.api.ws.protocol import VALID_CHANNELS, SubscribeMessage, UnsubscribeMessage
+
+if TYPE_CHECKING:
+    from engine.api.ws.connection_manager import ConnectionManager
 
 logger = structlog.get_logger()
 
@@ -46,8 +49,8 @@ class ChannelResolver:
                 message=f"unknown channel: {message.channel}",
             )
 
-        allowed, error_code = check_channel_access(
-            message.channel, scopes, message.params
+        allowed, _error_code = check_channel_access(
+            message.channel, scopes, message.params, user_id
         )
         if not allowed:
             return SubscriptionResult(

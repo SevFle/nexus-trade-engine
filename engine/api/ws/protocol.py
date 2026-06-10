@@ -25,7 +25,7 @@ Room naming convention: '<channel>:<scope>'
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -55,7 +55,7 @@ class PingMessage(BaseModel):
     ref: str | None = None
 
 
-InboundMessage = Union[AuthMessage, SubscribeMessage, UnsubscribeMessage, PingMessage]
+InboundMessage = AuthMessage | SubscribeMessage | UnsubscribeMessage | PingMessage
 
 
 class AckMessage(BaseModel):
@@ -95,7 +95,7 @@ class CloseMessage(BaseModel):
     reason: str
 
 
-OutboundMessage = Union[AckMessage, ErrorMessage, EventMessage, PongMessage, CloseMessage]
+OutboundMessage = AckMessage | ErrorMessage | EventMessage | PongMessage | CloseMessage
 
 VALID_CHANNELS: frozenset[str] = frozenset({"portfolio", "orders", "strategies"})
 
@@ -129,9 +129,10 @@ def parse_inbound(raw) -> tuple:
         return None, f"unknown message type: {msg_type}"
     try:
         msg = parser.model_validate(raw)
-        return msg, None
     except Exception as exc:
         return None, f"validation error: {exc}"
+    else:
+        return msg, None
 
 
 def parse_room_name(room: str) -> tuple[str, str]:
@@ -140,7 +141,8 @@ def parse_room_name(room: str) -> tuple[str, str]:
     Room format: '<channel>:<scope>' or '<channel>:<key>:<value>'
     Returns (channel, full_scope_string).
     """
-    parts = room.split(":", 2)
-    if len(parts) < 2:
+    _expected_parts = 2
+    parts = room.split(":", _expected_parts)
+    if len(parts) < _expected_parts:
         return parts[0] if parts else "", ""
-    return parts[0], parts[1] if len(parts) == 2 else f"{parts[1]}:{parts[2]}"
+    return parts[0], parts[1] if len(parts) == _expected_parts else f"{parts[1]}:{parts[2]}"

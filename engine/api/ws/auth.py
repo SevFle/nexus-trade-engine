@@ -8,18 +8,25 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
-from fastapi import WebSocket
+
+if TYPE_CHECKING:
+    from fastapi import WebSocket
 
 from engine.api.auth.jwt import decode_token
 from engine.api.ws.metrics import ws_metrics
 from engine.api.ws.protocol import WS_CLOSE_AUTH_INVALID, WS_CLOSE_AUTH_TIMEOUT
 
 logger = structlog.get_logger()
+
+_TRUSTED_PROXIES: frozenset[str] = frozenset(
+    os.environ.get("TRUSTED_PROXIES", "").split(",") if os.environ.get("TRUSTED_PROXIES") else []
+)
 
 
 @dataclass
@@ -47,7 +54,9 @@ class AuthRateLimiter:
     async def check(self, ip: str) -> bool:
         async with self._lock:
             now = time.monotonic()
-            bucket = self._buckets.get(ip, _RateBucket(tokens=float(self._max_attempts), last_refill=now))
+            bucket = self._buckets.get(
+                ip, _RateBucket(tokens=float(self._max_attempts), last_refill=now)
+            )
             elapsed = now - bucket.last_refill
             refill = min(
                 self._max_attempts,
@@ -70,18 +79,47 @@ def _hash_subject(sub: str) -> str:
 def _extract_scopes(token_data: dict) -> list[str]:
     """Extract scopes from JWT claims.
 
-    Maps JWT role to scopes. For JWT auth, users get full access.
-    For API key auth, scopes come from the key's declared scopes.
+    Maps JWT role to scopes. Only admin and portfolio_manager receive
+    :all scopes. All other roles get base read scopes only.
     """
     role = token_data.get("role", "viewer")
-    role_scopes = {
-        "viewer": ["read:portfolio", "read:portfolio:all", "read:orders", "read:orders:all", "read:strategies", "read:strategies:all"],
-        "retail_trader": ["read:portfolio", "read:portfolio:all", "read:orders", "read:strategies"],
+    role_scopes: dict[str, list[str]] = {
+        "admin": [
+            "read:portfolio", "read:portfolio:all",
+            "read:orders", "read:orders:all",
+            "read:strategies", "read:strategies:all",
+        ],
+        "portfolio_manager": [
+            "read:portfolio", "read:portfolio:all",
+            "read:orders", "read:orders:all",
+            "read:strategies", "read:strategies:all",
+        ],
         "quant_dev": ["read:portfolio", "read:orders", "read:strategies"],
+        "developer": ["read:portfolio", "read:orders", "read:strategies"],
+        "retail_trader": ["read:portfolio", "read:orders", "read:strategies"],
+        "user": ["read:portfolio", "read:orders", "read:strategies"],
+        "viewer": ["read:portfolio", "read:orders", "read:strategies"],
     }
-    if role in ("admin", "portfolio_manager", "quant_dev", "developer", "retail_trader", "user", "viewer"):
-        return role_scopes.get(role, role_scopes["viewer"])
-    return role_scopes["viewer"]
+    return role_scopes.get(role, role_scopes["viewer"])
+
+
+async def _receive_auth_token(
+    ws: WebSocket, auth_timeout: float
+) -> str | tuple[int, str]:
+    try:
+        msg = await asyncio.wait_for(ws.receive_json(), timeout=auth_timeout)
+    except TimeoutError:
+        return WS_CLOSE_AUTH_TIMEOUT, "auth timeout"
+    except Exception:
+        return WS_CLOSE_AUTH_INVALID, "invalid auth message"
+    if not isinstance(msg, dict):
+        return WS_CLOSE_AUTH_INVALID, "invalid auth message"
+    if msg.get("type") != "auth":
+        return WS_CLOSE_AUTH_INVALID, "expected auth message"
+    token = msg.get("token")
+    if not isinstance(token, str) or not token:
+        return WS_CLOSE_AUTH_INVALID, "missing token"
+    return token
 
 
 async def authenticate_websocket(
@@ -111,20 +149,10 @@ async def authenticate_websocket(
     token = ws.query_params.get("token")
 
     if token is None:
-        try:
-            msg = await asyncio.wait_for(ws.receive_json(), timeout=auth_timeout)
-        except TimeoutError:
-            return WS_CLOSE_AUTH_TIMEOUT, "auth timeout"
-        except Exception:
-            return WS_CLOSE_AUTH_INVALID, "invalid auth message"
-
-        if not isinstance(msg, dict):
-            return WS_CLOSE_AUTH_INVALID, "invalid auth message"
-        if msg.get("type") != "auth":
-            return WS_CLOSE_AUTH_INVALID, "expected auth message"
-        token = msg.get("token")
-        if not isinstance(token, str) or not token:
-            return WS_CLOSE_AUTH_INVALID, "missing token"
+        result = await _receive_auth_token(ws, auth_timeout)
+        if isinstance(result, tuple):
+            return result
+        token = result
 
     token_data = decode_token(token)
     if token_data is None:
@@ -160,6 +188,13 @@ def validate_refresh_token(token) -> AuthResult | None:
 
 
 def _get_remote_ip(ws: WebSocket) -> str:
+    if _TRUSTED_PROXIES and ws.client and ws.client.host in _TRUSTED_PROXIES:
+        forwarded = ws.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        real_ip = ws.headers.get("x-real-ip")
+        if real_ip:
+            return real_ip.strip()
     if ws.client:
         return ws.client.host
     return "unknown"

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import builtins
+import contextlib
 import contextvars
 from typing import Any
 
@@ -564,10 +565,8 @@ class TestContextVarEdgeCases:
         def _raise_unrelated() -> None:
             raise ValueError("unrelated")
 
-        try:
+        with contextlib.suppress(ValueError):
             _raise_unrelated()
-        except ValueError:
-            pass
         assert _in_sandbox_execution.get() is False
 
     def test_activate_deactivate_cycle(self, manifest: StrategyManifest):

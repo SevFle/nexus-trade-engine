@@ -8,14 +8,16 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from engine.api.ws.connection_manager import ConnectionManager
 from engine.api.ws.metrics import ws_metrics
 from engine.api.ws.protocol import EventMessage
-from engine.events.bus import EventBus, EventType
+
+if TYPE_CHECKING:
+    from engine.api.ws.connection_manager import ConnectionManager
+    from engine.events.bus import EventBus, EventType
 
 logger = structlog.get_logger()
 
@@ -47,26 +49,27 @@ class EventBusBridge:
         self._bus = bus
         self._manager = manager
         self._semaphore = asyncio.Semaphore(concurrency)
+        self._tasks: set[asyncio.Task[None]] = set()
         self._registered: list = []
         self._handler = self._handle
 
     def start(self, event_types: list[EventType] | None = None) -> None:
-        from engine.events.bus import EventType as ET
+        from engine.events.bus import EventType  # noqa: PLC0415
 
         if event_types is None:
             event_types = [
-                ET.PORTFOLIO_UPDATED,
-                ET.POSITION_OPENED,
-                ET.POSITION_CLOSED,
-                ET.ORDER_CREATED,
-                ET.ORDER_VALIDATED,
-                ET.ORDER_SUBMITTED,
-                ET.ORDER_FILLED,
-                ET.ORDER_REJECTED,
-                ET.ORDER_FAILED,
-                ET.STRATEGY_LOADED,
-                ET.STRATEGY_UNLOADED,
-                ET.STRATEGY_ERROR,
+                EventType.PORTFOLIO_UPDATED,
+                EventType.POSITION_OPENED,
+                EventType.POSITION_CLOSED,
+                EventType.ORDER_CREATED,
+                EventType.ORDER_VALIDATED,
+                EventType.ORDER_SUBMITTED,
+                EventType.ORDER_FILLED,
+                EventType.ORDER_REJECTED,
+                EventType.ORDER_FAILED,
+                EventType.STRATEGY_LOADED,
+                EventType.STRATEGY_UNLOADED,
+                EventType.STRATEGY_ERROR,
             ]
         for et in event_types:
             self._bus.subscribe(et, self._handler)
@@ -93,10 +96,7 @@ class EventBusBridge:
             return
         channel = mapping
         scope_key = payload.get("data", {})
-        if isinstance(scope_key, dict):
-            data = scope_key
-        else:
-            data = {}
+        data = scope_key if isinstance(scope_key, dict) else {}
         scope_value = None
         if channel == "portfolio":
             scope_value = data.get("account_id") or data.get("strategy_id")
@@ -104,12 +104,11 @@ class EventBusBridge:
             scope_value = data.get("symbol") or data.get("status")
         elif channel == "strategies":
             scope_value = data.get("strategy_id")
-        if scope_value:
-            room = f"{channel}:{scope_value}"
-        else:
-            room = channel
+        room = f"{channel}:{scope_value}" if scope_value else channel
         try:
-            asyncio.create_task(self._dispatch(room, channel, payload))
+            task = asyncio.create_task(self._dispatch(room, channel, payload))
+            self._tasks.add(task)
+            task.add_done_callback(self._tasks.discard)
         except Exception:
             ws_metrics.metrics.counter(
                 "sev_ws_messages_dropped_total", tags={"reason": "dispatch_error"}

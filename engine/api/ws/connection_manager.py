@@ -7,17 +7,26 @@ message fan-out with bounded send queues and backpressure.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
-from fastapi import WebSocket
 
-from engine.api.ws.exceptions import ConnectionLimitError, QueueFullError
+if TYPE_CHECKING:
+    from fastapi import WebSocket
+
+    from engine.api.ws.protocol import OutboundMessage
+
+from engine.api.ws.exceptions import (
+    ConnectionLimitError,
+    QueueFullError,
+    SubscriptionLimitError,
+)
 from engine.api.ws.metrics import ws_metrics
-from engine.api.ws.protocol import OutboundMessage
+from engine.api.ws.protocol import CloseMessage
 
 logger = structlog.get_logger()
 
@@ -34,7 +43,7 @@ class ConnectionInfo:
     last_seen: float = field(default_factory=time.monotonic)
     connected_at: float = field(default_factory=time.monotonic)
     metadata: dict[str, Any] = field(default_factory=dict)
-    _sender_task: asyncio.Task[None] | None = field(
+    sender_task: asyncio.Task[None] | None = field(
         default=None, repr=False
     )
 
@@ -82,7 +91,7 @@ class ConnectionManager:
             user_room = f"user:{user_id}"
             self._rooms.setdefault(user_room, set()).add(connection_id)
             info.rooms.add(user_room)
-            info._sender_task = asyncio.create_task(
+            info.sender_task = asyncio.create_task(
                 self._sender_loop(connection_id),
                 name=f"ws-sender-{connection_id[:8]}",
             )
@@ -107,12 +116,10 @@ class ConnectionManager:
                     members.discard(connection_id)
                     if not members:
                         del self._rooms[room]
-            if info._sender_task is not None:
-                info._sender_task.cancel()
-            try:
+            if info.sender_task is not None:
+                info.sender_task.cancel()
+            with contextlib.suppress(Exception):
                 info.send_queue.put_nowait(None)
-            except Exception:
-                pass
 
         duration_ms = round((time.monotonic() - info.connected_at) * 1000)
         ws_metrics.metrics.gauge("sev_ws_active_connections", len(self._connections))
@@ -135,7 +142,7 @@ class ConnectionManager:
             ws_metrics.metrics.counter(
                 "sev_ws_messages_dropped_total", tags={"reason": "queue_full"}
             )
-            raise QueueFullError(code=1008, reason="send queue full")
+            raise QueueFullError(code=1008, reason="send queue full") from None
 
     async def broadcast(self, room: str, message: OutboundMessage) -> int:
         async with self._lock:
@@ -175,7 +182,6 @@ class ConnectionManager:
             if info is None:
                 return
             if len(info.rooms) >= self._max_subscriptions + 1:
-                from engine.api.ws.exceptions import SubscriptionLimitError
                 raise SubscriptionLimitError(
                     code=1008, reason="max subscriptions reached"
                 )
@@ -232,7 +238,7 @@ class ConnectionManager:
 
     def stats(self) -> dict[str, Any]:
         queue_depths = sorted(
-            [len(info.send_queue._queue) for info in self._connections.values()]
+            [info.send_queue.qsize() for info in self._connections.values()]
         )
         return {
             "active_connections": len(self._connections),
@@ -267,18 +273,13 @@ class ConnectionManager:
         async with self._lock:
             conn_ids = list(self._connections.keys())
 
-        from engine.api.ws.protocol import CloseMessage
         close_msg = CloseMessage(code=code, reason=reason)
         for cid in conn_ids:
-            try:
+            with contextlib.suppress(QueueFullError):
                 await self.send(cid, close_msg)
-            except QueueFullError:
-                pass
             await asyncio.sleep(0.1)
             info = self._connections.get(cid)
             if info is not None:
-                try:
+                with contextlib.suppress(Exception):
                     await info.websocket.close(code=code, reason=reason)
-                except Exception:
-                    pass
                 await self.unregister(cid, reason="server_shutdown")
