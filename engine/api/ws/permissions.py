@@ -21,7 +21,7 @@ CHANNEL_PERMISSIONS: dict[str, PermissionCheck] = {
     "orders": PermissionCheck(
         required_scope="read:orders",
         all_scope="read:orders:all",
-        owner_field="symbol",
+        owner_field="user_id",
     ),
     "strategies": PermissionCheck(
         required_scope="read:strategies",

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import ipaddress
 import os
 import time
 from dataclasses import dataclass
@@ -188,13 +189,24 @@ def validate_refresh_token(token) -> AuthResult | None:
 
 
 def _get_remote_ip(ws: WebSocket) -> str:
+    fallback = ws.client.host if ws.client else "unknown"
     if _TRUSTED_PROXIES and ws.client and ws.client.host in _TRUSTED_PROXIES:
         forwarded = ws.headers.get("x-forwarded-for")
         if forwarded:
-            return forwarded.split(",")[0].strip()
+            ip = forwarded.split(",")[-1].strip()
+            try:
+                ipaddress.ip_address(ip)
+            except ValueError:
+                return fallback
+            else:
+                return ip
         real_ip = ws.headers.get("x-real-ip")
         if real_ip:
-            return real_ip.strip()
-    if ws.client:
-        return ws.client.host
-    return "unknown"
+            ip = real_ip.strip()
+            try:
+                ipaddress.ip_address(ip)
+            except ValueError:
+                return fallback
+            else:
+                return ip
+    return fallback

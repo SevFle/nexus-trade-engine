@@ -346,8 +346,8 @@ class TestCheckChannelAccess:
         ok, err = check_channel_access(
             "orders",
             ["read:orders"],
-            {"symbol": "AAPL"},
-            user_id="u_other",
+            {"user_id": "u_other"},
+            user_id="u_mine",
         )
         assert ok is False
         assert err == "403"
@@ -519,7 +519,7 @@ class TestGetRemoteIp:
             client_host="10.0.0.1",
             headers={"x-forwarded-for": "9.8.7.6, 10.0.0.1"},
         )
-        assert _get_remote_ip(ws) == "9.8.7.6"
+        assert _get_remote_ip(ws) == "10.0.0.1"
 
     @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.1"}))
     def test_trusted_proxy_real_ip(self):
