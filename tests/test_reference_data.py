@@ -846,3 +846,30 @@ class TestWithinOneEdit:
 
     def test_two_edits_returns_false(self):
         assert _within_one_edit("abc", "xyz") is False
+
+
+class TestTickerWhitespaceValidatorDirect:
+    def test_whitespace_ticker_raises_via_validator(self):
+        with pytest.raises(ValueError, match="non-empty and trimmed"):
+            RefInstrument._ticker_no_whitespace(" AAPL ")
+
+    def test_empty_stripped_ticker_raises(self):
+        with pytest.raises(ValueError, match="non-empty and trimmed"):
+            RefInstrument._ticker_no_whitespace("")
+
+
+class TestSearchScoreTickerContains:
+    def test_ticker_contains_query_scores_60(self):
+        idx = SearchIndex()
+        inst = RefInstrument(
+            primary_ticker="MSFT",
+            primary_venue="XNAS",
+            asset_class="equity",
+            name="Microsoft Corp.",
+        )
+        idx.add(inst)
+        score = SearchIndex._score(inst, "sf")
+        assert score == 60
+        results = idx.search("sf")
+        assert results
+        assert results[0].primary_ticker == "MSFT"
