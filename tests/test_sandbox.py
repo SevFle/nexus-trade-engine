@@ -131,3 +131,47 @@ class TestSignalStrategyIdInjection:
         signals = await sandbox.safe_evaluate(None, None, None)
         if signals:
             assert signals[0].strategy_id == "no_id_strategy"
+
+
+class TestSandboxWithoutResource:
+    def test_import_without_resource_module(self):
+        import importlib
+        import sys
+
+        orig_resource = sys.modules.get("resource")
+        orig_sandbox = sys.modules.get("engine.plugins.sandbox")
+
+        try:
+            sys.modules["resource"] = None
+            for key in list(sys.modules):
+                if key.startswith("engine.plugins.sandbox"):
+                    del sys.modules[key]
+
+            mod = importlib.import_module("engine.plugins.sandbox")
+            assert mod.HAS_RESOURCE_MODULE is False
+
+            class Trivial:
+                name = "t"
+                version = "1.0.0"
+
+                def on_bar(self, state, portfolio):
+                    return []
+
+            from engine.plugins.manifest import StrategyManifest
+
+            manifest = StrategyManifest(id="t", name="t", version="1.0.0")
+            sandbox = mod.StrategySandbox(Trivial(), manifest)
+            assert sandbox is not None
+            sandbox._apply_resource_limits()
+            sandbox._restore_resource_limits()
+        finally:
+            for key in list(sys.modules):
+                if key.startswith("engine.plugins.sandbox"):
+                    del sys.modules[key]
+            if orig_sandbox is not None:
+                sys.modules["engine.plugins.sandbox"] = orig_sandbox
+            if orig_resource is not None:
+                sys.modules["resource"] = orig_resource
+            else:
+                sys.modules.pop("resource", None)
+            importlib.import_module("engine.plugins.sandbox")

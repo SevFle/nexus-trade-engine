@@ -7,6 +7,7 @@ Bridges the gap between backtest and live.
 
 from __future__ import annotations
 
+import asyncio
 import random
 import time
 from collections.abc import Callable
@@ -119,6 +120,7 @@ class PaperExecutionBackend(ExecutionBackend):
         self._connected = False
         self._rng = random.Random(random_seed)
         self._stats = PaperFillStats()
+        self._stats_lock = asyncio.Lock()
         self._connected_at: float | None = None
 
     @property
@@ -151,42 +153,52 @@ class PaperExecutionBackend(ExecutionBackend):
         )
 
     async def execute(self, order: Order, market_price: float, costs: CostBreakdown) -> FillResult:
-        self._stats.total_fills += 1
+        async with self._stats_lock:
+            self._stats.total_fills += 1
+
+        latency_ms = max(0.0, self._rng.gauss(self.latency_ms_mean, self.latency_ms_std))
+        await asyncio.sleep(latency_ms / 1000.0)
 
         if not self._connected:
-            self._stats.failed_fills += 1
+            async with self._stats_lock:
+                self._stats.failed_fills += 1
             self.metrics.counter("paper_backend.execute", tags={"outcome": "not_connected"})
             return FillResult(success=False, reason="Paper backend not connected")
 
         effective_price = self._resolve_price(order.symbol, market_price)
         if effective_price is None or effective_price <= 0:
-            self._stats.failed_fills += 1
+            async with self._stats_lock:
+                self._stats.failed_fills += 1
             self.metrics.counter("paper_backend.execute", tags={"outcome": "no_price"})
             return FillResult(success=False, reason=f"No valid price for {order.symbol}")
 
         if not self._check_fill_probability():
-            self._stats.failed_fills += 1
+            async with self._stats_lock:
+                self._stats.failed_fills += 1
             self.metrics.counter("paper_backend.execute", tags={"outcome": "fill_rejected"})
             return FillResult(success=False, reason="Simulated fill failure (market conditions)")
 
-        slippage = self._calculate_slippage(effective_price, order.quantity, costs)
+        slippage = max(0.0, self._calculate_slippage(effective_price, order.quantity, costs))
 
         if order.side.value == "buy":
             fill_price = effective_price + slippage
+            fill_price = max(effective_price, fill_price)
         else:
             fill_price = effective_price - slippage
+            fill_price = min(effective_price, fill_price)
 
         fill_price = round(fill_price, 4)
 
         fill_quantity = self._calculate_fill_quantity(order.quantity)
 
         slippage_bps = abs(slippage / effective_price) * 10_000 if effective_price > 0 else 0
-        self._stats.successful_fills += 1
-        self._stats.total_slippage_bps += slippage_bps
-        self._stats.total_fill_quantity += fill_quantity
-        self._stats.total_fill_value += fill_price * fill_quantity
-        if fill_quantity < order.quantity:
-            self._stats.partial_fills += 1
+        async with self._stats_lock:
+            self._stats.successful_fills += 1
+            self._stats.total_slippage_bps += slippage_bps
+            self._stats.total_fill_quantity += fill_quantity
+            self._stats.total_fill_value += fill_price * fill_quantity
+            if fill_quantity < order.quantity:
+                self._stats.partial_fills += 1
 
         self.metrics.counter("paper_backend.execute", tags={"outcome": "filled"})
         self.metrics.histogram(

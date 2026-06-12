@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from enum import StrEnum
 from unittest.mock import MagicMock
@@ -219,8 +220,8 @@ class TestFillProbability:
         assert metrics.counters.get(key) == 1.0
 
     async def test_fill_probability_respects_seed(self):
-        backend1 = PaperExecutionBackend(fill_probability=0.5, random_seed=42)
-        backend2 = PaperExecutionBackend(fill_probability=0.5, random_seed=42)
+        backend1 = PaperExecutionBackend(fill_probability=0.5, random_seed=42, latency_ms_mean=0.0)
+        backend2 = PaperExecutionBackend(fill_probability=0.5, random_seed=42, latency_ms_mean=0.0)
         await backend1.connect()
         await backend2.connect()
         results1 = []
@@ -432,6 +433,7 @@ class TestPartialFills:
             random_seed=42,
             slippage_model=SlippageModel.FIXED,
             slippage_fixed_amount=0.0,
+            latency_ms_mean=0.0,
         )
         await backend.connect()
         order = _FakeOrder(quantity=1000)
@@ -465,6 +467,7 @@ class TestPartialFills:
             random_seed=42,
             slippage_model=SlippageModel.FIXED,
             slippage_fixed_amount=0.0,
+            latency_ms_mean=0.0,
         )
         await backend.connect()
         order = _FakeOrder(quantity=501)
@@ -506,6 +509,7 @@ class TestFillStats:
             random_seed=42,
             slippage_model=SlippageModel.FIXED,
             slippage_fixed_amount=0.0,
+            latency_ms_mean=0.0,
         )
         await backend.connect()
         order = _FakeOrder(quantity=1000)
@@ -514,7 +518,7 @@ class TestFillStats:
         assert backend.stats.partial_fills > 0
 
     async def test_stats_fill_rate(self):
-        backend = PaperExecutionBackend(fill_probability=0.5, random_seed=42)
+        backend = PaperExecutionBackend(fill_probability=0.5, random_seed=42, latency_ms_mean=0.0)
         await backend.connect()
         for _ in range(100):
             await backend.execute(_FakeOrder(), 100.0, _make_cost())
@@ -956,7 +960,7 @@ class TestIntegration:
         assert backend.stats.successful_fills == 50
 
     async def test_stress_fill_probability_distribution(self):
-        backend = PaperExecutionBackend(fill_probability=0.5, random_seed=42)
+        backend = PaperExecutionBackend(fill_probability=0.5, random_seed=42, latency_ms_mean=0.0)
         await backend.connect()
         success_count = 0
         for _ in range(1000):
@@ -964,3 +968,139 @@ class TestIntegration:
             if result.success:
                 success_count += 1
         assert 400 < success_count < 600
+
+
+class TestGaussianLatency:
+    async def test_execute_includes_latency(self):
+        import time
+
+        backend = PaperExecutionBackend(
+            fill_probability=1.0,
+            latency_ms_mean=50.0,
+            latency_ms_std=5.0,
+            random_seed=42,
+            slippage_model=SlippageModel.FIXED,
+            slippage_fixed_amount=0.0,
+        )
+        await backend.connect()
+        start = time.monotonic()
+        await backend.execute(_FakeOrder(), 100.0, _make_cost())
+        elapsed_ms = (time.monotonic() - start) * 1000
+        assert elapsed_ms >= 20
+
+    async def test_zero_latency_is_fast(self):
+        import time
+
+        backend = PaperExecutionBackend(
+            fill_probability=1.0,
+            latency_ms_mean=0.0,
+            latency_ms_std=0.0,
+            random_seed=42,
+            slippage_model=SlippageModel.FIXED,
+            slippage_fixed_amount=0.0,
+        )
+        await backend.connect()
+        start = time.monotonic()
+        for _ in range(10):
+            await backend.execute(_FakeOrder(), 100.0, _make_cost())
+        elapsed_ms = (time.monotonic() - start) * 1000
+        assert elapsed_ms < 500
+
+    async def test_latency_clamped_to_zero(self):
+        backend = PaperExecutionBackend(
+            fill_probability=1.0,
+            latency_ms_mean=0.0,
+            latency_ms_std=1.0,
+            random_seed=42,
+            slippage_model=SlippageModel.FIXED,
+            slippage_fixed_amount=0.0,
+        )
+        await backend.connect()
+        for _ in range(50):
+            result = await backend.execute(_FakeOrder(), 100.0, _make_cost())
+            assert result.success is True
+
+
+class TestFillPriceGuards:
+    async def test_buy_fill_price_gte_market_price(self):
+        backend = PaperExecutionBackend(
+            fill_probability=1.0,
+            slippage_model=SlippageModel.FIXED,
+            slippage_fixed_amount=0.05,
+            random_seed=42,
+            latency_ms_mean=0.0,
+        )
+        await backend.connect()
+        order = _FakeOrder(side=_FakeSide.BUY, quantity=100)
+        result = await backend.execute(order, 100.0, _make_cost())
+        assert result.success is True
+        assert result.price >= 100.0
+
+    async def test_sell_fill_price_lte_market_price(self):
+        backend = PaperExecutionBackend(
+            fill_probability=1.0,
+            slippage_model=SlippageModel.FIXED,
+            slippage_fixed_amount=0.05,
+            random_seed=42,
+            latency_ms_mean=0.0,
+        )
+        await backend.connect()
+        order = _FakeOrder(side=_FakeSide.SELL, quantity=100)
+        result = await backend.execute(order, 100.0, _make_cost())
+        assert result.success is True
+        assert result.price <= 100.0
+
+    async def test_zero_slippage_buy_equals_market(self):
+        backend = PaperExecutionBackend(
+            fill_probability=1.0,
+            slippage_model=SlippageModel.FIXED,
+            slippage_fixed_amount=0.0,
+            random_seed=42,
+            latency_ms_mean=0.0,
+        )
+        await backend.connect()
+        order = _FakeOrder(side=_FakeSide.BUY, quantity=100)
+        result = await backend.execute(order, 100.0, _make_cost())
+        assert result.success is True
+        assert result.price == 100.0
+
+    async def test_zero_slippage_sell_equals_market(self):
+        backend = PaperExecutionBackend(
+            fill_probability=1.0,
+            slippage_model=SlippageModel.FIXED,
+            slippage_fixed_amount=0.0,
+            random_seed=42,
+            latency_ms_mean=0.0,
+        )
+        await backend.connect()
+        order = _FakeOrder(side=_FakeSide.SELL, quantity=100)
+        result = await backend.execute(order, 100.0, _make_cost())
+        assert result.success is True
+        assert result.price == 100.0
+
+
+class TestStatsLock:
+    async def test_concurrent_stats_are_consistent(self):
+        backend = PaperExecutionBackend(
+            fill_probability=1.0,
+            random_seed=42,
+            latency_ms_mean=0.0,
+            slippage_model=SlippageModel.FIXED,
+            slippage_fixed_amount=0.0,
+        )
+        await backend.connect()
+
+        async def single_exec(i: int) -> FillResult:
+            order = _FakeOrder(quantity=100)
+            return await backend.execute(order, 100.0, _make_cost())
+
+        results = await asyncio.gather(*[single_exec(i) for i in range(100)])
+        assert all(r.success for r in results)
+        assert backend.stats.total_fills == 100
+        assert backend.stats.successful_fills == 100
+        assert backend.stats.total_fill_quantity == 100 * 100
+
+    async def test_lock_exists(self):
+        backend = PaperExecutionBackend()
+        assert hasattr(backend, "_stats_lock")
+        assert isinstance(backend._stats_lock, asyncio.Lock)
