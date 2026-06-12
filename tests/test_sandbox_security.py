@@ -801,11 +801,21 @@ class TestResourceLimitsNoModule:
 
 
 class TestResourceLimitsErrors:
+    @staticmethod
+    def _make_mock_resource() -> unittest.mock.MagicMock:
+        mock = unittest.mock.MagicMock()
+        mock.RLIMIT_AS = 9
+        mock.RLIMIT_NOFILE = 7
+        return mock
+
     def test_handles_rlimit_as_error(self, manifest: StrategyManifest) -> None:
         import engine.plugins.sandbox as mod
 
         sandbox = StrategySandbox(_GoodStrategy(), manifest)
-        with unittest.mock.patch.object(mod._resource, "getrlimit", side_effect=ValueError):
+        mock_resource = self._make_mock_resource()
+        mock_resource.getrlimit.side_effect = ValueError
+        with unittest.mock.patch.object(mod, "_resource", mock_resource), \
+             unittest.mock.patch.object(mod, "HAS_RESOURCE_MODULE", True):
             sandbox._apply_resource_limits()
         sandbox.cleanup()
 
@@ -813,19 +823,21 @@ class TestResourceLimitsErrors:
         import engine.plugins.sandbox as mod
 
         sandbox = StrategySandbox(_GoodStrategy(), manifest)
-        real_getrlimit = mod._resource.getrlimit
+        mock_resource = self._make_mock_resource()
         call_count = 0
 
-        def _flaky_getrlimit(res):
+        def _flaky_getrlimit(_res):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                return real_getrlimit(res)
+                return (1024, 4096)
             raise OSError("mocked")
 
-        with unittest.mock.patch.object(mod._resource, "getrlimit", side_effect=_flaky_getrlimit):
+        mock_resource.getrlimit.side_effect = _flaky_getrlimit
+        with unittest.mock.patch.object(mod, "_resource", mock_resource), \
+             unittest.mock.patch.object(mod, "HAS_RESOURCE_MODULE", True):
             sandbox._apply_resource_limits()
-        sandbox._restore_resource_limits()
+            sandbox._restore_resource_limits()
         sandbox.cleanup()
 
 
