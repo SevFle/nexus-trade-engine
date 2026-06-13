@@ -907,6 +907,57 @@ class TestConnectionManagerCloseAll:
         await m.close_all(code=1000, reason="test_shutdown")
         assert m.connection_count == 0
 
+    async def test_close_all_processes_all_connections(self):
+        m = ConnectionManager(send_queue_size=256)
+        sockets = [_FakeWebSocket() for _ in range(5)]
+        for i, ws in enumerate(sockets):
+            await m.register(ws, f"u{i}", [])
+        assert m.connection_count == 5
+        await m.close_all(code=1000, reason="test_shutdown")
+        assert m.connection_count == 0
+        assert all(ws._closed for ws in sockets)
+
+
+class TestHeartbeatSelfCancellation:
+    async def test_heartbeat_loop_exits_when_no_connections(self):
+        m = ConnectionManager(heartbeat_interval=0.01)
+        ws = _FakeWebSocket()
+        cid = await m.register(ws, "u1", [])
+        assert m._global_heartbeat_task is not None
+        info = m.get_connection(cid)
+        info.last_seen = time.monotonic() - 9999
+        await asyncio.sleep(0.05)
+        assert m.connection_count == 0
+        await asyncio.sleep(0.05)
+        assert m._global_heartbeat_task is None or m._global_heartbeat_task.done()
+
+    async def test_unregister_last_connection_no_self_cancel_race(self):
+        m = ConnectionManager(heartbeat_interval=0.01)
+        ws = _FakeWebSocket()
+        cid = await m.register(ws, "u1", [])
+        task = m._global_heartbeat_task
+        assert task is not None
+        info = m.get_connection(cid)
+        info.last_seen = time.monotonic() - 9999
+        await asyncio.sleep(0.05)
+        assert not task.cancelled()
+
+    async def test_heartbeat_task_restarts_on_new_register(self):
+        m = ConnectionManager(heartbeat_interval=0.01)
+        ws1 = _FakeWebSocket()
+        cid1 = await m.register(ws1, "u1", [])
+        old_task = m._global_heartbeat_task
+        await m.unregister(cid1)
+        await asyncio.sleep(0.05)
+        assert m._global_heartbeat_task is None or m._global_heartbeat_task.done()
+        ws2 = _FakeWebSocket()
+        await m.register(ws2, "u2", [])
+        assert m._global_heartbeat_task is not None
+        assert m._global_heartbeat_task is not old_task
+        await m.unregister(
+            next(iter(m._connections.keys())) if m._connections else ""
+        )
+
 
 # ---------------------------------------------------------------------------
 # channels.py — ChannelResolver
