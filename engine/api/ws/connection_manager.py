@@ -66,6 +66,7 @@ class ConnectionManager:
         self._max_subscriptions = max_subscriptions_per_connection
         self._heartbeat_interval = heartbeat_interval
         self._seq_counters: dict[str, int] = {}
+        self._global_heartbeat_task: asyncio.Task[None] | None = None
 
     async def register(
         self,
@@ -95,6 +96,10 @@ class ConnectionManager:
                 self._sender_loop(connection_id),
                 name=f"ws-sender-{connection_id[:8]}",
             )
+            if self._global_heartbeat_task is None or self._global_heartbeat_task.done():
+                self._global_heartbeat_task = asyncio.create_task(
+                    self._heartbeat_loop(), name="ws-global-heartbeat"
+                )
 
         ws_metrics.metrics.counter("sev_ws_connections_total")
         ws_metrics.metrics.gauge("sev_ws_active_connections", len(self._connections))
@@ -117,12 +122,18 @@ class ConnectionManager:
                     if not members:
                         del self._rooms[room]
             if info.sender_task is not None:
-                info.sender_task.cancel()
+                _current = asyncio.current_task()
+                if info.sender_task is not _current:
+                    info.sender_task.cancel()
             with contextlib.suppress(Exception):
                 info.send_queue.put_nowait(None)
 
         duration_ms = round((time.monotonic() - info.connected_at) * 1000)
         ws_metrics.metrics.gauge("sev_ws_active_connections", len(self._connections))
+        if not self._connections and self._global_heartbeat_task is not None:
+            if self._global_heartbeat_task is not asyncio.current_task():
+                self._global_heartbeat_task.cancel()
+            self._global_heartbeat_task = None
         logger.info(
             "ws.unregistered",
             connection_id=connection_id[:8],
@@ -250,6 +261,22 @@ class ConnectionManager:
             "rooms": {room: len(members) for room, members in self._rooms.items()},
         }
 
+    async def _heartbeat_loop(self) -> None:
+        try:
+            while True:
+                await asyncio.sleep(self._heartbeat_interval)
+                if not self._connections:
+                    break
+                now = time.monotonic()
+                stale: list[str] = []
+                for cid, info in list(self._connections.items()):
+                    if now - info.last_seen > self._heartbeat_interval * 2:
+                        stale.append(cid)
+                for cid in stale:
+                    await self.unregister(cid, reason="heartbeat_timeout")
+        except asyncio.CancelledError:
+            pass
+
     async def _sender_loop(self, connection_id: str) -> None:
         info = self._connections.get(connection_id)
         if info is None:
@@ -270,16 +297,16 @@ class ConnectionManager:
                 break
 
     async def close_all(self, code: int = 1000, reason: str = "server_shutdown") -> None:
-        async with self._lock:
-            conn_ids = list(self._connections.keys())
-
         close_msg = CloseMessage(code=code, reason=reason)
-        for cid in conn_ids:
-            with contextlib.suppress(QueueFullError):
-                await self.send(cid, close_msg)
-            await asyncio.sleep(0.1)
-            info = self._connections.get(cid)
-            if info is not None:
+        while self._connections:
+            remaining = dict(self._connections)
+            for cid in remaining:
+                info = self._connections.get(cid)
+                if info is None:
+                    continue
+                with contextlib.suppress(QueueFullError):
+                    await self.send(cid, close_msg)
+                await asyncio.sleep(0.1)
                 with contextlib.suppress(Exception):
                     await info.websocket.close(code=code, reason=reason)
                 await self.unregister(cid, reason="server_shutdown")

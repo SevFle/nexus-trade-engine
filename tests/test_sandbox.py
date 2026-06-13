@@ -138,16 +138,13 @@ class TestSandboxWithoutResource:
         import importlib
         import sys
 
+        import engine.plugins.sandbox as mod
+
         orig_resource = sys.modules.get("resource")
-        orig_sandbox = sys.modules.get("engine.plugins.sandbox")
 
         try:
             sys.modules["resource"] = None
-            for key in list(sys.modules):
-                if key.startswith("engine.plugins.sandbox"):
-                    del sys.modules[key]
-
-            mod = importlib.import_module("engine.plugins.sandbox")
+            importlib.reload(mod)
             assert mod.HAS_RESOURCE_MODULE is False
 
             class Trivial:
@@ -165,13 +162,8 @@ class TestSandboxWithoutResource:
             sandbox._apply_resource_limits()
             sandbox._restore_resource_limits()
         finally:
-            for key in list(sys.modules):
-                if key.startswith("engine.plugins.sandbox"):
-                    del sys.modules[key]
-            if orig_sandbox is not None:
-                sys.modules["engine.plugins.sandbox"] = orig_sandbox
             if orig_resource is not None:
                 sys.modules["resource"] = orig_resource
             else:
                 sys.modules.pop("resource", None)
-            importlib.import_module("engine.plugins.sandbox")
+            importlib.reload(mod)
