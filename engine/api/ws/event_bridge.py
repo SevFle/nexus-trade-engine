@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from engine.api.ws.metrics import ws_metrics
+from engine.api.ws.permissions import resolve_room_name
 from engine.api.ws.protocol import EventMessage
 
 if TYPE_CHECKING:
@@ -95,17 +96,11 @@ class EventBusBridge:
         if mapping is None:
             return
         channel = mapping
-        scope_key = payload.get("data", {})
-        data = scope_key if isinstance(scope_key, dict) else {}
-        scope_value = None
-        if channel == "portfolio":
-            scope_value = data.get("account_id") or data.get("strategy_id")
-        elif channel == "orders":
-            scope_value = data.get("symbol") or data.get("status")
-        elif channel == "strategies":
-            scope_value = data.get("strategy_id")
-        room = f"{channel}:{scope_value}" if scope_value else channel
+        raw_data = payload.get("data", {})
+        data = raw_data if isinstance(raw_data, dict) else {}
         try:
+            resolved = resolve_room_name(channel, data)
+            room = resolved if resolved else channel
             task = asyncio.create_task(self._dispatch(room, channel, payload))
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
@@ -113,6 +108,7 @@ class EventBusBridge:
             ws_metrics.metrics.counter(
                 "sev_ws_messages_dropped_total", tags={"reason": "dispatch_error"}
             )
+            logger.exception("ws_bridge.handle_error", channel=channel)
 
     async def _dispatch(
         self, room: str, channel: str, payload: dict[str, Any]

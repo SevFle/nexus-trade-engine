@@ -160,7 +160,7 @@ class ConnectionManager:
             return_exceptions=True,
         )
         for r in results:
-            if r is not None and not isinstance(r, Exception):
+            if r is None:
                 sent += 1
         return sent
 

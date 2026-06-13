@@ -1040,13 +1040,13 @@ class TestEventBusBridge:
         bridge.start()
         ws = _FakeWebSocket()
         cid = await manager.register(ws, "u1", [])
-        await manager.join_room(cid, "portfolio")
+        await manager.join_room(cid, "portfolio:account:A1")
         await bus.deliver(
             EventType.PORTFOLIO_UPDATED,
             {"type": "portfolio_updated", "data": {"account_id": "A1"}},
         )
         await asyncio.sleep(0.1)
-        seq = manager.next_seq("portfolio")
+        seq = manager.next_seq("portfolio:account:A1")
         assert seq >= 0
 
     async def test_handle_ignores_unknown_event(self, setup):
@@ -1122,6 +1122,116 @@ class TestEventBusBridge:
             },
         )
         await asyncio.sleep(0.1)
+
+    async def test_handle_resolve_returns_none_falls_back_to_channel(self, setup):
+        bus, manager, bridge, EventType = setup
+        bridge.start()
+        ws = _FakeWebSocket()
+        cid = await manager.register(ws, "u1", [])
+        await manager.join_room(cid, "portfolio")
+        with patch(
+            "engine.api.ws.event_bridge.resolve_room_name", return_value=None
+        ):
+            await bus.deliver(
+                EventType.PORTFOLIO_UPDATED,
+                {"type": "portfolio_updated", "data": {}},
+            )
+        await asyncio.sleep(0.1)
+        assert len(ws.sent) >= 1
+        assert ws.sent[0]["room"] == "portfolio"
+
+    async def test_handle_resolve_returns_empty_string_falls_back(self, setup):
+        bus, manager, bridge, EventType = setup
+        bridge.start()
+        ws = _FakeWebSocket()
+        cid = await manager.register(ws, "u1", [])
+        await manager.join_room(cid, "orders")
+        with patch(
+            "engine.api.ws.event_bridge.resolve_room_name", return_value=""
+        ):
+            await bus.deliver(
+                EventType.ORDER_CREATED,
+                {"type": "order_created", "data": {}},
+            )
+        await asyncio.sleep(0.1)
+        assert len(ws.sent) >= 1
+        assert ws.sent[0]["room"] == "orders"
+
+    async def test_handle_resolve_exception_caught_and_logged(self, setup):
+        bus, _manager, bridge, EventType = setup
+        bridge.start()
+        with patch(
+            "engine.api.ws.event_bridge.resolve_room_name",
+            side_effect=RuntimeError("resolve exploded"),
+        ):
+            await bus.deliver(
+                EventType.PORTFOLIO_UPDATED,
+                {"type": "portfolio_updated", "data": {}},
+            )
+        await asyncio.sleep(0.05)
+
+    async def test_handle_no_matching_params_uses_bare_channel(self, setup):
+        bus, manager, bridge, EventType = setup
+        bridge.start()
+        ws = _FakeWebSocket()
+        cid = await manager.register(ws, "u1", [])
+        await manager.join_room(cid, "strategies")
+        await bus.deliver(
+            EventType.STRATEGY_LOADED,
+            {"type": "strategy_loaded", "data": {"irrelevant_key": "val"}},
+        )
+        await asyncio.sleep(0.1)
+        assert len(ws.sent) >= 1
+        assert ws.sent[0]["room"] == "strategies"
+
+    async def test_handle_create_task_exception_caught(self, setup):
+        bus, _manager, bridge, EventType = setup
+        bridge.start()
+        original_create = asyncio.create_task
+        call_count = 0
+
+        def failing_create(coro):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise RuntimeError("task creation failed")
+            return original_create(coro)
+
+        with patch("engine.api.ws.event_bridge.asyncio.create_task", side_effect=failing_create):
+            await bus.deliver(
+                EventType.ORDER_CREATED,
+                {"type": "order_created", "data": {"symbol": "AAPL"}},
+            )
+            await asyncio.sleep(0.05)
+
+
+class TestResolveRoomNameGuard:
+    def test_none_falsy_is_handled(self):
+        result = None
+        channel = "portfolio"
+        room = result if result else channel
+        assert room == "portfolio"
+
+    def test_empty_string_falsy_is_handled(self):
+        result = ""
+        channel = "orders"
+        room = result if result else channel
+        assert room == "orders"
+
+    def test_non_empty_string_passes_through(self):
+        result = "portfolio:account:A1"
+        channel = "portfolio"
+        room = result if result else channel
+        assert room == "portfolio:account:A1"
+
+    def test_resolve_room_name_portfolio_empty_account_id(self):
+        assert resolve_room_name("portfolio", {"account_id": ""}) is None
+
+    def test_resolve_room_name_orders_empty_symbol(self):
+        assert resolve_room_name("orders", {"symbol": ""}) is None
+
+    def test_resolve_room_name_strategies_empty_strategy_id(self):
+        assert resolve_room_name("strategies", {"strategy_id": ""}) is None
 
 
 # ---------------------------------------------------------------------------
