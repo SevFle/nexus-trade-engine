@@ -7,6 +7,7 @@ event_bridge, and health — the 7 files touched by commit 131a1b6.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -917,6 +918,45 @@ class TestConnectionManagerCloseAll:
         assert m.connection_count == 0
         assert all(ws._closed for ws in sockets)
 
+    async def test_close_all_blocks_registration_during_shutdown(self):
+        m = ConnectionManager(send_queue_size=256)
+        ws = _FakeWebSocket()
+        await m.register(ws, "u1", [])
+        blocked = {"v": False}
+        original_send = m.send
+
+        async def send_that_attempts_register(cid, message):
+            if m._shutting_down:
+                with pytest.raises(ConnectionLimitError):
+                    await m.register(_FakeWebSocket(), "intruder", [])
+                blocked["v"] = True
+            return await original_send(cid, message)
+
+        m.send = send_that_attempts_register
+        await m.close_all()
+        assert blocked["v"] is True
+        assert m.connection_count == 0
+
+    async def test_close_all_resets_flag_and_allows_registration_after(self):
+        m = ConnectionManager()
+        ws = _FakeWebSocket()
+        await m.register(ws, "u1", [])
+        await m.close_all()
+        assert m._shutting_down is False
+        ws2 = _FakeWebSocket()
+        cid = await m.register(ws2, "u2", [])
+        assert m.connection_count == 1
+        await m.unregister(cid)
+
+    async def test_close_all_snapshot_is_taken_under_lock(self):
+        m = ConnectionManager(send_queue_size=256)
+        wss = [_FakeWebSocket() for _ in range(3)]
+        for i, ws in enumerate(wss):
+            await m.register(ws, f"u{i}", [])
+        await m.close_all(code=1001, reason="snap")
+        assert m.connection_count == 0
+        assert all(ws._closed for ws in wss)
+
 
 class TestHeartbeatSelfCancellation:
     async def test_heartbeat_loop_exits_when_no_connections(self):
@@ -957,6 +997,75 @@ class TestHeartbeatSelfCancellation:
         await m.unregister(
             next(iter(m._connections.keys())) if m._connections else ""
         )
+
+    async def test_heartbeat_survives_unregister_exception(self):
+        m = ConnectionManager(heartbeat_interval=0.01)
+        ws1 = _FakeWebSocket()
+        ws2 = _FakeWebSocket()
+        cid1 = await m.register(ws1, "u1", [])
+        cid2 = await m.register(ws2, "u2", [])
+        for cid in (cid1, cid2):
+            m.get_connection(cid).last_seen = time.monotonic() - 9999
+        original_unregister = m.unregister
+        failed_once = {"v": False}
+
+        async def flaky_unregister(cid, reason="client_disconnect"):
+            if cid == cid1 and not failed_once["v"]:
+                failed_once["v"] = True
+                raise RuntimeError("boom")
+            return await original_unregister(cid, reason=reason)
+
+        m.unregister = flaky_unregister
+        await asyncio.sleep(0.06)
+        assert failed_once["v"] is True
+        assert m.get_connection(cid2) is None
+        assert m.connection_count == 0
+
+    async def test_unregister_from_heartbeat_keeps_task_reference(self):
+        m = ConnectionManager(heartbeat_interval=999.0)
+        ws = _FakeWebSocket()
+        cid = await m.register(ws, "u1", [])
+        real_task = m._global_heartbeat_task
+        assert real_task is not None
+        real_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await real_task
+
+        async def simulated_heartbeat_call():
+            await m.unregister(cid, reason="heartbeat_timeout")
+
+        hb = asyncio.create_task(simulated_heartbeat_call())
+        m._global_heartbeat_task = hb
+        await hb
+        assert m.connection_count == 0
+        assert m._global_heartbeat_task is hb
+        assert not hb.cancelled()
+
+    async def test_unregister_from_external_cancels_and_nulls_task(self):
+        m = ConnectionManager(heartbeat_interval=999.0)
+        ws = _FakeWebSocket()
+        cid = await m.register(ws, "u1", [])
+        task = m._global_heartbeat_task
+        assert task is not None
+        await m.unregister(cid)
+        assert m.connection_count == 0
+        assert m._global_heartbeat_task is None
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        assert task.cancelled() or task.done()
+
+    async def test_register_reuses_heartbeat_task_when_not_done(self):
+        m = ConnectionManager(heartbeat_interval=999.0)
+        ws = _FakeWebSocket()
+        await m.register(ws, "u1", [])
+        task = m._global_heartbeat_task
+        assert task is not None
+        ws2 = _FakeWebSocket()
+        await m.register(ws2, "u2", [])
+        assert m._global_heartbeat_task is task
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 # ---------------------------------------------------------------------------

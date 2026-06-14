@@ -67,6 +67,7 @@ class ConnectionManager:
         self._heartbeat_interval = heartbeat_interval
         self._seq_counters: dict[str, int] = {}
         self._global_heartbeat_task: asyncio.Task[None] | None = None
+        self._shutting_down: bool = False
 
     async def register(
         self,
@@ -77,6 +78,10 @@ class ConnectionManager:
     ) -> str:
         connection_id = uuid.uuid4().hex
         async with self._lock:
+            if self._shutting_down:
+                raise ConnectionLimitError(
+                    code=1011, reason="server shutting down"
+                )
             if len(self._connections) >= self._max_connections:
                 raise ConnectionLimitError(
                     code=1011, reason="max connections reached"
@@ -130,9 +135,12 @@ class ConnectionManager:
 
         duration_ms = round((time.monotonic() - info.connected_at) * 1000)
         ws_metrics.metrics.gauge("sev_ws_active_connections", len(self._connections))
-        if not self._connections and self._global_heartbeat_task is not None:
-            if self._global_heartbeat_task is not asyncio.current_task():
-                self._global_heartbeat_task.cancel()
+        if (
+            not self._connections
+            and self._global_heartbeat_task is not None
+            and self._global_heartbeat_task is not asyncio.current_task()
+        ):
+            self._global_heartbeat_task.cancel()
             self._global_heartbeat_task = None
         logger.info(
             "ws.unregistered",
@@ -273,7 +281,13 @@ class ConnectionManager:
                     if now - info.last_seen > self._heartbeat_interval * 2:
                         stale.append(cid)
                 for cid in stale:
-                    await self.unregister(cid, reason="heartbeat_timeout")
+                    try:
+                        await self.unregister(cid, reason="heartbeat_timeout")
+                    except Exception:
+                        logger.exception(
+                            "ws.heartbeat_unregister_failed",
+                            connection_id=cid[:8],
+                        )
         except asyncio.CancelledError:
             pass
 
@@ -298,15 +312,19 @@ class ConnectionManager:
 
     async def close_all(self, code: int = 1000, reason: str = "server_shutdown") -> None:
         close_msg = CloseMessage(code=code, reason=reason)
-        while self._connections:
-            remaining = dict(self._connections)
-            for cid in remaining:
-                info = self._connections.get(cid)
-                if info is None:
-                    continue
-                with contextlib.suppress(QueueFullError):
-                    await self.send(cid, close_msg)
-                await asyncio.sleep(0.1)
-                with contextlib.suppress(Exception):
-                    await info.websocket.close(code=code, reason=reason)
+        async with self._lock:
+            self._shutting_down = True
+            snapshot = list(self._connections.keys())
+        for cid in snapshot:
+            info = self._connections.get(cid)
+            if info is None:
+                continue
+            with contextlib.suppress(QueueFullError):
+                await self.send(cid, close_msg)
+            await asyncio.sleep(0.1)
+            with contextlib.suppress(Exception):
+                await info.websocket.close(code=code, reason=reason)
+            with contextlib.suppress(Exception):
                 await self.unregister(cid, reason="server_shutdown")
+        async with self._lock:
+            self._shutting_down = False
