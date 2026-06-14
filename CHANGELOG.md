@@ -13,6 +13,10 @@ edit this file by hand — it is regenerated as part of every release PR.
 ## [Unreleased]
 
 ### Internal
+- (fix) Fix missing fakeredis dependency causing test collection failure in tests/test_rate_limit.py
+
+
+### Internal
 - (write_tests) Write tests for the most recently changed code to break the loop
 
 
