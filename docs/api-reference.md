@@ -238,9 +238,16 @@ Requires legal acceptance.
 | GET | `/api/v1/market-data/{symbol}/bars?interval=&period=&asset_class=&provider=` | OHLCV via the provider registry. Asset class is inferred from the symbol shape (`BTC/USD → CRYPTO`, `EURUSD=X → FOREX`, default `EQUITY`) and can be overridden. |
 | GET | `/api/v1/market-data/{symbol}/quote?asset_class=&provider=` | Latest quote. |
 
-Errors follow the provider hierarchy:
-`TransientProviderError → 503`, `FatalProviderError → 502`,
-`NoProviderAvailableError → 404`.
+Errors follow the provider hierarchy
+([`market_data.py`](../engine/api/routes/market_data.py)):
+
+| Exception | Status | When |
+|---|---|---|
+| `TransientProviderError`, `TimeoutError` | `503` | Upstream temporarily unavailable. |
+| `NoProviderAvailableError` | `503` | Every candidate adapter failed / none registered. |
+| `CapabilityNotSupportedError` | `501` | No adapter supports the requested operation for this asset class. |
+| `FatalProviderError` | `400` | Caller-side problem (bad symbol, rate-limited by vendor, etc.). |
+| `ProviderError` (quote only) | `502` | Generic upstream failure that isn't transient or fatal. |
 
 ## Tax
 
@@ -265,14 +272,14 @@ The HMAC-signed `signing_secret` is returned **only on create**.
 
 Templates: `generic`, `discord`, `slack`, `telegram`.
 
-| Method | Path | Scope | Notes |
-|---|---|---|---|
-| POST | `/api/v1/webhooks` | `trade` | `{url, event_types[], custom_headers?, template, max_retries?, portfolio_id?}` → `201`. |
-| GET | `/api/v1/webhooks` | `user` (JWT) / `read` (API key) | Lists caller's configs. |
-| PUT | `/api/v1/webhooks/{webhook_id}` | `trade` | Partial update. |
-| DELETE | `/api/v1/webhooks/{webhook_id}` | `trade` | `204`. |
-| POST | `/api/v1/webhooks/{webhook_id}/test` | `trade` | Synchronously fan out a test event; returns the resulting `WebhookDelivery`. |
-| GET | `/api/v1/webhooks/{webhook_id}/deliveries` | `read` | Delivery history. |
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/v1/webhooks` | `{url, event_types[], custom_headers?, template, max_retries?, portfolio_id?}` → `201`. **Enforces `trade` scope** for API keys (`require_api_scope("trade")`); JWTs bypass. |
+| GET | `/api/v1/webhooks` | Lists caller's configs. `get_current_user` (any authed principal); ownership filtered in handler. |
+| PUT | `/api/v1/webhooks/{webhook_id}` | Partial update. `get_current_user`; handler enforces ownership. |
+| DELETE | `/api/v1/webhooks/{webhook_id}` | `204`. `get_current_user`; handler enforces ownership. |
+| POST | `/api/v1/webhooks/{webhook_id}/test` | Synchronously fan out a test event; returns the resulting `WebhookDelivery`. |
+| GET | `/api/v1/webhooks/{webhook_id}/deliveries` | Delivery history. |
 
 ## Privacy (GDPR / CCPA)
 
@@ -292,25 +299,97 @@ DSR rows are auditable under GDPR Art. 12 (one-month SLA tracked in
 
 ## WebSocket
 
-`WS /api/v1/ws`. Source: [`routes/websocket.py`](../engine/api/routes/websocket.py)
-and [`api/websocket/manager.py`](../engine/api/websocket/manager.py).
+`WS /api/v1/ws`. The active implementation is the `engine/api/ws/`
+package:
 
-Auth-in-band protocol (deliberately **not** in the URL — query strings
-get logged by proxies):
+| File | Role |
+|---|---|
+| [`ws/router.py`](../engine/api/ws/router.py) | Endpoint + message dispatch loop |
+| [`ws/connection_manager.py`](../engine/api/ws/connection_manager.py) | Connection registry, room-based fan-out, heartbeat, backpressure |
+| [`ws/channels.py`](../engine/api/ws/channels.py) | Resolves `subscribe` requests to rooms with permission checks |
+| [`ws/permissions.py`](../engine/api/ws/permissions.py) | Channel access control + room-name resolution |
+| [`ws/protocol.py`](../engine/api/ws/protocol.py) | Pydantic wire schemas + valid channel set |
+| [`ws/event_bridge.py`](../engine/api/ws/event_bridge.py) | Subscribes to the `EventBus` and broadcasts events to rooms |
+| [`ws/auth.py`](../engine/api/ws/auth.py) | In-band token validation + per-IP auth rate limiting |
+
+> Note: `engine/api/routes/websocket.py` and
+> `engine/api/websocket/manager.py` are a **legacy** implementation
+> that is no longer mounted by [`router.py`](../engine/api/router.py).
+> The active route comes from `ws/router.py`. Do not extend the legacy
+> files.
+
+Auth is JWT-only (the active `ws/auth.py` calls `decode_token`; unlike the
+legacy endpoint it does **not** accept `nxs_*` API keys). The token is
+delivered either as a `?token=` query param or as the first JSON message
+within `NEXUS_WS_AUTH_TIMEOUT_SECONDS` (default 5 s). The handshake:
 
 ```
-client                              server
-  │── accept ─────────────────────────▶│
-  │── {"type":"auth","token":"<jwt or nxs_*>"} ─▶│   (10s window)
-  │                                     │── {"type":"auth.ok","user_id":...}
-  │── {"type":"subscribe","topics":[...]}─▶│
-  │◀──── {"type":"<topic event>", ...} ──│  (broadcasts)
-  │── {"type":"ping"} ──────────────────▶│── {"type":"pong"}
+client                                   server
+  │── accept ────────────────────────────────▶│
+  │── {"type":"auth","token":"<jwt>"} ────────▶│   (5 s window)
+  │                                          │── {"type":"ack","status":"ok","message":"connected"}
+  │── {"type":"subscribe","channel":"portfolio","params":{...}}─▶│
+  │◀──── {"type":"ack","status":"ok","room":"portfolio:..."} ──│
+  │◀──── {"type":"event","channel":...,"room":...,"payload":{...},"seq":N} ──│  (broadcasts)
+  │── {"type":"ping","ref":"1"} ─────────────▶│── {"type":"pong","ref":"1"}
 ```
 
-Valid topics: `portfolio`, `backtest`, `order`, `alert`. The manager
-is process-local today; multi-replica fan-out requires a Valkey pubsub
-bridge (see [known-limitations.md](known-limitations.md)).
+Inbound message types (see `protocol.py`): `auth`, `subscribe`,
+`unsubscribe`, `ping`. Every message accepts an optional `ref` that
+the server echoes back in the matching `ack`/`pong`.
+
+Outbound message types: `ack`, `error`, `event`, `pong`, `close`.
+
+### Channels (valid subscriptions)
+
+| Channel | Sub-keyed by | Room shape |
+|---|---|---|
+| `portfolio` | account / strategy id | `portfolio:account:<id>`, `portfolio:strategy:<id>` |
+| `orders` | symbol / status | `orders:symbol:<sym>`, `orders:status:<status>` |
+| `strategies` | strategy id | `strategies:strategy:<id>` |
+
+Each connection is also auto-joined to a private `user:<user_id>` room
+on registration, so user-scoped events can be targeted directly.
+
+### Auth & scopes
+
+`authenticate_websocket` (`ws/auth.py`) accepts the JWT from either a
+`?token=` query parameter or the first `auth` message. Prefer the
+first-message form — query strings are recorded by reverse proxies and
+log aggregators. Auth attempts are rate-limited per IP
+(`NEXUS_WS_AUTH_RATE_LIMIT_PER_MINUTE`, default 10) via a token bucket.
+
+Connection scopes are derived from the JWT `role` claim (see
+[`ws/auth.py:_extract_scopes`](../engine/api/ws/auth.py:80)):
+
+| Role | Scopes granted |
+|---|---|
+| `admin`, `portfolio_manager` | base + `:all` for every channel |
+| all others (`viewer` … `quant_dev`) | base `read:<channel>` only |
+
+Permission checks (`ws/permissions.py`) run on every `subscribe`:
+
+- `:all` scope → unrestricted access to the channel.
+- base scope only → **owner-based** access: the channel's owner param
+  (`account_id` / `strategy_id`) in `params` must equal the caller's
+  `user_id`, else `403`.
+- neither → `403`. Unknown channel → `error_code:"404"`. Subscription
+  cap exceeded (`NEXUS_WS_MAX_SUBSCRIPTIONS_PER_CONNECTION`) → `429`.
+
+Mid-session, a client can send `{"type":"auth","token":"<new JWT>"}` to
+refresh an expiring token; the server re-derives scopes on the live
+connection.
+
+### Event delivery
+
+[`ws/event_bridge.py`](../engine/api/ws/event_bridge.py)
+(`EventBusBridge`) subscribes to the [`EventBus`](../engine/events/bus.py)
+for portfolio / order / strategy event types and broadcasts each to the
+matching room(s) as an `event` message with a per-room `seq`. Because
+the `EventBus` itself publishes over Redis/Valkey pub/sub, events
+published on **any** replica reach local WebSocket connections on
+**every** replica. The `ConnectionManager` (the live socket objects) is
+still per-process, but event distribution is cross-replica.
 
 ## Errors
 

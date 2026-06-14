@@ -27,6 +27,7 @@ import asyncio
 import builtins
 import contextlib
 import contextvars
+import pathlib
 from typing import Any
 
 import httpx
@@ -608,3 +609,172 @@ class TestContextVarEdgeCases:
                 client, request, stream=True
             )
             assert response.status_code == 200
+
+
+# ── 11. File open restriction gated by contextvar ────────────────────
+
+
+class _FileReadStrategy:
+    """Strategy that attempts to read a file outside the sandbox."""
+
+    name = "file_read"
+    version = "1.0.0"
+
+    def __init__(self, target_path: str) -> None:
+        self._target = target_path
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        with open(self._target) as f:
+            f.read()
+        return []
+
+
+class TestFileOpenContextVarGate:
+    """
+    Verify _restricted_open is gated by _in_sandbox_execution.
+
+    When the contextvar is False (outside sandbox evaluation), the
+    monkey-patched builtins.open / io.open must pass through to the
+    original implementation unconditionally.  This prevents the sandbox
+    file restriction from breaking coverage HTML generation, pytest
+    internals, and other tooling that reads files after tests complete.
+    """
+
+    def test_restricted_open_passes_through_when_contextvar_false(
+        self, manifest: StrategyManifest, tmp_path: Any
+    ):
+        secret = tmp_path / "secret.txt"
+        secret.write_text("data")
+
+        sandbox = StrategySandbox(_PassiveStrategy(), manifest)
+        sandbox._original_open = builtins.open
+        try:
+            assert _in_sandbox_execution.get() is False
+            result = sandbox._restricted_open(str(secret))
+            assert result.read() == "data"
+        finally:
+            sandbox.cleanup()
+
+    def test_restricted_open_passes_through_for_package_files(
+        self, manifest: StrategyManifest
+    ):
+        import importlib
+
+        sandbox = StrategySandbox(_PassiveStrategy(), manifest)
+        sandbox._original_open = builtins.open
+        try:
+            coverage_pkg = importlib.import_module("coverage")
+            htmlfiles_dir = pathlib.Path(coverage_pkg.__file__).parent / "htmlfiles"
+            index_html = htmlfiles_dir / "index.html"
+            assert index_html.exists(), "coverage htmlfiles/index.html should exist"
+
+            assert _in_sandbox_execution.get() is False
+            with sandbox._restricted_open(str(index_html)) as f:
+                content = f.read()
+            assert len(content) > 0
+        finally:
+            sandbox.cleanup()
+
+    def test_restricted_open_allows_write_when_contextvar_false(
+        self, manifest: StrategyManifest, tmp_path: Any
+    ):
+        target = tmp_path / "output.txt"
+
+        sandbox = StrategySandbox(_PassiveStrategy(), manifest)
+        sandbox._original_open = builtins.open
+        try:
+            assert _in_sandbox_execution.get() is False
+            with sandbox._restricted_open(str(target), "w") as f:
+                f.write("written outside sandbox")
+            assert target.read_text() == "written outside sandbox"
+        finally:
+            sandbox.cleanup()
+
+    def test_restricted_open_blocks_when_contextvar_true(
+        self, manifest: StrategyManifest, tmp_path: Any
+    ):
+        secret = tmp_path / "secret.txt"
+        secret.write_text("sensitive")
+
+        sandbox = StrategySandbox(_PassiveStrategy(), manifest)
+        sandbox._original_open = builtins.open
+        _in_sandbox_execution.set(True)
+        try:
+            with pytest.raises(PermissionError, match="not allowed"):
+                sandbox._restricted_open(str(secret))
+        finally:
+            _in_sandbox_execution.set(False)
+            sandbox.cleanup()
+
+    def test_restricted_open_blocks_write_when_contextvar_true(
+        self, manifest: StrategyManifest
+    ):
+        sandbox = StrategySandbox(_PassiveStrategy(), manifest)
+        sandbox._original_open = builtins.open
+        _in_sandbox_execution.set(True)
+        try:
+            target = str(pathlib.Path(sandbox._work_dir) / "writable.txt")
+            with pytest.raises(PermissionError, match="Write access"):
+                sandbox._restricted_open(target, "w")
+        finally:
+            _in_sandbox_execution.set(False)
+            sandbox.cleanup()
+
+    async def test_open_works_after_sandbox_evaluation(
+        self, manifest: StrategyManifest, tmp_path: Any
+    ):
+        secret = tmp_path / "secret.txt"
+        secret.write_text("post-eval data")
+
+        sandbox = StrategySandbox(_PassiveStrategy(), manifest)
+        try:
+            await sandbox.safe_evaluate(None, None, None)
+            assert _in_sandbox_execution.get() is False
+            with open(str(secret)) as f:
+                assert f.read() == "post-eval data"
+        finally:
+            sandbox.cleanup()
+
+    async def test_open_blocked_during_evaluation(
+        self, manifest: StrategyManifest, tmp_path: Any
+    ):
+        secret = tmp_path / "secret.txt"
+        secret.write_text("sensitive")
+
+        sandbox = StrategySandbox(
+            _FileReadStrategy(str(secret)), manifest
+        )
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "not allowed" in (
+                sandbox.metrics.last_error or ""
+            ).lower()
+        finally:
+            sandbox.cleanup()
+
+    async def test_open_works_outside_sandbox_with_monkeypatch_installed(
+        self, manifest: StrategyManifest, tmp_path: Any
+    ):
+        """
+        Even when builtins.open is monkey-patched but contextvar is False,
+        reads should pass through.  This is the exact scenario that caused
+        the coverage INTERNALERROR.
+        """
+        secret = tmp_path / "tooling_file.txt"
+        secret.write_text("tooling data")
+
+        original_open = builtins.open
+        sandbox = StrategySandbox(_PassiveStrategy(), manifest)
+        sandbox._activate_restrictions()
+        try:
+            assert builtins.open is not original_open
+            assert _in_sandbox_execution.get() is True
+            _in_sandbox_execution.set(False)
+            with open(str(secret)) as f:
+                assert f.read() == "tooling data"
+        finally:
+            _in_sandbox_execution.set(False)
+            sandbox._deactivate_restrictions()
+            sandbox.cleanup()

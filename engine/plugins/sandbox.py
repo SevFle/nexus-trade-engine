@@ -219,6 +219,9 @@ class StrategySandbox:
         *args: Any,
         **kwargs: Any,
     ) -> Any:
+        if not _in_sandbox_execution.get(False):
+            return self._original_open(file, mode, *args, **kwargs)
+
         if isinstance(file, int):
             raise PermissionError("File descriptor access is not allowed in strategy sandbox")
 
