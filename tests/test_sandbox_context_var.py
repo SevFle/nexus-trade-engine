@@ -27,6 +27,7 @@ import asyncio
 import builtins
 import contextlib
 import contextvars
+import os
 from typing import Any
 
 import httpx
@@ -37,6 +38,7 @@ from engine.plugins.manifest import StrategyManifest
 from engine.plugins.sandbox import (
     StrategySandbox,
     _in_sandbox_execution,
+    _real_open,
 )
 
 
@@ -608,3 +610,154 @@ class TestContextVarEdgeCases:
                 client, request, stream=True
             )
             assert response.status_code == 200
+
+
+# ── 11. File-open respects contextvar ─────────────────────────────────
+
+
+class TestRestrictedOpenContextVar:
+    """
+    Regression tests: ``_restricted_open`` must check
+    ``_in_sandbox_execution`` before enforcing path restrictions.
+
+    When the contextvar is *False* (outside sandbox), ``open()`` delegates
+    to the real ``builtins.open`` so that test infra, coverage tools, and
+    other non-sandbox code can read files normally.
+
+    This mirrors the contextvar scoping already applied for network
+    restrictions in ``_make_restricted_send``.
+    """
+
+    def test_open_works_outside_sandbox(self, tmp_path: Any) -> None:
+        """builtins.open reads files normally without any sandbox active."""
+        assert _in_sandbox_execution.get() is False
+        test_file = tmp_path / "data.txt"
+        test_file.write_text("hello")
+        with open(test_file) as f:
+            assert f.read() == "hello"
+
+    def test_open_reads_system_files_outside_sandbox(self) -> None:
+        """open() reads arbitrary system files when contextvar is False."""
+        assert _in_sandbox_execution.get() is False
+        with open(os.__file__) as f:
+            content = f.read()
+        assert "import" in content
+
+    def test_open_delegates_when_patched_but_not_in_sandbox(
+        self, manifest: StrategyManifest, tmp_path: Any,
+    ) -> None:
+        """
+        Even if ``builtins.open`` is still patched to ``_restricted_open``
+        (e.g. leaked from a previous evaluation that did not clean up),
+        it delegates to the real open when the contextvar is False.
+
+        This is the exact scenario that caused coverage's HTML report
+        generation to crash with PermissionError.
+        """
+        test_file = tmp_path / "data.txt"
+        test_file.write_text("hello")
+
+        sandbox = StrategySandbox(_PassiveStrategy(), manifest)
+        saved_open = builtins.open
+        sandbox._original_open = builtins.open
+        builtins.open = sandbox._restricted_open
+        try:
+            assert _in_sandbox_execution.get() is False
+
+            with open(test_file) as f:
+                assert f.read() == "hello"
+
+            with open(os.__file__) as f:
+                assert "import" in f.read()
+        finally:
+            builtins.open = saved_open
+            sandbox._original_open = None
+            sandbox.cleanup()
+
+    def test_open_blocked_for_disallowed_path_in_sandbox(
+        self, manifest: StrategyManifest, tmp_path: Any,
+    ) -> None:
+        """_restricted_open blocks disallowed paths when contextvar is True."""
+        secret = tmp_path / "secret.txt"
+        secret.write_text("secret")
+
+        sandbox = StrategySandbox(_PassiveStrategy(), manifest)
+        saved_open = builtins.open
+        sandbox._original_open = builtins.open
+        builtins.open = sandbox._restricted_open
+        try:
+            _in_sandbox_execution.set(True)
+            with pytest.raises(PermissionError, match="not allowed"), open(str(secret)):
+                pass
+        finally:
+            _in_sandbox_execution.set(False)
+            builtins.open = saved_open
+            sandbox._original_open = None
+            sandbox.cleanup()
+
+    def test_open_works_for_workdir_in_sandbox(
+        self, manifest: StrategyManifest,
+    ) -> None:
+        """_restricted_open allows reads inside the sandbox workdir."""
+        sandbox = StrategySandbox(_PassiveStrategy(), manifest)
+        saved_open = builtins.open
+        sandbox._original_open = builtins.open
+        builtins.open = sandbox._restricted_open
+        work_file = os.path.join(sandbox._work_dir, "test.txt")
+        with _real_open(work_file, "w") as f:
+            f.write("workdir data")
+        try:
+            _in_sandbox_execution.set(True)
+            with open(work_file) as f:
+                assert f.read() == "workdir data"
+        finally:
+            _in_sandbox_execution.set(False)
+            builtins.open = saved_open
+            sandbox._original_open = None
+            sandbox.cleanup()
+
+    def test_restricted_open_method_checks_contextvar(
+        self, manifest: StrategyManifest, tmp_path: Any,
+    ) -> None:
+        """
+        Calling ``_restricted_open`` directly (as coverage does via the
+        patched ``builtins.open``) delegates to ``_real_open`` when the
+        contextvar is False — no PermissionError raised.
+        """
+        sandbox = StrategySandbox(_PassiveStrategy(), manifest)
+        sandbox._original_open = builtins.open
+        target = str(tmp_path / "anywhere.txt")
+
+        assert _in_sandbox_execution.get() is False
+        result = sandbox._restricted_open(target, "w")
+        result.write("ok")
+        result.close()
+
+        result = sandbox._restricted_open(target, "r")
+        assert result.read() == "ok"
+        result.close()
+        sandbox.cleanup()
+
+    async def test_open_works_after_sandbox_evaluation(
+        self, manifest: StrategyManifest, tmp_path: Any,
+    ) -> None:
+        """open() reads arbitrary files after a sandbox evaluation."""
+        test_file = tmp_path / "data.txt"
+        test_file.write_text("hello")
+
+        sandbox = StrategySandbox(_PassiveStrategy(), manifest)
+        try:
+            await sandbox.safe_evaluate(None, None, None)
+            assert _in_sandbox_execution.get() is False
+            with open(test_file) as f:
+                assert f.read() == "hello"
+            with open(os.__file__) as f:
+                assert "import" in f.read()
+        finally:
+            sandbox.cleanup()
+
+    def test_real_open_is_real_builtin(self) -> None:
+        """_real_open captured at import time is the real builtin open."""
+        import io
+
+        assert _real_open is io.open

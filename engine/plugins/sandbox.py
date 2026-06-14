@@ -52,6 +52,8 @@ except ImportError:
 
 logger = structlog.get_logger()
 
+_real_open = builtins.open
+
 _BLOCKED_ATTRS: frozenset[str] = frozenset(
     {
         "__subclasses__",
@@ -219,6 +221,9 @@ class StrategySandbox:
         *args: Any,
         **kwargs: Any,
     ) -> Any:
+        if not _in_sandbox_execution.get(False):
+            return _real_open(file, mode, *args, **kwargs)
+
         if isinstance(file, int):
             raise PermissionError("File descriptor access is not allowed in strategy sandbox")
 
