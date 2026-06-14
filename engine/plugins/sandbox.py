@@ -50,6 +50,8 @@ except ImportError:
     _resource = None  # type: ignore[assignment]
     HAS_RESOURCE_MODULE = False
 
+_original_builtin_open: Any = builtins.open
+
 logger = structlog.get_logger()
 
 _BLOCKED_ATTRS: frozenset[str] = frozenset(
@@ -122,7 +124,7 @@ class StrategySandbox:
         self.metrics = SandboxMetrics()
         self._max_eval_seconds = manifest.resources.max_cpu_seconds
 
-        self._importer = RestrictedImporter()
+        self._importer = RestrictedImporter(context_var=_in_sandbox_execution)
         self._http_client: SandboxedHttpClient | None = None
         self._work_dir: str | None = None
         self._original_open: Any = None
@@ -219,6 +221,10 @@ class StrategySandbox:
         *args: Any,
         **kwargs: Any,
     ) -> Any:
+        if not _in_sandbox_execution.get(False):
+            real_open = self._original_open or _original_builtin_open
+            return real_open(file, mode, *args, **kwargs)
+
         if isinstance(file, int):
             raise PermissionError("File descriptor access is not allowed in strategy sandbox")
 
@@ -238,6 +244,8 @@ class StrategySandbox:
         return self._original_open(file, mode, *args, **kwargs)
 
     def _restricted_getattr(self, obj: Any, name: str, *default: Any) -> Any:
+        if not _in_sandbox_execution.get(False):
+            return self._original_getattr(obj, name, *default)  # type: ignore[misc]
         if name in _BLOCKED_ATTRS:
             raise PermissionError(f"Attribute '{name}' is not accessible in strategy sandbox")
         return self._original_getattr(obj, name, *default)  # type: ignore[misc]

@@ -16,6 +16,7 @@ from importlib.abc import MetaPathFinder
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    import contextvars
     from collections.abc import Callable
     from importlib.machinery import ModuleSpec
 
@@ -86,12 +87,27 @@ class RestrictedImporter(MetaPathFinder):
     Dual-layer enforcement:
       1. ``sys.meta_path`` finder - catches imports of modules not yet loaded.
       2. ``builtins.__import__`` override - catches re-imports of cached modules.
+
+    When a ``context_var`` is supplied, restrictions are **only** enforced
+    while that ContextVar evaluates truthy.  This prevents leaked hooks from
+    blocking legitimate imports outside sandbox execution.
     """
 
-    def __init__(self, blocked: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        blocked: set[str] | None = None,
+        context_var: contextvars.ContextVar[bool] | None = None,
+    ) -> None:
         self.blocked = blocked or set(BLOCKED_MODULES)
+        self._context_var = context_var
         self._installed = False
         self._original_import: Callable[..., Any] = builtins.__import__
+
+    def _is_enforcing(self) -> bool:
+        """Return True only when sandbox execution is active (or no guard)."""
+        if self._context_var is None:
+            return True
+        return self._context_var.get(False)
 
     def find_spec(
         self,
@@ -99,6 +115,8 @@ class RestrictedImporter(MetaPathFinder):
         _path: object = None,
         _target: object = None,
     ) -> ModuleSpec | None:
+        if not self._is_enforcing():
+            return None
         root = fullname.split(".", maxsplit=1)[0]
         if root in self.blocked:
             raise ImportError(f"Module '{fullname}' is blocked in strategy sandbox")
@@ -112,6 +130,8 @@ class RestrictedImporter(MetaPathFinder):
         fromlist: tuple[str, ...] = (),
         level: int = 0,
     ) -> object:
+        if not self._is_enforcing():
+            return self._original_import(name, globals_, locals_, fromlist, level)
         if level == 0:
             root = name.split(".", maxsplit=1)[0]
             if root in self.blocked:
