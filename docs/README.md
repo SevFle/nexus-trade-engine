@@ -56,7 +56,10 @@ docs/
 ├── adr/                            ← architecture decision records (why we chose X)
 │   ├── 0001-scaffold-tech-choices.md
 │   ├── 0002-auth-rbac.md
-│   └── 0003-mobile-app-strategy.md
+│   ├── 0003-mobile-app-strategy.md
+│   ├── 0004-task-queue-taskiq.md
+│   ├── 0005-valkey-over-redis.md
+│   └── 0006-bcrypt-fernet.md
 ├── api-reference.md                ← every HTTP/WS route, auth, schemas
 ├── data-model.md                   ← entities, relationships, invariants
 ├── deployment.md                   ← infra requirements, env, rollout

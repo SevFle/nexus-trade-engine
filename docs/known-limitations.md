@@ -92,20 +92,44 @@ read-only file.
 
 ---
 
-## P1 — WebSocket manager is process-local
+## P2 — WebSocket connection registry is process-local (events are cross-replica)
 
-**Where**: [`engine/api/websocket/manager.py:9`](../engine/api/websocket/manager.py:9).
+**Where**: [`engine/api/ws/connection_manager.py`](../engine/api/ws/connection_manager.py).
 
-The `ConnectionManager` is a single-process dict. Broadcasts do not
-cross replica boundaries.
-
-**Workaround today**: deploy a single replica if you need WebSocket
-delivery guarantees, or accept that broadcasts are best-effort per
+The live `WebSocket` objects themselves live in a per-process dict, so a
+client must reconnect to the replica it originally hit. **Event delivery is
+already cross-replica**, however: the
+[`EventBusBridge`](../engine/api/ws/event_bridge.py) subscribes to the
+[`EventBus`](../engine/events/bus.py), which publishes over Redis/Valkey
+pub/sub, so events emitted on replica A reach local connections on every
 replica.
 
-**Fix path**: bridge the manager through a Valkey pubsub channel,
-consume on each replica. The module docstring calls this out as an
-intentional follow-up.
+The remaining gap is that there is no shared connection registry or sticky
+sessioning, so a client whose replica dies must reconnect. There is also no
+back-pressure signal back to the `EventBus` if a room has no local
+subscribers — the bridge fans out unconditionally.
+
+**Workaround today**: deploy behind a load balancer that supports
+connection draining, or accept that a replica restart drops its in-flight WS
+sessions. Event correctness (via the bridge) does not depend on a single
+replica.
+
+---
+
+## P2 — WebSocket does not accept API keys
+
+**Where**: [`engine/api/ws/auth.py`](../engine/api/ws/auth.py:158)
+
+The active WS authenticator calls `decode_token` (JWT only). It does
+**not** run the `is_engine_token` / `find_active_by_token` path that the
+REST `get_current_user` dependency uses, so a `nxs_*` API key cannot open
+a WS connection. The legacy `routes/websocket.py` did support API keys;
+that code is no longer mounted.
+
+**Workaround today**: headless clients mint a short-lived JWT via
+`POST /api/v1/auth/login` (or the API-key → JWT exchange if added) and
+use that for WS. If long-lived WS access for automation is needed, port
+the API-key branch from the legacy endpoint into `ws/auth.py`.
 
 ---
 

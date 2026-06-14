@@ -158,8 +158,10 @@ which `PING`s the broker on `/ready`.
     application-scoped Valkey client.
   - [`engine/api/rate_limit.py`](../../engine/api/rate_limit.py) —
     note the dual `Valkey | Redis` type hint.
-  - [`engine/api/websocket/manager.py`](../../engine/api/websocket/manager.py)
-    — pubsub subscription across replicas.
+  - [`engine/events/bus.py`](../../engine/events/bus.py) — Redis
+    pub/sub for cross-replica event delivery, consumed by the
+    [`EventBusBridge`](../../engine/api/ws/event_bridge.py) to fan out
+    to WebSocket rooms.
   - [`engine/tasks/worker.py`](../../engine/tasks/worker.py) —
     `taskiq-redis` broker against Valkey.
 - Related ADRs:

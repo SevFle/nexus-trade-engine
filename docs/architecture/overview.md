@@ -73,7 +73,7 @@ The full pinned set is in [`pyproject.toml`](../../pyproject.toml).
 
 ## Request lifecycle (HTTP)
 
-A typical authenticated `POST /api/v1/backtest` does this:
+A typical authenticated `POST /api/v1/backtest/run` does this:
 
 1. Reverse proxy forwards the request to uvicorn (`engine.app:create_app`).
 2. **CORS / security middleware** rejects disallowed origins.
@@ -85,15 +85,19 @@ A typical authenticated `POST /api/v1/backtest` does this:
    resolves the bearer token to a `User`. If the user has MFA enabled
    the request must carry a valid challenge token from `/login`.
 6. **Route handler** in `engine/api/routes/backtest.py` validates the
-   payload, persists a `BacktestResult` row, and enqueues the actual
-   computation onto the TaskIQ broker.
-7. The handler returns `202 Accepted` with the new id; the worker
-   picks the job up, runs it via [`engine/core/backtest_runner.py`](../../engine/core/backtest_runner.py),
-   wraps the result in [`engine/core/strategy_evaluator.py`](../../engine/core/strategy_evaluator.py),
-   and writes the composite score / breakdown back to the row.
-8. Listeners on `engine/events/bus.py` get notified. The webhook
-   dispatcher fans out to every active webhook config that subscribed
-   to the relevant event.
+   payload and runs the computation via FastAPI `BackgroundTasks`
+   (**not** TaskIQ — see [known-limitations.md](../known-limitations.md)).
+   Results land in an in-process dict keyed by `backtest_id` with a
+   1-hour TTL; the `backtest_results` table exists but the REST route
+   does not yet write to it.
+7. The handler returns `202 Accepted` with the new id; the background
+   job runs the backtest through
+   [`engine/core/backtest_runner.py`](../../engine/core/backtest_runner.py)
+   and writes the composite score / breakdown back into the result.
+8. Listeners on `engine/events/bus.py` get notified. The
+   [`EventBusBridge`](../../engine/api/ws/event_bridge.py) fans events
+   out to WebSocket rooms, and the webhook dispatcher fans out to
+   every active webhook config that subscribed to the relevant event.
 
 Synchronous reads (`GET /api/v1/portfolio`, etc.) follow steps 1–5
 then return the result directly without enqueueing.
@@ -101,14 +105,24 @@ then return the result directly without enqueueing.
 ## Event flow
 
 ```
-domain code  ──▶  EventBus.publish(event)  ──▶  WebhookDispatcher
-                                          ──▶  internal listeners
+domain code  ──▶  EventBus.publish(event)
+                  ├──▶  in-process async handlers  (awaited in sequence)
+                  ├──▶  Redis/Valkey pub/sub         (cross-replica)
+                  │       └──▶  EventBusBridge on every replica  ──▶  WS rooms
+                  └──▶  WebhookDispatcher  (HMAC-signed outbound HTTP)
 ```
 
 The `EventBus` ([`engine/events/bus.py`](../../engine/events/bus.py))
-is in-process and synchronous; subscribers register at startup. The
-webhook dispatcher (gh#80) is the single subscriber today and handles
-all outbound HTTP fan-out with retries + HMAC signing.
+does two things per `publish()`: it `await`s every registered
+in-process handler in turn (the webhook dispatcher is one such handler),
+**and** it republishes the event onto a Redis/Valkey pub/sub channel
+(`nexus:<event_type>`) so consumers on other replicas see it. The
+[`EventBusBridge`](../../engine/api/ws/event_bridge.py) is the key
+cross-replica consumer: each replica's bridge re-delivers received
+events to its local WebSocket rooms, so a portfolio update emitted on
+replica A reaches WS clients connected to replica B. If Redis is
+unavailable the bus falls back to in-process-only delivery (logged at
+warning level).
 
 ## Configuration
 
