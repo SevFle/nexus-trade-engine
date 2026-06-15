@@ -16,20 +16,26 @@ MarketState in, Signal[] out), and killed if it exceeds limits.
 Security note
 -------------
 This module deliberately keeps **no module-level references** to dangerous
-modules (``os``, ``io``, ``shutil``, ``httpx``, ``resource``).  Those imports
-are performed *inside* the methods that need them and the resulting bindings are
-local, so sandboxed code that reaches this module's globals via
-``engine.plugins.sandbox`` cannot discover them.  The previous
-``ContextVar``-based security gate has been replaced with a process-level flag
-(see :class:`_ProcessSandboxFlag`) because a ``ContextVar`` is process-wide
-mutable state that attacker code could clear via the ``contextvars`` module —
-which is now itself blocked by the allowlist.
+modules (``os``, ``io``, ``shutil``, ``httpx``, ``resource``, ``asyncio``,
+``builtins``).  Those imports are performed *inside* the methods that need them
+(while restrictions are *not* yet active, or after they have been lifted) and
+the resulting bindings are local, so sandboxed code that reaches this module's
+globals via ``engine.plugins.sandbox`` cannot discover them.  A handful of
+captured *callables/values* (``_realpath``, ``_sep``, ``_eval_lock``,
+``_wait_for``, ``_iscoroutine``) are retained because they are needed while
+restrictions are active; none of them exposes a dangerous module object.
+
+The previous ``ContextVar``-based security gate has been replaced with a
+process-level flag (see :class:`_ProcessSandboxFlag`) because a ``ContextVar``
+is process-wide mutable state that attacker code could clear via the
+``contextvars`` module — which is now itself blocked by the allowlist.  The flag
+is additionally unreachable by sandboxed code because importing
+``engine.plugins.sandbox`` is denied by :data:`_DENIED_SUBMODULES` in the
+restricted importer.
 """
 
 from __future__ import annotations
 
-import asyncio
-import builtins
 import contextlib
 import time
 from dataclasses import dataclass
@@ -48,10 +54,25 @@ if TYPE_CHECKING:
     from engine.core.portfolio import PortfolioSnapshot
     from engine.plugins.manifest import StrategyManifest
 
-# ``resource`` is imported lazily inside the methods that need it so that no
-# module-level reference to this dangerous module exists.  ``HAS_RESOURCE_MODULE``
-# is computed once at import time by attempting the import without retaining the
-# module object.
+
+# Capture path-resolution helpers from ``os`` WITHOUT retaining a module-level
+# reference to the (blocked) ``os`` module.  ``_realpath`` is a plain function
+# and ``_sep`` a string constant; neither exposes the ``os`` module nor
+# constitutes an escape vector on its own.  They are needed by
+# ``_restricted_open`` which executes while import restrictions are active (so
+# ``import os`` would be rejected by the allowlist).
+def _capture_os_path_helpers() -> tuple[Any, str]:
+    import os
+
+    return os.path.realpath, os.sep
+
+
+_realpath, _sep = _capture_os_path_helpers()
+
+
+# ``resource`` is probed at import time without retaining the module object, so
+# that no module-level reference to this blocked module exists.  The actual
+# module reference is captured per-instance in ``StrategySandbox.__init__``.
 def _detect_resource_module() -> bool:
     try:
         import resource  # noqa: F401 -- probe only, reference not retained
@@ -61,6 +82,19 @@ def _detect_resource_module() -> bool:
 
 
 HAS_RESOURCE_MODULE: bool = _detect_resource_module()
+
+
+# Capture asyncio primitives without retaining the (blocked) ``asyncio`` module
+# at module level, so sandboxed code cannot reach it via
+# ``engine.plugins.sandbox.asyncio``.  The captured lock/functions carry their
+# own internal state and do not expose the module object.
+def _capture_asyncio_helpers() -> tuple[Any, Any, Any]:
+    import asyncio
+
+    return asyncio.Lock(), asyncio.wait_for, asyncio.iscoroutine
+
+
+_eval_lock, _wait_for, _iscoroutine = _capture_asyncio_helpers()
 
 logger = structlog.get_logger()
 
@@ -74,8 +108,6 @@ _BLOCKED_ATTRS: frozenset[str] = frozenset(
         "__code__",
     }
 )
-
-_eval_lock: asyncio.Lock = asyncio.Lock()
 
 
 class _ProcessSandboxFlag:
@@ -177,6 +209,20 @@ class StrategySandbox:
         self._original_httpx_send: Any = None
         self._original_object: Any = None
 
+        # Capture the ``resource`` module reference now (before any restrictions
+        # are active) and store it on the instance.  Strategy code never
+        # receives a reference to the sandbox object, so this is unreachable,
+        # and there is no module-level ``resource`` reference for sandboxed code
+        # to discover via ``engine.plugins.sandbox``.
+        self._resource_module: Any = None
+        if HAS_RESOURCE_MODULE:
+            try:
+                import resource as _resource_mod
+            except ImportError:
+                self._resource_module = None
+            else:
+                self._resource_module = _resource_mod
+
         self._create_sandboxed_http_client()
         self._setup_filesystem_isolation()
 
@@ -221,12 +267,8 @@ class StrategySandbox:
         return int(val)
 
     def _apply_resource_limits(self) -> None:
-        if not HAS_RESOURCE_MODULE:
-            return
-
-        try:
-            import resource as _resource
-        except ImportError:
+        _resource = self._resource_module
+        if _resource is None:
             return
 
         try:
@@ -247,12 +289,8 @@ class StrategySandbox:
             pass
 
     def _restore_resource_limits(self) -> None:
-        if not HAS_RESOURCE_MODULE:
-            return
-
-        try:
-            import resource as _resource
-        except ImportError:
+        _resource = self._resource_module
+        if _resource is None:
             return
 
         for name, (soft, hard) in self._saved_resource_limits.items():
@@ -281,16 +319,14 @@ class StrategySandbox:
         if isinstance(file, int):
             raise PermissionError("File descriptor access is not allowed in strategy sandbox")
 
-        import os
-
-        resolved = os.path.realpath(str(file))
-        work_dir = os.path.realpath(self._work_dir or "")
+        resolved = _realpath(str(file))
+        work_dir = _realpath(self._work_dir or "")
 
         allowed = [work_dir]
-        allowed.extend(os.path.realpath(a) + os.sep for a in self.manifest.artifacts)
-        allowed.extend(os.path.realpath(a) for a in self.manifest.artifacts)
+        allowed.extend(_realpath(a) + _sep for a in self.manifest.artifacts)
+        allowed.extend(_realpath(a) for a in self.manifest.artifacts)
 
-        if not any(resolved == p or resolved.startswith(p + os.sep) for p in allowed if p):
+        if not any(resolved == p or resolved.startswith(p + _sep) for p in allowed if p):
             raise PermissionError(f"File access to {file} is not allowed in strategy sandbox")
 
         if any(c in mode for c in ("w", "a", "+")):
@@ -324,32 +360,35 @@ class StrategySandbox:
         return restricted_send
 
     def _activate_restrictions(self) -> None:
+        import builtins as _builtins
         import io as _io
 
         import httpx as _httpx
 
         self._importer.install()
-        self._original_object = builtins.object
-        builtins.object = _RestrictedObject  # type: ignore[assignment]
-        self._original_getattr = builtins.getattr
-        builtins.getattr = self._restricted_getattr  # type: ignore[assignment]
+        self._original_object = _builtins.object
+        _builtins.object = _RestrictedObject  # type: ignore[assignment]
+        self._original_getattr = _builtins.getattr
+        _builtins.getattr = self._restricted_getattr  # type: ignore[assignment]
         self._original_io_open = _io.open
         _io.open = self._restricted_open  # type: ignore[assignment]
         self._original_httpx_send = _httpx.AsyncClient.send
         _httpx.AsyncClient.send = self._make_restricted_send()
-        self._original_open = builtins.open
-        builtins.open = self._restricted_open  # type: ignore[assignment]
+        self._original_open = _builtins.open
+        _builtins.open = self._restricted_open  # type: ignore[assignment]
         self._apply_resource_limits()
         _in_sandbox_execution.set(True)
 
     def _deactivate_restrictions(self) -> None:
         _in_sandbox_execution.set(False)
         self._importer.uninstall()
+        import builtins as _builtins
+
         if self._original_object is not None:
-            builtins.object = self._original_object
+            _builtins.object = self._original_object
             self._original_object = None
         if self._original_getattr is not None:
-            builtins.getattr = self._original_getattr  # type: ignore[assignment]
+            _builtins.getattr = self._original_getattr  # type: ignore[assignment]
             self._original_getattr = None
         if self._original_io_open is not None:
             import io as _io
@@ -362,7 +401,7 @@ class StrategySandbox:
             _httpx.AsyncClient.send = self._original_httpx_send
             self._original_httpx_send = None
         if self._original_open is not None:
-            builtins.open = self._original_open  # type: ignore[assignment]
+            _builtins.open = self._original_open  # type: ignore[assignment]
             self._original_open = None
         self._restore_resource_limits()
 
@@ -391,7 +430,7 @@ class StrategySandbox:
         self._activate_restrictions()
 
         try:
-            raw_signals = await asyncio.wait_for(
+            raw_signals = await _wait_for(
                 self._call_strategy(portfolio, market),
                 timeout=self._max_eval_seconds,
             )
@@ -430,7 +469,7 @@ class StrategySandbox:
         market: Any,
     ) -> list[Any]:
         result = self.strategy.on_bar(market, portfolio)
-        if asyncio.iscoroutine(result):
+        if _iscoroutine(result):
             result = await result
         return result
 
