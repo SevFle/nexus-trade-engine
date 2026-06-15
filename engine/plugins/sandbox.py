@@ -2,7 +2,7 @@
 Strategy Sandbox - isolated execution environment for plugins.
 
 Enforces five security layers:
-  1. Import restrictions (blocked modules via RestrictedImporter)
+  1. Import restrictions (**allowlist** model via RestrictedImporter)
   2. Network whitelist (SandboxedHttpClient for declared endpoints)
   3. Resource limits (memory, file descriptors via resource on Linux)
   4. Filesystem isolation (temp working dir, read-only artifacts)
@@ -12,6 +12,18 @@ For the current MVP, layers 1-4 provide in-process isolation.  Layer 5
 is the production architecture where each strategy runs in its own
 process or container, communicated with via pipes (serialized
 MarketState in, Signal[] out), and killed if it exceeds limits.
+
+Security note
+-------------
+This module deliberately keeps **no module-level references** to dangerous
+modules (``os``, ``io``, ``shutil``, ``httpx``, ``resource``).  Those imports
+are performed *inside* the methods that need them and the resulting bindings are
+local, so sandboxed code that reaches this module's globals via
+``engine.plugins.sandbox`` cannot discover them.  The previous
+``ContextVar``-based security gate has been replaced with a process-level flag
+(see :class:`_ProcessSandboxFlag`) because a ``ContextVar`` is process-wide
+mutable state that attacker code could clear via the ``contextvars`` module —
+which is now itself blocked by the allowlist.
 """
 
 from __future__ import annotations
@@ -19,16 +31,10 @@ from __future__ import annotations
 import asyncio
 import builtins
 import contextlib
-import contextvars
-import io as _io_module
-import os
-import shutil
-import tempfile
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-import httpx as _httpx_module
 import structlog
 
 from engine.core.signal import Signal
@@ -42,13 +48,19 @@ if TYPE_CHECKING:
     from engine.core.portfolio import PortfolioSnapshot
     from engine.plugins.manifest import StrategyManifest
 
-try:
-    import resource as _resource
+# ``resource`` is imported lazily inside the methods that need it so that no
+# module-level reference to this dangerous module exists.  ``HAS_RESOURCE_MODULE``
+# is computed once at import time by attempting the import without retaining the
+# module object.
+def _detect_resource_module() -> bool:
+    try:
+        import resource  # noqa: F401 -- probe only, reference not retained
+    except ImportError:
+        return False
+    return True
 
-    HAS_RESOURCE_MODULE = True
-except ImportError:
-    _resource = None  # type: ignore[assignment]
-    HAS_RESOURCE_MODULE = False
+
+HAS_RESOURCE_MODULE: bool = _detect_resource_module()
 
 logger = structlog.get_logger()
 
@@ -65,9 +77,41 @@ _BLOCKED_ATTRS: frozenset[str] = frozenset(
 
 _eval_lock: asyncio.Lock = asyncio.Lock()
 
-_in_sandbox_execution: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "_in_sandbox_execution", default=False,
-)
+
+class _ProcessSandboxFlag:
+    """Process-level sandbox-active flag.
+
+    Replaces the former ``contextvars.ContextVar`` security gate.
+
+    A ``ContextVar`` is process-wide mutable state that attacker code could
+    trivially clear by importing ``contextvars`` and manipulating the context
+    machinery (``copy_context``, ``Token.reset``, etc.).  This class is a plain
+    boolean with a deliberately small, compatible API (``get``/``set``/``name``)
+    so that existing call-sites and tests continue to work, while the
+    ``contextvars`` module itself is blocked by the import allowlist — closing
+    the reset/clear escape vector.
+
+    In the production subprocess-isolation architecture (Layer 5) this flag
+    becomes implicit: the child process *is* the sandbox and there is no shared
+    state to manipulate.
+    """
+
+    name = "_in_sandbox_execution"
+
+    def __init__(self) -> None:
+        self._value: bool = False
+
+    def get(self, default: bool = False) -> bool:  # noqa: ARG002
+        return self._value
+
+    def set(self, value: bool) -> None:
+        self._value = value
+
+    def reset(self) -> None:
+        self._value = False
+
+
+_in_sandbox_execution: _ProcessSandboxFlag = _ProcessSandboxFlag()
 
 
 class _RestrictedObject:
@@ -181,18 +225,23 @@ class StrategySandbox:
             return
 
         try:
+            import resource as _resource
+        except ImportError:
+            return
+
+        try:
             max_bytes = self._parse_memory(self.manifest.resources.max_memory)
-            soft, hard = _resource.getrlimit(_resource.RLIMIT_AS)  # type: ignore[union-attr]
+            soft, hard = _resource.getrlimit(_resource.RLIMIT_AS)
             new_soft = min(max_bytes, hard)
-            _resource.setrlimit(_resource.RLIMIT_AS, (new_soft, hard))  # type: ignore[union-attr]
+            _resource.setrlimit(_resource.RLIMIT_AS, (new_soft, hard))
             self._saved_resource_limits["RLIMIT_AS"] = (soft, hard)
         except (ValueError, OSError, AttributeError):
             pass
 
         try:
-            soft, hard = _resource.getrlimit(_resource.RLIMIT_NOFILE)  # type: ignore[union-attr]
+            soft, hard = _resource.getrlimit(_resource.RLIMIT_NOFILE)
             new_soft = min(64, hard)
-            _resource.setrlimit(_resource.RLIMIT_NOFILE, (new_soft, hard))  # type: ignore[union-attr]
+            _resource.setrlimit(_resource.RLIMIT_NOFILE, (new_soft, hard))
             self._saved_resource_limits["RLIMIT_NOFILE"] = (soft, hard)
         except (ValueError, OSError, AttributeError):
             pass
@@ -201,15 +250,22 @@ class StrategySandbox:
         if not HAS_RESOURCE_MODULE:
             return
 
+        try:
+            import resource as _resource
+        except ImportError:
+            return
+
         for name, (soft, hard) in self._saved_resource_limits.items():
             with contextlib.suppress(ValueError, OSError, AttributeError):
-                _resource.setrlimit(  # type: ignore[union-attr]
-                    getattr(_resource, name),  # type: ignore[union-attr]
+                _resource.setrlimit(
+                    getattr(_resource, name),
                     (soft, hard),
                 )
         self._saved_resource_limits.clear()
 
     def _setup_filesystem_isolation(self) -> None:
+        import tempfile
+
         self._work_dir = tempfile.mkdtemp(prefix="strategy_sandbox_")
 
     def _restricted_open(
@@ -224,6 +280,8 @@ class StrategySandbox:
 
         if isinstance(file, int):
             raise PermissionError("File descriptor access is not allowed in strategy sandbox")
+
+        import os
 
         resolved = os.path.realpath(str(file))
         work_dir = os.path.realpath(self._work_dir or "")
@@ -266,15 +324,19 @@ class StrategySandbox:
         return restricted_send
 
     def _activate_restrictions(self) -> None:
+        import io as _io
+
+        import httpx as _httpx
+
         self._importer.install()
         self._original_object = builtins.object
         builtins.object = _RestrictedObject  # type: ignore[assignment]
         self._original_getattr = builtins.getattr
         builtins.getattr = self._restricted_getattr  # type: ignore[assignment]
-        self._original_io_open = _io_module.open
-        _io_module.open = self._restricted_open  # type: ignore[assignment]
-        self._original_httpx_send = _httpx_module.AsyncClient.send
-        _httpx_module.AsyncClient.send = self._make_restricted_send()
+        self._original_io_open = _io.open
+        _io.open = self._restricted_open  # type: ignore[assignment]
+        self._original_httpx_send = _httpx.AsyncClient.send
+        _httpx.AsyncClient.send = self._make_restricted_send()
         self._original_open = builtins.open
         builtins.open = self._restricted_open  # type: ignore[assignment]
         self._apply_resource_limits()
@@ -290,10 +352,14 @@ class StrategySandbox:
             builtins.getattr = self._original_getattr  # type: ignore[assignment]
             self._original_getattr = None
         if self._original_io_open is not None:
-            _io_module.open = self._original_io_open
+            import io as _io
+
+            _io.open = self._original_io_open
             self._original_io_open = None
         if self._original_httpx_send is not None:
-            _httpx_module.AsyncClient.send = self._original_httpx_send
+            import httpx as _httpx
+
+            _httpx.AsyncClient.send = self._original_httpx_send
             self._original_httpx_send = None
         if self._original_open is not None:
             builtins.open = self._original_open  # type: ignore[assignment]
@@ -394,8 +460,12 @@ class StrategySandbox:
     def cleanup(self) -> None:
         """Release all sandbox resources (temp dir, hooks, HTTP client)."""
         self._deactivate_restrictions()
-        if self._work_dir and os.path.isdir(self._work_dir):
-            shutil.rmtree(self._work_dir, ignore_errors=True)
+        if self._work_dir:
+            import os
+            import shutil
+
+            if os.path.isdir(self._work_dir):
+                shutil.rmtree(self._work_dir, ignore_errors=True)
             self._work_dir = None
 
     def get_health(self) -> dict:
