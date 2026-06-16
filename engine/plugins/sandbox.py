@@ -209,6 +209,12 @@ class StrategySandbox:
         self._original_httpx_send: Any = None
         self._original_object: Any = None
 
+        # Tracks whether ``_restricted_getattr`` already recorded a blocked
+        # attribute violation during the current evaluation, so that
+        # ``_evaluate_inner`` doesn't double-count the propagating exception.
+        # Reset at the start of every ``_evaluate_inner`` call.
+        self._getattr_violation_counted: bool = False
+
         # Capture the ``resource`` module reference now (before any restrictions
         # are active) and store it on the instance.  Strategy code never
         # receives a reference to the sandbox object, so this is unreachable,
@@ -336,6 +342,19 @@ class StrategySandbox:
 
     def _restricted_getattr(self, obj: Any, name: str, *default: Any) -> Any:
         if name in _BLOCKED_ATTRS:
+            # Record the security violation *before* raising (or returning
+            # the caller's default) so the attempt is visible in
+            # ``metrics.errors`` / ``metrics.last_error`` even when the
+            # strategy swallows the exception or uses the 3-argument
+            # ``getattr(obj, name, default)`` form.  The flag lets
+            # ``_evaluate_inner`` skip its own increment for the propagating
+            # exception, avoiding a double count.
+            violation_msg = (
+                f"Attribute '{name}' is not accessible in strategy sandbox"
+            )
+            self.metrics.errors += 1
+            self.metrics.last_error = violation_msg
+            self._getattr_violation_counted = True
             if default:
                 # Respect the 3-argument ``getattr(obj, name, default)`` contract.
                 # A caller that supplies a default — notably
@@ -349,7 +368,7 @@ class StrategySandbox:
                 # Direct attacker access ``getattr(obj, '__globals__')`` (no
                 # default) still raises ``PermissionError``.
                 return default[0]
-            raise PermissionError(f"Attribute '{name}' is not accessible in strategy sandbox")
+            raise PermissionError(violation_msg)
         return self._original_getattr(obj, name, *default)  # type: ignore[misc]
 
     def _make_restricted_send(self) -> Any:
@@ -440,6 +459,7 @@ class StrategySandbox:
         market: Any,
     ) -> list[Signal]:
         start = time.monotonic()
+        self._getattr_violation_counted = False
         self._activate_restrictions()
 
         try:
@@ -459,8 +479,11 @@ class StrategySandbox:
             return []
         except Exception as e:
             elapsed_ms = (time.monotonic() - start) * 1000
-            self.metrics.errors += 1
-            self.metrics.last_error = str(e)
+            # If the exception originated from ``_restricted_getattr`` the
+            # violation was already recorded there; skip the double count.
+            if not self._getattr_violation_counted:
+                self.metrics.errors += 1
+                self.metrics.last_error = str(e)
             logger.exception(
                 "sandbox.evaluation_error",
                 strategy_name=self.strategy.name,
