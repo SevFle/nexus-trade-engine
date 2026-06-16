@@ -52,7 +52,7 @@ The `ICostModel` is passed directly into every strategy's `evaluate()` call. Str
 ### Prerequisites
 
 - Docker & Docker Compose
-- Python 3.12+ and [uv](https://github.com/astral-sh/uv)
+- Python 3.11+ and [uv](https://github.com/astral-sh/uv)
 - Node.js 20+
 - Git
 
@@ -165,14 +165,29 @@ key entry points:
 
 ## Roadmap
 
+The honest, source-of-truth status lives in
+[`docs/known-limitations.md`](docs/known-limitations.md); this list is
+the headline view. Items marked *partial* have code landed but are not
+on the public API surface or not production-validated.
+
 - [x] Core architecture scaffold
-- [ ] Plugin SDK v1.0
-- [ ] Backtest engine with full cost model
-- [ ] Paper trading with live data feeds
-- [ ] React dashboard MVP
-- [ ] Strategy marketplace
-- [ ] Live broker integration (Alpaca, IBKR)
-- [ ] Multi-asset support (crypto, forex, options)
+- [x] Backtest engine with full cost model (commissions, spread,
+      slippage, taxes, wash-sale, holding costs)
+- [ ] Plugin SDK v1.0 *(in progress — `sdk/nexus_sdk/` ships
+      `IStrategy`/`Signal`/types/testing, marketplace install is a stub)*
+- [~] Paper trading execution *(partial — `engine/core/execution/paper.py`
+      backend landed; not yet wired to a public run route)*
+- [~] Live broker integration *(partial — read-only `AlpacaDataProvider`;
+      `engine/core/execution/live.py` + live loop scaffolded, no run route)*
+- [ ] Strategy marketplace *(stub routes only — returns `not_implemented`)*
+- [~] Multi-asset support *(partial — equity/ETF/crypto/forex/options
+      primitives exist; asset-class inference on market-data route works)*
+- [~] WebSocket real-time streams *(partial — see
+      [known-limitations](docs/known-limitations.md): connection registry
+      is process-local)*
+- [ ] React dashboard MVP *(missing)*
+- [ ] Observability export *(OpenTelemetry/Prometheus/Sentry wired but
+      SLI metric coverage incomplete — see [SLO doc](docs/operations/slos.md))*
 
 ## License
 
