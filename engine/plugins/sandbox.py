@@ -336,6 +336,19 @@ class StrategySandbox:
 
     def _restricted_getattr(self, obj: Any, name: str, *default: Any) -> Any:
         if name in _BLOCKED_ATTRS:
+            if default:
+                # Respect the 3-argument ``getattr(obj, name, default)`` contract.
+                # A caller that supplies a default — notably
+                # ``inspect.get_annotations`` and ``_signature_from_function``
+                # which both call ``getattr(obj, '__globals__', None)`` —
+                # expects the default value back and *never* an exception.
+                # Returning the caller's default (rather than the real value)
+                # keeps the blocked attribute's contents unreachable while
+                # allowing legitimate introspection libraries (inspect,
+                # dataclasses, pydantic) to function inside the sandbox.
+                # Direct attacker access ``getattr(obj, '__globals__')`` (no
+                # default) still raises ``PermissionError``.
+                return default[0]
             raise PermissionError(f"Attribute '{name}' is not accessible in strategy sandbox")
         return self._original_getattr(obj, name, *default)  # type: ignore[misc]
 

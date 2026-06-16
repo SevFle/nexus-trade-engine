@@ -71,9 +71,7 @@ class _DirectHttpxToEvilStrategy:
     version = "1.0.0"
 
     async def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
-        transport = httpx.MockTransport(
-            lambda _r: httpx.Response(200)
-        )
+        transport = httpx.MockTransport(lambda _r: httpx.Response(200))
         async with httpx.AsyncClient(transport=transport) as client:
             await client.get("https://evil.com/api")
         return []
@@ -84,9 +82,7 @@ class _DirectHttpxToAllowedStrategy:
     version = "1.0.0"
 
     async def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
-        transport = httpx.MockTransport(
-            lambda _r: httpx.Response(200, json={"ok": True})
-        )
+        transport = httpx.MockTransport(lambda _r: httpx.Response(200, json={"ok": True}))
         async with httpx.AsyncClient(transport=transport) as client:
             await client.get("https://api.anthropic.com/v1/models")
         return []
@@ -144,9 +140,7 @@ class TestContextVarDefault:
 
 class TestNetworkAllowedOutsideSandbox:
     async def test_httpx_works_without_sandbox(self):
-        transport = httpx.MockTransport(
-            lambda _r: httpx.Response(200, json={"ok": True})
-        )
+        transport = httpx.MockTransport(lambda _r: httpx.Response(200, json={"ok": True}))
         async with httpx.AsyncClient(transport=transport) as client:
             resp = await client.get("https://evil.com/api")
             assert resp.status_code == 200
@@ -156,9 +150,7 @@ class TestNetworkAllowedOutsideSandbox:
     ):
         sandbox = StrategySandbox(_PassiveStrategy(), networked_manifest)
         try:
-            transport = httpx.MockTransport(
-                lambda _r: httpx.Response(200, json={"ok": True})
-            )
+            transport = httpx.MockTransport(lambda _r: httpx.Response(200, json={"ok": True}))
             async with httpx.AsyncClient(transport=transport) as client:
                 resp = await client.get("https://evil.com/api")
                 assert resp.status_code == 200
@@ -171,9 +163,7 @@ class TestNetworkAllowedOutsideSandbox:
         sandbox = StrategySandbox(_PassiveStrategy(), networked_manifest)
         try:
             await sandbox.safe_evaluate(None, None, None)
-            transport = httpx.MockTransport(
-                lambda _r: httpx.Response(200, json={"ok": True})
-            )
+            transport = httpx.MockTransport(lambda _r: httpx.Response(200, json={"ok": True}))
             async with httpx.AsyncClient(transport=transport) as client:
                 resp = await client.get("https://evil.com/api")
                 assert resp.status_code == 200
@@ -185,28 +175,18 @@ class TestNetworkAllowedOutsideSandbox:
 
 
 class TestNetworkBlockedInsideSandbox:
-    async def test_blocked_host_raises_in_sandbox(
-        self, networked_manifest: StrategyManifest
-    ):
-        sandbox = StrategySandbox(
-            _DirectHttpxToEvilStrategy(), networked_manifest
-        )
+    async def test_blocked_host_raises_in_sandbox(self, networked_manifest: StrategyManifest):
+        sandbox = StrategySandbox(_DirectHttpxToEvilStrategy(), networked_manifest)
         try:
             signals = await sandbox.safe_evaluate(None, None, None)
             assert signals == []
             assert sandbox.metrics.errors == 1
-            assert "not allowed" in (
-                sandbox.metrics.last_error or ""
-            ).lower()
+            assert "not allowed" in (sandbox.metrics.last_error or "").lower()
         finally:
             sandbox.cleanup()
 
-    async def test_allowed_host_passes_in_sandbox(
-        self, networked_manifest: StrategyManifest
-    ):
-        sandbox = StrategySandbox(
-            _DirectHttpxToAllowedStrategy(), networked_manifest
-        )
+    async def test_allowed_host_passes_in_sandbox(self, networked_manifest: StrategyManifest):
+        sandbox = StrategySandbox(_DirectHttpxToAllowedStrategy(), networked_manifest)
         try:
             signals = await sandbox.safe_evaluate(None, None, None)
             assert signals == []
@@ -215,13 +195,21 @@ class TestNetworkBlockedInsideSandbox:
             sandbox.cleanup()
 
 
-# ── 4. ContextVar scoped per asyncio task ─────────────────────────────
+# ── 4. Sandbox flag is process-level (serialized via lock) ────────────
 
 
 class TestContextVarPerTaskIsolation:
-    async def test_context_var_independent_across_tasks(
-        self, networked_manifest: StrategyManifest
-    ):
+    """
+    After patch #908 the sandbox gate is a *process-level* flag
+    (``_ProcessSandboxFlag``), not a real ``ContextVar``, because a
+    ``ContextVar`` could be cleared by importing the ``contextvars`` module.
+    The flag is safe because sandbox evaluations are serialised via
+    ``_eval_lock`` (C-4), so only one sandbox is ever active at a time.
+    """
+
+    async def test_flag_is_process_level_not_per_task(self, networked_manifest: StrategyManifest):
+        """The flag is shared across tasks — this is the intended behaviour
+        that defeats the contextvars reset escape vector."""
         results: list[bool] = []
 
         async def task_check_context():
@@ -240,17 +228,16 @@ class TestContextVarPerTaskIsolation:
         t2 = asyncio.create_task(task_set_context())
         await asyncio.gather(t1, t2)
 
-        assert all(v is False for v in results)
+        # Process-level flag means the setter's True is visible to the checker.
+        # At least one observation should have seen True once the setter ran.
+        assert True in results
+        assert _in_sandbox_execution.get() is False
 
     async def test_concurrent_sandbox_evaluations_isolated(
         self, networked_manifest: StrategyManifest
     ):
-        sandbox_a = StrategySandbox(
-            _PassiveStrategy(), networked_manifest
-        )
-        sandbox_b = StrategySandbox(
-            _PassiveStrategy(), networked_manifest
-        )
+        sandbox_a = StrategySandbox(_PassiveStrategy(), networked_manifest)
+        sandbox_b = StrategySandbox(_PassiveStrategy(), networked_manifest)
         try:
             await asyncio.gather(
                 sandbox_a.safe_evaluate(None, None, None),
@@ -266,9 +253,7 @@ class TestContextVarPerTaskIsolation:
 
 
 class TestContextVarResetAfterNormal:
-    async def test_reset_after_successful_eval(
-        self, manifest: StrategyManifest
-    ):
+    async def test_reset_after_successful_eval(self, manifest: StrategyManifest):
         sandbox = StrategySandbox(_PassiveStrategy(), manifest)
         try:
             assert _in_sandbox_execution.get() is False
@@ -277,9 +262,7 @@ class TestContextVarResetAfterNormal:
         finally:
             sandbox.cleanup()
 
-    async def test_reset_after_signal_emitting_eval(
-        self, manifest: StrategyManifest
-    ):
+    async def test_reset_after_signal_emitting_eval(self, manifest: StrategyManifest):
         class SignalStrategy:
             name = "signal_strat"
             version = "1.0.0"
@@ -300,9 +283,7 @@ class TestContextVarResetAfterNormal:
 
 
 class TestContextVarResetAfterError:
-    async def test_reset_after_runtime_error(
-        self, manifest: StrategyManifest
-    ):
+    async def test_reset_after_runtime_error(self, manifest: StrategyManifest):
         sandbox = StrategySandbox(_CrashingStrategy(), manifest)
         try:
             assert _in_sandbox_execution.get() is False
@@ -312,15 +293,14 @@ class TestContextVarResetAfterError:
         finally:
             sandbox.cleanup()
 
-    async def test_reset_after_import_error(
-        self, manifest: StrategyManifest
-    ):
+    async def test_reset_after_import_error(self, manifest: StrategyManifest):
         class ImportOsStrategy:
             name = "import_os"
             version = "1.0.0"
 
             def on_bar(self, _s, _p):
                 import os  # noqa: F401
+
                 return []
 
         sandbox = StrategySandbox(ImportOsStrategy(), manifest)
@@ -352,18 +332,14 @@ class TestContextVarResetAfterTimeout:
 
 
 class TestCleanupResetsContextVar:
-    def test_cleanup_resets_after_activate(
-        self, manifest: StrategyManifest
-    ):
+    def test_cleanup_resets_after_activate(self, manifest: StrategyManifest):
         sandbox = StrategySandbox(_PassiveStrategy(), manifest)
         sandbox._activate_restrictions()
         assert _in_sandbox_execution.get() is True
         sandbox.cleanup()
         assert _in_sandbox_execution.get() is False
 
-    def test_deactivate_resets_context_var(
-        self, manifest: StrategyManifest
-    ):
+    def test_deactivate_resets_context_var(self, manifest: StrategyManifest):
         sandbox = StrategySandbox(_PassiveStrategy(), manifest)
         sandbox._activate_restrictions()
         assert _in_sandbox_execution.get() is True
@@ -398,78 +374,54 @@ class TestCleanupResetsContextVar:
 
 
 class TestHttpxMonkeyPatchNoLeak:
-    async def test_send_restored_after_eval(
-        self, networked_manifest: StrategyManifest
-    ):
+    async def test_send_restored_after_eval(self, networked_manifest: StrategyManifest):
         original_send = httpx.AsyncClient.send
-        sandbox = StrategySandbox(
-            _PassiveStrategy(), networked_manifest
-        )
+        sandbox = StrategySandbox(_PassiveStrategy(), networked_manifest)
         try:
             await sandbox.safe_evaluate(None, None, None)
             assert httpx.AsyncClient.send is original_send
         finally:
             sandbox.cleanup()
 
-    async def test_send_restored_after_error(
-        self, networked_manifest: StrategyManifest
-    ):
+    async def test_send_restored_after_error(self, networked_manifest: StrategyManifest):
         original_send = httpx.AsyncClient.send
-        sandbox = StrategySandbox(
-            _CrashingStrategy(), networked_manifest
-        )
+        sandbox = StrategySandbox(_CrashingStrategy(), networked_manifest)
         try:
             await sandbox.safe_evaluate(None, None, None)
             assert httpx.AsyncClient.send is original_send
         finally:
             sandbox.cleanup()
 
-    async def test_send_restored_after_timeout(
-        self, networked_manifest: StrategyManifest
-    ):
+    async def test_send_restored_after_timeout(self, networked_manifest: StrategyManifest):
         original_send = httpx.AsyncClient.send
-        sandbox = StrategySandbox(
-            _SlowStrategy(), networked_manifest
-        )
+        sandbox = StrategySandbox(_SlowStrategy(), networked_manifest)
         try:
             await sandbox.safe_evaluate(None, None, None)
             assert httpx.AsyncClient.send is original_send
         finally:
             sandbox.cleanup()
 
-    async def test_restricted_send_checks_context_var(
-        self, networked_manifest: StrategyManifest
-    ):
-        sandbox = StrategySandbox(
-            _PassiveStrategy(), networked_manifest
-        )
+    async def test_restricted_send_checks_context_var(self, networked_manifest: StrategyManifest):
+        sandbox = StrategySandbox(_PassiveStrategy(), networked_manifest)
         sandbox._original_httpx_send = httpx.AsyncClient.send
         restricted_send = sandbox._make_restricted_send()
 
-        transport = httpx.MockTransport(
-            lambda _r: httpx.Response(200, json={"ok": True})
-        )
+        transport = httpx.MockTransport(lambda _r: httpx.Response(200, json={"ok": True}))
         async with httpx.AsyncClient(transport=transport) as client:
             request = httpx.Request("GET", "https://evil.com/api")
 
             assert _in_sandbox_execution.get() is False
-            response = await restricted_send(
-                client, request, stream=False
-            )
+            response = await restricted_send(client, request, stream=False)
             assert response.status_code == 200
 
     async def test_restricted_send_blocks_when_context_true(
         self, networked_manifest: StrategyManifest
     ):
-        sandbox = StrategySandbox(
-            _PassiveStrategy(), networked_manifest
-        )
+        sandbox = StrategySandbox(_PassiveStrategy(), networked_manifest)
         sandbox._original_httpx_send = httpx.AsyncClient.send
         restricted_send = sandbox._make_restricted_send()
 
-        transport = httpx.MockTransport(
-            lambda _r: httpx.Response(200)
-        )
+        transport = httpx.MockTransport(lambda _r: httpx.Response(200))
         async with httpx.AsyncClient(transport=transport) as client:
             request = httpx.Request("GET", "https://evil.com/api")
 
@@ -497,50 +449,34 @@ class TestIntegrationTestInfraNotBlocked:
         async def test_route():
             return {"status": "ok"}
 
-        sandbox = StrategySandbox(
-            _PassiveStrategy(), networked_manifest
-        )
+        sandbox = StrategySandbox(_PassiveStrategy(), networked_manifest)
         try:
             await sandbox.safe_evaluate(None, None, None)
         finally:
             sandbox.cleanup()
 
         transport = ASGITransport(app=app)
-        async with AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/test")
             assert resp.status_code == 200
             assert resp.json()["status"] == "ok"
 
-    async def test_multiple_sandbox_lifecycle_cycles(
-        self, networked_manifest: StrategyManifest
-    ):
+    async def test_multiple_sandbox_lifecycle_cycles(self, networked_manifest: StrategyManifest):
         for _ in range(3):
-            sandbox = StrategySandbox(
-                _PassiveStrategy(), networked_manifest
-            )
+            sandbox = StrategySandbox(_PassiveStrategy(), networked_manifest)
             try:
                 await sandbox.safe_evaluate(None, None, None)
                 assert _in_sandbox_execution.get() is False
 
-                transport = httpx.MockTransport(
-                    lambda _r: httpx.Response(200)
-                )
-                async with httpx.AsyncClient(
-                    transport=transport
-                ) as client:
+                transport = httpx.MockTransport(lambda _r: httpx.Response(200))
+                async with httpx.AsyncClient(transport=transport) as client:
                     resp = await client.get("https://evil.com/api")
                     assert resp.status_code == 200
             finally:
                 sandbox.cleanup()
 
-    async def test_sandbox_from_factory_resets_context_var(
-        self, manifest: StrategyManifest
-    ):
-        sandbox = StrategySandbox.from_factory(
-            _PassiveStrategy, manifest
-        )
+    async def test_sandbox_from_factory_resets_context_var(self, manifest: StrategyManifest):
+        sandbox = StrategySandbox.from_factory(_PassiveStrategy, manifest)
         try:
             assert _in_sandbox_execution.get() is False
             await sandbox.safe_evaluate(None, None, None)
@@ -579,9 +515,7 @@ class TestContextVarEdgeCases:
             assert _in_sandbox_execution.get() is False
         sandbox.cleanup()
 
-    async def test_network_manifest_without_endpoints(
-        self, manifest: StrategyManifest
-    ):
+    async def test_network_manifest_without_endpoints(self, manifest: StrategyManifest):
         sandbox = StrategySandbox(_PassiveStrategy(), manifest)
         try:
             assert sandbox._http_client is None
@@ -590,24 +524,16 @@ class TestContextVarEdgeCases:
         finally:
             sandbox.cleanup()
 
-    async def test_restricted_send_with_stream_flag(
-        self, networked_manifest: StrategyManifest
-    ):
-        sandbox = StrategySandbox(
-            _PassiveStrategy(), networked_manifest
-        )
+    async def test_restricted_send_with_stream_flag(self, networked_manifest: StrategyManifest):
+        sandbox = StrategySandbox(_PassiveStrategy(), networked_manifest)
         sandbox._original_httpx_send = httpx.AsyncClient.send
         restricted_send = sandbox._make_restricted_send()
 
-        transport = httpx.MockTransport(
-            lambda _r: httpx.Response(200, json={"data": "test"})
-        )
+        transport = httpx.MockTransport(lambda _r: httpx.Response(200, json={"data": "test"}))
         async with httpx.AsyncClient(transport=transport) as client:
             request = httpx.Request("GET", "https://evil.com/api")
 
-            response = await restricted_send(
-                client, request, stream=True
-            )
+            response = await restricted_send(client, request, stream=True)
             assert response.status_code == 200
 
 
@@ -655,9 +581,7 @@ class TestFileOpenContextVarGate:
         finally:
             sandbox.cleanup()
 
-    def test_restricted_open_passes_through_for_package_files(
-        self, manifest: StrategyManifest
-    ):
+    def test_restricted_open_passes_through_for_package_files(self, manifest: StrategyManifest):
         import importlib
 
         sandbox = StrategySandbox(_PassiveStrategy(), manifest)
@@ -706,9 +630,7 @@ class TestFileOpenContextVarGate:
             _in_sandbox_execution.set(False)
             sandbox.cleanup()
 
-    def test_restricted_open_blocks_write_when_contextvar_true(
-        self, manifest: StrategyManifest
-    ):
+    def test_restricted_open_blocks_write_when_contextvar_true(self, manifest: StrategyManifest):
         sandbox = StrategySandbox(_PassiveStrategy(), manifest)
         sandbox._original_open = builtins.open
         _in_sandbox_execution.set(True)
@@ -735,22 +657,16 @@ class TestFileOpenContextVarGate:
         finally:
             sandbox.cleanup()
 
-    async def test_open_blocked_during_evaluation(
-        self, manifest: StrategyManifest, tmp_path: Any
-    ):
+    async def test_open_blocked_during_evaluation(self, manifest: StrategyManifest, tmp_path: Any):
         secret = tmp_path / "secret.txt"
         secret.write_text("sensitive")
 
-        sandbox = StrategySandbox(
-            _FileReadStrategy(str(secret)), manifest
-        )
+        sandbox = StrategySandbox(_FileReadStrategy(str(secret)), manifest)
         try:
             signals = await sandbox.safe_evaluate(None, None, None)
             assert signals == []
             assert sandbox.metrics.errors == 1
-            assert "not allowed" in (
-                sandbox.metrics.last_error or ""
-            ).lower()
+            assert "not allowed" in (sandbox.metrics.last_error or "").lower()
         finally:
             sandbox.cleanup()
 

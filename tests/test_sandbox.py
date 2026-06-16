@@ -135,12 +135,20 @@ class TestSignalStrategyIdInjection:
 
 class TestSandboxWithoutResource:
     def test_import_without_resource_module(self):
+        import copy
         import importlib
         import sys
 
         import engine.plugins.sandbox as mod
 
         orig_resource = sys.modules.get("resource")
+        # ``importlib.reload`` mutates the module ``__dict__`` in place,
+        # replacing module-level objects (``_in_sandbox_execution``,
+        # ``StrategySandbox``, captured helpers…).  Other test modules that
+        # bound those names at import time would then hold *stale* references,
+        # causing assertion failures and leaked import hooks.  We snapshot the
+        # entire dict and restore it so this test stays hermetic.
+        saved_globals = copy.copy(mod.__dict__)
 
         try:
             sys.modules["resource"] = None
@@ -167,3 +175,7 @@ class TestSandboxWithoutResource:
             else:
                 sys.modules.pop("resource", None)
             importlib.reload(mod)
+            # Restore the original module globals so other test modules'
+            # import-time bindings remain valid.
+            mod.__dict__.clear()
+            mod.__dict__.update(saved_globals)
