@@ -92,15 +92,19 @@ pre-compute the SLI numerator + denominator at 5 m, 1 h, 6 h, 24 h, and
 
 ## Wiring
 
-The metrics backend is currently `NullBackend` by default — the engine
-emits to a no-op until an exporter is configured at deploy time. To
-collect real SLI data you need:
+The engine installs a recording metrics backend at startup:
+[`engine/app.py`](../../engine/app.py) calls
+`set_metrics(PrometheusBackend())` in the lifespan, and the
+[`GET /metrics`](../api-reference.md) route (source:
+[`routes/metrics.py`](../../engine/api/routes/metrics.py)) exposes the
+backend's snapshot in Prometheus exposition format
+(`text/plain; version=0.0.4`). To collect real SLI data you need:
 
-1. A Prometheus-compatible scrape endpoint. The intended path is to set
-   `metrics_backend = "prometheus"` once the exporter lands and expose
-   `/metrics` from the FastAPI app. The metric names below are what the
-   recording rules expect; they should match what the eventual exporter
-   emits.
+1. A Prometheus scrape target pointed at `/metrics` on every replica.
+   The backend is single-process (each uvicorn worker keeps its own
+   in-memory counters), so for multi-worker/multi-pod deploys scrape
+   every process and aggregate in Prometheus — see the caveat in
+   [`engine/observability/prometheus.py`](../../engine/observability/prometheus.py).
 2. The Prometheus rule file loaded into your Prometheus / Alertmanager
    stack. See [`observability/prometheus/README.md`](../../observability/prometheus/README.md).
 3. A receiver in Alertmanager for both `severity: page` and
@@ -108,7 +112,40 @@ collect real SLI data you need:
    (PagerDuty / Opsgenie / on-call SMS), ticket receivers can be Slack
    / GitHub issue / email.
 
+### Metric-name coverage (read this before trusting the SLOs)
+
+The SLI table below uses the **intended** contract — the names
+[`observability/prometheus/slo-rules.yaml`](../../observability/prometheus/slo-rules.yaml)
+is written against. The engine has **not** finished emitting to that
+contract. As of the last audit:
+
+| Intended SLI metric (rules file) | Emitted today? | Actual emitted name(s) |
+|---|---|---|
+| `nexus_http_requests_total` (`route`,`method`,`status_code`) | **Partial** | `http_request_count` tagged `method`,`status_class` (`2xx`/`5xx`/…) — no `route`, no exact `status_code` |
+| `nexus_http_request_duration_seconds` (`route`,`method`,`status_code`) | **Partial** | `http_request_duration_ms` (milliseconds) tagged `method`,`status_class` |
+| `nexus_auth_attempts_total` | **No** — no auth counter is emitted yet | — |
+| `nexus_backtest_submissions_total` | **No** | — |
+| `nexus_webhook_deliveries_terminal_total` | **Close** | `webhook_attempts`, `webhook_delivered` (different tags/shape) |
+| `nexus_task_runs_total` | **No** | — |
+
+Consequence: with the rules file as-shipped, the API latency SLO
+roughly works (the histogram exists, modulo ms-vs-s and label drift),
+but the **auth, backtest-submit, webhook, and task-pipeline SLOs will
+never fire** until the matching counter is added at the call site.
+This is tracked as a known limitation — see
+[known-limitations.md](../known-limitations.md). When you wire a
+counter, emit it under the engine dot-namespace (`http.request.count`)
+and the Prometheus renderer will surface it as the underscore form;
+either rename the call sites to the `nexus_*` contract or relax the
+rules file to match — but pick one and update both this table and the
+rule file in the same PR.
+
 ## SLI Reference
+
+> The names below are the **target contract** the rules file is written
+> against, not a guarantee of what the engine emits today. See the
+> "Metric-name coverage" table under [Wiring](#wiring) for the current
+> state — several of these counters do not exist yet.
 
 The SLOs above expect metrics in this shape (units in parentheses):
 

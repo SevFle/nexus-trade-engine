@@ -196,16 +196,28 @@ passes the 80% gate (per recent CI runs and `LAST_AUDIT.md`).
 
 ---
 
-## P2 — SLO metrics backend is null by default
+## P2 — SLO metric coverage is incomplete
 
-`set_metrics(PrometheusBackend())` runs in the lifespan, but if no
-Prometheus scrape target is wired the SLOs in
-[`operations/slos.md`](operations/slos.md) emit zeros forever. This
-is a monitoring gap, not a code bug.
+`set_metrics(PrometheusBackend())` runs in the lifespan and
+`/metrics` is exposed, so the scrape path works. But the **intended
+SLI metric contract is only partially emitted**: the rules file in
+[`observability/prometheus/slo-rules.yaml`](../observability/prometheus/slo-rules.yaml)
+is written against `nexus_*` names that several code paths do not yet
+produce. Concretely:
 
-**Workaround today**: wire Prometheus against `/metrics` and
-Alertmanager against the rule file at
-[`observability/prometheus/slo-rules.yaml`](../observability/prometheus/slo-rules.yaml).
+- No `auth_attempts_total`, `backtest_submissions_total`, or
+  `task_runs_total` counter exists at the call site, so the auth /
+  backtest-submit / task-pipeline SLOs can never fire.
+- The HTTP metrics are emitted as `http.request.count` /
+  `http.request.duration_ms` tagged `method`+`status_class`, not the
+  `route`+`status_code` shape the rules expect (see the coverage table
+  in [`operations/slos.md`](operations/slos.md)).
+
+**Workaround today**: the API availability/latency SLOs are
+approximately observable (histogram exists). Treat the auth, webhook,
+backtest, and task SLOs as uninstrumented until the matching counters
+land. Wire Prometheus against `/metrics` and Alertmanager against the
+rule file regardless — the alerts that *can* fire will.
 
 ---
 
@@ -217,13 +229,17 @@ SLO because live isn't shipped.
 
 ---
 
-## P2 — Many ADR-level decisions not yet captured
+## P2 — Some decisions still lack an ADR
 
-`docs/adr/` has three ADRs. Several other decisions that shape the
-codebase are recorded only as PR descriptions or commit messages —
-e.g. the choice of TaskIQ over Celery, Valkey over Redis-py, bcrypt
-over Argon2 for passwords. Use [`adr/template.md`](adr/template.md)
-to capture these as they come up in code review.
+[`docs/adr/`](adr/README.md) now captures six decisions: scaffold
+(0001), auth/RBAC (0002), mobile/PWA (0003), TaskIQ (0004), Valkey
+(0005), and bcrypt+Fernet (0006). A handful of decisions that shape
+the codebase are still recorded only as PR descriptions or commit
+messages — e.g. the pluggable `MetricsBackend` Protocol (gh#34), the
+allowlist import model for the strategy sandbox, the in-process
+backtest result store, and the cross-replica `EventBus` bridge. Use
+[`adr/template.md`](adr/template.md) to capture these as they come up
+in code review; don't batch them into one mega-ADR.
 
 ---
 

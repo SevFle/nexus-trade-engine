@@ -8,26 +8,50 @@ flows through them.
 
 ## Components
 
+```mermaid
+flowchart LR
+    FE["React frontend<br/>(frontend/)"] -->|HTTPS · JSON · WS| API
+    subgraph engine["engine/ (FastAPI app)"]
+        API["api/<br/>routers · auth · WS"]
+        CORE["core/<br/>backtest · OMS · risk"]
+        EV["events/<br/>EventBus"]
+    end
+    API <--> CORE
+    CORE -->|publish| EV
+    EV -->|pub/sub<br/>(cross-replica)| WSB["ws/event_bridge"]
+    EV -->|fan-out| WH["webhook dispatcher<br/>(HMAC)"]
+    WSB --> WS["WS clients"]
+    WH --> EXT["external endpoints"]
+    CORE -.->|enqueue| WORK["TaskIQ workers<br/>(engine/tasks)"]
+    WORK <--> PG[("Postgres<br/>+ TimescaleDB")]
+    API <--> PG
+    WORK <--> VK[("Valkey / Redis")]
+    API <--> VK
+    EV <-->|broker| VK
+```
+
+Plain-text fallback (same topology):
+
 ```
 ┌──────────────────┐        HTTPS         ┌──────────────────┐
 │   React frontend │ ───────────────────▶ │  FastAPI engine  │
 │   (frontend/)    │ ◀─────────────────── │  (engine/api)    │
 └──────────────────┘    JSON / WebSocket  └────────┬─────────┘
                                                    │
-                          enqueue / dispatch       │
+                           enqueue / dispatch       │
                                                    ▼
-                                          ┌──────────────────┐
-                                          │  TaskIQ workers  │
-                                          │  (engine/tasks)  │
-                                          └────────┬─────────┘
+                                           ┌──────────────────┐
+                                           │  TaskIQ workers  │
+                                           │  (engine/tasks)  │
+                                           └────────┬─────────┘
                                                    │
-                                          ┌────────┴─────────┐
-                                          ▼                  ▼
-                                  ┌────────────┐     ┌──────────────┐
-                                  │  Postgres  │     │ Valkey/Redis │
-                                  │ (asyncpg + │     │ (TaskIQ      │
-                                  │  TimescaleDB)    │  broker, cache)│
-                                  └────────────┘     └──────────────┘
+                                           ┌────────┴─────────┐
+                                           ▼                  ▼
+                                   ┌────────────┐     ┌──────────────┐
+                                   │  Postgres  │     │ Valkey/Redis │
+                                   │ (asyncpg + │     │ (TaskIQ      │
+                                   │  TimescaleDB)    │  broker, cache)│
+                                   └────────────┘     └──────────────┘
 ```
 
 The full service is one Python package (`engine/`) with sub-packages
@@ -38,8 +62,8 @@ React app under `frontend/`.
 
 | Path                     | Responsibility |
 |--------------------------|----------------|
-| [`engine/app.py`](../../engine/app.py)            | FastAPI app factory. Wires routers, middleware, lifespan hooks. |
-| [`engine/main.py`](../../engine/main.py)          | Entry point used by uvicorn (`--factory engine.app:create_app`). |
+| [`engine/app.py`](../../engine/app.py)            | FastAPI app factory (`create_app`). Wires routers, middleware, lifespan hooks. **This is the uvicorn entrypoint** (`uvicorn engine.app:create_app --factory`). |
+| [`engine/main.py`](../../engine/main.py)          | Legacy minimal app module kept for `python -m engine.main`. It mounts only portfolio/strategies/backtest/marketplace and is **not** what `create_app()` produces — do not extend it; add routers to [`engine/api/router.py`](../../engine/api/router.py) instead. |
 | [`engine/config.py`](../../engine/config.py)      | Pydantic settings — every env var the engine reads lives here. |
 | [`engine/api/`](../../engine/api/)                | HTTP/WebSocket surface: routers, auth, rate limiting, error mapping. |
 | [`engine/core/`](../../engine/core/)              | Domain logic: backtest runner, strategy evaluator, execution primitives. |

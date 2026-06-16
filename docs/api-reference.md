@@ -96,6 +96,23 @@ Unauthenticated probes for load balancers and Prometheus.
 
 Source: [`routes/system.py`](../engine/api/routes/system.py).
 
+## Client errors
+
+`/api/v1/client/*` — browser-side error ingest. Source:
+[`routes/client_errors.py`](../engine/api/routes/client_errors.py).
+
+The frontend's `ErrorBoundary` POSTs unhandled exceptions here so
+browser-side failures correlate with the audit trail. The endpoint is
+**not auth-gated** (an authenticated session is exactly when error
+reporting is most likely to fail); abuse is bounded by a tight
+per-route rate limit (`30 req/min/IP`, configured in
+[`engine/app.py`](../engine/app.py)). There is no persistence slice —
+it emits one structlog `client.error` event and returns a stable id.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/api/v1/client/errors` | `{message, stack?, component_stack?, url?, user_agent?, error_id?}` | `201 {error_id}`. All text fields are capped at 64 KiB; CRLF/ANSI escapes are stripped, `url` is reduced to scheme+host+path (query strings carry tokens), and a caller-supplied `error_id` must parse as a UUID. |
+
 ## Auth & MFA
 
 Mounted at `/api/v1/auth/*` and `/api/v1/auth/mfa/*`. Source:
