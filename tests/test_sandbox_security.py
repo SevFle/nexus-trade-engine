@@ -787,7 +787,9 @@ class TestResourceLimitsNoModule:
             mod.HAS_RESOURCE_MODULE = original
             sandbox.cleanup()
 
-    def test_restore_returns_early_without_resource_module(self, manifest: StrategyManifest) -> None:
+    def test_restore_returns_early_without_resource_module(
+        self, manifest: StrategyManifest
+    ) -> None:
         import engine.plugins.sandbox as mod
 
         sandbox = StrategySandbox(_GoodStrategy(), manifest)
@@ -809,19 +811,16 @@ class TestResourceLimitsErrors:
         return mock
 
     def test_handles_rlimit_as_error(self, manifest: StrategyManifest) -> None:
-        import engine.plugins.sandbox as mod
-
         sandbox = StrategySandbox(_GoodStrategy(), manifest)
         mock_resource = self._make_mock_resource()
         mock_resource.getrlimit.side_effect = ValueError
-        with unittest.mock.patch.object(mod, "_resource", mock_resource), \
-             unittest.mock.patch.object(mod, "HAS_RESOURCE_MODULE", True):
-            sandbox._apply_resource_limits()
+        # After patch #908 the resource module lives on the instance as
+        # ``_resource_module`` (no longer a module-level ``_resource``).
+        sandbox._resource_module = mock_resource
+        sandbox._apply_resource_limits()
         sandbox.cleanup()
 
     def test_handles_rlimit_nofile_error(self, manifest: StrategyManifest) -> None:
-        import engine.plugins.sandbox as mod
-
         sandbox = StrategySandbox(_GoodStrategy(), manifest)
         mock_resource = self._make_mock_resource()
         call_count = 0
@@ -834,15 +833,16 @@ class TestResourceLimitsErrors:
             raise OSError("mocked")
 
         mock_resource.getrlimit.side_effect = _flaky_getrlimit
-        with unittest.mock.patch.object(mod, "_resource", mock_resource), \
-             unittest.mock.patch.object(mod, "HAS_RESOURCE_MODULE", True):
-            sandbox._apply_resource_limits()
-            sandbox._restore_resource_limits()
+        sandbox._resource_module = mock_resource
+        sandbox._apply_resource_limits()
+        sandbox._restore_resource_limits()
         sandbox.cleanup()
 
 
 class TestFilesystemIsolationWrite:
-    async def test_write_to_allowed_path_blocked(self, manifest: StrategyManifest, tmp_path: Any) -> None:
+    async def test_write_to_allowed_path_blocked(
+        self, manifest: StrategyManifest, tmp_path: Any
+    ) -> None:
         artifact_dir = tmp_path / "artifacts"
         artifact_dir.mkdir()
         target = artifact_dir / "data.txt"
@@ -876,7 +876,9 @@ class TestRestrictedNetworkSend:
 
 
 class TestCleanupWhileActive:
-    def test_cleanup_restores_builtins_when_restrictions_active(self, manifest: StrategyManifest) -> None:
+    def test_cleanup_restores_builtins_when_restrictions_active(
+        self, manifest: StrategyManifest
+    ) -> None:
         import builtins as bi
 
         sandbox = StrategySandbox(_GoodStrategy(), manifest)
