@@ -368,7 +368,15 @@ class StrategySandbox:
                 # Direct attacker access ``getattr(obj, '__globals__')`` (no
                 # default) still raises ``PermissionError``.
                 return default[0]
-            raise PermissionError(violation_msg)
+            # Tag the exception itself so ``_evaluate_inner`` can tell that
+            # *this specific* propagating exception was already counted by us.
+            # Relying solely on the instance-level ``_getattr_violation_counted``
+            # flag would be wrong: if the strategy swallows the ``PermissionError``
+            # and then raises a *different* error in the same evaluation, that
+            # later error must still be counted (the flag would otherwise mask it).
+            err = PermissionError(violation_msg)
+            err._sandbox_violation_counted = True  # type: ignore[attr-defined]  # noqa: SLF001
+            raise err
         return self._original_getattr(obj, name, *default)  # type: ignore[misc]
 
     def _make_restricted_send(self) -> Any:
@@ -479,11 +487,17 @@ class StrategySandbox:
             return []
         except Exception as e:
             elapsed_ms = (time.monotonic() - start) * 1000
-            # If the exception originated from ``_restricted_getattr`` the
-            # violation was already recorded there; skip the double count.
-            if not self._getattr_violation_counted:
+            # If *this* exception originated from ``_restricted_getattr`` it was
+            # already recorded there; skip the double count.  The check is bound
+            # to the exception object (not the instance flag) so that a
+            # *different* error raised in the same evaluation — after a
+            # swallowed getattr violation — is still counted.
+            if not getattr(e, "_sandbox_violation_counted", False):
                 self.metrics.errors += 1
                 self.metrics.last_error = str(e)
+            # Reset the per-evaluation flag so a subsequent call starts clean;
+            # ``_evaluate_inner`` also resets it at entry as a belt-and-braces.
+            self._getattr_violation_counted = False
             logger.exception(
                 "sandbox.evaluation_error",
                 strategy_name=self.strategy.name,

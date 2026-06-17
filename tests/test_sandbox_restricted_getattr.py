@@ -21,6 +21,7 @@ Coverage areas
 from __future__ import annotations
 
 import builtins
+import contextlib
 from typing import Any
 
 import pytest
@@ -125,6 +126,27 @@ class _GetattrSubclassesStrategy:
     def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
         subs = getattr(int, "__subclasses__")()  # noqa: B009
         return [type(s).__name__ for s in subs]
+
+
+class _SwallowGetattrThenCrashStrategy:
+    """Swallow a blocked-attr ``PermissionError`` then raise a *different*
+    error in the same evaluation.
+
+    Pins down the within-evaluation undercounting bug: the getattr violation
+    is counted by ``_restricted_getattr`` (errors +1), and the subsequent
+    ``RuntimeError`` must *also* be counted by ``_evaluate_inner`` (errors +1
+    again) — even though the instance-level ``_getattr_violation_counted``
+    flag is still ``True`` from the swallowed violation.
+    """
+
+    name = "swallow_then_crash"
+    version = "1.0.0"
+
+    def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+        fn = self.on_bar
+        with contextlib.suppress(PermissionError):
+            getattr(fn, "__globals__")  # noqa: B009
+        raise RuntimeError("boom-after-swallow")
 
 
 class _NormalGetattrStrategy:
@@ -377,6 +399,28 @@ class TestNoDoubleCounting:
             for _ in range(3):
                 await sandbox.safe_evaluate(None, None, None)
             assert sandbox.metrics.errors == 0
+        finally:
+            sandbox.cleanup()
+
+    async def test_swallowed_violation_does_not_mask_later_error(
+        self, manifest: StrategyManifest
+    ) -> None:
+        """A getattr violation that the strategy *swallows* must not cause a
+        *different* error raised later in the same evaluation to be silently
+        dropped from ``metrics.errors`` / ``metrics.last_error``.
+
+        Regression test for the within-evaluation undercounting bug where the
+        instance-level ``_getattr_violation_counted`` flag — once set True by
+        a swallowed violation — masked every subsequent error in that
+        evaluation.
+        """
+        sandbox = StrategySandbox(_SwallowGetattrThenCrashStrategy(), manifest)
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            # One for the swallowed getattr violation, one for the RuntimeError.
+            assert sandbox.metrics.errors == 2
+            assert "boom-after-swallow" in (sandbox.metrics.last_error or "")
         finally:
             sandbox.cleanup()
 
