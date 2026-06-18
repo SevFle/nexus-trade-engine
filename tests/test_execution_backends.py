@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from engine.core.brokers.base import BrokerAuthError
 from engine.core.execution.base import FillResult
 from engine.core.execution.live import LiveBackend
 from engine.core.execution.paper import PaperBackend
@@ -60,9 +61,15 @@ class TestLiveBackend:
 
     @pytest.mark.asyncio
     async def test_connect(self):
-        backend = LiveBackend()
+        backend = LiveBackend(api_key="key123", api_secret="secret456")
         await backend.connect()
         assert backend._client is None
+
+    @pytest.mark.asyncio
+    async def test_connect_missing_credentials(self):
+        backend = LiveBackend()
+        with pytest.raises(BrokerAuthError):
+            await backend.connect()
 
     @pytest.mark.asyncio
     async def test_disconnect(self):
@@ -81,7 +88,7 @@ class TestLiveBackend:
     @pytest.mark.asyncio
     async def test_execute_not_implemented(self):
         backend = LiveBackend()
-        backend._client = MagicMock()
+        backend._client = AsyncMock()
         result = await backend.execute(_FakeOrder(), 150.0, _make_cost())
         assert result.success is False
         assert "not yet implemented" in result.reason.lower()
