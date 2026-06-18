@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 
+from engine.core.brokers.base import BrokerAuthError
 from engine.core.execution.base import ExecutionBackend, FillResult
 
 if TYPE_CHECKING:
@@ -41,6 +42,10 @@ class LiveBackend(ExecutionBackend):
         self._client = None
 
     async def connect(self) -> None:
+        if not self.api_key or not self.api_secret:
+            raise BrokerAuthError(
+                f"live backend requires api_key and api_secret for broker '{self.broker_name}'"
+            )
         logger.info("live.backend.connected", broker=self.broker_name)
 
     async def disconnect(self) -> None:
