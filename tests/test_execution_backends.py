@@ -10,12 +10,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from engine.core.brokers.base import BrokerAuthError
+from engine.core.execution.base import FillResult
 from engine.core.execution.live import LiveBackend
 from engine.core.execution.paper import PaperBackend
 
 if TYPE_CHECKING:
     from engine.core.cost_model import CostBreakdown
-    from engine.core.execution.base import FillResult
     from engine.core.order_manager import Order
 
 
@@ -79,16 +79,19 @@ class TestLiveBackend:
         await backend.connect()
         # The scaffold does not build a real broker client yet.
         assert backend._client is None
-        # ... but the connection state flag must reflect a successful handshake.
-        assert backend._connected is True
-        assert backend._connected_at is not None
+        # ... so it must honestly report disconnected/unavailable rather than
+        # pretending a handshake succeeded (the old _connected=True / client=None
+        # state was misleading).
+        assert backend._connected is False
+        assert backend._connected_at is None
 
     @pytest.mark.asyncio
     async def test_connect_sets_connected_only_after_success(self):
         backend = LiveBackend(api_key="key123", api_secret="secret456")
         assert backend._connected is False
         await backend.connect()
-        assert backend._connected is True
+        # A scaffold backend never establishes a real connection.
+        assert backend._connected is False
 
     @pytest.mark.asyncio
     async def test_connect_missing_credentials(self):
@@ -128,12 +131,11 @@ class TestLiveBackend:
             await backend.connect()
 
     @pytest.mark.asyncio
-    async def test_connect_records_timestamp(self):
+    async def test_connect_does_not_record_timestamp_for_scaffold(self):
+        # A scaffold backend has no real handshake, so no timestamp is set.
         backend = LiveBackend(api_key="key123", api_secret="secret456")
-        before = __import__("time").monotonic()
         await backend.connect()
-        after = __import__("time").monotonic()
-        assert before <= backend._connected_at <= after
+        assert backend._connected_at is None
 
     # ------------------------------------------------------------ disconnect
 
@@ -150,7 +152,8 @@ class TestLiveBackend:
     async def test_disconnect_after_connect_clears_state(self):
         backend = LiveBackend(api_key="key123", api_secret="secret456")
         await backend.connect()
-        assert backend._connected is True
+        # Scaffold stays disconnected even after connect.
+        assert backend._connected is False
         await backend.disconnect()
         assert backend._connected is False
         assert backend._connected_at is None
@@ -180,8 +183,9 @@ class TestLiveBackend:
         await backend.disconnect()
         assert backend._connected is False
         await backend.connect()
-        assert backend._connected is True
-        assert backend._connected_at is not None
+        # Scaffold backends stay disconnected even after reconnect.
+        assert backend._connected is False
+        assert backend._connected_at is None
 
     # --------------------------------------------------------------- execute
 
@@ -212,17 +216,26 @@ class TestLiveBackend:
         assert result.quantity == 0
 
     @pytest.mark.asyncio
-    async def test_submit_order_scaffold_raises_not_implemented(self):
-        # The default broker-submission hook must signal "not implemented".
+    async def test_execute_scaffold_flag_returns_not_implemented(self):
+        # The explicit ``_is_scaffold`` flag short-circuits execution with a
+        # clear, structured failure instead of relying on catching a
+        # NotImplementedError raised by ``_submit_order``.
         backend = LiveBackend()
-        with pytest.raises(NotImplementedError, match="not yet implemented"):
-            await backend._submit_order(_FakeOrder(), 150.0, _make_cost())
+        assert backend._is_scaffold is True
+        backend._client = AsyncMock()
+        result = await backend.execute(_FakeOrder(), 150.0, _make_cost())
+        assert result.success is False
+        assert "not yet implemented" in result.reason.lower()
+        assert result.price == 0.0
+        assert result.quantity == 0
 
     @pytest.mark.asyncio
     async def test_execute_wraps_broker_exception(self):
         # A subclass overrides the submission hook to raise; execute() must
         # catch it and return a structured failure rather than propagating.
         class _BrokenBroker(LiveBackend):
+            _is_scaffold = False
+
             async def _submit_order(
                 self, order: Order, market_price: float, costs: CostBreakdown
             ) -> FillResult:
@@ -240,6 +253,8 @@ class TestLiveBackend:
     @pytest.mark.asyncio
     async def test_execute_broker_exception_preserves_error_text(self):
         class _RejectingBroker(LiveBackend):
+            _is_scaffold = False
+
             async def _submit_order(
                 self, order: Order, market_price: float, costs: CostBreakdown
             ) -> FillResult:
@@ -257,7 +272,8 @@ class TestLiveBackend:
         # the scaffold therefore surfaces "not connected" until a client exists.
         backend = LiveBackend(api_key="key123", api_secret="secret456")
         await backend.connect()
-        assert backend._connected is True
+        # Scaffold backends have no client even after a successful connect.
+        assert backend._connected is False
         result = await backend.execute(_FakeOrder(), 150.0, _make_cost())
         assert result.success is False
         assert "not connected" in result.reason.lower()
@@ -270,7 +286,8 @@ class TestLiveBackend:
         assert backend._connected is False
 
         await backend.connect()
-        assert backend._connected is True
+        # Scaffold backends report disconnected.
+        assert backend._connected is False
 
         # Without a concrete client, execution is gated.
         result = await backend.execute(_FakeOrder(), 100.0, _make_cost())
@@ -278,6 +295,84 @@ class TestLiveBackend:
 
         await backend.disconnect()
         assert backend._connected is False
+
+    # -------------------------------------------------------- concrete subclass
+
+    @pytest.mark.asyncio
+    async def test_non_scaffold_subclass_connects_via_do_connect(self):
+        # A concrete broker adapter flips _is_scaffold to False, implements
+        # _do_connect (to build the client) and _submit_order (to send orders).
+        # connect() must then report connected and execute() must route to the
+        # real submission hook.
+        class _ConcreteBroker(LiveBackend):
+            _is_scaffold = False
+
+            async def _do_connect(self) -> None:
+                self._client = object()
+
+            async def _submit_order(
+                self, order: Order, market_price: float, costs: CostBreakdown
+            ) -> FillResult:
+                return FillResult(success=True, price=market_price, quantity=order.quantity)
+
+        backend = _ConcreteBroker(api_key="key123", api_secret="secret456")
+        assert backend._connected is False
+
+        await backend.connect()
+        # A real backend reports connected with a live client and timestamp.
+        assert backend._connected is True
+        assert backend._client is not None
+        assert backend._connected_at is not None
+
+        result = await backend.execute(_FakeOrder(), 150.0, _make_cost())
+        assert result.success is True
+        assert result.price == 150.0
+        assert result.quantity == 100
+
+        await backend.disconnect()
+        assert backend._connected is False
+        assert backend._client is None
+
+    @pytest.mark.asyncio
+    async def test_non_scaffold_subconnect_still_requires_credentials(self):
+        # Flipping _is_scaffold does not bypass credential validation.
+        class _ConcreteBroker(LiveBackend):
+            _is_scaffold = False
+
+        backend = _ConcreteBroker()
+        with pytest.raises(BrokerAuthError, match="api_key and api_secret"):
+            await backend.connect()
+        assert backend._connected is False
+
+    @pytest.mark.asyncio
+    async def test_non_scaffold_subclass_missing_do_connect_raises(self):
+        # A subclass that flips _is_scaffold to False but forgets to override
+        # _do_connect must fail loudly at connect time rather than silently
+        # reporting a connection with no broker client.
+        class _IncompleteBroker(LiveBackend):
+            _is_scaffold = False
+
+        backend = _IncompleteBroker(api_key="key123", api_secret="secret456")
+        with pytest.raises(NotImplementedError, match="_do_connect"):
+            await backend.connect()
+        # A failed connect must never leave the backend connected.
+        assert backend._connected is False
+
+    @pytest.mark.asyncio
+    async def test_non_scaffold_subclass_missing_submit_order_propagates(self):
+        # A subclass that flips _is_scaffold to False but forgets to override
+        # _submit_order must surface NotImplementedError from execute() rather
+        # than masking it as a generic "Broker error" FillResult.
+        class _IncompleteBroker(LiveBackend):
+            _is_scaffold = False
+
+            async def _do_connect(self) -> None:
+                self._client = object()
+
+        backend = _IncompleteBroker(api_key="key123", api_secret="secret456")
+        await backend.connect()
+        with pytest.raises(NotImplementedError, match="_submit_order"):
+            await backend.execute(_FakeOrder(), 150.0, _make_cost())
 
 
 class TestPaperBackend:

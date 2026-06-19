@@ -26,9 +26,24 @@ class LiveBackend(ExecutionBackend):
     Live broker execution.
 
     Connects to a real broker (Alpaca, IBKR, etc.) and submits orders.
-    This is a scaffold — implement the broker-specific logic in a subclass
-    by overriding :meth:`_submit_order`.
+    The base class is a **scaffold**: it validates credentials and tracks
+    connection state but does not talk to any broker.
+
+    To wire up a concrete broker, subclass and:
+
+    1. Set ``_is_scaffold = False``.
+    2. Override :meth:`_do_connect` to build the broker client
+       (assign it to ``self._client``) and perform any handshake.
+    3. Override :meth:`_submit_order` to translate an internal order into a
+       broker-specific request and return the resulting :class:`FillResult`.
     """
+
+    #: When ``True`` the backend has no real broker wiring. Subclasses flip
+    #: this to ``False`` once they implement ``_do_connect`` and
+    #: ``_submit_order``. The flag replaces the old pattern of letting
+    #: ``_submit_order`` raise ``NotImplementedError`` and catching it in
+    #: ``execute``.
+    _is_scaffold: bool = True
 
     def __init__(
         self,
@@ -55,13 +70,41 @@ class LiveBackend(ExecutionBackend):
                 f"live backend requires api_key and api_secret for broker '{self.broker_name}'"
             )
 
-        # The concrete broker client would be constructed here. Connection
-        # state is only flipped to True once a usable client exists, so that
-        # ``_connected`` always reflects reality rather than mere intent.
-        # Subclasses set ``self._client`` as part of their ``connect`` override.
+        if self._is_scaffold:
+            # The base class cannot construct a real broker client. Rather
+            # than pretend a connection exists (``_connected = True`` with
+            # ``_client = None``), stay disconnected so the backend honestly
+            # reports its state. ``execute`` will surface a clear message.
+            logger.warning(
+                "live.backend.scaffold_mode",
+                broker=self.broker_name,
+                msg="no broker client; staying disconnected",
+            )
+            self._connected = False
+            self._connected_at = None
+            return
+
+        # Concrete subclasses build the broker client inside ``_do_connect``.
+        await self._do_connect()
         self._connected = True
         self._connected_at = time.monotonic()
         logger.info("live.backend.connected", broker=self.broker_name)
+
+    async def _do_connect(self) -> None:
+        """Construct and validate the concrete broker client.
+
+        Concrete subclasses override this to build a real broker client
+        (e.g. ``self._client = alpaca.REST(...)``) and perform any
+        connection handshake. It is only invoked when ``_is_scaffold`` is
+        ``False``.
+
+        The base implementation raises :class:`NotImplementedError` so a
+        subclass that flips ``_is_scaffold`` to ``False`` without overriding
+        this hook fails loudly at connect time, rather than silently claiming
+        a connection while leaving ``self._client`` unset. This mirrors the
+        defensive guard in :meth:`_submit_order`.
+        """
+        raise NotImplementedError("_do_connect must be overridden when _is_scaffold is False.")
 
     async def disconnect(self) -> None:
         # Idempotent: safe to call when never connected or already disconnected.
@@ -74,8 +117,23 @@ class LiveBackend(ExecutionBackend):
         if self._client is None:
             return FillResult(success=False, reason="Broker client not connected")
 
+        if self._is_scaffold:
+            # No broker wiring: report a structured failure instead of relying
+            # on a NotImplementedError that ``execute`` would have to catch.
+            logger.warning("live.backend.not_implemented", order_id=order.id)
+            return FillResult(
+                success=False,
+                reason="Live execution not yet implemented. Use paper or backtest mode.",
+            )
+
         try:
             return await self._submit_order(order, market_price, costs)
+        except NotImplementedError:
+            # A subclass flipped _is_scaffold to False without overriding
+            # _submit_order. Surface the programming error instead of masking
+            # it as a generic broker failure (the generic handler below is only
+            # meant for transient/runtime broker errors).
+            raise
         except Exception as e:
             logger.exception("live.execution_error", order_id=order.id, error=str(e))
             return FillResult(success=False, reason=f"Broker error: {e!s}")
@@ -85,12 +143,16 @@ class LiveBackend(ExecutionBackend):
     ) -> FillResult:
         """Submit a single order to the broker.
 
-        Scaffold hook: concrete broker adapters override this to translate the
-        internal order into a broker-specific request and return the resulting
-        :class:`FillResult`. The default implementation signals that live
-        execution is not wired up yet.
+        Concrete broker adapters override this to translate the internal
+        order into a broker-specific request and return the resulting
+        :class:`FillResult`. It is only reached when ``_is_scaffold`` is
+        ``False``.
+
+        The base body is a defensive guard — :meth:`execute` gates on the
+        ``_is_scaffold`` flag *before* calling this, so the guard is never
+        reached during normal operation. It exists solely to fail loudly if a
+        subclass flips ``_is_scaffold`` to ``False`` without overriding the
+        hook (unlike the old design, ``execute`` no longer *catches* this to
+        detect scaffold mode).
         """
-        logger.warning("live.backend.not_implemented", order_id=order.id)
-        raise NotImplementedError(
-            "Live execution not yet implemented. Use paper or backtest mode."
-        )
+        raise NotImplementedError("_submit_order must be overridden when _is_scaffold is False.")
