@@ -273,6 +273,89 @@ class TestRestrictedImporter:
             importer.find_spec("custom_danger")
 
 
+class TestPurgeNonAllowlisted:
+    """Cover ``RestrictedImporter.purge_non_allowlisted`` (lines 201-208).
+
+    Verifies that non-allowlisted, non-essential modules are evicted from
+    ``sys.modules`` while essentials and allowlisted modules survive.
+
+    A snapshot/restore fixture is essential because ``purge_non_allowlisted``
+    mutates the *real* ``sys.modules`` dict — without restoration, subsequent
+    tests (and their autouse fixtures) would crash trying to re-import purged
+    third-party packages like ``fastapi`` / ``typing_extensions``.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _restore_sys_modules(self) -> None:
+        snapshot = dict(sys.modules)
+        yield
+        for name, mod in snapshot.items():
+            if name not in sys.modules:
+                sys.modules[name] = mod
+
+    def test_purge_removes_non_allowlisted_module(self) -> None:
+        importer = RestrictedImporter()
+        sentinel = "_test_purge_sentinel_module"
+        sys.modules[sentinel] = object()
+        try:
+            assert sentinel in sys.modules
+            importer.purge_non_allowlisted()
+            assert sentinel not in sys.modules
+        finally:
+            sys.modules.pop(sentinel, None)
+
+    def test_purge_retains_essential_cpython_modules(self) -> None:
+        importer = RestrictedImporter()
+        importer.purge_non_allowlisted()
+        assert "sys" in sys.modules
+        assert "builtins" in sys.modules
+
+    def test_purge_retains_allowlisted_modules(self) -> None:
+        importer = RestrictedImporter()
+        if "json" not in sys.modules:
+            import json  # noqa: F401
+        importer.purge_non_allowlisted()
+        assert "json" in sys.modules
+
+    def test_purge_removes_submodule_of_blocked_root(self) -> None:
+        importer = RestrictedImporter()
+        sentinel = "_test_purge_pkg.sub"
+        sys.modules[sentinel] = object()
+        try:
+            importer.purge_non_allowlisted()
+            assert sentinel not in sys.modules
+        finally:
+            sys.modules.pop(sentinel, None)
+
+    def test_purge_is_idempotent(self) -> None:
+        importer = RestrictedImporter()
+        importer.purge_non_allowlisted()
+        importer.purge_non_allowlisted()
+        assert "sys" in sys.modules
+
+
+class TestResourceImportFallback:
+    """Cover the ``except ImportError`` branch in ``StrategySandbox.__init__``
+    (sandbox.py lines 227-228) where ``import resource`` fails at construction
+    time even though ``HAS_RESOURCE_MODULE`` was ``True`` at module load.
+    """
+
+    def test_resource_import_failure_sets_none(self, manifest: StrategyManifest) -> None:
+        original_import = builtins.__import__
+
+        def failing_import(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name == "resource":
+                raise ImportError("simulated unavailable")
+            return original_import(name, *args, **kwargs)
+
+        with unittest.mock.patch("builtins.__import__", failing_import):
+            sandbox = StrategySandbox(_GoodStrategy(), manifest)
+            try:
+                assert sandbox._resource_module is None
+            finally:
+                sandbox.cleanup()
+
+
 class TestImportRestrictionIntegration:
     async def test_import_os_blocked_in_sandbox(self, manifest: StrategyManifest) -> None:
         sandbox = StrategySandbox(_ImportOsStrategy(), manifest)

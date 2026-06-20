@@ -496,6 +496,13 @@ class TestContextVarEdgeCases:
         _in_sandbox_execution.set(False)
         assert _in_sandbox_execution.get() is False
 
+    def test_reset_method_clears_flag(self):
+        assert _in_sandbox_execution.get() is False
+        _in_sandbox_execution.set(True)
+        assert _in_sandbox_execution.get() is True
+        _in_sandbox_execution.reset()
+        assert _in_sandbox_execution.get() is False
+
     async def test_context_var_not_affected_by_unrelated_exception(self):
         assert _in_sandbox_execution.get() is False
 
