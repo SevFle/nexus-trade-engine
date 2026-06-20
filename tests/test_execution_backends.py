@@ -419,6 +419,38 @@ class TestLiveBackend:
         assert result.success is False
         assert "not connected" in result.reason.lower()
 
+    @pytest.mark.asyncio
+    async def test_scaffold_credentialless_connect_then_not_implemented(self):
+        # End-to-end regression for both prompt fixes, exercised without any
+        # mocking (so the awaitable-mock foot-gun from fix #2 cannot apply):
+        #
+        #   fix #1 — connect() must NOT raise BrokerAuthError for a scaffold
+        #            built with no credentials: the _is_scaffold guard runs
+        #            before credential validation, so a credential-less scaffold
+        #            connects cleanly and honestly reports _connected=False.
+        #   fix #2 — execute() then short-circuits to "not implemented" via the
+        #            scaffold branch (which precedes the client guard), so no
+        #            broker client is required for the lifecycle to complete.
+        #
+        # If either guard were reordered this test would fail: moving credential
+        # validation above the scaffold branch makes connect() raise; moving the
+        # client guard above the scaffold branch makes execute() report "not
+        # connected" instead of "not implemented".
+        backend = LiveBackend()  # no api_key / api_secret
+        assert not backend.api_key and not backend.api_secret
+
+        await backend.connect()  # fix #1: must not raise BrokerAuthError
+        assert backend._connected is False
+        assert backend._connected_at is None
+        assert backend._client is None
+
+        result = await backend.execute(_FakeOrder(), 100.0, _make_cost())  # fix #2
+        assert result.success is False
+        assert "not yet implemented" in result.reason.lower()
+        assert "not connected" not in result.reason.lower()
+        assert result.price == 0.0
+        assert result.quantity == 0
+
     # --------------------------------------------------------------- lifecycle
 
     @pytest.mark.asyncio
