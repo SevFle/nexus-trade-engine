@@ -18,7 +18,7 @@ because this is the most visible failure mode.
    ratio is genuinely above the threshold (not a single-scrape blip).
 2. Curl the public health endpoint:
    ```bash
-   curl -fsS https://<your-host>/api/v1/health
+   curl -fsS https://<your-host>/health
    ```
    If this fails, the engine is down — skip ahead to "Common causes →
    Process down".

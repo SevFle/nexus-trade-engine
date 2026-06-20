@@ -14,7 +14,7 @@ Two ways to run Nexus Trade Engine locally:
 uv sync --extra dev
 
 # 2. Bring up Postgres + Valkey via the production compose file
-make docker-up      # starts only db + valkey containers in the background
+docker compose up -d db valkey   # only the infra you need for native dev
 
 # 3. Run migrations
 make migrate
@@ -90,9 +90,13 @@ make the source visible, and the reload watchers pick up changes.
 ## Running the test suite
 
 ```bash
-make test                    # full pytest suite (host, against current uv env)
-make test-cov                # with coverage report at htmlcov/index.html
+make test                    # full pytest suite (host, against current uv env).
+                             # coverage is always on (pyproject addopts) and
+                             # writes htmlcov/index.html + term-missing.
 ```
+
+To open the HTML report after a run: `open htmlcov/index.html` (or
+`python -m http.server -d htmlcov`).
 
 Inside the dev stack:
 

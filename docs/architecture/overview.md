@@ -168,7 +168,7 @@ without reading the source.
 |---------------------------------------|--------------------------------------------------|
 | A new HTTP endpoint                   | `engine/api/routes/<area>.py`, registered in `engine/api/router.py` |
 | A new background job                  | `engine/tasks/`                                  |
-| A new strategy / data provider / executor | A plugin under `engine/plugins/<kind>/<name>/`. See [plugins.md](plugins.md). |
+| A new strategy / data provider / executor | A strategy package under [`strategies/<name>/`](../../strategies/) (manifest + `strategy.py`); a data provider via `engine/data/providers/` + the YAML registry. See [plugins.md](plugins.md). |
 | A new outbound integration (webhook template) | Extend [`engine/events/webhook_dispatcher.py:render_template`](../../engine/events/webhook_dispatcher.py) and the `_VALID_TEMPLATES` set in `routes/webhooks.py`. |
 | A new database table / column         | An Alembic revision in `engine/db/migrations/versions/`. See [database.md](database.md). |
 | A new metric                          | Use `get_metrics()` from `engine/observability/metrics.py`. Add it to [`docs/operations/slos.md`](../operations/slos.md) **only** if it backs an SLO. |
