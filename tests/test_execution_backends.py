@@ -262,9 +262,10 @@ class TestLiveBackend:
     @pytest.mark.asyncio
     async def test_connect_is_awaitable_coroutine(self):
         # connect() is a coroutine function and must be directly awaitable. This
-        # is why mocks of connect() must be AsyncMock (awaitable) and never
-        # MagicMock (which raises TypeError on ``await``). See
-        # test_execute_not_implemented for the AsyncMock usage.
+        # is why any mock of connect() must be AsyncMock (awaitable) and never
+        # MagicMock (which raises TypeError on ``await``); see
+        # test_execute_not_implemented, which exercises the real coroutine
+        # instead of mocking it.
         import inspect
 
         backend = LiveBackend()
@@ -358,16 +359,18 @@ class TestLiveBackend:
         # A scaffold backend reports "not implemented" without requiring a
         # client — the scaffold check short-circuits before the client guard.
         #
-        # The full connect()->execute() lifecycle is exercised. ``connect`` is
-        # patched with an *awaitable* ``AsyncMock`` (NOT a ``MagicMock``):
-        # ``MagicMock`` is not a coroutine, so ``await backend.connect()`` would
-        # raise ``TypeError``. ``AsyncMock(return_value=None)`` keeps the await
-        # path working while leaving the backend disconnected, which is exactly
-        # what forces ``execute()`` down the scaffold "not implemented" branch.
+        # The full connect()->execute() lifecycle is exercised using the *real*
+        # ``connect`` coroutine (no mock): patching an async method with
+        # ``MagicMock`` raises ``TypeError`` on ``await`` and even ``AsyncMock``
+        # is unnecessary here because a scaffold ``connect()`` is a real
+        # coroutine that simply leaves the backend disconnected. That honestly
+        # disconnected state is what forces ``execute()`` down the scaffold
+        # "not implemented" branch.
         backend = LiveBackend()
-        backend.connect = AsyncMock(return_value=None)
-        await backend.connect()  # must be awaitable; a MagicMock is not.
+        await backend.connect()  # real coroutine; scaffold stays disconnected.
         assert backend._is_scaffold is True
+        assert backend._connected is False
+        assert backend._client is None
         result = await backend.execute(_FakeOrder(), 150.0, _make_cost())
         assert result.success is False
         assert "not yet implemented" in result.reason.lower()
