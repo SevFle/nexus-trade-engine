@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import ast
+import inspect
+import textwrap
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -9,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from engine.core.brokers.base import BrokerAuthError
+from engine.core.brokers.base import BrokerAuthError, BrokerError
 from engine.core.execution.base import FillResult
 from engine.core.execution.live import LiveBackend
 from engine.core.execution.paper import PaperBackend
@@ -67,6 +70,27 @@ class _NoClientBackend(LiveBackend):
     async def _do_connect(self) -> None:
         # Intentionally leaves self._client as None.
         return
+
+
+def _top_level_if_lines(method: Any, target_attrs: set[str]) -> dict[str, int]:
+    """Map each ``target_attr`` to the lineno of the first top-level ``if`` in
+    ``method`` whose test references ``self.<attr>``.
+
+    This walks the parsed AST of the method source in source order, so callers
+    can assert *ordering* invariants (e.g. the ``_is_scaffold`` branch must
+    textually precede the credential check). It is the strongest loop-breaker:
+    it inspects the real implementation rather than just observable behavior, so
+    a refactor that reorders the guards fails immediately at collection time.
+    """
+    tree = ast.parse(textwrap.dedent(inspect.getsource(method)))
+    func = next(n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)))
+    found: dict[str, int] = {}
+    for stmt in func.body:
+        if isinstance(stmt, ast.If):
+            referenced = {n.attr for n in ast.walk(stmt.test) if isinstance(n, ast.Attribute)}
+            for attr in referenced & target_attrs:
+                found.setdefault(attr, stmt.lineno)
+    return found
 
 
 class TestLiveBackend:
@@ -514,6 +538,193 @@ class TestLiveBackend:
         await backend.connect()
         with pytest.raises(NotImplementedError, match="_submit_order"):
             await backend.execute(_FakeOrder(), 150.0, _make_cost())
+
+
+class TestLiveBackendLoopBreaker:
+    """Structural + behavioral invariants that pin the ``connect()``/``execute()``
+    scaffold-guard ordering so the recurring fix-test-fail loop cannot be
+    reintroduced.
+
+    The AST-based tests are the strongest loop-breaker: they inspect the real
+    source of ``connect()``/``execute()`` and assert the ``_is_scaffold`` branch
+    textually precedes the credential / client checks, so any refactor that
+    reorders the guards fails at test time rather than silently changing
+    behavior. The behavioral tests cover the gap between the source shape and
+    the runtime contract (no ``_do_connect`` call, no credential mutation,
+    exact failure reasons, mock awaitability).
+    """
+
+    # ---------------------------------------------- structural (AST) guards
+
+    def test_connect_source_scaffold_guard_precedes_credential_check(self):
+        lines = _top_level_if_lines(LiveBackend.connect, {"_is_scaffold", "api_key"})
+        assert "_is_scaffold" in lines, "connect() must branch on _is_scaffold"
+        assert "api_key" in lines, "connect() must validate credentials"
+        assert lines["_is_scaffold"] < lines["api_key"], (
+            "_is_scaffold guard MUST textually precede credential validation"
+        )
+
+    def test_execute_source_scaffold_guard_precedes_client_guard(self):
+        lines = _top_level_if_lines(LiveBackend.execute, {"_is_scaffold", "_client"})
+        assert "_is_scaffold" in lines, "execute() must branch on _is_scaffold"
+        assert "_client" in lines, "execute() must guard on a broker client"
+        assert lines["_is_scaffold"] < lines["_client"], (
+            "_is_scaffold guard MUST textually precede the client guard"
+        )
+
+    def test_connect_source_contains_scaffold_branch(self):
+        lines = _top_level_if_lines(LiveBackend.connect, {"_is_scaffold"})
+        assert "_is_scaffold" in lines
+
+    def test_connect_source_contains_credential_validation_branch(self):
+        lines = _top_level_if_lines(LiveBackend.connect, {"api_key", "api_secret"})
+        assert "api_key" in lines
+        assert "api_secret" in lines
+
+    # ----------------------------------------------------- defaults / DTOs
+
+    def test_is_scaffold_defaults_to_true_on_base_class(self):
+        assert LiveBackend._is_scaffold is True
+        assert LiveBackend()._is_scaffold is True
+        # A freshly constructed instance never flips the class-level flag.
+        backend = LiveBackend(api_key="k", api_secret="s")
+        assert backend._is_scaffold is True
+
+    def test_fill_result_defaults(self):
+        ok = FillResult(success=True)
+        assert ok.price == 0.0
+        assert ok.quantity == 0
+        assert ok.reason == ""
+        fail = FillResult(success=False)
+        assert fail.price == 0.0
+        assert fail.quantity == 0
+        assert fail.reason == ""
+
+    def test_broker_auth_error_is_broker_error_subclass(self):
+        # The OMS live-loop dispatches on the typed error hierarchy; a
+        # BrokerAuthError must remain a BrokerError so the kill-switch path
+        # catches it.
+        assert issubclass(BrokerAuthError, BrokerError)
+        assert isinstance(BrokerAuthError("x"), BrokerError)
+
+    # ---------------------------------------------- scaffold connect guards
+
+    @pytest.mark.asyncio
+    async def test_scaffold_connect_does_not_invoke_do_connect(self):
+        class _DoConnectSpy(LiveBackend):
+            def __init__(self, **kw: Any) -> None:
+                super().__init__(**kw)
+                self.do_connect_called = False
+
+            async def _do_connect(self) -> None:
+                self.do_connect_called = True
+
+        backend = _DoConnectSpy()
+        await backend.connect()
+        assert backend.do_connect_called is False
+        assert backend._connected is False
+        assert backend._client is None
+
+    @pytest.mark.asyncio
+    async def test_scaffold_connect_leaves_credentials_untouched(self):
+        backend = LiveBackend(api_key="key123", api_secret="secret456", base_url="u")
+        await backend.connect()
+        assert backend.api_key == "key123"
+        assert backend.api_secret == "secret456"
+        assert backend.base_url == "u"
+
+    @pytest.mark.asyncio
+    async def test_scaffold_connect_idempotent_across_repeated_calls(self):
+        backend = LiveBackend()
+        for _ in range(5):
+            await backend.connect()
+            assert backend._connected is False
+            assert backend._connected_at is None
+            assert backend._client is None
+
+    @pytest.mark.asyncio
+    async def test_scaffold_connect_stays_disconnected_even_with_preset_client(self):
+        # Even if a caller wrongly assigns a client beforehand, the scaffold
+        # must honestly report disconnected (it never performed a handshake).
+        backend = LiveBackend()
+        backend._client = object()
+        await backend.connect()
+        assert backend._connected is False
+        assert backend._connected_at is None
+
+    # ---------------------------------------------- scaffold execute guards
+
+    @pytest.mark.asyncio
+    async def test_scaffold_execute_does_not_invoke_submit_order(self):
+        class _SubmitSpy(LiveBackend):
+            def __init__(self) -> None:
+                super().__init__()
+                self.submit_called = False
+
+            async def _submit_order(
+                self, order: Any, market_price: float, costs: Any
+            ) -> FillResult:
+                self.submit_called = True
+                return FillResult(success=True)
+
+        backend = _SubmitSpy()
+        result = await backend.execute(_FakeOrder(), 150.0, _make_cost())
+        assert backend.submit_called is False
+        assert result.success is False
+
+    @pytest.mark.asyncio
+    async def test_scaffold_execute_exact_reason_message(self):
+        # The exact wording is part of the contract surfaced to operators.
+        backend = LiveBackend()
+        result = await backend.execute(_FakeOrder(), 150.0, _make_cost())
+        assert result.reason == ("Live execution not yet implemented. Use paper or backtest mode.")
+
+    # ----------------------------------------- non-scaffold ordering guards
+
+    @pytest.mark.asyncio
+    async def test_non_scaffold_missing_credentials_does_not_invoke_do_connect(self):
+        # Credentials must be validated *before* any network handshake, so a
+        # misconfiguration surfaces as BrokerAuthError rather than reaching the
+        # broker client builder.
+        class _CredSpy(LiveBackend):
+            _is_scaffold = False
+
+            def __init__(self, **kw: Any) -> None:
+                super().__init__(**kw)
+                self.do_connect_called = False
+
+            async def _do_connect(self) -> None:
+                self.do_connect_called = True
+
+        backend = _CredSpy()
+        with pytest.raises(BrokerAuthError, match="api_key and api_secret"):
+            await backend.connect()
+        assert backend.do_connect_called is False
+        assert backend._connected is False
+        assert backend._connected_at is None
+
+    # ----------------------------------------------- mock awaitability doc
+
+    @pytest.mark.asyncio
+    async def test_magicmock_connect_is_not_awaitable(self):
+        # Locks in WHY connect() must be patched with AsyncMock: MagicMock is
+        # not a coroutine, so ``await backend.connect()`` raises TypeError.
+        backend = LiveBackend()
+        backend.connect = MagicMock()
+        with pytest.raises(TypeError):
+            await backend.connect()
+
+    # -------------------------------------------------- base defensive hooks
+
+    @pytest.mark.asyncio
+    async def test_base_do_connect_raises_not_implemented(self):
+        with pytest.raises(NotImplementedError, match="_do_connect"):
+            await LiveBackend()._do_connect()
+
+    @pytest.mark.asyncio
+    async def test_base_submit_order_raises_not_implemented(self):
+        with pytest.raises(NotImplementedError, match="_submit_order"):
+            await LiveBackend()._submit_order(_FakeOrder(), 100.0, _make_cost())
 
 
 class TestPaperBackend:
