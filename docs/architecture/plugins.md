@@ -20,19 +20,44 @@ the lifecycle visually; this doc is the flat-markdown source of truth.
 
 The plugin SDK's contract is intentionally small:
 
-1. A class implementing the relevant Protocol from `engine/plugins/`.
-2. A `manifest.toml` declaring name, version, kind, and entry point.
+1. A class implementing the strategy interface — either the public
+   [`IStrategy`](../../sdk/nexus_sdk/strategy.py) ABC (`async
+   evaluate(portfolio, market, costs) -> list[Signal]`, what the README
+   and [`PLUGIN_DEV_GUIDE.md`](../PLUGIN_DEV_GUIDE.md) teach) or the
+   legacy in-engine [`BaseStrategy`](../../engine/plugins/sdk.py)
+   (`on_bar(state, portfolio) -> list[dict]`).
+2. A **YAML** manifest (`strategy.manifest.yaml` or `manifest.yaml`)
+   parsed by the [`StrategyManifest`](../../engine/plugins/manifest.py)
+   Pydantic model.
 3. Optional `tests/` exercising the plugin against a fixture.
+
+> The unified "every kind is a plugin" model below is the *target
+> architecture*. Today only **strategies** are discoverable via the
+> filesystem registry; data providers are registered in code from a YAML
+> config (see [database/overview](overview.md)); executors are not yet
+> pluggable.
 
 ## Discovery & registration
 
-At startup the engine scans `engine/plugins/<kind>/` for plugins that
-declare a manifest. Discovered plugins are registered in the runtime
-registry; the API and core code reference them by name (string id)
-rather than by class import.
+[`PluginRegistry`](../../engine/plugins/registry.py) walks a root
+directory for `*/manifest.yaml` entries, loads each sibling
+`strategy.py`, and instantiates its top-level `Strategy` class. The
+canonical root is the repo-level [`strategies/`](../../strategies/)
+directory. The [`StrategyManifest`](../../engine/plugins/manifest.py)
+schema is what `strategy.manifest.yaml` (the filename the bundled
+examples and the SDK use) is parsed against.
 
-This is intentional: it lets the operator swap strategies / providers
-in config without re-deploying.
+The HTTP surface in
+[`routes/strategies.py`](../../engine/api/routes/strategies.py) talks
+to `app.state.plugin_registry` (a richer registry exposing
+`list_all()`, `get()`, `activate`/`reload`/`unload`). Note that today
+this is only attached by the legacy
+[`engine/main.py`](../../engine/main.py) entrypoint, not the canonical
+`create_app()` in [`engine/app.py`](../../engine/app.py) — so live
+strategy activation from the public API is part of the still-partial
+strategy story (see [known-limitations.md](../known-limitations.md)).
+This split is intentional: it lets the operator swap strategies in
+config without re-deploying once the wiring is complete.
 
 ## Lifecycle
 
@@ -61,22 +86,41 @@ discover  ──▶  validate manifest  ──▶  import entry point  ──▶
 
 Concrete tutorials live in
 [`docs/PLUGIN_DEV_GUIDE.md`](../PLUGIN_DEV_GUIDE.md). The minimum
-shape:
+shape (matching the bundled [`strategies/`](../../strategies/)
+examples):
 
-1. Subclass the appropriate Protocol (e.g. `engine.plugins.strategy.Strategy`).
-2. Implement the required methods (`on_bar`, `on_trade`, …).
-3. Add a `manifest.toml`:
-   ```toml
-   [plugin]
-   name = "mean-reversion"
-   version = "0.1.0"
-   kind  = "strategy"
-   entry = "mean_reversion:Strategy"
-
-   [plugin.dependencies]
-   numpy = ">=2.0"
+1. Subclass the strategy interface — `nexus_sdk.IStrategy` for the
+   public SDK contract (`async evaluate(...) -> list[Signal]`), or
+   `engine.plugins.sdk.BaseStrategy` for the legacy `on_bar` loop.
+2. Implement the required methods (`evaluate` for `IStrategy`,
+   `on_bar` for `BaseStrategy`; `initialize`/`dispose`/`get_config_schema`
+   for the SDK ABC).
+3. Add a `strategy.manifest.yaml` (or `manifest.yaml`):
+   ```yaml
+   id: "mean-reversion-basic"
+   name: "Mean Reversion Basic"
+   version: "1.0.0"
+   author: "Nexus Team"
+   runtime: "python:3.11"
+   dependencies: []
+   resources:
+     max_memory: "256MB"
+     gpu: "none"
+   network:
+     allowed_endpoints: []
+   config_schema:
+     type: object
+     properties:
+       sma_period: { type: integer, default: 50 }
+   data_feeds: ["ohlcv"]
+   min_history_bars: 60
+   watchlist: ["AAPL", "MSFT"]
    ```
-4. Drop the directory at `engine/plugins/strategy/mean_reversion/`.
+4. Drop the directory at `strategies/<name>/` with a `strategy.py`
+   that defines a `Strategy` class. See
+   [`strategies/examples/`](../../strategies/examples/) for reference
+   implementations (`mean_reversion`, `quality_momentum`,
+   `llm_sentiment`).
 5. Run the test suite — the plugin loader has its own integration
    tests that ensure your manifest validates and your entry point
    imports cleanly.
@@ -128,13 +172,17 @@ for executors) is deferred until that work is sequenced.
 
 | File                                        | Purpose                                |
 |---------------------------------------------|----------------------------------------|
-| `engine/plugins/__init__.py`                | Public registry surface.               |
-| `engine/plugins/manifest.py`                | Manifest schema + validation.          |
-| `engine/plugins/loader.py`                  | Discovery + import logic.              |
-| `engine/plugins/strategy/`                  | Strategy plugins live here.            |
-| `engine/plugins/data/`                      | Data-provider plugins.                 |
-| `engine/plugins/exec/`                      | Executor plugins.                      |
-| `tests/plugins/`                            | Loader + manifest tests + fixtures.    |
+| [`strategies/`](../../strategies/)          | Strategy packages: each holds a `manifest.yaml` (+ optional artifacts) and a `strategy.py` exposing a `Strategy` class. `examples/` ships reference strategies. |
+| [`engine/plugins/registry.py`](../../engine/plugins/registry.py) | Filesystem discovery + `PluginRegistry` (discover, load, instantiate). |
+| [`engine/plugins/manifest.py`](../../engine/plugins/manifest.py) | `StrategyManifest` / `ResourceLimits` / `NetworkConfig` Pydantic schema + validation. |
+| [`engine/plugins/sdk.py`](../../engine/plugins/sdk.py) | Legacy `BaseStrategy` ABC (`on_bar` loop). |
+| [`sdk/nexus_sdk/strategy.py`](../../sdk/nexus_sdk/strategy.py) | Public `IStrategy` ABC (`evaluate` → `Signal[]`), `MarketState`, `StrategyConfig`. |
+| [`engine/plugins/sandbox.py`](../../engine/plugins/sandbox.py) | Layered strategy sandbox (see below). |
+| [`engine/plugins/restricted_importer.py`](../../engine/plugins/restricted_importer.py) | Allowlist import hook (layer 1). |
+| [`engine/plugins/allowlist.py`](../../engine/plugins/allowlist.py) | The import allowlist itself. |
+| [`engine/plugins/sandboxed_http.py`](../../engine/plugins/sandboxed_http.py) | Network-whitelist HTTP proxy (layer 2). |
+| [`engine/plugins/scoring_executor.py`](../../engine/plugins/scoring_executor.py) | Runs `IScoringStrategy` plugins for the scoring routes. |
+| [`tests/`](../../tests/)                    | Loader + manifest tests live alongside the rest of the suite (e.g. `test_plugin_registry.py`, `test_strategies_coverage.py`). |
 
-(File names are illustrative — they may have evolved by the time you
-read this. Run `tree engine/plugins/ -L 2` to see the current shape.)
+Run `ls engine/plugins/` and `ls strategies/` to confirm the current
+shape — these trees grow as new kinds land.

@@ -35,7 +35,7 @@ operator, observations, RTO actually achieved) in your operations log.
 ### 3. Application bring-up
 
 - [ ] Repoint a sandbox engine instance at the recovered DB.
-- [ ] Hit `/api/v1/health` — expect `200`.
+- [ ] Hit `/health` — expect `200 {status:"ok"}`.
 - [ ] Log in with an MFA-enabled test user. Confirm the code is accepted
       (verifies the Fernet key recovery path).
 - [ ] Hit a representative read (e.g. `GET /api/v1/strategies`) and a

@@ -115,7 +115,7 @@ async with session_factory() as session:
 - **No sync sessions in route handlers.** They block the event loop.
 - **One session per request.** Don't pass a session across async
   boundaries; use the dependency in
-  [`engine/api/deps.py`](../../engine/api/deps.py).
+  [`engine/deps.py`](../../engine/deps.py).
 - **Don't `commit` inside utility functions.** Commit at the route
   handler boundary so the request's atomicity is obvious.
 - **Use `select` + `where`, not `query`.** SQLAlchemy 2's legacy API
