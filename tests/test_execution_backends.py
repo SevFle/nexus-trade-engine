@@ -44,6 +44,31 @@ def _make_cost(slippage_amount: float = 5.0):
     return mock_cost
 
 
+class _NonScaffoldBackend(LiveBackend):
+    """A concrete (non-scaffold) backend used to exercise the real code paths.
+
+    It deliberately keeps the base ``_do_connect``/``_submit_order`` guards so
+    credential validation can be tested in isolation: ``connect`` rejects
+    missing credentials before ever reaching ``_do_connect``.
+    """
+
+    _is_scaffold = False
+
+
+class _NoClientBackend(LiveBackend):
+    """A non-scaffold backend whose ``_do_connect`` forgets to set ``_client``.
+
+    Used to prove ``execute`` still guards on a real client even when
+    ``_connected`` is ``True``.
+    """
+
+    _is_scaffold = False
+
+    async def _do_connect(self) -> None:
+        # Intentionally leaves self._client as None.
+        return
+
+
 class TestLiveBackend:
     # ------------------------------------------------------------------ init
 
@@ -75,7 +100,9 @@ class TestLiveBackend:
 
     @pytest.mark.asyncio
     async def test_connect(self):
-        backend = LiveBackend(api_key="key123", api_secret="secret456")
+        # A scaffold backend has no broker wiring, so it must connect
+        # successfully *without* any credentials (it never talks to a broker).
+        backend = LiveBackend()
         await backend.connect()
         # The scaffold does not build a real broker client yet.
         assert backend._client is None
@@ -95,7 +122,9 @@ class TestLiveBackend:
 
     @pytest.mark.asyncio
     async def test_connect_missing_credentials(self):
-        backend = LiveBackend()
+        # Credential validation applies to real (non-scaffold) backends; a
+        # scaffold short-circuits before reaching it.
+        backend = _NonScaffoldBackend()
         with pytest.raises(BrokerAuthError, match="api_key and api_secret"):
             await backend.connect()
         # A failed connect must never leave the backend in a connected state.
@@ -104,14 +133,14 @@ class TestLiveBackend:
 
     @pytest.mark.asyncio
     async def test_connect_missing_only_api_key(self):
-        backend = LiveBackend(api_secret="secret456")
+        backend = _NonScaffoldBackend(api_secret="secret456")
         with pytest.raises(BrokerAuthError):
             await backend.connect()
         assert backend._connected is False
 
     @pytest.mark.asyncio
     async def test_connect_missing_only_api_secret(self):
-        backend = LiveBackend(api_key="key123")
+        backend = _NonScaffoldBackend(api_key="key123")
         with pytest.raises(BrokerAuthError):
             await backend.connect()
         assert backend._connected is False
@@ -120,13 +149,13 @@ class TestLiveBackend:
     async def test_connect_rejects_empty_string_credentials(self):
         # Boundary: empty-string credentials are falsy and must be rejected.
         for key, secret in [("", "secret"), ("key", ""), ("", "")]:
-            backend = LiveBackend(api_key=key, api_secret=secret)
+            backend = _NonScaffoldBackend(api_key=key, api_secret=secret)
             with pytest.raises(BrokerAuthError):
                 await backend.connect()
 
     @pytest.mark.asyncio
     async def test_connect_error_message_includes_broker_name(self):
-        backend = LiveBackend(broker_name="ibkr")
+        backend = _NonScaffoldBackend(broker_name="ibkr")
         with pytest.raises(BrokerAuthError, match="ibkr"):
             await backend.connect()
 
@@ -191,7 +220,10 @@ class TestLiveBackend:
 
     @pytest.mark.asyncio
     async def test_execute_not_connected(self):
-        backend = LiveBackend()
+        # A non-scaffold backend that was never connected has no client, so
+        # execute() surfaces "not connected". (A scaffold would report "not
+        # implemented" instead — see test_execute_not_implemented.)
+        backend = _NonScaffoldBackend()
         result = await backend.execute(_FakeOrder(), 150.0, _make_cost())
         assert result.success is False
         assert "not connected" in result.reason.lower()
@@ -201,8 +233,9 @@ class TestLiveBackend:
 
     @pytest.mark.asyncio
     async def test_execute_not_implemented(self):
+        # A scaffold backend reports "not implemented" without requiring a
+        # client — the scaffold check short-circuits before the client guard.
         backend = LiveBackend()
-        backend._client = AsyncMock()
         result = await backend.execute(_FakeOrder(), 150.0, _make_cost())
         assert result.success is False
         assert "not yet implemented" in result.reason.lower()
@@ -268,12 +301,12 @@ class TestLiveBackend:
 
     @pytest.mark.asyncio
     async def test_execute_uses_client_guard_not_connected_flag(self):
-        # Even when _connected is True, execute() requires a real client;
-        # the scaffold therefore surfaces "not connected" until a client exists.
-        backend = LiveBackend(api_key="key123", api_secret="secret456")
+        # Even when a non-scaffold backend reports _connected is True, execute()
+        # requires a real client. Here _do_connect succeeds but forgets to
+        # assign self._client, so execution is still gated as "not connected".
+        backend = _NoClientBackend(api_key="key123", api_secret="secret456")
         await backend.connect()
-        # Scaffold backends have no client even after a successful connect.
-        assert backend._connected is False
+        assert backend._connected is True
         result = await backend.execute(_FakeOrder(), 150.0, _make_cost())
         assert result.success is False
         assert "not connected" in result.reason.lower()

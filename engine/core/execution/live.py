@@ -61,20 +61,13 @@ class LiveBackend(ExecutionBackend):
         self._connected_at: float | None = None
 
     async def connect(self) -> None:
-        # Validate credentials *before* attempting any network work so a
-        # misconfiguration surfaces as BrokerAuthError rather than a noisy
-        # connection failure deep inside the broker client.
-        if not self.api_key or not self.api_secret:
-            self._connected = False
-            raise BrokerAuthError(
-                f"live backend requires api_key and api_secret for broker '{self.broker_name}'"
-            )
-
         if self._is_scaffold:
-            # The base class cannot construct a real broker client. Rather
-            # than pretend a connection exists (``_connected = True`` with
-            # ``_client = None``), stay disconnected so the backend honestly
-            # reports its state. ``execute`` will surface a clear message.
+            # The base class has no real broker wiring, so it can neither use
+            # credentials nor build a client. Rather than require credentials
+            # it will never consume (or pretend a connection exists with
+            # ``_connected = True`` / ``_client = None``), stay honestly
+            # disconnected without touching credentials at all. ``execute``
+            # surfaces a clear "not implemented" message.
             logger.warning(
                 "live.backend.scaffold_mode",
                 broker=self.broker_name,
@@ -83,6 +76,15 @@ class LiveBackend(ExecutionBackend):
             self._connected = False
             self._connected_at = None
             return
+
+        # Real backends validate credentials *before* attempting any network
+        # work so a misconfiguration surfaces as BrokerAuthError rather than a
+        # noisy connection failure deep inside the broker client.
+        if not self.api_key or not self.api_secret:
+            self._connected = False
+            raise BrokerAuthError(
+                f"live backend requires api_key and api_secret for broker '{self.broker_name}'"
+            )
 
         # Concrete subclasses build the broker client inside ``_do_connect``.
         await self._do_connect()
@@ -114,17 +116,19 @@ class LiveBackend(ExecutionBackend):
         logger.info("live.backend.disconnected", broker=self.broker_name)
 
     async def execute(self, order: Order, market_price: float, costs: CostBreakdown) -> FillResult:
-        if self._client is None:
-            return FillResult(success=False, reason="Broker client not connected")
-
         if self._is_scaffold:
-            # No broker wiring: report a structured failure instead of relying
-            # on a NotImplementedError that ``execute`` would have to catch.
+            # No broker wiring: short-circuit with a structured failure. This
+            # check runs *before* the client guard so a scaffold reports a
+            # clear "not implemented" without requiring a client that can
+            # never exist (a scaffold never establishes one).
             logger.warning("live.backend.not_implemented", order_id=order.id)
             return FillResult(
                 success=False,
                 reason="Live execution not yet implemented. Use paper or backtest mode.",
             )
+
+        if self._client is None:
+            return FillResult(success=False, reason="Broker client not connected")
 
         try:
             return await self._submit_order(order, market_price, costs)
