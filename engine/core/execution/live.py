@@ -26,8 +26,11 @@ class LiveBackend(ExecutionBackend):
     Live broker execution.
 
     Connects to a real broker (Alpaca, IBKR, etc.) and submits orders.
-    The base class is a **scaffold**: it validates credentials and tracks
-    connection state but does not talk to any broker.
+    The base class is a **scaffold**: it tracks connection state but does
+    **not** talk to any broker and does **not** validate credentials (it has
+    no broker wiring, so credentials would be neither consumed nor checked).
+    Credential validation only kicks in for concrete (non-scaffold) subclasses
+    that flip ``_is_scaffold`` to ``False``.
 
     To wire up a concrete broker, subclass and:
 
@@ -61,6 +64,10 @@ class LiveBackend(ExecutionBackend):
         self._connected_at: float | None = None
 
     async def connect(self) -> None:
+        # INVARIANT: the ``_is_scaffold`` guard MUST run before any credential
+        # validation. A scaffold has no broker wiring, so it can neither use nor
+        # validate credentials. Checking credentials first would make a bare
+        # scaffold raise BrokerAuthError even though it never talks to a broker.
         if self._is_scaffold:
             # The base class has no real broker wiring, so it can neither use
             # credentials nor build a client. Rather than require credentials

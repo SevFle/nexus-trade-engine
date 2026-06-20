@@ -194,6 +194,63 @@ class TestLiveBackend:
         assert backend._client is None
 
     @pytest.mark.asyncio
+    async def test_connect_scaffold_vs_non_scaffold_with_identical_credentials(self):
+        # Strongest loop-breaker: hand a scaffold and a real backend the *same*
+        # (missing/empty) credentials. The scaffold MUST stay quiet (no raise,
+        # _connected=False) while the real backend MUST raise BrokerAuthError.
+        # If the _is_scaffold guard were ever moved below the credential check,
+        # the scaffold would raise too and this test would fail.
+        for key, secret in [(None, None), ("", ""), ("key", ""), ("", "secret")]:
+            scaffold = LiveBackend(api_key=key or "", api_secret=secret or "")
+            await scaffold.connect()  # must not raise
+            assert scaffold._connected is False
+            assert scaffold._connected_at is None
+            assert scaffold._client is None
+
+            real = _NonScaffoldBackend(api_key=key or "", api_secret=secret or "")
+            with pytest.raises(BrokerAuthError):
+                await real.connect()
+            assert real._connected is False
+
+    @pytest.mark.asyncio
+    async def test_connect_scaffold_never_inspects_credentials(self):
+        # Edge case: even whitespace / garbage credentials must not make a
+        # scaffold raise, because the scaffold short-circuits before any
+        # credential inspection happens at all.
+        backend = LiveBackend(api_key="   ", api_secret="garbage")
+        await backend.connect()
+        assert backend._connected is False
+        assert backend._connected_at is None
+
+    @pytest.mark.asyncio
+    async def test_connect_non_scaffold_valid_credentials_reaches_do_connect(self):
+        # Credential validation only matters for non-scaffold backends. With
+        # valid credentials, connect() must pass the credential gate and reach
+        # _do_connect; the base _do_connect raises NotImplementedError, which
+        # proves we got *past* credentials rather than being blocked by the
+        # scaffold branch.
+        backend = _NonScaffoldBackend(api_key="key123", api_secret="secret456")
+        with pytest.raises(NotImplementedError, match="_do_connect"):
+            await backend.connect()
+        # A failed _do_connect must not leave the backend connected.
+        assert backend._connected is False
+
+    @pytest.mark.asyncio
+    async def test_connect_is_awaitable_coroutine(self):
+        # connect() is a coroutine function and must be directly awaitable. This
+        # is why mocks of connect() must be AsyncMock (awaitable) and never
+        # MagicMock (which raises TypeError on ``await``). See
+        # test_execute_not_implemented for the AsyncMock usage.
+        import inspect
+
+        backend = LiveBackend()
+        assert inspect.iscoroutinefunction(backend.connect)
+        coro = backend.connect()
+        assert inspect.iscoroutine(coro)
+        await coro
+        assert backend._connected is False
+
+    @pytest.mark.asyncio
     async def test_execute_scaffold_guard_precedes_client_check(self):
         # Regression guard for the check reordering in execute(): the scaffold
         # branch must run *before* the client guard, so a scaffold with no
@@ -276,7 +333,17 @@ class TestLiveBackend:
     async def test_execute_not_implemented(self):
         # A scaffold backend reports "not implemented" without requiring a
         # client — the scaffold check short-circuits before the client guard.
+        #
+        # The full connect()->execute() lifecycle is exercised. ``connect`` is
+        # patched with an *awaitable* ``AsyncMock`` (NOT a ``MagicMock``):
+        # ``MagicMock`` is not a coroutine, so ``await backend.connect()`` would
+        # raise ``TypeError``. ``AsyncMock(return_value=None)`` keeps the await
+        # path working while leaving the backend disconnected, which is exactly
+        # what forces ``execute()`` down the scaffold "not implemented" branch.
         backend = LiveBackend()
+        backend.connect = AsyncMock(return_value=None)
+        await backend.connect()  # must be awaitable; a MagicMock is not.
+        assert backend._is_scaffold is True
         result = await backend.execute(_FakeOrder(), 150.0, _make_cost())
         assert result.success is False
         assert "not yet implemented" in result.reason.lower()
