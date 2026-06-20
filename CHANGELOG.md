@@ -7,10 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Releases are produced automatically by
 [release-please](https://github.com/googleapis/release-please) from
-[Conventional Commits](https://www.conventionalcommits.org/) on `main`. Do not
+[Conventional Commits](https://www.conventionalcommats.org/) on `main`. Do not
 edit this file by hand — it is regenerated as part of every release PR.
 
 ## [Unreleased]
+
+### Fixed
+- (fix) Fix check ordering in `engine/core/execution/live.py` `execute()` and the two failing tests in `tests/test_execution_backends.py`
 
 ### Internal
 - (fix) Fix missing fakeredis dependency causing test collection failure in tests/test_rate_limit.py
