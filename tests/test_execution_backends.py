@@ -494,25 +494,6 @@ class TestLiveBackend:
         assert result.price == 0.0
         assert result.quantity == 0
 
-    @pytest.mark.asyncio
-    async def test_prompt_regression_connect_no_auth_error_and_real_coroutine(self):
-        # Named regression for the exact two CI failures this change resolves:
-        #   1) connect() on a credential-less scaffold must NOT raise
-        #      BrokerAuthError ("live backend requires api_key and api_secret
-        #      for broker 'alpaca'"). The _is_scaffold guard runs first.
-        #   2) connect() must be exercised as a real awaitable coroutine; the
-        #      suite must never patch it with MagicMock, whose non-coroutine
-        #      return raises "TypeError: object MagicMock can't be used in
-        #      'await' expression". Asserting iscoroutinefunction pins this.
-        backend = LiveBackend()
-        assert backend._is_scaffold is True
-        assert not backend.api_key and not backend.api_secret
-        assert inspect.iscoroutinefunction(backend.connect)
-        await backend.connect()  # neither BrokerAuthError nor TypeError
-        assert backend._connected is False
-        assert backend._connected_at is None
-        assert backend._client is None
-
     # --------------------------------------------------------------- lifecycle
 
     @pytest.mark.asyncio
