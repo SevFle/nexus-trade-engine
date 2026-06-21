@@ -231,15 +231,17 @@ SLO because live isn't shipped.
 
 ## P2 — Some decisions still lack an ADR
 
-[`docs/adr/`](adr/README.md) now captures six decisions: scaffold
+[`docs/adr/`](adr/README.md) now captures nine decisions: scaffold
 (0001), auth/RBAC (0002), mobile/PWA (0003), TaskIQ (0004), Valkey
-(0005), and bcrypt+Fernet (0006). A handful of decisions that shape
-the codebase are still recorded only as PR descriptions or commit
-messages — e.g. the pluggable `MetricsBackend` Protocol (gh#34), the
-allowlist import model for the strategy sandbox, the in-process
-backtest result store, and the cross-replica `EventBus` bridge. Use
-[`adr/template.md`](adr/template.md) to capture these as they come up
-in code review; don't batch them into one mega-ADR.
+(0005), bcrypt+Fernet (0006), the strategy sandbox allowlist import
+model (0007), the pluggable `MetricsBackend` Protocol (0008), and the
+cross-replica `EventBus` WebSocket bridge (0009). A handful of smaller
+decisions are still recorded only as PR descriptions or commit
+messages — e.g. the in-process backtest result store (this is tech
+debt to be fixed, P0 above, rather than an accepted architecture
+decision). Use [`adr/template.md`](adr/template.md) to capture
+remaining decisions as they come up in code review; don't batch them
+into one mega-ADR.
 
 ---
 

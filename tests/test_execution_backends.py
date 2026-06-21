@@ -124,8 +124,10 @@ class TestLiveBackend:
 
     @pytest.mark.asyncio
     async def test_connect(self):
-        # A scaffold backend has no broker wiring, so it must connect
-        # successfully *without* any credentials (it never talks to a broker).
+        # Scaffold path: a scaffold backend has no broker wiring, so it must
+        # connect successfully *without* any credentials (it never talks to a
+        # broker). The _is_scaffold guard short-circuits before credential
+        # validation, so no BrokerAuthError is raised here.
         backend = LiveBackend()
         await backend.connect()
         # The scaffold does not build a real broker client yet.
@@ -135,6 +137,22 @@ class TestLiveBackend:
         # state was misleading).
         assert backend._connected is False
         assert backend._connected_at is None
+
+        # Non-scaffold path: a concrete (real) live backend validates
+        # credentials, so connect() without api_key/api_secret MUST raise
+        # BrokerAuthError before any network handshake. This is the loop-
+        # breaking assertion: a scaffold stays quiet (above) while a real
+        # backend raises (here). If the _is_scaffold guard were ever moved
+        # below credential validation, the scaffold block above would raise
+        # too and fail; if credential validation were removed, this block
+        # would fail to raise.
+        no_creds = _NonScaffoldBackend()
+        assert not no_creds.api_key and not no_creds.api_secret
+        with pytest.raises(BrokerAuthError, match="api_key and api_secret"):
+            await no_creds.connect()
+        # A failed connect must never leave the backend in a connected state.
+        assert no_creds._connected is False
+        assert no_creds._connected_at is None
 
     @pytest.mark.asyncio
     async def test_connect_scaffold_no_credentials_reports_disconnected(self):
@@ -266,8 +284,6 @@ class TestLiveBackend:
         # MagicMock (which raises TypeError on ``await``); see
         # test_execute_not_implemented, which exercises the real coroutine
         # instead of mocking it.
-        import inspect
-
         backend = LiveBackend()
         assert inspect.iscoroutinefunction(backend.connect)
         coro = backend.connect()
@@ -477,6 +493,25 @@ class TestLiveBackend:
         assert "not connected" not in result.reason.lower()
         assert result.price == 0.0
         assert result.quantity == 0
+
+    @pytest.mark.asyncio
+    async def test_prompt_regression_connect_no_auth_error_and_real_coroutine(self):
+        # Named regression for the exact two CI failures this change resolves:
+        #   1) connect() on a credential-less scaffold must NOT raise
+        #      BrokerAuthError ("live backend requires api_key and api_secret
+        #      for broker 'alpaca'"). The _is_scaffold guard runs first.
+        #   2) connect() must be exercised as a real awaitable coroutine; the
+        #      suite must never patch it with MagicMock, whose non-coroutine
+        #      return raises "TypeError: object MagicMock can't be used in
+        #      'await' expression". Asserting iscoroutinefunction pins this.
+        backend = LiveBackend()
+        assert backend._is_scaffold is True
+        assert not backend.api_key and not backend.api_secret
+        assert inspect.iscoroutinefunction(backend.connect)
+        await backend.connect()  # neither BrokerAuthError nor TypeError
+        assert backend._connected is False
+        assert backend._connected_at is None
+        assert backend._client is None
 
     # --------------------------------------------------------------- lifecycle
 
