@@ -59,7 +59,10 @@ docs/
 │   ├── 0003-mobile-app-strategy.md
 │   ├── 0004-task-queue-taskiq.md
 │   ├── 0005-valkey-over-redis.md
-│   └── 0006-bcrypt-fernet.md
+│   ├── 0006-bcrypt-fernet.md
+│   ├── 0007-strategy-sandbox-allowlist-imports.md
+│   ├── 0008-pluggable-metrics-backend.md
+│   └── 0009-cross-replica-eventbus-bridge.md
 ├── api-reference.md                ← every HTTP/WS route, auth, schemas
 ├── data-model.md                   ← entities, relationships, invariants
 ├── deployment.md                   ← infra requirements, env, rollout
