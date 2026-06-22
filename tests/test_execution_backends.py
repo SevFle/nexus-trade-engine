@@ -514,6 +514,38 @@ class TestLiveBackend:
         assert backend._connected_at is None
         assert backend._client is None
 
+    @pytest.mark.asyncio
+    async def test_all_scaffold_mode_invariants_construction_connect_execute(self):
+        # Consolidated regression asserting *every* scaffold-mode invariant in a
+        # single end-to-end flow (construction -> connect -> execute). If any one
+        # invariant regresses this test pinpoints the exact phase that broke.
+        #
+        # Construction (no credentials):
+        backend = LiveBackend()
+        assert backend._is_scaffold is True
+        assert backend._connected is False
+        assert backend._connected_at is None
+        assert backend._client is None
+        assert backend.api_key == ""
+        assert backend.api_secret == ""
+        # connect() is a real coroutine function, never a MagicMock patch.
+        assert iscoroutinefunction(backend.connect) is True
+        # connect() must not raise BrokerAuthError for a credential-less scaffold.
+        await backend.connect()
+        # After connect: scaffold stays honestly disconnected (no fake handshake).
+        assert backend._is_scaffold is True
+        assert backend._connected is False
+        assert backend._connected_at is None
+        assert backend._client is None
+        # execute() short-circuits to a structured "not implemented" failure
+        # without requiring a broker client that can never exist for a scaffold.
+        result = await backend.execute(_FakeOrder(), 100.0, _make_cost())
+        assert result.success is False
+        assert "not yet implemented" in result.reason.lower()
+        assert "not connected" not in result.reason.lower()
+        assert result.price == 0.0
+        assert result.quantity == 0
+
     # --------------------------------------------------------------- lifecycle
 
     @pytest.mark.asyncio
