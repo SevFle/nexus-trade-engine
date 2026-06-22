@@ -42,11 +42,14 @@ from engine.observability.logging import setup_logging
 from engine.observability.metrics import set_metrics
 from engine.observability.middleware import CorrelationIdMiddleware
 from engine.observability.prometheus import PrometheusBackend
+from engine.observability.sentry import close_sentry, setup_sentry
 from engine.observability.tracing import setup_tracing
 from engine.reference.seed import seed_index
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+    from engine.events.bus import EventBus
 
 logger = structlog.get_logger()
 
@@ -131,6 +134,10 @@ def _seed_reference_index() -> None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
     setup_tracing()
+    try:
+        setup_sentry()
+    except Exception:
+        logger.warning("nexus.sentry_setup_failed")
     # Switch the process-wide metrics singleton to a recording backend so
     # the /metrics route exposes real counters/gauges/histograms. Operators
     # who want a different exporter (OTel, StatsD, etc.) call set_metrics()
@@ -183,12 +190,58 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     yield
 
+    await _shutdown(app, ws_bridge, ws_manager, event_bus)
+
+
+async def _shutdown(
+    app: FastAPI,
+    ws_bridge: EventBusBridge,
+    ws_manager: ConnectionManager,
+    event_bus: EventBus,
+) -> None:
+    """Run graceful teardown.
+
+    Each cleanup step is wrapped in its own ``try/except`` so that a
+    failure in one step does not prevent the remaining steps from
+    executing.  :func:`close_sentry` runs last, inside its own guard, so
+    the Sentry SDK flushes its event queue regardless of what happened
+    above.
+    """
     logger.info("nexus.shutdown")
-    ws_bridge.stop()
-    await ws_manager.close_all(code=1000, reason="server_shutdown")
-    await event_bus.disconnect()
-    await app.state.valkey.aclose()
-    await dispose_engine()
+
+    async def _stop_bridge() -> None:
+        ws_bridge.stop()
+
+    async def _close_websockets() -> None:
+        await ws_manager.close_all(code=1000, reason="server_shutdown")
+
+    async def _disconnect_bus() -> None:
+        await event_bus.disconnect()
+
+    async def _close_valkey() -> None:
+        await app.state.valkey.aclose()
+
+    async def _dispose_engine() -> None:
+        await dispose_engine()
+
+    cleanup_steps: list[tuple[str, Any]] = [
+        ("ws_bridge.stop", _stop_bridge),
+        ("ws_manager.close_all", _close_websockets),
+        ("event_bus.disconnect", _disconnect_bus),
+        ("valkey.aclose", _close_valkey),
+        ("dispose_engine", _dispose_engine),
+    ]
+
+    for step_name, step_coro in cleanup_steps:
+        try:
+            await step_coro()
+        except Exception:
+            logger.exception("nexus.shutdown_step_failed", step=step_name)
+
+    try:
+        close_sentry()
+    except Exception:
+        logger.exception("nexus.shutdown_sentry_close_failed")
 
 
 def create_app() -> FastAPI:

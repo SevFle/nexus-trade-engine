@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     log_format: str = "console"
     otlp_endpoint: str = ""
     sentry_dsn: str = ""
+    sentry_traces_sample_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     app_version: str = "0.1.0"
     log_sampling_info: float = 1.0
     log_sampling_debug: float = 0.01

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -229,3 +229,260 @@ class TestRateLimitBackendSelection:
         # The client-error route is always pinned to a tight cap.
         assert "/api/v1/client/errors" in config.overrides
         assert config.overrides["/api/v1/client/errors"] == (30, 30)
+
+
+class TestShutdownGuaranteesCloseSentry:
+    """The ``_shutdown`` helper must run every cleanup step with its own
+    ``try/except`` guard and always call ``close_sentry`` at the end,
+    even when a preceding step raises.
+    """
+
+    @pytest.mark.asyncio
+    async def test_close_sentry_called_on_clean_shutdown(self):
+        from engine.app import _shutdown
+
+        ws_bridge = MagicMock()
+        ws_manager = MagicMock()
+        ws_manager.close_all = AsyncMock()
+        event_bus = MagicMock()
+        event_bus.disconnect = AsyncMock()
+        app = MagicMock()
+        app.state.valkey.aclose = AsyncMock()
+
+        with (
+            patch("engine.app.dispose_engine", new=AsyncMock()),
+            patch("engine.app.close_sentry") as mock_close,
+        ):
+            await _shutdown(app, ws_bridge, ws_manager, event_bus)
+
+        mock_close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_close_sentry_called_even_when_step_raises(self):
+        from engine.app import _shutdown
+
+        ws_bridge = MagicMock()
+        ws_bridge.stop.side_effect = RuntimeError("boom")
+        ws_manager = MagicMock()
+        ws_manager.close_all = AsyncMock()
+        event_bus = MagicMock()
+        event_bus.disconnect = AsyncMock()
+        app = MagicMock()
+        app.state.valkey.aclose = AsyncMock()
+
+        with (
+            patch("engine.app.dispose_engine", new=AsyncMock()),
+            patch("engine.app.close_sentry") as mock_close,
+        ):
+            # Should NOT raise — the exception is caught per-step.
+            await _shutdown(app, ws_bridge, ws_manager, event_bus)
+
+        # Despite the exception, close_sentry must still have been called.
+        mock_close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_all_steps_run_even_when_first_raises(self):
+        """A failure in one step must not skip subsequent steps."""
+        from engine.app import _shutdown
+
+        ws_bridge = MagicMock()
+        ws_bridge.stop.side_effect = RuntimeError("bridge down")
+        ws_manager = MagicMock()
+        ws_manager.close_all = AsyncMock()
+        event_bus = MagicMock()
+        event_bus.disconnect = AsyncMock()
+        app = MagicMock()
+        app.state.valkey.aclose = AsyncMock()
+
+        with (
+            patch("engine.app.dispose_engine", new=AsyncMock()) as mock_dispose,
+            patch("engine.app.close_sentry"),
+        ):
+            await _shutdown(app, ws_bridge, ws_manager, event_bus)
+
+        ws_manager.close_all.assert_awaited_once()
+        event_bus.disconnect.assert_awaited_once()
+        app.state.valkey.aclose.assert_awaited_once()
+        mock_dispose.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_middle_step_failure_still_runs_rest(self):
+        """A failure in a middle step must not skip remaining steps."""
+        from engine.app import _shutdown
+
+        ws_bridge = MagicMock()
+        ws_manager = MagicMock()
+        ws_manager.close_all = AsyncMock(side_effect=RuntimeError("ws boom"))
+        event_bus = MagicMock()
+        event_bus.disconnect = AsyncMock()
+        app = MagicMock()
+        app.state.valkey.aclose = AsyncMock()
+
+        with (
+            patch("engine.app.dispose_engine", new=AsyncMock()) as mock_dispose,
+            patch("engine.app.close_sentry") as mock_close,
+        ):
+            await _shutdown(app, ws_bridge, ws_manager, event_bus)
+
+        event_bus.disconnect.assert_awaited_once()
+        app.state.valkey.aclose.assert_awaited_once()
+        mock_dispose.assert_awaited_once()
+        mock_close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_close_sentry_failure_does_not_propagate(self):
+        """If close_sentry itself raises the error must be swallowed."""
+        from engine.app import _shutdown
+
+        ws_bridge = MagicMock()
+        ws_manager = MagicMock()
+        ws_manager.close_all = AsyncMock()
+        event_bus = MagicMock()
+        event_bus.disconnect = AsyncMock()
+        app = MagicMock()
+        app.state.valkey.aclose = AsyncMock()
+
+        with (
+            patch("engine.app.dispose_engine", new=AsyncMock()),
+            patch("engine.app.close_sentry", side_effect=RuntimeError("flush fail")),
+        ):
+            # Must NOT raise even though close_sentry blows up.
+            await _shutdown(app, ws_bridge, ws_manager, event_bus)
+
+    @pytest.mark.asyncio
+    async def test_all_steps_failed_close_sentry_still_called(self):
+        """When every step raises, close_sentry must still execute."""
+        from engine.app import _shutdown
+
+        ws_bridge = MagicMock()
+        ws_bridge.stop.side_effect = RuntimeError("a")
+        ws_manager = MagicMock()
+        ws_manager.close_all = AsyncMock(side_effect=RuntimeError("b"))
+        event_bus = MagicMock()
+        event_bus.disconnect = AsyncMock(side_effect=RuntimeError("c"))
+        app = MagicMock()
+        app.state.valkey.aclose = AsyncMock(side_effect=RuntimeError("d"))
+
+        with (
+            patch("engine.app.dispose_engine", new=AsyncMock(side_effect=RuntimeError("e"))),
+            patch("engine.app.close_sentry") as mock_close,
+        ):
+            await _shutdown(app, ws_bridge, ws_manager, event_bus)
+
+        mock_close.assert_called_once()
+
+
+class TestSetupSentryGuard:
+    """``setup_sentry()`` in the lifespan startup must be wrapped in a
+    ``try/except`` so that a failure during initialisation does not abort
+    the entire application startup — it should log a warning instead.
+    """
+
+    @pytest.mark.asyncio
+    async def test_setup_sentry_failure_logs_warning_and_continues(self):
+        """When setup_sentry raises, a warning is logged and the lifespan
+        proceeds to the next step (``set_metrics``)."""
+        from engine.app import lifespan
+
+        mock_valkey = MagicMock()
+        mock_valkey.aclose = AsyncMock()
+
+        mock_app = MagicMock()
+        mock_app.state.valkey = mock_valkey
+
+        mock_ws_manager = MagicMock()
+        mock_ws_manager.close_all = AsyncMock()
+
+        mock_event_bus = MagicMock()
+        mock_event_bus.disconnect = AsyncMock()
+        mock_event_bus.connect = AsyncMock()
+
+        mock_ws_bridge = MagicMock()
+        mock_ws_bridge.stop = MagicMock()
+
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_session_factory = MagicMock(return_value=mock_session)
+
+        with (
+            patch("engine.app.setup_logging"),
+            patch("engine.app.setup_tracing"),
+            patch("engine.app.setup_sentry", side_effect=RuntimeError("dsn bad")),
+            patch("engine.app.set_metrics") as mock_set_metrics,
+            patch("engine.app.Valkey.from_url", return_value=mock_valkey),
+            patch("engine.app._build_auth_registry"),
+            patch("engine.app._configure_data_providers"),
+            patch("engine.app._seed_reference_index"),
+            patch("engine.app.get_session_factory", return_value=mock_session_factory),
+            patch("engine.app.sync_legal_documents", new=AsyncMock(return_value=0)),
+            patch("engine.app.ConnectionManager", return_value=mock_ws_manager),
+            patch("engine.app.AuthRateLimiter"),
+            patch("engine.app.init_ws"),
+            patch("engine.events.bus.EventBus", return_value=mock_event_bus),
+            patch("engine.app.EventBusBridge", return_value=mock_ws_bridge),
+            patch("engine.app.dispose_engine", new=AsyncMock()),
+            patch("engine.app.close_sentry"),
+        ):
+            async with lifespan(mock_app):
+                pass
+
+        # set_metrics is called AFTER setup_sentry — if the guard works,
+        # this must have been called despite the RuntimeError.
+        mock_set_metrics.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_setup_sentry_success_does_not_log_warning(self):
+        """When setup_sentry succeeds no warning is emitted."""
+        from engine.app import lifespan
+
+        mock_valkey = MagicMock()
+        mock_valkey.aclose = AsyncMock()
+
+        mock_app = MagicMock()
+        mock_app.state.valkey = mock_valkey
+
+        mock_ws_manager = MagicMock()
+        mock_ws_manager.close_all = AsyncMock()
+
+        mock_event_bus = MagicMock()
+        mock_event_bus.disconnect = AsyncMock()
+        mock_event_bus.connect = AsyncMock()
+
+        mock_ws_bridge = MagicMock()
+        mock_ws_bridge.stop = MagicMock()
+
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_session_factory = MagicMock(return_value=mock_session)
+
+        with (
+            patch("engine.app.setup_logging"),
+            patch("engine.app.setup_tracing"),
+            patch("engine.app.setup_sentry"),
+            patch("engine.app.set_metrics"),
+            patch("engine.app.Valkey.from_url", return_value=mock_valkey),
+            patch("engine.app._build_auth_registry"),
+            patch("engine.app._configure_data_providers"),
+            patch("engine.app._seed_reference_index"),
+            patch("engine.app.get_session_factory", return_value=mock_session_factory),
+            patch("engine.app.sync_legal_documents", new=AsyncMock(return_value=0)),
+            patch("engine.app.ConnectionManager", return_value=mock_ws_manager),
+            patch("engine.app.AuthRateLimiter"),
+            patch("engine.app.init_ws"),
+            patch("engine.events.bus.EventBus", return_value=mock_event_bus),
+            patch("engine.app.EventBusBridge", return_value=mock_ws_bridge),
+            patch("engine.app.dispose_engine", new=AsyncMock()),
+            patch("engine.app.close_sentry"),
+            patch("engine.app.logger") as mock_logger,
+        ):
+            async with lifespan(mock_app):
+                pass
+
+        # The warning about sentry setup failure should NOT have been logged.
+        sentry_warning_calls = [
+            c for c in mock_logger.warning.call_args_list
+            if "sentry" in str(c).lower()
+        ]
+        assert sentry_warning_calls == []

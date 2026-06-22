@@ -115,6 +115,16 @@ def _scrub_dict(d: dict[Any, Any]) -> dict[Any, Any]:
     return out
 
 
+def scrub_pii(event_dict: dict[str, Any]) -> dict[str, Any]:
+    """Public helper: scrub a single event dict in isolation.
+
+    Functionally identical to :func:`redact_processor` (which is the
+    structlog-processor wrapper). Provided as a standalone, callable
+    entry point for callers that are not inside the structlog pipeline.
+    """
+    return _scrub_dict(dict(event_dict))
+
+
 def redact_processor(
     _logger: WrappedLogger, _name: str, event_dict: EventDict
 ) -> EventDict:
@@ -122,4 +132,4 @@ def redact_processor(
     return _scrub_dict(dict(event_dict))
 
 
-__all__ = ["REDACTED", "redact_processor"]
+__all__ = ["REDACTED", "redact_processor", "scrub_pii"]

@@ -7,7 +7,9 @@ import pytest
 from engine.observability.redact import (
     _BANNED_KEYS_LOWER,
     REDACTED,
+    _scrub_value,
     redact_processor,
+    scrub_pii,
 )
 
 
@@ -143,3 +145,47 @@ class TestNonStringKey:
 
         out = _emit({"event": "x", K.TOKEN.value: "leak"})
         assert out["token"] == REDACTED
+
+
+class TestScrubValueDictDispatch:
+    """_scrub_value must dispatch dict inputs to _scrub_dict."""
+
+    def test_scrub_value_recurses_into_dict(self):
+        result = _scrub_value({"password": "leak", "user": "ok"})
+        assert result["password"] == REDACTED
+        assert result["user"] == "ok"
+
+    def test_scrub_value_handles_nested_dict_in_list(self):
+        result = _scrub_value([{"token": "t"}, {"name": "n"}])
+        assert result[0]["token"] == REDACTED
+        assert result[1]["name"] == "n"
+
+
+class TestScrubPiiRoundTrip:
+    """scrub_pii must produce identical output to redact_processor."""
+
+    def test_scrub_pii_equals_redact_processor_simple(self):
+        event = {"event": "login", "password": "secret", "user": "alice"}
+        assert scrub_pii(dict(event)) == redact_processor(None, "info", dict(event))
+
+    def test_scrub_pii_equals_redact_processor_nested(self):
+        event = {
+            "event": "request",
+            "headers": {"authorization": "Bearer xyz"},
+            "body": {"token": "abc", "data": [1, 2, 3]},
+        }
+        assert scrub_pii(dict(event)) == redact_processor(None, "info", dict(event))
+
+    def test_scrub_pii_equals_redact_processor_patterns(self):
+        event = {"event": "x", "note": "card 4242 4242 4242 4242 declined"}
+        assert scrub_pii(dict(event)) == redact_processor(None, "info", dict(event))
+
+    def test_scrub_pii_does_not_mutate_input(self):
+        event = {"event": "x", "password": "secret"}
+        original = dict(event)
+        scrub_pii(event)
+        assert event == original
+
+    def test_scrub_pii_redacts_banned_key(self):
+        out = scrub_pii({"event": "x", "api_key": "leak"})
+        assert out["api_key"] == REDACTED
