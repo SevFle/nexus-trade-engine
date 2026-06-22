@@ -63,6 +63,18 @@ class LiveBackend(ExecutionBackend):
         self._connected = False
         self._connected_at: float | None = None
 
+    def _reset_connection_state(self) -> None:
+        """Force the backend into the honestly-disconnected state.
+
+        Centralised so the scaffold early-return and every error path share a
+        single definition of "disconnected", preventing the state-inconsistency
+        bugs (``_connected = True`` with ``_client = None``) that the recurring
+        test loop was about.
+        """
+        self._connected = False
+        self._connected_at = None
+        self._client = None
+
     async def connect(self) -> None:
         # INVARIANT: the ``_is_scaffold`` guard MUST run before any credential
         # validation. A scaffold has no broker wiring, so it can neither use nor
@@ -80,6 +92,10 @@ class LiveBackend(ExecutionBackend):
                 broker=self.broker_name,
                 msg="no broker client; staying disconnected",
             )
+            # A scaffold must NOT clear _client here — a caller may have preset
+            # it. We only ensure the connection *flags* are honest. Use the
+            # scoped reset that clears flags but preserves any preset client so
+            # the scaffold path is a pure no-op on credentials/client wiring.
             self._connected = False
             self._connected_at = None
             return
@@ -88,7 +104,7 @@ class LiveBackend(ExecutionBackend):
         # work so a misconfiguration surfaces as BrokerAuthError rather than a
         # noisy connection failure deep inside the broker client.
         if not self.api_key or not self.api_secret:
-            self._connected = False
+            self._reset_connection_state()
             raise BrokerAuthError(
                 f"live backend requires api_key and api_secret for broker '{self.broker_name}'"
             )
@@ -117,9 +133,7 @@ class LiveBackend(ExecutionBackend):
 
     async def disconnect(self) -> None:
         # Idempotent: safe to call when never connected or already disconnected.
-        self._client = None
-        self._connected = False
-        self._connected_at = None
+        self._reset_connection_state()
         logger.info("live.backend.disconnected", broker=self.broker_name)
 
     async def execute(self, order: Order, market_price: float, costs: CostBreakdown) -> FillResult:

@@ -4,6 +4,8 @@ import json
 import re
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -84,31 +86,70 @@ class TestChangelog:
 
 
 class TestReleaseWorkflow:
+    def _workflow(self) -> dict:
+        return yaml.safe_load((ROOT / ".github" / "workflows" / "release-please.yml").read_text())
+
+    def _triggers(self) -> dict:
+        # YAML 1.1 parses a bare ``on:`` key as the boolean ``True``; handle
+        # both spellings so the assertion works regardless of loader behavior.
+        wf = self._workflow()
+        return wf.get("on") or wf.get(True)
+
+    def _steps(self) -> list[dict]:
+        return self._workflow()["jobs"]["release-please"]["steps"]
+
     def test_workflow_file_exists(self):
         assert (ROOT / ".github" / "workflows" / "release-please.yml").is_file()
 
     def test_workflow_triggers_on_push_to_main(self):
-        content = (ROOT / ".github" / "workflows" / "release-please.yml").read_text()
-        assert "push:" in content
-        assert "main" in content
+        triggers = self._triggers()
+        assert "push" in triggers
+        assert "main" in triggers["push"]["branches"]
 
     def test_workflow_uses_release_please_v4(self):
-        content = (ROOT / ".github" / "workflows" / "release-please.yml").read_text()
-        assert "googleapis/release-please-action@v4" in content
+        uses = [s["uses"] for s in self._steps() if "uses" in s]
+        assert "googleapis/release-please-action@v4" in uses
 
     def test_workflow_references_config_and_manifest(self):
-        content = (ROOT / ".github" / "workflows" / "release-please.yml").read_text()
-        assert "release-please-config.json" in content
-        assert ".release-please-manifest.json" in content
+        withs = [s["with"] for s in self._steps() if "with" in s]
+        config_files = [w.get("config-file") for w in withs]
+        manifest_files = [w.get("manifest-file") for w in withs]
+        assert "release-please-config.json" in config_files
+        assert ".release-please-manifest.json" in manifest_files
 
     def test_workflow_has_write_permissions(self):
-        content = (ROOT / ".github" / "workflows" / "release-please.yml").read_text()
-        assert "contents: write" in content
-        assert "pull-requests: write" in content
+        perms = self._workflow()["permissions"]
+        assert perms["contents"] == "write"
+        assert perms["pull-requests"] == "write"
 
     def test_workflow_uses_custom_token(self):
-        content = (ROOT / ".github" / "workflows" / "release-please.yml").read_text()
-        assert "RELEASE_PLEASE_TOKEN" in content
+        withs = [s["with"] for s in self._steps() if "with" in s]
+        tokens = [w.get("token", "") for w in withs]
+        assert any("RELEASE_PLEASE_TOKEN" in t for t in tokens)
+
+    def test_workflow_step_structure(self):
+        # Assert the actual step structure: a single release-please action step
+        # carrying token/config/manifest inputs.
+        steps = self._steps()
+        assert len(steps) >= 1
+        rp = next(s for s in steps if s.get("uses", "").startswith("googleapis/release-please-action"))
+        assert rp["with"]["config-file"] == "release-please-config.json"
+        assert rp["with"]["manifest-file"] == ".release-please-manifest.json"
+        assert "RELEASE_PLEASE_TOKEN" in rp["with"]["token"]
+
+    def test_workflow_skips_when_release_token_absent(self):
+        # PyYAML-based structural assertion: parse the workflow file and assert
+        # the *actual* ``if:`` expression on the release-please job equals the
+        # expected guard exactly. This replaces fragile string-matching / grep
+        # approaches with a structural YAML assertion that inspects the parsed
+        # tree, so reformatting whitespace or key ordering cannot mask a missing
+        # guard.
+        job = self._workflow()["jobs"]["release-please"]
+        expected_if = "${{ secrets.RELEASE_PLEASE_TOKEN != '' }}"
+        assert job["if"] == expected_if, (
+            f"release-please job must skip when token is absent; "
+            f"expected if={expected_if!r}, got if={job.get('if')!r}"
+        )
 
 
 class TestReleasingDocs:

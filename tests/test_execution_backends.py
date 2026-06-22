@@ -7,6 +7,7 @@ import inspect
 import textwrap
 from dataclasses import dataclass
 from enum import StrEnum
+from inspect import iscoroutinefunction
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -494,6 +495,25 @@ class TestLiveBackend:
         assert result.price == 0.0
         assert result.quantity == 0
 
+    @pytest.mark.asyncio
+    async def test_prompt_regression_connect_no_auth_error_and_real_coroutine(self):
+        # Named regression for the exact two CI failures this change resolves:
+        #   1) connect() on a credential-less scaffold must NOT raise
+        #      BrokerAuthError ("live backend requires api_key and api_secret
+        #      for broker 'alpaca'"). The _is_scaffold guard runs first.
+        #   2) connect() must be exercised as a real awaitable coroutine; the
+        #      suite must never patch it with MagicMock, whose non-coroutine
+        #      return raises "TypeError: object MagicMock can't be used in
+        #      'await' expression". Asserting iscoroutinefunction pins this.
+        backend = LiveBackend()
+        assert backend._is_scaffold is True
+        assert not backend.api_key and not backend.api_secret
+        assert inspect.iscoroutinefunction(backend.connect)
+        await backend.connect()  # neither BrokerAuthError nor TypeError
+        assert backend._connected is False
+        assert backend._connected_at is None
+        assert backend._client is None
+
     # --------------------------------------------------------------- lifecycle
 
     @pytest.mark.asyncio
@@ -640,6 +660,21 @@ class TestLiveBackendLoopBreaker:
         # A freshly constructed instance never flips the class-level flag.
         backend = LiveBackend(api_key="k", api_secret="s")
         assert backend._is_scaffold is True
+
+    def test_scaffold_defaults_without_credentials(self):
+        # Consolidated regression for the two production-code fixes:
+        #   * LiveBackend() built with no credentials must enter scaffold mode
+        #     (_is_scaffold stays True) and stay honestly disconnected rather
+        #     than raising BrokerAuthError.
+        #   * connect() must be a real coroutine function (an ``async def`` on
+        #     the class), never a monkey-patched bound method. iscoroutinefunction
+        #     inspects the bound method, so a MagicMock patch would fail here.
+        backend = LiveBackend()  # no api_key / api_secret
+        assert backend._is_scaffold is True
+        assert backend._connected is False
+        assert backend._connected_at is None
+        assert backend._client is None
+        assert iscoroutinefunction(backend.connect) is True
 
     def test_fill_result_defaults(self):
         ok = FillResult(success=True)
