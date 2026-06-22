@@ -1,8 +1,37 @@
 from __future__ import annotations
 
+import logging
+from typing import Any
+
 import sentry_sdk
 
 from engine.config import settings
+from engine.observability.redact import _scrub_dict, _scrub_value
+
+logger = logging.getLogger(__name__)
+
+
+def _before_send(
+    event: dict[str, Any], _hint: dict[str, Any]
+) -> dict[str, Any]:
+    """Sentry ``before_send`` hook.
+
+    Reuses the structlog redaction logic (``engine.observability.redact``) to
+    strip secrets / PII from the event's ``contexts`` and ``breadcrumbs``
+    before it leaves the process.  Mirrors the guarantee the log redaction
+    processor already provides for log records.
+    """
+    contexts = event.get("contexts")
+    if isinstance(contexts, dict):
+        event["contexts"] = _scrub_dict(contexts)
+
+    breadcrumbs = event.get("breadcrumbs")
+    if isinstance(breadcrumbs, dict):
+        event["breadcrumbs"] = _scrub_dict(breadcrumbs)
+    elif isinstance(breadcrumbs, list):
+        event["breadcrumbs"] = _scrub_value(breadcrumbs)
+
+    return event
 
 
 def setup_sentry() -> None:
@@ -16,7 +45,11 @@ def setup_sentry() -> None:
 
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
+        release=settings.app_version,
+        environment=settings.app_env,
         traces_sample_rate=settings.sentry_traces_sample_rate,
+        send_default_pii=False,
+        before_send=_before_send,
     )
 
 
@@ -29,10 +62,18 @@ def close_sentry() -> None:
     if not sentry_sdk.is_initialized():
         return
 
-    sentry_sdk.flush(timeout=2)
+    flushed = sentry_sdk.flush(timeout=2)
+    if not flushed:
+        logger.warning(
+            "sentry.flush_timeout",
+            extra={
+                "detail": "Sentry failed to flush events within the "
+                "2 s timeout; some events may be lost"
+            },
+        )
 
     client = sentry_sdk.get_client()
     client.close()
 
 
-__all__ = ["close_sentry", "setup_sentry"]
+__all__ = ["_before_send", "close_sentry", "setup_sentry"]
