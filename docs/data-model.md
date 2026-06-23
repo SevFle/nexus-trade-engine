@@ -57,7 +57,7 @@ email — that's intentional (the operator decides whether to merge).
 
 Rotating session tokens. Single-use — any second presentation triggers
 revoke-all for the user (token-replay detection in
-[`routes/auth.py`](../engine/api/routes/auth.py:183)).
+[`routes/auth.py`](../engine/api/routes/auth.py#L183)).
 
 | Column | Type | Notes |
 |---|---|---|

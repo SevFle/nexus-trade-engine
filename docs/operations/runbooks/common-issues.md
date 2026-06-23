@@ -62,7 +62,7 @@ curl -X POST -H "X-API-Key: $KEY" ... /api/v1/portfolio/           # 403?
 
 Check the key's `scopes` via `GET /api/v1/auth/api-keys`. The scope
 hierarchy is `admin > trade > read` (see
-[`api/auth/dependency.py:160`](../../../engine/api/auth/dependency.py:160)).
+[`api/auth/dependency.py:160`](../../../engine/api/auth/dependency.py#L160)).
 A `read`-scoped key cannot POST. Routes that mutate state declare
 `Depends(require_api_scope("trade"))` (e.g. portfolio create, webhook
 create).
@@ -79,7 +79,7 @@ Scopes cannot be edited on an existing key — revoke and reissue.
 ### First 60 seconds
 
 This is **not** a bug — it's the replay-detection guard firing
-([`routes/auth.py:208-219`](../../../engine/api/routes/auth.py:208)).
+([`routes/auth.py:208-219`](../../../engine/api/routes/auth.py#L208)).
 A refresh token was used twice. The engine revoked every active
 session for that user as a defense.
 
@@ -184,7 +184,7 @@ GROUP BY status;
 - Target URL is timing out and the dispatcher is in a retry backoff
   window.
 - A new template was added in code but not in `_VALID_TEMPLATES` in
-  [`routes/webhooks.py`](../../../engine/api/routes/webhooks.py:30).
+  [`routes/webhooks.py`](../../../engine/api/routes/webhooks.py#L30).
 
 ### Likely fix
 
@@ -211,7 +211,7 @@ curl https://api.example.com/api/v1/system/status | jq '.counts'
 ### Triage
 
 - The in-memory `_backtest_results` dict
-  ([`routes/backtest.py:22`](../../../engine/api/routes/backtest.py:22))
+  ([`routes/backtest.py:22`](../../../engine/api/routes/backtest.py#L22))
   holds full equity curves for 1 hour. A burst of backtests against
   long histories can grow this to GBs.
 - `MarketStateBuilder` retains Polars frames for the duration of a
