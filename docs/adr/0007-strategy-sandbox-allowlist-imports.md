@@ -68,7 +68,7 @@ it and layer 5 (process isolation) remains the production target.
 - **Negative** — CPython bootstraps certain `_`-prefixed C-extension
   modules that cannot be purged from `sys.modules` without crashing the
   interpreter. These are enumerated in
-  `_ESSENTIAL_CPYTHON_MODULES` ([`restricted_importer.py:49`](../../engine/plugins/restricted_importer.py:49))
+  `_ESSENTIAL_CPYTHON_MODULES` ([`restricted_importer.py:49`](../../engine/plugins/restricted_importer.py#L49))
   and kept reachable; they are harmless C-extensions that cannot be
   used as escape vectors on their own.
 
@@ -106,7 +106,7 @@ unreachable because importing `engine.plugins.sandbox` is blocked via
 
 ### Builtins curation
 
-Source: [`allowlist.py:227`](../../engine/plugins/allowlist.py:227).
+Source: [`allowlist.py:227`](../../engine/plugins/allowlist.py#L227).
 
 `CURATED_BUILTINS` exposes a subset of `builtins` to sandboxed code.
 Removed: `open`, `eval`, `exec`, `compile`, `__import__`, `globals`,

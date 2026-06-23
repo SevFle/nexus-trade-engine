@@ -26,7 +26,7 @@ present, so scope checks downstream don't re-authenticate.
 ### Roles (RBAC hierarchy)
 
 Enforced via `Depends(require_role("developer"))` etc. Numeric levels
-in [`engine/api/auth/dependency.py`](../engine/api/auth/dependency.py:27):
+in [`engine/api/auth/dependency.py`](../engine/api/auth/dependency.py#L27):
 
 | Role | Level |
 |---|---|
@@ -81,7 +81,7 @@ Unauthenticated probes for load balancers and Prometheus.
 
 | Method | Path | Source | Notes |
 |---|---|---|---|
-| GET | `/health` | [`routes/health.py`](../engine/api/routes/health.py:19) | Liveness. Always returns `{"status": "ok"}`. |
+| GET | `/health` | [`routes/health.py`](../engine/api/routes/health.py#L19) | Liveness. Always returns `{"status": "ok"}`. |
 | GET | `/health/providers` | same | Reports each registered data provider (up/degraded/down + latency). |
 | GET | `/ready` | same | Readiness — pings DB (`SELECT 1`) and `valkey.ping()`. Returns `degraded` if either fails. |
 | GET | `/metrics` | [`routes/metrics.py`](../engine/api/routes/metrics.py) | Prometheus exposition. The `RateLimitMiddleware` exempts `/metrics` from throttling. |
@@ -131,7 +131,7 @@ Mounted at `/api/v1/auth/*` and `/api/v1/auth/mfa/*`. Source:
 Providers enabled by `NEXUS_AUTH_PROVIDERS` (csv): `local`, `google`,
 `github`, `oidc`, `ldap`. Each provider registers in
 [`engine/api/auth/`](../engine/api/auth/) at app startup via
-[`_build_auth_registry`](../engine/app.py:86).
+[`_build_auth_registry`](../engine/app.py#L86).
 
 ### MFA (TOTP + backup codes)
 
@@ -160,7 +160,13 @@ Mounted at `/api/v1/auth/api-keys`.
 
 ## Legal
 
-Mounted **outside** the v1 prefix. Source: [`routes/legal.py`](../engine/api/routes/legal.py).
+The legal router is mounted without a router-level `prefix=` in
+[`router.py`](../engine/api/router.py) — every route declares its full
+`/api/v1/legal/*` path in the decorator instead, so the effective URLs
+are still under the v1 namespace. It is deliberately **not** gated by
+`require_legal_acceptance`: it has to stay reachable so the user can
+record the acceptance the gate checks for. Source:
+[`routes/legal.py`](../engine/api/routes/legal.py).
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
@@ -377,7 +383,7 @@ log aggregators. Auth attempts are rate-limited per IP
 (`NEXUS_WS_AUTH_RATE_LIMIT_PER_MINUTE`, default 10) via a token bucket.
 
 Connection scopes are derived from the JWT `role` claim (see
-[`ws/auth.py:_extract_scopes`](../engine/api/ws/auth.py:80)):
+[`ws/auth.py:_extract_scopes`](../engine/api/ws/auth.py#L80)):
 
 | Role | Scopes granted |
 |---|---|
@@ -424,7 +430,7 @@ still per-process, but event distribution is cross-replica.
 
 ## Cross-cutting middleware
 
-Applied in reverse order in [`create_app`](../engine/app.py:154) so the
+Applied in reverse order in [`create_app`](../engine/app.py#L154) so the
 last-added wraps everything:
 
 1. `SecurityHeadersMiddleware` — CSP, HSTS, X-Content-Type-Options, …

@@ -16,7 +16,7 @@ Priority legend:
 
 ## P0 — Backtest results are not persisted
 
-**Where**: [`engine/api/routes/backtest.py:22`](../engine/api/routes/backtest.py:22)
+**Where**: [`engine/api/routes/backtest.py:22`](../engine/api/routes/backtest.py#L22)
 
 The `POST /api/v1/backtest/run` route stores results in an
 **in-process Python dict** (`_backtest_results`) with a 1-hour TTL.
@@ -118,7 +118,7 @@ replica.
 
 ## P2 — WebSocket does not accept API keys
 
-**Where**: [`engine/api/ws/auth.py`](../engine/api/ws/auth.py:158)
+**Where**: [`engine/api/ws/auth.py`](../engine/api/ws/auth.py#L158)
 
 The active WS authenticator calls `decode_token` (JWT only). It does
 **not** run the `is_engine_token` / `find_active_by_token` path that the
@@ -167,7 +167,7 @@ should try to drop the ignore. Don't fix in one mega-PR.
 
 ## P2 — Marketplace `MarketplaceEntry` Pydantic model is unused
 
-Defined in [`routes/marketplace.py:15`](../engine/api/routes/marketplace.py:15)
+Defined in [`routes/marketplace.py:15`](../engine/api/routes/marketplace.py#L15)
 but never returned by any handler. Remove when the marketplace stub
 is replaced.
 
