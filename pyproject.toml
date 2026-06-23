@@ -31,6 +31,8 @@ dependencies = [
     "pyjwt[crypto]>=2.10.0",
     "bcrypt>=4.0.0",
     "python-multipart>=0.0.9",
+    "mcp>=1.0.0",
+    "sse-starlette>=3.4.0",
 ]
 
 [project.optional-dependencies]
@@ -97,6 +99,8 @@ ignore = ["S101", "TRY003", "PLR0913"]
 "engine/core/cost_model.py" = ["ARG002", "PLR2004"]
 "engine/tasks/worker.py" = ["PLC0415", "TRY301"]
 "engine/events/bus.py" = ["PLC0415", "E501"]
+"engine/mcp/**/*.py" = ["PLC0415", "TRY300", "TRY301", "E501", "ARG002", "RUF013"]
+"engine/mcp/server.py" = ["PLR0911"]
 "engine/core/oms/risk.py" = ["PLC0415", "ARG002"]
 "engine/core/execution/live.py" = ["ARG002", "S311"]
 "engine/core/execution/paper.py" = ["S311"]
