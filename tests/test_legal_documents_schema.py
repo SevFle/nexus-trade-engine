@@ -28,9 +28,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from sqlalchemy import inspect, select, text
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.pool import StaticPool
 
 from engine.db.models import Base, LegalAcceptance, LegalDocument
@@ -39,9 +37,6 @@ from engine.legal.service import get_pending_acceptances
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
-
-# SQLite has no JSONB; mirror the conftest override so create_all can run.
-compiles(JSONB, "sqlite")(lambda type_, compiler, **kw: "TEXT")
 
 
 def _sqlite_engine():

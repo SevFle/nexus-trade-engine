@@ -52,6 +52,7 @@ def _build_metadata() -> MetaData:
         Column("hashed_password", String(255), nullable=True),
         Column("display_name", String(100), nullable=False),
         Column("is_active", Boolean, default=True),
+        Column("processing_restricted", Boolean, default=False, nullable=False),
         Column("role", String(20), default="user"),
         Column("auth_provider", String(20), default="local"),
         Column("external_id", String(255), nullable=True),
@@ -88,6 +89,29 @@ def _build_metadata() -> MetaData:
         Column("created_at", DateTime, default=datetime.now),
     )
     return metadata
+
+
+class TestE2ESchemaDriftGuard:
+    """Pin the hand-built e2e schema to the ORM ``User`` model.
+
+    The e2e suite deliberately builds a lightweight SQLite schema instead of
+    running ``Base.metadata.create_all`` (which would drag in every table).
+    Any column added to :class:`engine.db.models.User` therefore has to be
+    mirrored in ``_build_metadata`` or the real ORM queries fail with
+    ``no such column``. This test makes that drift fail loudly here instead
+    of surfacing as ``OperationalError`` in dozens of unrelated auth tests.
+    """
+
+    def test_e2e_users_schema_has_every_user_model_column(self):
+        from engine.db.models import User
+
+        model_cols = {c.name for c in User.__table__.columns}
+        schema_cols = set(_build_metadata().tables["users"].columns.keys())
+        missing = model_cols - schema_cols
+        assert not missing, (
+            "The e2e users schema is missing columns that exist on the User "
+            f"model: {sorted(missing)}. Add them to _build_metadata()."
+        )
 
 
 @pytest.fixture

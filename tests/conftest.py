@@ -25,6 +25,7 @@ from sqlalchemy import event as sa_event
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.pool import StaticPool
 
 from engine.api.auth.dependency import get_current_user
@@ -33,6 +34,12 @@ from engine.config import settings
 from engine.db.models import Base, User
 from engine.deps import get_db
 from engine.legal.dependencies import require_legal_acceptance
+
+# SQLite has no native JSONB. Register the compile override exactly once, at
+# import time, so *every* test module and every ad-hoc SQLite engine can run
+# ``Base.metadata.create_all`` without each re-registering it. This is the
+# single source of truth for the JSONB→TEXT override across the suite.
+compiles(JSONB, "sqlite")(lambda type_, compiler, **kw: "TEXT")
 
 
 async def _noop_legal_acceptance() -> None:
@@ -127,10 +134,6 @@ def _build_test_engine() -> tuple[AsyncEngine, bool]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-
-    from sqlalchemy.ext.compiler import compiles
-
-    compiles(JSONB, "sqlite")(lambda type_, compiler, **kw: "TEXT")
 
     @sa_event.listens_for(engine.sync_engine, "connect")
     def _set_sqlite_pragma(dbapi_conn, _connection_record):
