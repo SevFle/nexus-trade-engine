@@ -30,9 +30,12 @@ def _safe_float(value: object) -> float:
     return f
 
 
+_MIN_EQUITY_POINTS = 2
+
+
 async def get_market_data(
     services: EngineServices,
-    principal: AuthPrincipal,
+    _principal: AuthPrincipal,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     symbol = arguments.get("symbol")
@@ -83,7 +86,7 @@ async def get_market_data(
 
 async def get_cost_model(
     services: EngineServices,
-    principal: AuthPrincipal,
+    _principal: AuthPrincipal,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     symbol = arguments.get("symbol")
@@ -125,12 +128,16 @@ async def get_cost_model(
 
 
 async def get_performance_metrics(
-    services: EngineServices,
-    principal: AuthPrincipal,
+    _services: EngineServices,
+    _principal: AuthPrincipal,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     equity_curve = arguments.get("equity_curve")
-    if not equity_curve or not isinstance(equity_curve, list) or len(equity_curve) < 2:
+    if (
+        not equity_curve
+        or not isinstance(equity_curve, list)
+        or len(equity_curve) < _MIN_EQUITY_POINTS
+    ):
         raise ValidationError("equity_curve must contain at least 2 points")
     initial_capital = float(arguments.get("initial_capital", 100_000.0))
 

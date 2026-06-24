@@ -17,15 +17,16 @@ market-data provider). This keeps the server usable in two modes:
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from engine.core.cost_model import DefaultCostModel
 from engine.core.portfolio import Portfolio
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
+
     from engine.data.feeds import MarketDataProvider
     from engine.plugins.registry import PluginRegistry
 
@@ -57,15 +58,31 @@ class PortfolioStore:
         return sorted(self._portfolios)
 
 
+def _default_registry() -> PluginRegistry:
+    from engine.plugins.registry import PluginRegistry
+
+    return PluginRegistry()
+
+
+def _default_provider_factory() -> Callable[[], MarketDataProvider]:
+    def _factory() -> MarketDataProvider:
+        from engine.data.feeds import get_data_provider
+        from engine.mcp.config import mcp_settings
+
+        return get_data_provider(mcp_settings.backtest_default_provider)
+
+    return _factory
+
+
 @dataclass
 class EngineServices:
     """Container of injectable engine capabilities used by the adapters."""
 
-    plugin_registry: PluginRegistry = field(default_factory=lambda: _default_registry())
+    plugin_registry: PluginRegistry = field(default_factory=_default_registry)
     portfolio_store: PortfolioStore = field(default_factory=PortfolioStore)
     cost_model: DefaultCostModel = field(default_factory=DefaultCostModel)
     market_data_provider_factory: Callable[[], MarketDataProvider] = field(
-        default_factory=lambda: _default_provider_factory()
+        default_factory=_default_provider_factory
     )
     strategies_dir: Path | None = None
 
@@ -99,22 +116,6 @@ class EngineServices:
         )
 
 
-def _default_registry() -> PluginRegistry:
-    from engine.plugins.registry import PluginRegistry
-
-    return PluginRegistry()
-
-
-def _default_provider_factory() -> Callable[[], MarketDataProvider]:
-    def _factory() -> MarketDataProvider:
-        from engine.data.feeds import get_data_provider
-        from engine.mcp.config import mcp_settings
-
-        return get_data_provider(mcp_settings.backtest_default_provider)
-
-    return _factory
-
-
 def to_jsonable(obj: Any) -> Any:
     """Best-effort conversion of engine objects to JSON-serialisable forms.
 
@@ -127,12 +128,12 @@ def to_jsonable(obj: Any) -> Any:
 
     if isinstance(obj, Decimal):
         return float(obj)
-    if isinstance(obj, _dt.datetime | _dt.date):
-        return obj.isoformat()
-    if isinstance(obj, _dt.timedelta):
-        return obj.total_seconds()
+    if isinstance(obj, _dt.datetime | _dt.date | _dt.timedelta):
+        return obj.total_seconds() if isinstance(obj, _dt.timedelta) else obj.isoformat()
     if is_dataclass(obj) and not isinstance(obj, type):
-        return {k: to_jsonable(v) for k, v in asdict(obj).items()}  # type: ignore[arg-type]
+        # Reduce dataclass instances to their dict form so they flow through
+        # the generic mapping branch below.
+        obj = asdict(obj)  # type: ignore[arg-type]
     if isinstance(obj, dict):
         return {str(k): to_jsonable(v) for k, v in obj.items()}
     if isinstance(obj, list | tuple):
