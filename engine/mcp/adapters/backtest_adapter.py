@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 async def run_backtest(
     services: EngineServices,
-    principal: AuthPrincipal,
+    _principal: AuthPrincipal,
     arguments: dict[str, Any],
     progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
