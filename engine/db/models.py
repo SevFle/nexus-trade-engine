@@ -26,6 +26,13 @@ class User(Base):
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     display_name: Mapped[str] = mapped_column(String(100))
     is_active: Mapped[bool] = mapped_column(default=True)
+    # GDPR Art. 18 restriction flag (gh#157). When True, all processing
+    # except retention-critical background jobs is halted (e.g. live
+    # trading auto-stops). The user can still authenticate to manage
+    # their privacy settings — this is *not* account deactivation.
+    processing_restricted: Mapped[bool] = mapped_column(
+        default=False, server_default="false"
+    )
     role: Mapped[str] = mapped_column(String(20), default="user")
     auth_provider: Mapped[str] = mapped_column(String(20), default="local")
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -343,6 +350,72 @@ class DSRequest(Base):
     )
 
     __table_args__ = (Index("ix_dsr_requests_user_kind_status", "user_id", "kind", "status"),)
+
+
+class ConsentRecord(Base):
+    """GDPR / CCPA consent to processing, per purpose (gh#157).
+
+    Append-only ledger: the newest row per ``(user_id, purpose)`` is the
+    current state. A ``granted=True`` row records consent (with
+    ``granted_at``); withdrawing writes a fresh ``granted=False`` row
+    (with ``withdrawn_at``). Versioned like legal acceptances so an
+    operator can rev the purpose vocabulary and re-prompt.
+    """
+
+    __tablename__ = "consent_records"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    # core_ops | analytics | marketing
+    purpose: Mapped[str] = mapped_column(String(32), index=True)
+    granted: Mapped[bool] = mapped_column(default=True)
+    version: Mapped[str] = mapped_column(String(20), default="1.0.0")
+    # settings | onboarding | admin
+    source: Mapped[str] = mapped_column(String(32), default="settings")
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    granted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (
+        Index("ix_consent_user_purpose_time", "user_id", "purpose", "created_at"),
+    )
+
+
+class DeletionSchedule(Base):
+    """Post-grace anonymization schedule for a deletion request (gh#157).
+
+    Created when the deletion grace window opens; flipped to ``purged``
+    once :func:`engine.privacy.deletion.anonymize_user` has run. Carries
+    any retention exceptions (records kept past deletion for legal
+    reasons — e.g. trade records for 7 years) so the periodic review job
+    governed by the retention module (gh#90) has a source of truth.
+    """
+
+    __tablename__ = "deletion_schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    dsr_request_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("dsr_requests.id", ondelete="CASCADE"), index=True
+    )
+    scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # scheduled | purged | cancelled
+    status: Mapped[str] = mapped_column(String(32), default="scheduled")
+    retention_exceptions: Mapped[dict] = mapped_column(JSONB, default=dict)  # type: ignore[assignment]
+    purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    anonymized_label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    __table_args__ = (Index("ix_deletion_schedule_status_due", "status", "scheduled_for"),)
 
 
 class ApiKey(Base):

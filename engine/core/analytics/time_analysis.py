@@ -3,7 +3,7 @@
 Pydantic model for the 10 time-series / chart datasets (taxonomy items
 77-86). Each field maps 1:1 to a chart the analytics dashboard renders:
 
-- ``monthly_heatmap``      — 77  years × months returns grid
+- ``monthly_heatmap``      — 77  years x months returns grid
 - ``day_of_week_returns``  — 78  Mon-Sun average returns
 - ``hour_of_day_returns``  — 79  intraday average returns
 - ``rolling_sharpe``       — 80  30d / 90d rolling Sharpe
@@ -17,11 +17,12 @@ Pydantic model for the 10 time-series / chart datasets (taxonomy items
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
-from engine.core.analytics.returns import PeriodReturn
+if TYPE_CHECKING:
+    from engine.core.analytics.returns import PeriodReturn
 
 
 class TimeAnalysis(BaseModel):
