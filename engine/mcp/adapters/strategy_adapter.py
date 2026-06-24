@@ -36,8 +36,8 @@ def _summarize(name: str, manifest: dict[str, Any]) -> dict[str, Any]:
 
 async def list_strategies(
     services: EngineServices,
-    principal: AuthPrincipal,
-    arguments: dict[str, Any],
+    _principal: AuthPrincipal,
+    _arguments: dict[str, Any],
 ) -> dict[str, Any]:
     discovered = _discover(services)
     strategies = [_summarize(name, entry.get("manifest") or {}) for name, entry in discovered.items()]
@@ -46,7 +46,7 @@ async def list_strategies(
 
 async def get_strategy_details(
     services: EngineServices,
-    principal: AuthPrincipal,
+    _principal: AuthPrincipal,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     name = arguments.get("strategy_name")

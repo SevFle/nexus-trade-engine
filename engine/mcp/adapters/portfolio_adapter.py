@@ -27,7 +27,7 @@ def _resolve_portfolio(services: EngineServices, arguments: dict[str, Any]):
 
 async def get_portfolio_status(
     services: EngineServices,
-    principal: AuthPrincipal,
+    _principal: AuthPrincipal,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     portfolio, portfolio_id = _resolve_portfolio(services, arguments)
@@ -47,7 +47,7 @@ async def get_portfolio_status(
 
 async def get_positions(
     services: EngineServices,
-    principal: AuthPrincipal,
+    _principal: AuthPrincipal,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     portfolio, portfolio_id = _resolve_portfolio(services, arguments)
@@ -78,7 +78,7 @@ async def get_positions(
 
 async def get_orders(
     services: EngineServices,
-    principal: AuthPrincipal,
+    _principal: AuthPrincipal,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     portfolio, portfolio_id = _resolve_portfolio(services, arguments)
