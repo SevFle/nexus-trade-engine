@@ -22,6 +22,7 @@ We follow the [MADR](https://adr.github.io/madr/) format. See
 | 0007   | Accepted | [Strategy sandbox — allowlist import model](0007-strategy-sandbox-allowlist-imports.md) |
 | 0008   | Accepted | [Pluggable MetricsBackend Protocol (over hard-coded Prometheus)](0008-pluggable-metrics-backend.md) |
 | 0009   | Accepted | [Cross-replica WebSocket event delivery via Redis pub/sub bridge](0009-cross-replica-eventbus-bridge.md) |
+| 0010   | Accepted (impl in progress) | [MCP server — reuse engine auth/RBAC, standalone settings, stdio-first](0010-mcp-server.md) |
 
 When you accept a new ADR, add a row to this table in the same PR.
 
