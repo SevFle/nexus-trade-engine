@@ -16,6 +16,7 @@ edit this file by hand — it is regenerated as part of every release PR.
 - (fix) Fix check ordering in `engine/core/execution/live.py` `execute()` and the two failing tests in `tests/test_execution_backends.py`
 
 ### Internal
+- (fix) Fix schema drift guard to compare column types and nullable flags (not just names), remove a dead-code assertion, and extract the duplicated drift guard from `tests/test_auth.py` and `tests/test_auth_e2e.py` into `tests/helpers/drift_guard.py`
 - (fix) Fix missing fakeredis dependency causing test collection failure in tests/test_rate_limit.py
 
 
