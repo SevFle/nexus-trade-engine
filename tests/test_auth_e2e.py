@@ -52,6 +52,7 @@ def _build_metadata() -> MetaData:
         Column("hashed_password", String(255), nullable=True),
         Column("display_name", String(100), nullable=False),
         Column("is_active", Boolean, default=True),
+        Column("processing_restricted", Boolean, default=False),
         Column("role", String(20), default="user"),
         Column("auth_provider", String(20), default="local"),
         Column("external_id", String(255), nullable=True),
@@ -152,6 +153,31 @@ async def _login(client: AsyncClient, email: str, password: str = "testpassword1
 
 def _auth_header(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+async def _oauth_callback(
+    client: AsyncClient, provider: str, code: str | None = None
+):
+    """Drive the OAuth callback through its real two-step flow.
+
+    The ``/{provider}/authorize`` endpoint mints a CSRF ``state`` token and
+    stores it in an httponly cookie scoped to ``/api/v1/auth``; the
+    ``/{provider}/callback`` endpoint echoes that state back and the server
+    compares it to the cookie. Tests must honour this contract instead of
+    bypassing it (otherwise they trip the state guard with a 422/401), so this
+    helper performs the authorize step first — capturing the returned state
+    while the ``AsyncClient`` cookie jar retains the cookie — and then calls
+    the callback echoing the state.
+
+    Omit ``code`` to exercise the missing-code validation path.
+    """
+    authorize = await client.get(f"/api/v1/auth/{provider}/authorize")
+    assert authorize.status_code == 200, authorize.text
+    state = authorize.json()["state"]
+    params: dict[str, str] = {"state": state}
+    if code is not None:
+        params["code"] = code
+    return await client.get(f"/api/v1/auth/{provider}/callback", params=params)
 
 
 # ─── Auth Flow E2E ────────────────────────────────────────────────────────────
@@ -504,7 +530,6 @@ class TestRouteProtection:
 # ─── OAuth Flow (mocked) ─────────────────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="OAuth callback tests pre-date the state-cookie requirement; rewrite needed to plumb state + cookie through the mock client")
 class TestOAuthFlowMocked:
     async def test_authorize_returns_url_for_configured_provider(self, e2e_db: AsyncSession):
         from engine.api.auth.google import GoogleAuthProvider
@@ -576,7 +601,7 @@ class TestOAuthFlowMocked:
             ),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/v1/auth/google/callback?code=mock-auth-code")
+                resp = await _oauth_callback(client, "google", code="mock-auth-code")
                 assert resp.status_code == 200
                 data = resp.json()
                 assert "access_token" in data
@@ -602,7 +627,7 @@ class TestOAuthFlowMocked:
         app.dependency_overrides[get_db] = override_get_db
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.get("/api/v1/auth/google/callback")
+            resp = await _oauth_callback(client, "google")
             assert resp.status_code in (401, 422)
         app.dependency_overrides.clear()
 
@@ -630,7 +655,7 @@ class TestOAuthFlowMocked:
             return_value=AuthResult(success=False, error="Invalid authorization code"),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/v1/auth/google/callback?code=bad-code")
+                resp = await _oauth_callback(client, "google", code="bad-code")
                 assert resp.status_code == 401
         app.dependency_overrides.clear()
 
@@ -682,7 +707,7 @@ class TestOAuthFlowMocked:
             ),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/v1/auth/google/callback?code=first-code")
+                resp = await _oauth_callback(client, "google", code="first-code")
                 assert resp.status_code == 200
 
         from sqlalchemy import select
@@ -751,17 +776,83 @@ class TestOAuthFlowMocked:
             return_value=auth_result,
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                first = await client.get("/api/v1/auth/google/callback?code=first-code")
+                first = await _oauth_callback(client, "google", code="first-code")
                 assert first.status_code == 200
                 first_data = first.json()
 
-                second = await client.get("/api/v1/auth/google/callback?code=second-code")
+                second = await _oauth_callback(client, "google", code="second-code")
                 assert second.status_code == 200
                 second_data = second.json()
 
                 first_decode = decode_token(first_data["access_token"])
                 second_decode = decode_token(second_data["access_token"])
                 assert first_decode["sub"] == second_decode["sub"]
+        app.dependency_overrides.clear()
+
+    async def test_callback_rejects_state_without_cookie_401(
+        self, e2e_db: AsyncSession
+    ):
+        """The state-cookie CSRF guard rejects callbacks whose state was not
+        minted by this server's own ``/authorize`` step (no matching cookie),
+        even when a provider is configured and code/state are present.
+
+        Regression guard for the state-cookie requirement that motivated
+        un-skipping the OAuth callback tests (#732). Without this guard the
+        original failures (422/401, formerly misreported as 'Account is
+        disabled') would silently return.
+        """
+        from engine.api.auth.google import GoogleAuthProvider
+        from engine.api.auth.registry import AuthProviderRegistry
+
+        app = create_app()
+        registry = AuthProviderRegistry()
+        registry.register(GoogleAuthProvider())
+        app.state.auth_registry = registry
+
+        async def override_get_db():
+            yield e2e_db
+
+        app.dependency_overrides[get_db] = override_get_db
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # No prior /authorize ⇒ no oauth_state_google cookie. A state
+            # value pulled from thin air must be rejected as a CSRF attempt.
+            resp = await client.get(
+                "/api/v1/auth/google/callback",
+                params={"code": "x", "state": "forged-state"},
+            )
+            assert resp.status_code == 401
+            assert "state" in resp.json()["detail"].lower()
+        app.dependency_overrides.clear()
+
+    async def test_callback_rejects_mismatched_state_401(
+        self, e2e_db: AsyncSession
+    ):
+        """Even with a valid cookie set by ``/authorize``, a callback echoing
+        a *different* state must be rejected."""
+        from engine.api.auth.google import GoogleAuthProvider
+        from engine.api.auth.registry import AuthProviderRegistry
+
+        app = create_app()
+        registry = AuthProviderRegistry()
+        registry.register(GoogleAuthProvider())
+        app.state.auth_registry = registry
+
+        async def override_get_db():
+            yield e2e_db
+
+        app.dependency_overrides[get_db] = override_get_db
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            authorize = await client.get("/api/v1/auth/google/authorize")
+            assert authorize.status_code == 200
+            # cookie now holds the real state; echo a mismatched one.
+            resp = await client.get(
+                "/api/v1/auth/google/callback",
+                params={"code": "x", "state": "not-the-real-state"},
+            )
+            assert resp.status_code == 401
+            assert "state" in resp.json()["detail"].lower()
         app.dependency_overrides.clear()
 
 
