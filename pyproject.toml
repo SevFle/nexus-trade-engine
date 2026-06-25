@@ -134,7 +134,7 @@ ignore = ["S101", "TRY003", "PLR0913"]
 "sdk/nexus_sdk/testing.py" = ["ARG002", "E501"]
 "sdk/setup.py" = ["E501", "SIM115"]
 "strategies/examples/**/*.py" = ["PLR2004", "E501", "F401"]
-"scripts/*.py" = ["S110", "E501", "SIM115"]
+"scripts/*.py" = ["S110", "E501", "SIM115", "T201", "T203", "S603", "S607"]
 "tests/*" = ["PLR2004", "S105", "S106", "PT019", "PLC0415", "ARG001", "ARG002", "ARG005", "PT011", "PT018", "E501", "SLF001", "TC002", "TC003", "B008", "N806", "DTZ001"]
 
 [tool.ruff.lint.isort]
