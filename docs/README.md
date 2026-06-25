@@ -44,6 +44,7 @@ we explain *why*, not *what*.
 | Know what's broken or half-built | [`known-limitations.md`](known-limitations.md) |
 | Understand the test-coverage gate & ramp | [`coverage-ramp.md`](coverage-ramp.md) · [`adr/0010-coverage-ramp-policy.md`](adr/0010-coverage-ramp-policy.md) |
 | Debug a production incident | [`operations/runbooks/common-issues.md`](operations/runbooks/common-issues.md) |
+| Track roadmap status (umbrella #166) | [`adr/0011-roadmap-manifest.md`](adr/0011-roadmap-manifest.md) · `scripts/roadmap_status.py` |
 
 ## Layout
 
@@ -63,7 +64,9 @@ docs/
 │   ├── 0006-bcrypt-fernet.md
 │   ├── 0007-strategy-sandbox-allowlist-imports.md
 │   ├── 0008-pluggable-metrics-backend.md
-│   └── 0009-cross-replica-eventbus-bridge.md
+│   ├── 0009-cross-replica-eventbus-bridge.md
+│   ├── 0010-coverage-ramp-policy.md
+│   └── 0011-roadmap-manifest.md
 ├── api-reference.md                ← every HTTP/WS route, auth, schemas
 ├── data-model.md                   ← entities, relationships, invariants
 ├── deployment.md                   ← infra requirements, env, rollout

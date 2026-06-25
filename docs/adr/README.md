@@ -23,6 +23,7 @@ We follow the [MADR](https://adr.github.io/madr/) format. See
 | 0008   | Accepted | [Pluggable MetricsBackend Protocol (over hard-coded Prometheus)](0008-pluggable-metrics-backend.md) |
 | 0009   | Accepted | [Cross-replica WebSocket event delivery via Redis pub/sub bridge](0009-cross-replica-eventbus-bridge.md) |
 | 0010   | Accepted | [Phased test-coverage ramp](0010-coverage-ramp-policy.md) |
+| 0011   | Accepted | [Roadmap manifest as machine-readable source of truth](0011-roadmap-manifest.md) |
 
 When you accept a new ADR, add a row to this table in the same PR.
 

@@ -1,0 +1,231 @@
+# Nexus Trade Engine — Roadmap manifest.
+#
+# This is the machine-readable source of truth for the post-gap-analysis
+# roadmap tracked by umbrella issue #166. It encodes:
+#
+#   * the six delivery buckets and their `bucket:*` labels,
+#   * the 57 underlying work issues (#109–#165) grouped per bucket,
+#   * the key dependency chains,
+#   * the exit criteria for each bucket, and
+#   * the peer initiatives that interact with this roadmap but are
+#     tracked under their own umbrellas.
+#
+# Issue *status* (open / closed) is intentionally NOT stored here — that
+# state lives in GitHub. The manifest only stores structural truth; the
+# :mod:`engine.roadmap` module accepts a runtime status map to compute
+# completion, readiness, and chain progress. Keeping the two concerns
+# separate means this file changes rarely while status queries are fresh.
+#
+# When an issue is added/removed, update BOTH this file and umbrella #166.
+
+tracking_issue: 166
+title: "Post-gap-analysis: 57 issues across 6 work buckets"
+
+buckets:
+  - label: foundation
+    name: "Foundation"
+    summary: "Must land before anything else. Infrastructure, data correctness, CI, market-calendar truth."
+    exit_criteria: >-
+      CI is green and required for merge; secrets are never plaintext;
+      every symbol has a canonical identity; every bar is validated;
+      every log line has a correlation id.
+    issues:
+      - number: 115
+        title: "Secrets management (Vault/KMS, rotation, encryption-at-rest)"
+      - number: 116
+        title: "GitHub Actions CI/CD pipeline (lint, test, build, publish)"
+      - number: 117
+        title: "Market data quality and validation pipeline"
+      - number: 113
+        title: "Market calendar system (holidays, sessions, per-venue rules)"
+      - number: 112
+        title: "Corporate actions handling (splits, dividends, spinoffs, mergers)"
+      - number: 131
+        title: "Reference data system (symbol master, ISIN/CUSIP/FIGI, GICS)"
+      - number: 145
+        title: "Structured logging with correlation IDs"
+
+  - label: safety
+    name: "Safety"
+    summary: "Everything required before real capital touches the engine. This is the pre-live gate."
+    exit_criteria: >-
+      no path to real-broker submission bypasses risk + audit; kill-switch
+      works via API, CLI, and flag file; chaos scenarios pass; auth
+      supports MFA with session management; security headers and CI
+      scanning are enforced.
+    issues:
+      - number: 109
+        title: "Live trading orchestration loop (reconciliation, recovery, kill-switch)"
+      - number: 110
+        title: "Pre-trade risk management engine (limits + circuit breakers)"
+      - number: 111
+        title: "Order Management System (bracket, OCO, TWAP/VWAP/POV/Iceberg)"
+      - number: 114
+        title: "Immutable audit log and trade journal"
+      - number: 126
+        title: "MFA / 2FA (TOTP + WebAuthn)"
+      - number: 127
+        title: "Session management (idle timeout, revocation)"
+      - number: 128
+        title: "CSP, CORS, CSRF, security headers"
+      - number: 129
+        title: "Security scanning in CI (SAST/deps/containers/secrets/SBOM)"
+      - number: 130
+        title: "API rate limiting, quotas, abuse protection"
+      - number: 139
+        title: "Chaos and fault-injection for live-trading loop"
+
+  - label: trust
+    name: "Trust"
+    summary: "Quant rigor: the math you show a user must be honest, and broker behavior must be verified against real sandboxes."
+    exit_criteria: >-
+      strategies cannot reach `live` without WFA + Monte Carlo + paper-window
+      evidence; real broker sandboxes run clean in CI; golden backtests pin
+      core math against regressions.
+    issues:
+      - number: 119
+        title: "Walk-forward analysis and cross-validation"
+      - number: 120
+        title: "Parameter optimization engine (grid/Bayesian/genetic/Hyperband)"
+      - number: 121
+        title: "Monte Carlo robustness testing"
+      - number: 122
+        title: "Post-trade Transaction Cost Analysis (TCA)"
+      - number: 123
+        title: "Portfolio optimization primitives (MVO, risk parity, HRP, Black-Litterman)"
+      - number: 124
+        title: "Strategy lifecycle and promotion gates"
+      - number: 125
+        title: "Strategy versioning and immutable deployments"
+      - number: 136
+        title: "Broker sandbox integration tests (Alpaca, IBKR, Binance, Kraken, Oanda)"
+      - number: 138
+        title: "Backtest golden-file regression tests"
+
+  - label: productization
+    name: "Productization"
+    summary: "Everything required to ship a polished v1 to end users — docs, UX, legal, compliance."
+    exit_criteria: >-
+      a fresh user reaches their first backtest in under 10 minutes,
+      accessibility is audited, legal surfaces are in place, regulatory
+      exports reconcile with the tax engine, GDPR/CCPA rights are
+      exercisable end-to-end.
+    issues:
+      - number: 118
+        title: "End-user documentation (tutorials, user manual, deployment guide)"
+      - number: 148
+        title: "WCAG 2.1 AA accessibility conformance"
+      - number: 149
+        title: "First-run onboarding wizard"
+      - number: 150
+        title: "In-app notification center"
+      - number: 151
+        title: "User settings and preferences page"
+      - number: 152
+        title: "Theming and dark mode (design tokens)"
+      - number: 153
+        title: "Error boundaries and empty/loading/error states"
+      - number: 154
+        title: "Risk disclaimers, EULA, Terms of Service, legal-notice surfaces"
+      - number: 155
+        title: "Regulatory reports (1099-B, Sched D, 1256, MiFID II, HMRC, KESt)"
+      - number: 156
+        title: "Wash-sale detection and enforcement across portfolios"
+      - number: 157
+        title: "GDPR/CCPA data-subject request handling"
+
+  - label: scale
+    name: "Scale"
+    summary: "Production operability: observability, deploy strategy, backup/DR, and the data-layer features that matter at scale."
+    exit_criteria: >-
+      a release can be safely deployed via canary with auto-rollback,
+      operators have dashboards + runbooks out of the box, backups are
+      verified monthly, alt-data and streaming scale without surprise.
+    issues:
+      - number: 132
+        title: "Alternative data adapters (news, sentiment, fundamentals, earnings)"
+      - number: 133
+        title: "Real-time stream backpressure, buffering, replay"
+      - number: 134
+        title: "Data lineage tracking"
+      - number: 135
+        title: "Frontend E2E test suite (Playwright)"
+      - number: 137
+        title: "Load and performance regression suite (k6)"
+      - number: 140
+        title: "Semantic versioning, changelog automation, release workflow"
+      - number: 141
+        title: "Multi-arch GHCR image publishing with signing + SBOM"
+      - number: 142
+        title: "Terraform reference modules (AWS + GCP + Azure)"
+      - number: 143
+        title: "Backup, restore, DR procedures with PITR"
+      - number: 144
+        title: "Blue/green and canary deploy with live-worker handoff"
+      - number: 146
+        title: "Grafana dashboards + alert runbook library"
+      - number: 147
+        title: "SLOs, error budgets, burn-rate alerts"
+
+  - label: community
+    name: "Community"
+    summary: "Ecosystem, governance, and extensibility. Post-v1 but high leverage for adoption."
+    exit_criteria: >-
+      contributors can ramp via CONTRIBUTING + Discussions; SDKs are
+      published; monetization is opt-in and tested; governance docs name
+      maintainers and processes.
+    issues:
+      - number: 158
+        title: "Strategy marketplace monetization (Stripe Connect)"
+      - number: 159
+        title: "Python and TypeScript SDK client libraries"
+      - number: 160
+        title: "Migration guides from Backtrader, QuantConnect, Zipline"
+      - number: 161
+        title: "CODE_OF_CONDUCT, issue/PR templates, SECURITY, GOVERNANCE, Discussions"
+      - number: 162
+        title: "A/B testing and shadow mode for live strategies"
+      - number: 163
+        title: "Mobile-app decision document (ADR 0001)"
+      - number: 164
+        title: "Keyboard shortcuts and command palette"
+      - number: 165
+        title: "Data governance and PII classification policy"
+
+chains:
+  - slug: pre-live-safety
+    name: "Pre-live-trading safety chain"
+    issues: [115, 116, 110, 109, 111, 114, 139]
+    terminal: "production"
+  - slug: backtest-correctness
+    name: "Backtest correctness chain"
+    issues: [113, 112, 117, 131, 138]
+  - slug: strategy-trust
+    name: "Strategy trust chain"
+    issues: [119, 120, 121, 124, 125, 162]
+  - slug: observability
+    name: "Observability chain"
+    issues: [145, 146, 147, 144]
+  - slug: compliance
+    name: "Compliance chain"
+    issues: [114, 157, 156, 155, 154]
+  - slug: frontend-polish
+    name: "Frontend polish chain"
+    issues: [152, 148, 153, 149, 150, 151, 164]
+
+# Peer initiatives that interact with the buckets above but are tracked
+# under their own umbrellas. `covers` is empty when an initiative has no
+# enumerated child range in the roadmap text.
+initiatives:
+  - name: "MCP"
+    tracking_issue: 99
+    covers: [100, 101, 102, 103, 104, 105, 106, 107, 108]
+    note: "Peer initiative; Bucket 3/4 work depends on MCP for external surfaces."
+  - name: "Multi-asset"
+    tracking_issue: null
+    covers: [77, 78, 79, 83, 84, 91, 92]
+    note: "Prerequisites woven through all buckets."
+  - name: "Tax foundation"
+    tracking_issue: null
+    covers: [4, 81, 82]
+    note: "Feeds Bucket 4 compliance work."
