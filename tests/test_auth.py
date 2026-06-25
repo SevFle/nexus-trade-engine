@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import JSON, Boolean, Column, DateTime, MetaData, String, Table, Text, Uuid
+from sqlalchemy import JSON, Boolean, Column, DateTime, MetaData, String, Table, Text, Uuid, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from engine.api.auth.jwt import create_access_token, decode_token
@@ -41,6 +41,7 @@ async def auth_engine():
         Column("hashed_password", String(255), nullable=True),
         Column("display_name", String(100), nullable=False),
         Column("is_active", Boolean, default=True),
+        Column("processing_restricted", Boolean, default=False, server_default=text("0")),
         Column("role", String(20), default="user"),
         Column("auth_provider", String(20), default="local"),
         Column("external_id", String(255), nullable=True),

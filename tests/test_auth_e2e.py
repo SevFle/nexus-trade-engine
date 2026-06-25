@@ -27,6 +27,7 @@ from sqlalchemy import (
     Table,
     Text,
     Uuid,
+    text,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -52,6 +53,7 @@ def _build_metadata() -> MetaData:
         Column("hashed_password", String(255), nullable=True),
         Column("display_name", String(100), nullable=False),
         Column("is_active", Boolean, default=True),
+        Column("processing_restricted", Boolean, default=False, server_default=text("0")),
         Column("role", String(20), default="user"),
         Column("auth_provider", String(20), default="local"),
         Column("external_id", String(255), nullable=True),
@@ -837,3 +839,28 @@ class TestEdgeCases:
     async def test_empty_body_login_422(self, e2e_client: AsyncClient):
         resp = await e2e_client.post("/api/v1/auth/login", json={})
         assert resp.status_code == 422
+
+
+class TestHandRolledSchemaCoversUserModel:
+    """Regression guard for the schema-drift bug where the hand-rolled
+    ``users`` table (built by ``_build_metadata``) silently dropped a column
+    that the ORM ``User`` model declares — e.g. ``processing_restricted``
+    (gh#157). When that happens the ORM issues a SELECT for a column the
+    SQLite test DB doesn't have, and every auth e2e test blows up with
+    ``sqlite3.OperationalError: no such column``.
+
+    We deliberately only check column *presence* (not types/nullable):
+    the hand-rolled schema intentionally uses simplified types on SQLite
+    (e.g. ``Float`` for ``initial_capital``, ``JSON`` for ``mfa_backup_codes``)
+    which would false-positive on a full ``assert_no_schema_drift``.
+    """
+
+    def test_build_metadata_users_has_all_user_model_columns(self):
+        metadata = _build_metadata()
+        declared = set(User.__table__.columns.keys())
+        materialised = set(metadata.tables["users"].columns.keys())
+        missing = declared - materialised
+        assert not missing, (
+            "hand-rolled 'users' table is missing columns declared by the "
+            f"User ORM model: {sorted(missing)}. Add them to _build_metadata()."
+        )
