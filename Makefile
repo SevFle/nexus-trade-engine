@@ -3,7 +3,7 @@
 .PHONY: help dev test lint fix typecheck migrate \
         docker-up docker-down docker-build \
         docker-dev docker-dev-down docker-dev-logs docker-dev-build docker-dev-rebuild \
-        coverage-check coverage-bump
+        coverage-check coverage-bump coverage-check-modules coverage-bump-modules
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -35,6 +35,14 @@ coverage-check: ## Verify every module meets its per-module floor (issue #648)
 coverage-bump: ## Dry-run: show per-module floor bumps toward current coverage (issue #648)
 	uv run coverage json -o .coverage.json
 	uv run python scripts/coverage_ramp.py --coverage-json .coverage.json --floors config/coverage-floors.json bump
+
+coverage-check-modules: ## Verify every module meets its per-module (dir) floor — per-PR CI gate (issue #656)
+	uv run coverage json -o .coverage.json
+	uv run python scripts/coverage_ramp.py --coverage-json .coverage.json --module-level check
+
+coverage-bump-modules: ## Dry-run: show per-module (dir) floor bumps toward current coverage (issue #656)
+	uv run coverage json -o .coverage.json
+	uv run python scripts/coverage_ramp.py --coverage-json .coverage.json --module-level bump
 
 migrate-new: ## Create a new migration (usage: make migrate-new msg="description")
 	uv run alembic revision --autogenerate -m "$(msg)"

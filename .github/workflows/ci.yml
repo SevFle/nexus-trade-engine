@@ -52,6 +52,19 @@ jobs:
           NEXUS_APP_ENV: test
         run: python -m pytest tests -v --tb=short --junitxml=test-results.xml
 
+      # Per-module (parent-directory) coverage gate (issue #656).
+      # Coarser and lower-variance than the per-file ramp (#648, weekly),
+      # so it is safe to run on every PR. Floors live in
+      # config/coverage-module-floors.json; see docs/coverage-ramp.md.
+      - name: Per-module coverage gate
+        env:
+          NEXUS_APP_ENV: test
+        run: |
+          python -m coverage json -o .coverage.json
+          python scripts/coverage_ramp.py \
+            --coverage-json .coverage.json \
+            --module-level check
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()

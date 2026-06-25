@@ -44,6 +44,11 @@ from typing import Any
 # the repo root; ``main`` resolves it via Path(__file__).
 DEFAULT_FLOORS_PATH = "config/coverage-floors.json"
 
+# The per-module (parent-directory) floors — a coarser, lower-variance
+# view of the same coverage data. This is the gate promoted into the
+# per-PR CI (issue #656); the per-file gate above runs weekly only.
+DEFAULT_MODULE_FLOORS_PATH = "config/coverage-module-floors.json"
+
 # Default headroom (in percentage points) between measured coverage and
 # the floor we record. Per issue #648 step 2: "current - 1%".
 DEFAULT_HEADROOM = 1.0
@@ -106,6 +111,53 @@ def parse_coverage_json(payload: Mapping[str, object]) -> dict[str, ModuleStat]:
         percent = float(summary.get("percent_covered", 0.0))
         out[str(path)] = ModuleStat(str(path), statements, missing, percent)
     return out
+
+
+def _percent(statements: int, missing: int) -> float:
+    """Statement-weighted coverage percentage; 100 % when nothing is measurable.
+
+    Used when re-deriving a percentage from summed statement/missing
+    counts (i.e. when aggregating files into a module). Matching
+    ``coverage``'s own ``percent_covered = covered / statements``.
+    """
+    if statements <= 0:
+        return 100.0
+    return (statements - missing) / statements * 100.0
+
+
+def aggregate_modules(
+    measured: Mapping[str, ModuleStat],
+) -> dict[str, ModuleStat]:
+    """Roll per-file coverage up to per-module (parent-directory) coverage.
+
+    A *module* is a file's parent directory (e.g. ``engine/plugins``,
+    ``engine/core/oms``). Coverage is aggregated statement-weighted, so
+    a 300-statement file moves a module's number more than a
+    5-statement one. Top-level files with no parent directory are
+    dropped, as are empty buckets.
+
+    The result is keyed by module path, ready to feed straight into
+    ``ratchet_floors`` / ``check_floors`` / ``diff_floors`` — those are
+    path-keyed and don't care whether the key names a file or a module.
+    Per-module coverage has lower run-to-run variance than per-file
+    coverage (one flaky file is diluted by its siblings), which is why
+    the module-level gate is the one promoted into the per-PR CI gate
+    (issue #656) while the finer per-file gate runs weekly.
+    """
+    grouped: dict[str, dict[str, int]] = {}
+    for stat in measured.values():
+        module = os.path.dirname(stat.path)
+        if not module:
+            continue
+        bucket = grouped.setdefault(module, {"statements": 0, "missing": 0})
+        bucket["statements"] += stat.statements
+        bucket["missing"] += stat.missing
+    out: dict[str, ModuleStat] = {}
+    for module, counts in grouped.items():
+        statements = counts["statements"]
+        missing = counts["missing"]
+        out[module] = ModuleStat(module, statements, missing, _percent(statements, missing))
+    return dict(sorted(out.items()))
 
 
 def _floor_pct(percent: float, headroom: float) -> int:
@@ -336,6 +388,15 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_HEADROOM,
         help="Points below measured coverage to set the floor (default: 1.0).",
     )
+    parser.add_argument(
+        "--module-level",
+        action="store_true",
+        help=(
+            "Operate on per-module (parent-directory) aggregates instead of "
+            "per-file. Module coverage is statement-weighted and lower-variance, "
+            "so the module-level gate is the one wired into per-PR CI (issue #656)."
+        ),
+    )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("seed", help="Record initial floors = measured - headroom.")
     sub.add_parser("bump", help="Ratchet floors up to current coverage.")
@@ -357,7 +418,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     filtered = [a for a in (argv or sys.argv[1:]) if a != "--apply"]
     args = parser.parse_args(filtered)
 
+    # ``--module-level`` switches to the coarser per-module floors config
+    # unless the caller named a floors file explicitly.
+    if args.module_level and args.floors == DEFAULT_FLOORS_PATH:
+        args.floors = DEFAULT_MODULE_FLOORS_PATH
+
     measured = read_coverage_json(args.coverage_json)
+    if args.module_level:
+        measured = aggregate_modules(measured)
     existing = load_floors(args.floors)
 
     if args.command in {"seed", "bump"}:
