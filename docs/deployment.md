@@ -67,6 +67,19 @@ The worker overrides the entrypoint:
 Build is reproducible from `uv.lock` — never build from a dirty tree
 in CI.
 
+### MCP server (pending)
+
+A third entrypoint is planned for the same image: the MCP server
+([`engine/mcp/`](../engine/mcp/), documented in
+[`mcp-server.md`](mcp-server.md)). Its domain layer ships today, but
+the runnable transport shell does not — see
+[`known-limitations.md`](known-limitations.md). When the `stdio`/`http`
+assembly lands it will run as a sidecar process (`stdio` for IDE child
+processes, or `http` on `NEXUS_MCP_HTTP_PORT`) reusing the same image.
+It is **not** part of `engine/app.py` and does not need Postgres to
+start (it reads the engine's typed components directly). Plan capacity
+independently from the app/worker pair once it ships.
+
 ## Environment variables
 
 Every setting is declared in [`engine/config.py`](../engine/config.py).

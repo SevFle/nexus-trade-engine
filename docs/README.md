@@ -36,6 +36,7 @@ we explain *why*, not *what*.
 | Get a 10-minute mental model of the system | [`architecture/overview.md`](architecture/overview.md) |
 | Understand every table and its constraints | [`data-model.md`](data-model.md) |
 | Call the REST / WebSocket API | [`api-reference.md`](api-reference.md) |
+| Drive the engine from an LLM / coding agent | [`mcp-server.md`](mcp-server.md) |
 | Run the engine locally | [`development.md`](development.md) |
 | Ship a release | [`deployment.md`](deployment.md) · [`RELEASING.md`](RELEASING.md) |
 | Write a strategy plugin | [`PLUGIN_DEV_GUIDE.md`](PLUGIN_DEV_GUIDE.md) · [`architecture/plugins.md`](architecture/plugins.md) |
@@ -62,8 +63,10 @@ docs/
 │   ├── 0006-bcrypt-fernet.md
 │   ├── 0007-strategy-sandbox-allowlist-imports.md
 │   ├── 0008-pluggable-metrics-backend.md
-│   └── 0009-cross-replica-eventbus-bridge.md
+│   ├── 0009-cross-replica-eventbus-bridge.md
+│   └── 0010-mcp-server.md
 ├── api-reference.md                ← every HTTP/WS route, auth, schemas
+├── mcp-server.md                   ← MCP tools/resources for AI assistants
 ├── data-model.md                   ← entities, relationships, invariants
 ├── deployment.md                   ← infra requirements, env, rollout
 ├── development.md                  ← local setup, test suite, lint loop
@@ -108,6 +111,7 @@ same PR (enforced in CODEOWNERS, not yet in CI):
 | Code change | Required doc update |
 |---|---|
 | New / changed HTTP route | `api-reference.md` |
+| New / changed MCP tool or resource | `mcp-server.md` |
 | New / changed DB model or migration | `data-model.md` + `architecture/database.md` |
 | New env var | `deployment.md` + `architecture/overview.md` "Configuration" |
 | New SLO or alert | `operations/slos.md` + matching runbook under `operations/runbooks/` |

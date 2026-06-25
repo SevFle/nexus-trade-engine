@@ -138,6 +138,8 @@ key entry points:
   components, request lifecycle, configuration.
 - [API reference](docs/api-reference.md) — every HTTP and WebSocket
   route, auth model, error semantics.
+- [MCP server](docs/mcp-server.md) — the typed tool/resource surface
+  AI assistants and coding agents use to drive the engine.
 - [Data model](docs/data-model.md) — entities, relationships,
   invariants.
 - [Development setup](docs/development.md) — local stack, tests,
@@ -173,6 +175,10 @@ on the public API surface or not production-validated.
 - [x] Core architecture scaffold
 - [x] Backtest engine with full cost model (commissions, spread,
       slippage, taxes, wash-sale, holding costs)
+- [~] MCP server for AI assistants *(partial — domain layer ships in
+      `engine/mcp/` with 9 tools + 5 resources reusing engine JWT/RBAC;
+      the runnable `stdio`/`http` transport shell is pending — see
+      [mcp-server.md](docs/mcp-server.md))*
 - [ ] Plugin SDK v1.0 *(in progress — `sdk/nexus_sdk/` ships
       `IStrategy`/`Signal`/types/testing, marketplace install is a stub)*
 - [~] Paper trading execution *(partial — `engine/core/execution/paper.py`

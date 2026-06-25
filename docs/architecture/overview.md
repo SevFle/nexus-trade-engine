@@ -2,8 +2,9 @@
 
 Nexus Trade Engine is a Python service that backtests algorithmic
 trading strategies, runs them against live or paper broker
-connections, and exposes the results via a REST API and a React
-frontend. This document describes the moving pieces and how a request
+connections, and exposes the results via a REST API, a WebSocket
+stream, a React frontend, and an MCP server for AI assistants
+(see [`mcp-server.md`](../mcp-server.md)). This document describes the moving pieces and how a request
 flows through them.
 
 ## Components
@@ -73,6 +74,7 @@ React app under `frontend/`.
 | [`engine/observability/`](../../engine/observability/) | Structlog wiring, lineage middleware, pluggable metrics backend (gh#34). |
 | [`engine/plugins/`](../../engine/plugins/)        | Plugin SDK and runtime registry. See [plugins.md](plugins.md). |
 | [`engine/tasks/`](../../engine/tasks/)            | TaskIQ worker definitions for async work (backtests, scheduled jobs). |
+| [`engine/mcp/`](../../engine/mcp/)                | Model Context Protocol server — typed tools/resources that let AI assistants drive the engine. See [`mcp-server.md`](../mcp-server.md). |
 | [`engine/legal/`](../../engine/legal/)            | Legal-document acceptance (Terms / Privacy / etc.). |
 | [`engine/reference/`](../../engine/reference/)    | Static reference data (instruments, exchanges). |
 | [`frontend/`](../../frontend/)                    | React dashboard (Vite, React 18, Tailwind, react-query). |
@@ -171,6 +173,7 @@ without reading the source.
 | A new strategy / data provider / executor | A strategy package under [`strategies/<name>/`](../../strategies/) (manifest + `strategy.py`); a data provider via `engine/data/providers/` + the YAML registry. See [plugins.md](plugins.md). |
 | A new outbound integration (webhook template) | Extend [`engine/events/webhook_dispatcher.py:render_template`](../../engine/events/webhook_dispatcher.py) and the `_VALID_TEMPLATES` set in `routes/webhooks.py`. |
 | A new database table / column         | An Alembic revision in `engine/db/migrations/versions/`. See [database.md](database.md). |
+| A new capability for AI assistants     | A `ToolDefinition` + adapter under [`engine/mcp/`](../../engine/mcp/). See [`mcp-server.md`](../mcp-server.md). |
 | A new metric                          | Use `get_metrics()` from `engine/observability/metrics.py`. Add it to [`docs/operations/slos.md`](../operations/slos.md) **only** if it backs an SLO. |
 | A new SLO                             | [`docs/operations/slos.md`](../operations/slos.md) and [`observability/prometheus/slo-rules.yaml`](../../observability/prometheus/slo-rules.yaml) in the same PR. |
 

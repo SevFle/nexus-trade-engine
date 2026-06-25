@@ -73,6 +73,38 @@ The marketplace routes exist purely to lock the public API shape.
 
 ---
 
+## P1 — MCP server domain layer ships without a runnable transport
+
+**Where**: [`engine/mcp/`](../engine/mcp/) (see [`mcp-server.md`](mcp-server.md))
+
+The MCP server's *domain layer* is complete and tested via the dispatch
+path (`engine.mcp.handlers.dispatch_tool`): all nine tools, five
+resources, JWT/RBAC auth, cursor pagination, the `ResultGuard` token
+budget, per-principal rate limiting, error mapping, progress, and the
+`mcp.*` observability hooks. What is **not** present is the top-level
+transport assembly that wires those pieces into a runnable `stdio`/
+`http` process. `pyproject.toml` even carries a dangling
+`"engine/mcp/server.py"` per-file-ignore for a `server.py` that does
+not exist on disk, and `tests/mcp/` has no active test files.
+
+**Impact**: today you cannot run `nexus-mcp-server` as a process, so
+LLM clients cannot connect. The contract is real and stable (this doc
++ the ADR capture it); only the thin transport shell is missing.
+
+**Workaround today**: drive the engine via REST / WebSocket. The MCP
+code is exercised directly (in tests and by `dispatch_tool`) and is
+ready to be bound to an `mcp` SDK server in a follow-up.
+
+**Fix path**: add `engine/mcp/server.py` that builds an `mcp` SDK
+server from `mcp_tools()` + `RESOURCE_DEFINITIONS`, routes
+`tools/call` → `dispatch_tool` (with `extract_principal`, the
+`RateLimiter`, and a `ProgressReporter`), and supports both
+`stdio` and `http` transports from `MCPServerSettings`. Re-add the
+`tests/mcp/` coverage (it was emptied) and drop the dangling
+`server.py` ignore line once the file lands.
+
+---
+
 ## P1 — Data provider registry has no first-class credentials store
 
 **Where**: [`engine/data/providers/config.py`](../engine/data/providers/config.py),
@@ -231,11 +263,12 @@ SLO because live isn't shipped.
 
 ## P2 — Some decisions still lack an ADR
 
-[`docs/adr/`](adr/README.md) now captures nine decisions: scaffold
+[`docs/adr/`](adr/README.md) now captures ten decisions: scaffold
 (0001), auth/RBAC (0002), mobile/PWA (0003), TaskIQ (0004), Valkey
 (0005), bcrypt+Fernet (0006), the strategy sandbox allowlist import
-model (0007), the pluggable `MetricsBackend` Protocol (0008), and the
-cross-replica `EventBus` WebSocket bridge (0009). A handful of smaller
+model (0007), the pluggable `MetricsBackend` Protocol (0008), the
+cross-replica `EventBus` WebSocket bridge (0009), and the MCP server
+for AI assistants (0010). A handful of smaller
 decisions are still recorded only as PR descriptions or commit
 messages — e.g. the in-process backtest result store (this is tech
 debt to be fixed, P0 above, rather than an accepted architecture
