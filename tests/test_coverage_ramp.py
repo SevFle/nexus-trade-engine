@@ -136,6 +136,71 @@ class TestRatchetFloors:
         assert list(out) == ["engine/a.py", "engine/m.py", "engine/z.py"]
 
 
+class TestAggregateModules:
+    """Per-directory roll-up (issue #656) — the layer wired into per-PR CI."""
+
+    def test_groups_by_parent_directory(self):
+        measured = {
+            "engine/plugins/a.py": _stat("engine/plugins/a.py", stmts=100, missing=0, pct=100.0),
+            "engine/plugins/b.py": _stat("engine/plugins/b.py", stmts=100, missing=0, pct=100.0),
+            "engine/core/oms/x.py": _stat("engine/core/oms/x.py", stmts=100, missing=0, pct=100.0),
+        }
+        out = cr.aggregate_modules(measured)
+        assert set(out) == {"engine/plugins", "engine/core/oms"}
+        for stat in out.values():
+            assert stat.percent == 100.0
+
+    def test_is_statement_weighted_not_simple_mean(self):
+        # A 300-statement file at 50 % + a 100-statement file at 100 %
+        # is statement-weighted 62.5 %, *not* a plain mean of 75 %.
+        measured = {
+            "m/big.py": _stat("m/big.py", stmts=300, missing=150, pct=50.0),
+            "m/small.py": _stat("m/small.py", stmts=100, missing=0, pct=100.0),
+        }
+        out = cr.aggregate_modules(measured)
+        assert out["m"].statements == 400
+        assert out["m"].missing == 150
+        assert out["m"].percent == 62.5
+
+    def test_drops_files_without_a_parent_dir(self):
+        # Top-level files (no directory) are dropped, not bucketed under "".
+        measured = {
+            "loose.py": _stat("loose.py", stmts=10, missing=1, pct=90.0),
+            "pkg/x.py": _stat("pkg/x.py", stmts=10, missing=1, pct=90.0),
+        }
+        out = cr.aggregate_modules(measured)
+        assert set(out) == {"pkg"}
+
+    def test_empty_buckets_are_dropped(self):
+        # Every measured file has a parent dir, so feeding only top-level
+        # files yields an empty result (no empty "" key).
+        measured = {
+            "a.py": _stat("a.py", stmts=10, missing=1, pct=90.0),
+            "b.py": _stat("b.py", stmts=10, missing=1, pct=90.0),
+        }
+        assert cr.aggregate_modules(measured) == {}
+
+    def test_result_is_sorted_by_module_path(self):
+        measured = {
+            "z/mod.py": _stat("z/mod.py", stmts=10, missing=1, pct=90.0),
+            "a/mod.py": _stat("a/mod.py", stmts=10, missing=1, pct=90.0),
+            "m/mod.py": _stat("m/mod.py", stmts=10, missing=1, pct=90.0),
+        }
+        out = cr.aggregate_modules(measured)
+        assert list(out) == ["a", "m", "z"]
+
+    def test_feeds_into_ratchet_and_check_unchanged(self):
+        # The roll-up is path-keyed, so ratchet/check/diff work on it
+        # exactly as they do on per-file stats.
+        measured = {
+            "engine/plugins/a.py": _stat("engine/plugins/a.py", stmts=100, missing=8, pct=92.0),
+        }
+        rolled = cr.aggregate_modules(measured)
+        seeded = cr.ratchet_floors(rolled, {}, headroom=1.0)
+        assert seeded == {"engine/plugins": 91}
+        assert cr.check_floors(rolled, {"engine/plugins": 91}) == []
+
+
 class TestCheckFloors:
     def test_no_violations_when_all_above(self):
         measured = {"engine/a.py": _stat("engine/a.py", stmts=10, missing=1, pct=90.0)}
@@ -338,3 +403,52 @@ class TestMain:
             "engine/a.py": 91,
             "engine/b.py": 79,
         }
+
+    # --- --module-level (issue #656, the per-PR directory gate) ---
+
+    def _module_measured(self):
+        # Two directories: plugins at 92 %, core/oms at 80 %.
+        return {
+            "engine/plugins/a.py": _stat("engine/plugins/a.py", stmts=100, missing=8, pct=92.0),
+            "engine/core/oms/x.py": _stat("engine/core/oms/x.py", stmts=100, missing=20, pct=80.0),
+        }
+
+    def test_module_level_seed_writes_directory_floors(self, tmp_path, monkeypatch):
+        floors_path = tmp_path / "module-floors.json"
+        monkeypatch.setattr(cr, "read_coverage_json", lambda _p: self._module_measured())
+        rc = cr.main(["--module-level", "--floors", str(floors_path), "--apply", "seed"])
+        assert rc == 0
+        assert cr.load_floors(str(floors_path)) == {
+            "engine/plugins": 91,
+            "engine/core/oms": 79,
+        }
+
+    def test_module_level_check_passes(self, tmp_path, monkeypatch, capsys):
+        floors_path = tmp_path / "module-floors.json"
+        cr.save_floors(str(floors_path), {"engine/plugins": 91, "engine/core/oms": 79})
+        monkeypatch.setattr(cr, "read_coverage_json", lambda _p: self._module_measured())
+        rc = cr.main(["--module-level", "--floors", str(floors_path), "check"])
+        assert rc == 0
+        assert "OK:" in capsys.readouterr().out
+
+    def test_module_level_check_flags_directory_shortfall(self, tmp_path, monkeypatch, capsys):
+        floors_path = tmp_path / "module-floors.json"
+        cr.save_floors(str(floors_path), {"engine/core/oms": 95})
+        monkeypatch.setattr(cr, "read_coverage_json", lambda _p: self._module_measured())
+        rc = cr.main(["--module-level", "--floors", str(floors_path), "check"])
+        assert rc == 1
+        out = capsys.readouterr().out
+        assert "FAIL:" in out
+        assert "engine/core/oms" in out
+
+    def test_module_level_bump_is_monotonic(self, tmp_path, monkeypatch):
+        floors_path = tmp_path / "module-floors.json"
+        cr.save_floors(str(floors_path), {"engine/core/oms": 79})
+        measured = {
+            # directory coverage dropped to 50 % — floor must not fall
+            "engine/core/oms/x.py": _stat("engine/core/oms/x.py", stmts=100, missing=50, pct=50.0),
+        }
+        monkeypatch.setattr(cr, "read_coverage_json", lambda _p: measured)
+        rc = cr.main(["--module-level", "--floors", str(floors_path), "--apply", "bump"])
+        assert rc == 0
+        assert cr.load_floors(str(floors_path)) == {"engine/core/oms": 79}

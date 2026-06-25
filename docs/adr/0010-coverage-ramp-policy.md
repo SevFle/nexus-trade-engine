@@ -65,6 +65,29 @@ value that enforces it. `make test` mirrors the value via an explicit
 `--cov-fail-under` flag so the gate is visible in `make help`; CI
 enforces it through the same `pyproject.toml` on every run.
 
+### Three-layer enforcement
+
+The global floor above is the **coarsest** of three layers; issues
+#648 and #656 added two finer ratchets on top. All three are enforced
+by the same `scripts/coverage_ramp.py` engine; they differ in
+granularity and cadence:
+
+| Layer | Granularity | Cadence | Floors file | Gate |
+|---|---|---|---|---|
+| Global | whole project | every PR | `pyproject.toml` `fail_under` | `pytest` via `addopts` |
+| Per-module (dir) (#656) | one per source directory, statement-weighted | every PR | `config/coverage-module-floors.json` | `ci.yml` "Per-module coverage gate" |
+| Per-file (#648) | one per source file | weekly | `config/coverage-floors.json` | `.github/workflows/coverage-ramp.yml` |
+
+The split cadence is deliberate. Per-file coverage has high
+run-to-run variance (one flaky test or one large file swings a number),
+so gating every PR on it would flake the main gate; it therefore runs
+weekly, opens a bump PR, and surfaces regressions without blocking
+PRs. Per-directory coverage is statement-weighted across a directory's
+files, which dilutes that variance, so it **is** safe on every PR and
+is the layer wired into `ci.yml`. All ratchets are **monotonic** — a
+floor only ever rises — and are seeded at measured − 1 % (floored) so
+each starts with at least one point of headroom.
+
 ### Consequences
 
 - **Positive** — Every CI run fails below the floor; coverage can no
@@ -77,11 +100,17 @@ enforces it through the same `pyproject.toml` on every run.
   advance, or the floor stalls at 85 indefinitely. Branch coverage is
   deferred (see [coverage-ramp.md](../coverage-ramp.md)) so the gate
   under-reports logical paths until line coverage is at the ceiling.
-- **Neutral** — The two knobs (`pyproject.toml` `fail_under` and the
-  Makefile flag) must be bumped together; this is documented as a
+  The per-file weekly layer does not block PRs, so a file can regress
+  for up to a week before the weekly job flags it — the per-module
+  per-PR layer catches coarse regressions faster but not single-file
+  ones.
+- **Neutral** — The global knobs (`pyproject.toml` `fail_under` and
+  the Makefile flag) must be bumped together; this is documented as a
   checklist rather than automated, because a single source of truth
   plus an explicit mirror was judged more readable than a generated
-  value.
+  value. The two floors files are bumped via the same script with a
+  `--module-level` switch rather than two scripts, to keep one
+  ratchet implementation.
 
 ## Pros and Cons of the Options
 
@@ -117,6 +146,10 @@ enforces it through the same `pyproject.toml` on every run.
 - Policy guide: [`docs/coverage-ramp.md`](../coverage-ramp.md)
 - Enforcing config: `pyproject.toml` → `[tool.coverage.report]` and
   `[tool.pytest.ini_options] addopts`; `Makefile` → `test` target.
+- Floors baselines: `config/coverage-module-floors.json` (per-PR,
+  #656) and `config/coverage-floors.json` (weekly, #648).
+- Engine: `scripts/coverage_ramp.py` (`seed` / `bump` / `check`, plus
+  `--module-level`); tests in `tests/test_coverage_ramp.py`.
 - Related: [ADR-0004](0004-task-queue-taskiq.md) (the worker whose
   tasks this gate keeps testable), [known-limitations.md](../known-limitations.md)
   (the stubbed code that caps the realistic ceiling below 100 %).

@@ -9,16 +9,29 @@ The policy itself is recorded as [ADR-0010](adr/0010-coverage-ramp-policy.md).
 
 ## TL;DR
 
+The gate is **three layers**, coarsest to finest, each with its own
+source of truth and cadence:
+
+| Layer | Granularity | Cadence | Source of truth | Enforced by |
+|---|---|---|---|---|
+| **1. Global floor** | whole project (`engine` + `nexus_sdk`) | every PR | `pyproject.toml` → `[tool.coverage.report] fail_under` | `pytest` (`addopts` injects `--cov`) |
+| **2. Per-module (directory)** | one per source directory, statement-weighted | every PR | `config/coverage-module-floors.json` (issue #656) | `ci.yml` "Per-module coverage gate" step |
+| **3. Per-file** | one per source file | weekly | `config/coverage-floors.json` (issue #648) | `.github/workflows/coverage-ramp.yml` |
+
 | Thing | Value | Source of truth |
 |---|---|---|
 | Packages measured | `engine`, `nexus_sdk` | `pyproject.toml` → `[tool.pytest.ini_options] addopts` |
 | Measured baseline | 92.63 % | `pyproject.toml` → `[tool.coverage.report]` comment |
-| Ramp schedule | 85 → 88 → 90 → 92 → 93 | same comment |
-| **Current floor** | **85 % (phase 1 of 5)** | `pyproject.toml` → `fail_under` |
+| Ramp schedule (global) | 85 → 88 → 90 → 92 → 93 | same comment |
+| **Current global floor** | **85 % (phase 1 of 5)** | `pyproject.toml` → `fail_under` |
+| Per-module floors config | `config/coverage-module-floors.json` | per-PR CI gate (#656) |
+| Per-file floors config | `config/coverage-floors.json` | weekly ratchet (#648) |
+| Ratchet engine | `scripts/coverage_ramp.py` | `seed` / `bump` / `check` (+ `--module-level`) |
 | Reports | stdout (`term-missing`) + `htmlcov/index.html` | `addopts` |
 
-The floor is **above zero and below the measured baseline on purpose**
-— see "Why a ramp" below.
+The global floor is **above zero and below the measured baseline on
+purpose** — see "Why a ramp" below. The per-module and per-file layers
+sit on top of it as ratchets that can only ever tighten.
 
 ## Where the gate lives
 
@@ -195,43 +208,62 @@ To move from the current phase to the next:
 - [development.md](development.md) — the `make test` / lint / typecheck
   loop this gate plugs into.
 
-## Per-module ramp (issue #648)
+## Per-module (directory) ramp (issue #656) — per-PR gate
 
-The global `fail_under` above is the **coarse** gate: it stops the
-*whole project* dropping below a floor. Issue #648 adds a finer layer
-on top — a **per-module ratchet** that records an individual floor for
-every source file and bumps each one upward as that file's measured
-coverage rises.
+On top of the global floor sits a **per-directory ratchet**: one floor
+per source directory (e.g. `engine/plugins`, `engine/core/oms`),
+aggregated statement-weighted across the files in it. Because a single
+flaky file is diluted by its siblings, per-directory coverage has much
+lower run-to-run variance than per-file coverage, so this is the layer
+that is **safe to gate every PR on**. It is wired into
+`.github/workflows/ci.yml` as the "Per-module coverage gate" step.
+
+| Thing | Value | Source of truth |
+|---|---|---|
+| Floors config | `config/coverage-module-floors.json` | checked-in baseline (`level: "module"`) |
+| Aggregation | `aggregate_modules` (statement-weighted, by parent dir) | `scripts/coverage_ramp.py` |
+| CI gate | `ci.yml` → "Per-module coverage gate" | runs `--module-level check` on every PR |
+| Local targets | `make coverage-check-modules`, `make coverage-bump-modules` | `Makefile` |
+
+Floors are seeded at **measured − 1 %** (floored) and the ratchet is
+**monotonic** — a floor only ever rises. The per-PR CI step runs
+`--module-level check`; raising a floor is a deliberate, reviewed act
+(see "Bumping the floors" below), so the floor map in
+`config/coverage-module-floors.json` advances more slowly than the
+measured coverage and keeps real headroom.
+
+## Per-file ramp (issue #648) — weekly ratchet
+
+The finest layer is a **per-file ratchet**: one floor per source file.
+Per-file numbers are noisier (one flaky test or one big file swings
+them), so this layer is **not** in the per-PR gate — it runs weekly in
+`.github/workflows/coverage-ramp.yml`, which re-measures coverage,
+ratchets any floor whose measured coverage rose, and opens a review
+PR. It surfaces regressions early even when the per-PR layers still
+green; the violation list it prints is the actionable output.
 
 | Thing | Value | Source of truth |
 |---|---|---|
 | Floors config | `config/coverage-floors.json` | checked-in baseline |
-| Engine | `scripts/coverage_ramp.py` | `seed` / `bump` / `check` |
 | Weekly bump job | `.github/workflows/coverage-ramp.yml` | Mondays 03:17 UTC |
 | Local targets | `make coverage-check`, `make coverage-bump` | `Makefile` |
 
-The floors are seeded at **measured − 1 %** (floored), so every module
-starts passing with at least one point of headroom. The ratchet is
-**monotonic**: a floor can only ever go *up*, never down. The weekly
-job re-measures coverage and, for any module whose coverage rose,
-opens a PR bumping its floor — the bump is reviewed before it binds.
+Both ratchets use the same engine (`scripts/coverage_ramp.py`): the
+`--module-level` flag switches it from per-file to per-directory
+aggregation and points it at the per-module floors file. The same
+`seed` / `bump` / `check` subcommands work for both.
 
-The per-module `check` runs **weekly** (in the ramp workflow), not on
-every PR, deliberately: per-file coverage has more run-to-run variance
-than the global total, and wiring it into the per-PR gate before that
-variance is characterised would risk flakes on the main gate. Once a
-few weekly cycles confirm the floors are stable, `check` can be
-promoted into `.github/workflows/ci.yml` as a second gate.
-
-### Operating the ramp locally
+## Operating the ramps locally
 
 ```bash
-make test                # collect .coverage (enforces the global floor)
-make coverage-check      # fail if any module is below its floor
-make coverage-bump       # dry-run: show which floors would rise
+make test                     # collect .coverage (enforces the global floor)
+make coverage-check-modules   # FAIL: any directory below its floor (per-PR gate)
+make coverage-bump-modules    # dry-run: which directory floors would rise
+make coverage-check           # FAIL: any file below its floor (weekly layer)
+make coverage-bump            # dry-run: which file floors would rise
 ```
 
-To write the bumps (what the weekly job does in its PR):
+To write the bumps (what the weekly job does in its PR, per-file):
 
 ```bash
 uv run python scripts/coverage_ramp.py \
@@ -239,6 +271,33 @@ uv run python scripts/coverage_ramp.py \
   --floors config/coverage-floors.json bump --apply
 ```
 
-The logic (ratchet / check / diff) is unit-tested in
-`tests/test_coverage_ramp.py`; the I/O shells are kept thin on
-purpose.
+…or the directory-level equivalent (run manually; CI does not
+auto-bump the per-module file):
+
+```bash
+uv run python scripts/coverage_ramp.py \
+  --coverage-json .coverage.json \
+  --module-level bump --apply
+```
+
+## Bumping the floors
+
+Neither floors file should be hand-edited value-by-value — re-run the
+bump so the history stays monotonic and reviewable:
+
+1. Run `make test` to collect a fresh `.coverage`.
+2. Run the relevant `coverage-bump[-modules]` dry-run; review the diff.
+3. Re-run with `--apply` (or `APPLY=1`) to write the new floors.
+4. Commit `config/coverage-floors.json` and/or
+   `config/coverage-module-floors.json` and open a PR. CI must stay
+green at the new floors before merge.
+
+For the per-file layer, the weekly `coverage-ramp.yml` workflow does
+steps 1–4 automatically and opens the PR; for the per-module layer a
+maintainer runs them by hand (it gates every PR, so an auto-bump is
+deliberately not wired up).
+
+The selection / ratchet / check / diff logic is unit-tested in
+`tests/test_coverage_ramp.py` (including the `aggregate_modules`
+roll-up and the `--module-level` CLI path); the I/O shells are kept
+thin on purpose.
