@@ -17,12 +17,16 @@ Pydantic model for the 10 time-series / chart datasets (taxonomy items
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-if TYPE_CHECKING:
-    from engine.core.analytics.returns import PeriodReturn
+# NOTE: PeriodReturn is imported at runtime (not under TYPE_CHECKING) on
+# purpose. Pydantic resolves the ``list[PeriodReturn]`` annotations by
+# looking the name up in this module's globals at model-build time; a
+# TYPE_CHECKING-only import makes ``PerformanceReport()`` raise
+# "TimeAnalysis is not fully defined". Hence noqa: TC001.
+from engine.core.analytics.returns import PeriodReturn  # noqa: TC001
 
 
 class TimeAnalysis(BaseModel):

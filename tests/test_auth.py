@@ -3,21 +3,29 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import JSON, Boolean, Column, DateTime, MetaData, String, Table, Text, Uuid
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.compiler import compiles
 
 from engine.api.auth.jwt import create_access_token, decode_token
 from engine.app import create_app
 from engine.config import settings
+from engine.db.models import Base
 from engine.deps import get_db
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+# JSONB is a Postgres-only type; SQLite (used by the in-memory DB) needs a TEXT
+# fallback so Base.metadata.create_all() can build the schema straight from the
+# real ORM models instead of a hand-rolled Table() definition that drifts (the
+# drift was the root cause of the missing ``processing_restricted`` column).
+compiles(JSONB, "sqlite")(lambda type_, compiler, **kw: "TEXT")
 
 
 @pytest.fixture(scope="module")
@@ -32,39 +40,10 @@ def _set_test_settings():
 async def auth_engine():
     engine = create_async_engine("sqlite+aiosqlite://", echo=False)
 
-    metadata = MetaData()
-    Table(
-        "users",
-        metadata,
-        Column("id", Uuid, primary_key=True),
-        Column("email", String(255), unique=True, nullable=False),
-        Column("hashed_password", String(255), nullable=True),
-        Column("display_name", String(100), nullable=False),
-        Column("is_active", Boolean, default=True),
-        Column("role", String(20), default="user"),
-        Column("auth_provider", String(20), default="local"),
-        Column("external_id", String(255), nullable=True),
-        Column("mfa_enabled", Boolean, default=False, nullable=False),
-        Column("mfa_secret_encrypted", Text, nullable=True),
-        Column("mfa_backup_codes", JSON, nullable=True),
-        Column("created_at", DateTime, default=datetime.now),
-        Column("updated_at", DateTime, default=datetime.now, onupdate=datetime.now),
-    )
-    Table(
-        "refresh_tokens",
-        metadata,
-        Column("id", Uuid, primary_key=True),
-        Column("user_id", Uuid, nullable=False, index=True),
-        Column("token_hash", String(64), unique=True, nullable=False),
-        Column("expires_at", DateTime, nullable=False),
-        Column("revoked_at", DateTime, nullable=True),
-        Column("created_at", DateTime, default=datetime.now),
-        Column("user_agent", String(512), nullable=True),
-        Column("ip_address", String(45), nullable=True),
-    )
-
+    # Build the schema straight from the ORM models so the test DB can never
+    # drift from production (e.g. a missing column such as processing_restricted).
     async with engine.begin() as conn:
-        await conn.run_sync(metadata.create_all)
+        await conn.run_sync(Base.metadata.create_all)
     yield engine
     await engine.dispose()
 

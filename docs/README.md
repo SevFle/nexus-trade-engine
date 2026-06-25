@@ -42,6 +42,7 @@ we explain *why*, not *what*.
 | Understand non-obvious design choices | [`adr/`](adr/README.md) |
 | Operate the running system | [`operations/slos.md`](operations/slos.md) · [`operations/runbooks/`](operations/runbooks/README.md) |
 | Know what's broken or half-built | [`known-limitations.md`](known-limitations.md) |
+| Understand the test-coverage gate & ramp | [`coverage-ramp.md`](coverage-ramp.md) · [`adr/0010-coverage-ramp-policy.md`](adr/0010-coverage-ramp-policy.md) |
 | Debug a production incident | [`operations/runbooks/common-issues.md`](operations/runbooks/common-issues.md) |
 
 ## Layout

@@ -166,4 +166,7 @@ omit = ["tests/*", "engine/db/migrations/*"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-fail_under = 80
+# Coverage gate — see docs/coverage-ramp.md for the full ramp schedule.
+# Baseline (measured): 92.63%. Ramp: 85 -> 88 -> 90 -> 92 -> 93.
+# Current step: 85 (phase 1 of 5).
+fail_under = 85

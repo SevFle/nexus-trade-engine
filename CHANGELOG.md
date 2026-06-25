@@ -16,6 +16,7 @@ edit this file by hand — it is regenerated as part of every release PR.
 - (fix) Fix check ordering in `engine/core/execution/live.py` `execute()` and the two failing tests in `tests/test_execution_backends.py`
 
 ### Internal
+- (fix) Add missing `users.processing_restricted` column to the test SQLite schema so the 25 `test_auth_e2e.py` tests match the `User` ORM model and pass
 - (fix) Fix missing fakeredis dependency causing test collection failure in tests/test_rate_limit.py
 
 
