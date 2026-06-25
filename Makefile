@@ -2,7 +2,8 @@
 
 .PHONY: help dev test lint fix typecheck migrate \
         docker-up docker-down docker-build \
-        docker-dev docker-dev-down docker-dev-logs docker-dev-build docker-dev-rebuild
+        docker-dev docker-dev-down docker-dev-logs docker-dev-build docker-dev-rebuild \
+        coverage-check coverage-bump
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -26,6 +27,14 @@ typecheck: ## Run type checker
 
 migrate: ## Run database migrations
 	uv run alembic upgrade head
+
+coverage-check: ## Verify every module meets its per-module floor (issue #648)
+	uv run coverage json -o .coverage.json
+	uv run python scripts/coverage_ramp.py --coverage-json .coverage.json --floors config/coverage-floors.json check
+
+coverage-bump: ## Dry-run: show per-module floor bumps toward current coverage (issue #648)
+	uv run coverage json -o .coverage.json
+	uv run python scripts/coverage_ramp.py --coverage-json .coverage.json --floors config/coverage-floors.json bump
 
 migrate-new: ## Create a new migration (usage: make migrate-new msg="description")
 	uv run alembic revision --autogenerate -m "$(msg)"

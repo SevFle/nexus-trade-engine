@@ -194,3 +194,51 @@ To move from the current phase to the next:
   ignore list that intersects with test/code quality.
 - [development.md](development.md) — the `make test` / lint / typecheck
   loop this gate plugs into.
+
+## Per-module ramp (issue #648)
+
+The global `fail_under` above is the **coarse** gate: it stops the
+*whole project* dropping below a floor. Issue #648 adds a finer layer
+on top — a **per-module ratchet** that records an individual floor for
+every source file and bumps each one upward as that file's measured
+coverage rises.
+
+| Thing | Value | Source of truth |
+|---|---|---|
+| Floors config | `config/coverage-floors.json` | checked-in baseline |
+| Engine | `scripts/coverage_ramp.py` | `seed` / `bump` / `check` |
+| Weekly bump job | `.github/workflows/coverage-ramp.yml` | Mondays 03:17 UTC |
+| Local targets | `make coverage-check`, `make coverage-bump` | `Makefile` |
+
+The floors are seeded at **measured − 1 %** (floored), so every module
+starts passing with at least one point of headroom. The ratchet is
+**monotonic**: a floor can only ever go *up*, never down. The weekly
+job re-measures coverage and, for any module whose coverage rose,
+opens a PR bumping its floor — the bump is reviewed before it binds.
+
+The per-module `check` runs **weekly** (in the ramp workflow), not on
+every PR, deliberately: per-file coverage has more run-to-run variance
+than the global total, and wiring it into the per-PR gate before that
+variance is characterised would risk flakes on the main gate. Once a
+few weekly cycles confirm the floors are stable, `check` can be
+promoted into `.github/workflows/ci.yml` as a second gate.
+
+### Operating the ramp locally
+
+```bash
+make test                # collect .coverage (enforces the global floor)
+make coverage-check      # fail if any module is below its floor
+make coverage-bump       # dry-run: show which floors would rise
+```
+
+To write the bumps (what the weekly job does in its PR):
+
+```bash
+uv run python scripts/coverage_ramp.py \
+  --coverage-json .coverage.json \
+  --floors config/coverage-floors.json bump --apply
+```
+
+The logic (ratchet / check / diff) is unit-tested in
+`tests/test_coverage_ramp.py`; the I/O shells are kept thin on
+purpose.

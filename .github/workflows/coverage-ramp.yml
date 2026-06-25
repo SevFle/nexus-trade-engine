@@ -1,0 +1,145 @@
+name: Coverage ramp
+
+# Weekly per-module coverage ratchet (issue #648).
+#
+# Runs the full suite to collect a fresh ``.coverage``, verifies every
+# module still meets its recorded floor (``check``), then ratchets any
+# floor whose measured coverage has gone *up* (``bump``). If the floors
+# file changed, opens a PR so the monotonic bump is reviewed before it
+# binds. Floors only ever rise — see docs/coverage-ramp.md / ADR-0010.
+#
+# Manually triggerable via workflow_dispatch (e.g. to re-seed after a
+# large test-only PR). See: scripts/coverage_ramp.py
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Mondays 03:17 UTC — off-peak, and Monday so the bump PR
+    # lands at the start of the week's review queue.
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: coverage-ramp
+  cancel-in-progress: false
+
+jobs:
+  ramp:
+    name: Bump per-module coverage floors
+    runs-on: [self-hosted, nexus]
+    container:
+      image: python:3.12
+
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: nexus
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: nexus_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      valkey:
+        image: valkey/valkey:8-alpine
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pip install -e .[dev]
+
+      - name: Run migrations
+        run: alembic upgrade head
+        env:
+          NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:test_password@postgres:5432/nexus_test
+
+      # Collect coverage exactly as ci.yml does so the weekly number is
+      # comparable to the per-PR gate. --cov-fail-under=0 keeps the run
+      # green even if the global floor slipped; the per-module ``check``
+      # below is the gate this job cares about.
+      - name: Run tests with coverage
+        env:
+          NEXUS_DATABASE_URL: postgresql+asyncpg://nexus:test_password@postgres:5432/nexus_test
+          NEXUS_VALKEY_URL: redis://valkey:6379/0
+          NEXUS_APP_ENV: test
+        run: python -m pytest tests --cov-fail-under=0 -q
+
+      - name: Emit coverage JSON
+        run: python -m coverage json -o .coverage.json
+
+      # Surface regressions even when we can't bump. continue-on-error
+      # so a single regressing module doesn't block bumping the rest;
+      # the violation list is the actionable output.
+      - name: Check per-module floors
+        continue-on-error: true
+        run: |
+          python scripts/coverage_ramp.py \
+            --coverage-json .coverage.json \
+            --floors config/coverage-floors.json \
+            check
+
+      - name: Bump floors (dry-run)
+        id: diff
+        run: |
+          python scripts/coverage_ramp.py \
+            --coverage-json .coverage.json \
+            --floors config/coverage-floors.json \
+            bump > bump-report.txt
+          cat bump-report.txt
+          if grep -q '^  [+-] ' bump-report.txt; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open bump PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python scripts/coverage_ramp.py \
+            --coverage-json .coverage.json \
+            --floors config/coverage-floors.json \
+            bump --apply
+
+          branch="chore/coverage-ramp-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add config/coverage-floors.json
+          git commit -m "chore(coverage): ratchet per-module floors
+
+          Automated weekly bump from the coverage-ramp workflow.
+          Floors only ever rise (monotonic ratchet); see
+          docs/coverage-ramp.md and ADR-0010.
+
+          $(cat bump-report.txt)
+
+          Refs #648"
+          git push --set-upstream origin "$branch"
+
+          gh pr create \
+            --title "chore(coverage): ratchet per-module floors" \
+            --body "Automated weekly coverage-ramp bump (issue #648).
+
+          The per-module floor for every module whose measured coverage
+          rose since last week has been ratcheted up. Floors never
+          decrease. See \`docs/coverage-ramp.md\`.
+
+          $(cat bump-report.txt)" \
+            --base main \
+            --head "$branch" \
+            --label "coverage"
