@@ -153,7 +153,7 @@ not depend on the worker process for backtest isolation today.
 
 ## P2 — Per-route ignore list in `pyproject.toml` is large
 
-**Where**: [`pyproject.toml`](../pyproject.toml) lines 73–130.
+**Where**: [`pyproject.toml`](../pyproject.toml) lines 76–139 (`[tool.ruff.lint.per-file-ignores]`).
 
 `[tool.ruff.lint.per-file-ignores]` has accumulated many specific
 overrides (PLR2004, PLC0415, E501, etc.). This is "correct" in that
@@ -185,14 +185,24 @@ runs `alembic upgrade head`, then asserts each model table exists.
 
 ---
 
-## P2 — Test coverage gate at 70% (`make test`), 80% in `pyproject.toml`
+## P2 — Coverage gate enforces a *floor*, not the measured total
 
-`Makefile` runs `pytest --cov-fail-under=70`; `pyproject.toml`
-declares `fail_under = 80`. The Makefile is the canonical entry
-point. The mismatch is unintentional drift; the project actually
-passes the 80% gate (per recent CI runs and `LAST_AUDIT.md`).
+The earlier 70 %/80 % Makefile-vs-`pyproject.toml` drift is fixed —
+both `make test` (`--cov-fail-under=85`) and `pyproject.toml`
+(`[tool.coverage.report] fail_under = 85`) are aligned, and the policy
+is now a documented ramp (85 → 88 → 90 → 92 → 93, currently phase 1)
+under [ADR-0010](adr/0010-coverage-ramp-policy.md) ·
+[`coverage-ramp.md`](coverage-ramp.md).
 
-**Fix path**: align both at 80%.
+The residual, honest limitation: measured coverage is ~93 % while the
+floor is 85 %, so a PR that drops the measured total from 93 → 86
+**still passes the gate**. The headroom is intentional (it lets feature
+work land), but it means the floor cannot catch mid-band regressions.
+On top of that, only **line** coverage is collected — branch coverage
+is deferred until the line floor reaches 92, so uncovered logical
+paths hide behind covered lines. Tighten both by advancing the ramp
+and turning on branch measurement per the checklist in
+[`coverage-ramp.md`](coverage-ramp.md).
 
 ---
 

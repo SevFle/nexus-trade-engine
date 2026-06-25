@@ -135,7 +135,8 @@ you have healthchecks wired to `/ready` (DB + Valkey).
 2. **Pre-flight** (manual or CI job):
    - `basedpyright` clean (the type-check gate).
    - `ruff check` + `ruff format --check` clean.
-   - `pytest --cov-fail-under=70` passes against a Postgres service.
+   - `pytest --cov-fail-under=85` passes against a Postgres service
+     (coverage gate policy: [`docs/coverage-ramp.md`](coverage-ramp.md)).
 3. **Migrations**: run `alembic upgrade head` against the live DB
    *before* rolling the new image. Migrations are written to be
    backwards-compatible for one release (see
