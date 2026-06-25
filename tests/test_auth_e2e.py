@@ -52,6 +52,7 @@ def _build_metadata() -> MetaData:
         Column("hashed_password", String(255), nullable=True),
         Column("display_name", String(100), nullable=False),
         Column("is_active", Boolean, default=True),
+        Column("processing_restricted", Boolean, default=False),
         Column("role", String(20), default="user"),
         Column("auth_provider", String(20), default="local"),
         Column("external_id", String(255), nullable=True),
@@ -837,3 +838,48 @@ class TestEdgeCases:
     async def test_empty_body_login_422(self, e2e_client: AsyncClient):
         resp = await e2e_client.post("/api/v1/auth/login", json={})
         assert resp.status_code == 422
+
+
+# ─── Schema Drift Guard ───────────────────────────────────────────────────────
+
+
+class TestSchemaDriftGuard:
+    """Pin the hand-built ``users`` schema (``_build_metadata``) to the
+    ``User`` ORM model.
+
+    The E2E fixtures create their SQLite tables from a hand-rolled
+    ``MetaData`` rather than ``Base.metadata.create_all``. That hand-built
+    schema is a fertile source of silent drift: every time the ``User``
+    model gains (or loses) a column the fixture must be updated in lock
+    step, otherwise auth tests run against a stale table shape and mask
+    real-world insert/read failures.
+
+    The guard is intentionally *symmetric* — it fails in both directions:
+
+    * ``model_cols - schema_cols`` is non-empty  -> the model grew a column
+      the fixture forgot (the classic mask-the-bug direction).
+    * ``schema_cols - model_cols`` is non-empty  -> the fixture references a
+      column the model no longer has (dead/broken test column).
+    """
+
+    def test_users_fixture_columns_match_user_model(self) -> None:
+        schema_cols = set(_build_metadata().tables["users"].columns.keys())
+        model_cols = set(User.__table__.columns.keys())
+
+        missing_from_fixture = model_cols - schema_cols
+        assert not missing_from_fixture, (
+            "The hand-built `users` table in _build_metadata() is missing "
+            f"columns that exist on the User model: {sorted(missing_from_fixture)}. "
+            "Update the fixture so the E2E SQLite schema mirrors engine.db.models.User."
+        )
+
+        # Symmetric check: the fixture must not declare columns the model
+        # has dropped, otherwise the test table silently diverges from prod.
+        stale_in_fixture = schema_cols - model_cols
+        assert not stale_in_fixture, (
+            "The hand-built `users` table in _build_metadata() declares "
+            f"columns absent from the User model: {sorted(stale_in_fixture)}. "
+            "Remove them so the fixture stays in sync with engine.db.models.User."
+        )
+
+        assert schema_cols == model_cols

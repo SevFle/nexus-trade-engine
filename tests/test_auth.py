@@ -28,10 +28,14 @@ def _set_test_settings():
     settings.secret_key = original
 
 
-@pytest.fixture
-async def auth_engine():
-    engine = create_async_engine("sqlite+aiosqlite://", echo=False)
+def _build_auth_metadata() -> MetaData:
+    """Hand-built SQLite schema mirroring the auth-related ORM models.
 
+    Kept deliberately separate from ``Base.metadata`` so the integration
+    fixtures only create the tables they exercise. ``TestSchemaDriftGuard``
+    pins the ``users`` table here against the ``User`` model so this
+    hand-rolled shape can't silently rot as the model evolves.
+    """
     metadata = MetaData()
     Table(
         "users",
@@ -41,6 +45,7 @@ async def auth_engine():
         Column("hashed_password", String(255), nullable=True),
         Column("display_name", String(100), nullable=False),
         Column("is_active", Boolean, default=True),
+        Column("processing_restricted", Boolean, default=False),
         Column("role", String(20), default="user"),
         Column("auth_provider", String(20), default="local"),
         Column("external_id", String(255), nullable=True),
@@ -62,6 +67,14 @@ async def auth_engine():
         Column("user_agent", String(512), nullable=True),
         Column("ip_address", String(45), nullable=True),
     )
+    return metadata
+
+
+@pytest.fixture
+async def auth_engine():
+    engine = create_async_engine("sqlite+aiosqlite://", echo=False)
+
+    metadata = _build_auth_metadata()
 
     async with engine.begin() as conn:
         await conn.run_sync(metadata.create_all)
@@ -361,3 +374,44 @@ class TestProtectedRoutes:
             headers={"Authorization": f"Bearer {auth_tokens['access_token']}"},
         )
         assert resp.status_code == 200
+
+
+# ─── Schema Drift Guard ─────────────────────────────────────────────────
+
+
+class TestSchemaDriftGuard:
+    """Pin the hand-built ``users`` schema (``_build_auth_metadata``) to the
+    ``User`` ORM model.
+
+    The auth integration fixtures create their SQLite tables from a
+    hand-rolled ``MetaData`` rather than ``Base.metadata.create_all``. That
+    hand-built shape drifts silently whenever the ``User`` model changes,
+    letting integration tests run against a stale table shape and mask real
+    insert/read failures. The guard is *symmetric*: it fails in both
+    directions so neither growth nor shrinkage of the model goes unnoticed.
+    """
+
+    def test_users_fixture_columns_match_user_model(self) -> None:
+        from engine.db.models import User
+
+        schema_cols = set(_build_auth_metadata().tables["users"].columns.keys())
+        model_cols = set(User.__table__.columns.keys())
+
+        missing_from_fixture = model_cols - schema_cols
+        assert not missing_from_fixture, (
+            "The hand-built `users` table in _build_auth_metadata() is missing "
+            f"columns that exist on the User model: {sorted(missing_from_fixture)}. "
+            "Update the fixture so the integration SQLite schema mirrors "
+            "engine.db.models.User."
+        )
+
+        # Symmetric check: the fixture must not declare columns the model
+        # has dropped, otherwise the test table silently diverges from prod.
+        stale_in_fixture = schema_cols - model_cols
+        assert not stale_in_fixture, (
+            "The hand-built `users` table in _build_auth_metadata() declares "
+            f"columns absent from the User model: {sorted(stale_in_fixture)}. "
+            "Remove them so the fixture stays in sync with engine.db.models.User."
+        )
+
+        assert schema_cols == model_cols
