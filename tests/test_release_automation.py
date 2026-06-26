@@ -138,8 +138,7 @@ class TestChangelog:
             if line.startswith("- ") and re.search(r"--[A-Za-z]$", line)
         ]
         assert not truncated, (
-            f"CHANGELOG.md contains truncated bullets (dangling flag stub): "
-            f"{truncated}"
+            f"CHANGELOG.md contains truncated bullets (dangling flag stub): {truncated}"
         )
 
 
@@ -234,11 +233,7 @@ class TestReleaseWorkflow:
         # green even on forks / PRs where the token is unavailable.
         steps = self._steps()
         fallback = next(
-            (
-                s
-                for s in steps
-                if s.get("if") == "${{ secrets.RELEASE_PLEASE_TOKEN == '' }}"
-            ),
+            (s for s in steps if s.get("if") == "${{ secrets.RELEASE_PLEASE_TOKEN == '' }}"),
             None,
         )
         assert fallback is not None, (
