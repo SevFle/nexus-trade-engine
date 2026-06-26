@@ -35,6 +35,7 @@ from engine.api.auth.jwt import (
     decode_token,
 )
 from engine.app import create_app
+from engine.config import settings
 from engine.db.models import User
 from engine.deps import get_db
 
@@ -52,6 +53,13 @@ def _build_metadata() -> MetaData:
         Column("hashed_password", String(255), nullable=True),
         Column("display_name", String(100), nullable=False),
         Column("is_active", Boolean, default=True),
+        Column(
+            "processing_restricted",
+            Boolean,
+            default=False,
+            server_default="false",
+            nullable=False,
+        ),
         Column("role", String(20), default="user"),
         Column("auth_provider", String(20), default="local"),
         Column("external_id", String(255), nullable=True),
@@ -88,6 +96,21 @@ def _build_metadata() -> MetaData:
         Column("created_at", DateTime, default=datetime.now),
     )
     return metadata
+
+
+@pytest.fixture(autouse=True)
+def _set_test_secret_key():
+    """These E2E tests sign and verify real JWTs, so they need a non-empty
+    HMAC ``secret_key``. ``settings.secret_key`` defaults to "" (and other
+    suites, e.g. test_rate_limit, rely on that default), so set it for the
+    duration of each test here and restore it afterwards. Without this the
+    tests free-ride on global state bled in from test_auth.py and fail with
+    ``jwt.exceptions.InvalidKeyError: HMAC key must not be empty`` when run
+    in isolation or in a different order."""
+    original = settings.secret_key
+    settings.secret_key = "test-secret-key-for-e2e-tests"
+    yield
+    settings.secret_key = original
 
 
 @pytest.fixture

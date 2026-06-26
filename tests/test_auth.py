@@ -41,6 +41,13 @@ async def auth_engine():
         Column("hashed_password", String(255), nullable=True),
         Column("display_name", String(100), nullable=False),
         Column("is_active", Boolean, default=True),
+        Column(
+            "processing_restricted",
+            Boolean,
+            default=False,
+            server_default="false",
+            nullable=False,
+        ),
         Column("role", String(20), default="user"),
         Column("auth_provider", String(20), default="local"),
         Column("external_id", String(255), nullable=True),
