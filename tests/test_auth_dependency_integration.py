@@ -9,13 +9,29 @@ from __future__ import annotations
 import uuid
 from datetime import timedelta
 
+import pytest
 from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from engine.api.auth.dependency import get_current_user, require_api_scope
 from engine.api.auth.jwt import create_access_token
+from engine.config import settings
 from engine.db.models import User
 from engine.deps import get_db
+
+
+@pytest.fixture(autouse=True)
+def _set_test_secret_key():
+    """These tests mint and verify real JWTs via ``create_access_token`` /
+    ``get_current_user``, which require a non-empty HMAC ``secret_key``.
+    ``settings.secret_key`` defaults to "" (other suites rely on that), so set
+    it for the duration of each test and restore it. Without this the tests
+    fail with ``jwt.exceptions.InvalidKeyError: HMAC key must not be empty``
+    unless another auth suite happens to have set it first."""
+    original = settings.secret_key
+    settings.secret_key = "test-secret-key-for-dependency-tests"
+    yield
+    settings.secret_key = original
 
 
 class TestUserFromJwt:

@@ -30,10 +30,17 @@ class TestCreateApp:
         assert isinstance(app, FastAPI)
         assert app.title == settings.app_name
 
-    def test_create_app_includes_api_router(self):
+    async def test_create_app_includes_api_router(self):
+        # Assert the API router is mounted by exercising a known route rather
+        # than introspecting ``app.routes`` — newer Starlette wraps included
+        # routers in an internal ``_IncludedRouter`` object whose paths are not
+        # exposed flatly, so a structural check is brittle across versions. A
+        # live request verifies the real behavior the test cares about.
         app = create_app()
-        routes = [r.path for r in app.routes]
-        assert any("/health" in r for r in routes)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/health")
+        assert resp.status_code == 200
 
     def test_create_app_has_middleware_stack(self):
         app = create_app()
