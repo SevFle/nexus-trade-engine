@@ -12,6 +12,10 @@ edit this file by hand — it is regenerated as part of every release PR.
 
 ## [Unreleased]
 
+### Internal
+- (write_tests) Write tests for the most recently changed code to break the loop
+
+
 ### Fixed
 - (fix) Fix check ordering in `engine/core/execution/live.py` `execute()` and the two failing tests in `tests/test_execution_backends.py`
 
