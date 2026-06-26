@@ -46,7 +46,15 @@ class TestExpandedRoleHierarchy:
         assert ROLE_HIERARCHY["admin"] > ROLE_HIERARCHY["portfolio_manager"]
 
     def test_all_roles_present(self):
-        expected = {"viewer", "user", "retail_trader", "quant_dev", "developer", "portfolio_manager", "admin"}
+        expected = {
+            "viewer",
+            "user",
+            "retail_trader",
+            "quant_dev",
+            "developer",
+            "portfolio_manager",
+            "admin",
+        }
         assert set(ROLE_HIERARCHY.keys()) == expected
 
     def test_backward_compatible_user_developer_admin(self):

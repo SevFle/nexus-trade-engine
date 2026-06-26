@@ -85,9 +85,7 @@ async def run_backtest(
         "total_trades": len(result.trades),
         "equity_points": len(result.equity_curve),
         "metrics": {
-            k: v
-            for k, v in metrics.items()
-            if k != "evaluation" and not isinstance(v, list)
+            k: v for k, v in metrics.items() if k != "evaluation" and not isinstance(v, list)
         },
         "evaluation": metrics.get("evaluation"),
     }

@@ -41,7 +41,18 @@ class TestReleasePleaseConfig:
         cfg = _read_json(ROOT / "release-please-config.json")
         sections = cfg["changelog-sections"]
         types = {s["type"] for s in sections}
-        expected = {"feat", "fix", "perf", "refactor", "docs", "test", "build", "ci", "chore", "revert"}
+        expected = {
+            "feat",
+            "fix",
+            "perf",
+            "refactor",
+            "docs",
+            "test",
+            "build",
+            "ci",
+            "chore",
+            "revert",
+        }
         assert types == expected
 
     def test_config_extra_files_includes_frontend_package_json(self):
@@ -83,6 +94,53 @@ class TestChangelog:
     def test_changelog_has_unreleased_section(self):
         content = (ROOT / "CHANGELOG.md").read_text()
         assert "## [Unreleased]" in content
+
+    def test_changelog_has_no_duplicate_identical_sections(self):
+        # release-please regenerates this file from Conventional Commits; a
+        # hand-merged run that produced *identical* duplicate ``### <Section>``
+        # blocks is churn that obscures the real history and keeps the
+        # generation loop alive. Parse the body of every level-3 section and
+        # assert no two same-named sections share an identical body, so
+        # recurring loop bullets collapse to a single entry.
+        content = (ROOT / "CHANGELOG.md").read_text()
+        sections: list[tuple[str, str]] = []
+        heading: str | None = None
+        body: list[str] = []
+        for line in content.splitlines():
+            if line.startswith("### "):
+                if heading is not None:
+                    sections.append((heading, "\n".join(body).strip()))
+                heading, body = line, []
+            elif heading is not None:
+                body.append(line)
+        if heading is not None:
+            sections.append((heading, "\n".join(body).strip()))
+
+        grouped: dict[str, list[str]] = {}
+        for h, b in sections:
+            if b:
+                grouped.setdefault(h, []).append(b)
+        for h, bodies in grouped.items():
+            dupes = {b for b in bodies if bodies.count(b) > 1}
+            assert not dupes, (
+                f"CHANGELOG.md has duplicate identical {h!r} sections; merge "
+                f"them into one. Offending bodies: {sorted(dupes)}"
+            )
+
+    def test_changelog_entries_are_not_truncated(self):
+        # Bullets must not end on a dangling/incomplete flag stub such as
+        # ``--m``. A real long flag is at least ``--ab``; a single trailing
+        # letter after ``--`` signals a truncated (cut-off) entry.
+        content = (ROOT / "CHANGELOG.md").read_text()
+        truncated = [
+            line
+            for line in content.splitlines()
+            if line.startswith("- ") and re.search(r"--[A-Za-z]$", line)
+        ]
+        assert not truncated, (
+            f"CHANGELOG.md contains truncated bullets (dangling flag stub): "
+            f"{truncated}"
+        )
 
 
 class TestReleaseWorkflow:
@@ -132,23 +190,66 @@ class TestReleaseWorkflow:
         # carrying token/config/manifest inputs.
         steps = self._steps()
         assert len(steps) >= 1
-        rp = next(s for s in steps if s.get("uses", "").startswith("googleapis/release-please-action"))
+        rp = next(
+            s for s in steps if s.get("uses", "").startswith("googleapis/release-please-action")
+        )
         assert rp["with"]["config-file"] == "release-please-config.json"
         assert rp["with"]["manifest-file"] == ".release-please-manifest.json"
         assert "RELEASE_PLEASE_TOKEN" in rp["with"]["token"]
 
-    def test_workflow_skips_when_release_token_absent(self):
-        # PyYAML-based structural assertion: parse the workflow file and assert
-        # the *actual* ``if:`` expression on the release-please job equals the
-        # expected guard exactly. This replaces fragile string-matching / grep
-        # approaches with a structural YAML assertion that inspects the parsed
-        # tree, so reformatting whitespace or key ordering cannot mask a missing
-        # guard.
+    def test_release_step_skips_when_token_absent_but_job_always_runs(self):
+        # The token-guard MUST live on the release-please *step*, never on the
+        # job. A job-level ``if: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}`` skips
+        # the entire workflow run when the token is absent, and a skipped run
+        # never reports ``success`` — so any required-status-check / merge queue
+        # gating on this workflow fails permanently (the check never goes
+        # green). Keeping the guard on the step means the job always runs and
+        # posts a green conclusion; only the release-please action itself is
+        # conditional. This is a structural YAML assertion (not a grep) so
+        # reformatting / key-ordering cannot mask a regressed guard.
         job = self._workflow()["jobs"]["release-please"]
+        assert "if" not in job, (
+            "release-please job must NOT carry a job-level `if:` guard — that "
+            "makes the whole run skip when the token is absent, which a "
+            "required status check reports as a permanent failure. Move the "
+            "guard onto the release-please step instead."
+        )
+        rp = next(
+            s
+            for s in job["steps"]
+            if s.get("uses", "").startswith("googleapis/release-please-action")
+        )
         expected_if = "${{ secrets.RELEASE_PLEASE_TOKEN != '' }}"
-        assert job["if"] == expected_if, (
-            f"release-please job must skip when token is absent; "
-            f"expected if={expected_if!r}, got if={job.get('if')!r}"
+        assert rp["if"] == expected_if, (
+            f"release-please step must skip when the token is absent; "
+            f"expected if={expected_if!r}, got if={rp.get('if')!r}"
+        )
+
+    def test_workflow_has_fallback_step_when_token_absent(self):
+        # When RELEASE_PLEASE_TOKEN is unset the release-please action step is
+        # skipped. An explicit fallback ``run: echo`` step gated on the *empty*
+        # token guarantees the job posts a concrete green step conclusion
+        # (instead of relying solely on a skipped-only job resolving to
+        # ``success``), so required status checks / merge queues always go
+        # green even on forks / PRs where the token is unavailable.
+        steps = self._steps()
+        fallback = next(
+            (
+                s
+                for s in steps
+                if s.get("if") == "${{ secrets.RELEASE_PLEASE_TOKEN == '' }}"
+            ),
+            None,
+        )
+        assert fallback is not None, (
+            "release-please.yml must include a fallback step gated on "
+            "`if: ${{ secrets.RELEASE_PLEASE_TOKEN == '' }}` so the job always "
+            "reports a concrete success step even when the token is absent."
+        )
+        assert "run" in fallback, "fallback step must use a `run:` shell command"
+        assert fallback["run"].strip().lower().startswith("echo"), (
+            "fallback step should be a trivial `run: echo ...` no-op to "
+            "guarantee a green conclusion."
         )
 
 

@@ -40,9 +40,7 @@ class TestFormatLabels:
         assert out == '{a="1",b="two"}'
 
     def test_escapes_quote_backslash_and_newline(self):
-        out = _format_labels(
-            (("k", 'has "quote" and \\backslash and\nnewline'),)
-        )
+        out = _format_labels((("k", 'has "quote" and \\backslash and\nnewline'),))
         assert out == '{k="has \\"quote\\" and \\\\backslash and\\nnewline"}'
 
     def test_label_key_is_sanitised(self):
@@ -140,15 +138,9 @@ class TestRenderHistograms:
 
         out = render_prometheus(b)
 
-        assert (
-            'webhook_duration_ms_count{event_type="order.filled"} 1'
-            in out
-        )
+        assert 'webhook_duration_ms_count{event_type="order.filled"} 1' in out
         # Sum of a single 10.0 observation is integral → no decimal.
-        assert (
-            'webhook_duration_ms_sum{event_type="order.filled"} 10\n'
-            in out
-        )
+        assert 'webhook_duration_ms_sum{event_type="order.filled"} 10\n' in out
 
 
 class TestPrometheusBackend:

@@ -149,11 +149,7 @@ class TestFifo:
         assert v.amount == Decimal("200.00")
 
     def test_gain_above_prior_taxes_remainder(self):
-        prior = PfuCarryover(
-            vintages=(
-                PfuLossVintage(year=2020, amount=Decimal("300")),
-            )
-        )
+        prior = PfuCarryover(vintages=(PfuLossVintage(year=2020, amount=Decimal("300")),))
         # +1,000 gain, 300 prior → 700 taxable. 12.8% = 89.6, 17.2% =
         # 120.4, total = 210 (rounded to two decimals).
         result = apply_pfu_carryover(
@@ -177,11 +173,7 @@ class TestExpiry:
     def test_vintage_at_ten_year_wall_is_expired(self):
         # Loss vintage from 2014 against a 2024 gain: 2024 - 2014 = 10
         # → expired (window is years < 10 since vintage).
-        prior = PfuCarryover(
-            vintages=(
-                PfuLossVintage(year=2014, amount=Decimal("500")),
-            )
-        )
+        prior = PfuCarryover(vintages=(PfuLossVintage(year=2014, amount=Decimal("500")),))
         result = apply_pfu_carryover(
             [_disp(proceeds="2000", cost="1000")],
             prior,
@@ -198,11 +190,7 @@ class TestExpiry:
 
     def test_vintage_one_year_inside_window_still_usable(self):
         # 2015 vintage in 2024 → 9 years, still valid.
-        prior = PfuCarryover(
-            vintages=(
-                PfuLossVintage(year=2015, amount=Decimal("500")),
-            )
-        )
+        prior = PfuCarryover(vintages=(PfuLossVintage(year=2015, amount=Decimal("500")),))
         result = apply_pfu_carryover(
             [_disp(proceeds="2000", cost="1000")],
             prior,

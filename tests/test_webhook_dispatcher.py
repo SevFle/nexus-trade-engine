@@ -120,13 +120,9 @@ def no_sleep():
 
 
 class TestDispatchOne:
-    async def test_2xx_marks_delivered_in_one_attempt(
-        self, session_factory, http_mock, no_sleep
-    ):
+    async def test_2xx_marks_delivered_in_one_attempt(self, session_factory, http_mock, no_sleep):
         factory, session = session_factory
-        http_mock.post.return_value = httpx.Response(
-            200, request=httpx.Request("POST", "/")
-        )
+        http_mock.post.return_value = httpx.Response(200, request=httpx.Request("POST", "/"))
         dispatcher = WebhookDispatcher(
             bus=EventBus(),
             session_factory=factory,
@@ -140,13 +136,9 @@ class TestDispatchOne:
         assert delivery.delivered_at is not None
         assert http_mock.post.await_count == 1
 
-    async def test_4xx_marks_failed_no_retry(
-        self, session_factory, http_mock, no_sleep
-    ):
+    async def test_4xx_marks_failed_no_retry(self, session_factory, http_mock, no_sleep):
         factory, session = session_factory
-        http_mock.post.return_value = httpx.Response(
-            404, request=httpx.Request("POST", "/")
-        )
+        http_mock.post.return_value = httpx.Response(404, request=httpx.Request("POST", "/"))
         dispatcher = WebhookDispatcher(
             bus=EventBus(),
             session_factory=factory,
@@ -160,13 +152,9 @@ class TestDispatchOne:
         assert "non-retryable" in delivery.error
         assert http_mock.post.await_count == 1
 
-    async def test_5xx_retries_until_max_then_failed(
-        self, session_factory, http_mock, no_sleep
-    ):
+    async def test_5xx_retries_until_max_then_failed(self, session_factory, http_mock, no_sleep):
         factory, session = session_factory
-        http_mock.post.return_value = httpx.Response(
-            503, request=httpx.Request("POST", "/")
-        )
+        http_mock.post.return_value = httpx.Response(503, request=httpx.Request("POST", "/"))
         dispatcher = WebhookDispatcher(
             bus=EventBus(),
             session_factory=factory,
@@ -179,9 +167,7 @@ class TestDispatchOne:
         assert delivery.attempts == 3
         assert http_mock.post.await_count == 3
 
-    async def test_5xx_then_2xx_recovers(
-        self, session_factory, http_mock, no_sleep
-    ):
+    async def test_5xx_then_2xx_recovers(self, session_factory, http_mock, no_sleep):
         factory, session = session_factory
         http_mock.post.side_effect = [
             httpx.Response(502, request=httpx.Request("POST", "/")),
@@ -198,9 +184,7 @@ class TestDispatchOne:
         assert delivery.status == "delivered"
         assert delivery.attempts == 2
 
-    async def test_network_error_retried(
-        self, session_factory, http_mock, no_sleep
-    ):
+    async def test_network_error_retried(self, session_factory, http_mock, no_sleep):
         factory, session = session_factory
         http_mock.post.side_effect = [
             httpx.ConnectError("boom"),
@@ -221,9 +205,7 @@ class TestDispatchOne:
         self, session_factory, http_mock, no_sleep
     ):
         factory, session = session_factory
-        http_mock.post.return_value = httpx.Response(
-            200, request=httpx.Request("POST", "/")
-        )
+        http_mock.post.return_value = httpx.Response(200, request=httpx.Request("POST", "/"))
         dispatcher = WebhookDispatcher(
             bus=EventBus(),
             session_factory=factory,
@@ -239,13 +221,9 @@ class TestDispatchOne:
         assert headers["X-Nexus-Signature"] == expected
         assert headers["X-Nexus-Event"] == "test.event"
 
-    async def test_custom_headers_merged(
-        self, session_factory, http_mock, no_sleep
-    ):
+    async def test_custom_headers_merged(self, session_factory, http_mock, no_sleep):
         factory, session = session_factory
-        http_mock.post.return_value = httpx.Response(
-            200, request=httpx.Request("POST", "/")
-        )
+        http_mock.post.return_value = httpx.Response(200, request=httpx.Request("POST", "/"))
         dispatcher = WebhookDispatcher(
             bus=EventBus(),
             session_factory=factory,

@@ -93,9 +93,7 @@ class _SyntheticProvider(MarketDataProvider):
         return {symbols[0]: float(self._df["close"].iloc[-1])}
 
 
-def _make_tz_aware_df(
-    n_days: int = 10, base_price: float = 100.0, seed: int = 42
-) -> pd.DataFrame:
+def _make_tz_aware_df(n_days: int = 10, base_price: float = 100.0, seed: int = 42) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     start = datetime(2024, 1, 1, tzinfo=UTC)
     dates = [start + timedelta(days=i) for i in range(n_days)]
@@ -108,9 +106,7 @@ def _make_tz_aware_df(
     )
 
 
-def _make_tz_naive_df(
-    n_days: int = 10, base_price: float = 100.0, seed: int = 42
-) -> pd.DataFrame:
+def _make_tz_naive_df(n_days: int = 10, base_price: float = 100.0, seed: int = 42) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     start = datetime(2024, 1, 1, tzinfo=UTC)
     dates = [start + timedelta(days=i) for i in range(n_days)]
@@ -469,9 +465,7 @@ class TestRollingInformationRatioEdgeCases:
 
     def test_zero_annualisation_rejected(self):
         with pytest.raises(ValueError, match="annualisation_factor"):
-            rolling_information_ratio(
-                [0.01, 0.02], [0.01, 0.02], 2, annualisation_factor=0
-            )
+            rolling_information_ratio([0.01, 0.02], [0.01, 0.02], 2, annualisation_factor=0)
 
     def test_window_one_rejected(self):
         with pytest.raises(ValueError, match="window must be"):
@@ -499,6 +493,7 @@ class TestBacktestRunnerTzFix:
         class _HoldStrategy:
             name = "test"
             version = "1.0.0"
+
             def on_bar(self, state, portfolio):
                 return []
 
@@ -521,6 +516,7 @@ class TestBacktestRunnerTzFix:
         class _HoldStrategy:
             name = "test"
             version = "1.0.0"
+
             def on_bar(self, state, portfolio):
                 return []
 
@@ -615,7 +611,16 @@ class TestRefInstrumentValidation:
             )
 
     def test_all_asset_classes_valid(self):
-        for ac in ("equity", "etf", "crypto", "crypto_perp", "crypto_future", "forex", "option", "future"):
+        for ac in (
+            "equity",
+            "etf",
+            "crypto",
+            "crypto_perp",
+            "crypto_future",
+            "forex",
+            "option",
+            "future",
+        ):
             inst = RefInstrument(
                 primary_ticker="TEST",
                 primary_venue="XNAS",
@@ -846,16 +851,12 @@ class TestSuggestEndpointIntegration:
         assert r.status_code == HTTPStatus.BAD_REQUEST
 
     async def test_suggest_limit_one(self, client: AsyncClient):
-        r = await client.get(
-            "/api/v1/reference/suggest", params={"q": "A", "limit": 1}
-        )
+        r = await client.get("/api/v1/reference/suggest", params={"q": "A", "limit": 1})
         assert r.status_code == HTTPStatus.OK
         assert len(r.json()["suggestions"]) <= 1
 
     async def test_suggest_limit_zero_422(self, client: AsyncClient):
-        r = await client.get(
-            "/api/v1/reference/suggest", params={"q": "A", "limit": 0}
-        )
+        r = await client.get("/api/v1/reference/suggest", params={"q": "A", "limit": 0})
         assert r.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
 
     async def test_suggest_no_results_returns_empty_list(self, client: AsyncClient):
@@ -900,7 +901,14 @@ class TestSerializeYahooAdditional:
         result = _serialize_yahoo(item)
         assert set(result.keys()) >= {"symbol", "name", "display", "completion", "score", "record"}
         rec = result["record"]
-        assert set(rec.keys()) >= {"id", "primary_ticker", "primary_venue", "asset_class", "name", "currency"}
+        assert set(rec.keys()) >= {
+            "id",
+            "primary_ticker",
+            "primary_venue",
+            "asset_class",
+            "name",
+            "currency",
+        }
 
     def test_yahoo_default_exchange(self):
         item = {"symbol": "X", "quoteType": "EQUITY", "exchange": ""}

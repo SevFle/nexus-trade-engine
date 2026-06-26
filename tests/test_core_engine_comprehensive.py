@@ -190,7 +190,9 @@ class TestCostBreakdown:
 
 class TestTaxLot:
     def test_cost_basis(self):
-        lot = TaxLot(symbol="AAPL", quantity=100, purchase_price=150.0, purchase_date=datetime.now(UTC))
+        lot = TaxLot(
+            symbol="AAPL", quantity=100, purchase_price=150.0, purchase_date=datetime.now(UTC)
+        )
         assert lot.cost_basis == 15_000.0
 
     def test_is_long_term_true(self):
@@ -227,7 +229,9 @@ class TestTaxLot:
         assert lot.is_long_term(as_of=datetime(2024, 6, 1, tzinfo=UTC)) is False
 
     def test_default_lot_id(self):
-        lot = TaxLot(symbol="AAPL", quantity=10, purchase_price=100.0, purchase_date=datetime.now(UTC))
+        lot = TaxLot(
+            symbol="AAPL", quantity=10, purchase_price=100.0, purchase_date=datetime.now(UTC)
+        )
         assert lot.lot_id == ""
 
 
@@ -295,9 +299,19 @@ class TestDefaultCostModelEdgeCases:
     def test_wash_sale_zero_loss(self):
         model = DefaultCostModel()
         sell_date = datetime.now(UTC)
-        result = model.calculate_wash_sale_adjustment("AAPL", sell_date, 0.0, [
-            {"symbol": "AAPL", "date": sell_date - timedelta(days=5), "price": 100.0, "quantity": 10},
-        ])
+        result = model.calculate_wash_sale_adjustment(
+            "AAPL",
+            sell_date,
+            0.0,
+            [
+                {
+                    "symbol": "AAPL",
+                    "date": sell_date - timedelta(days=5),
+                    "price": 100.0,
+                    "quantity": 10,
+                },
+            ],
+        )
         assert result["is_wash_sale"] is False
 
     def test_wash_sale_multiple_replacement_lots(self):
@@ -305,8 +319,18 @@ class TestDefaultCostModelEdgeCases:
         sell_date = datetime.now(UTC)
         loss = -1000.0
         buy_history = [
-            {"symbol": "AAPL", "date": sell_date - timedelta(days=10), "price": 145.0, "quantity": 50},
-            {"symbol": "AAPL", "date": sell_date - timedelta(days=5), "price": 146.0, "quantity": 50},
+            {
+                "symbol": "AAPL",
+                "date": sell_date - timedelta(days=10),
+                "price": 145.0,
+                "quantity": 50,
+            },
+            {
+                "symbol": "AAPL",
+                "date": sell_date - timedelta(days=5),
+                "price": 146.0,
+                "quantity": 50,
+            },
         ]
         result = model.calculate_wash_sale_adjustment("AAPL", sell_date, loss, buy_history)
         assert result["is_wash_sale"] is True
@@ -341,17 +365,31 @@ class TestDefaultCostModelEdgeCases:
         model = DefaultCostModel(wash_sale_window_days=30)
         sell_date = datetime.now(UTC)
         buy_at_boundary = sell_date - timedelta(days=30)
-        assert model.check_wash_sale("AAPL", sell_date, [
-            {"symbol": "AAPL", "date": buy_at_boundary},
-        ]) is True
+        assert (
+            model.check_wash_sale(
+                "AAPL",
+                sell_date,
+                [
+                    {"symbol": "AAPL", "date": buy_at_boundary},
+                ],
+            )
+            is True
+        )
 
     def test_check_wash_sale_one_day_past_boundary(self):
         model = DefaultCostModel(wash_sale_window_days=30)
         sell_date = datetime.now(UTC)
         buy_past = sell_date - timedelta(days=31)
-        assert model.check_wash_sale("AAPL", sell_date, [
-            {"symbol": "AAPL", "date": buy_past},
-        ]) is False
+        assert (
+            model.check_wash_sale(
+                "AAPL",
+                sell_date,
+                [
+                    {"symbol": "AAPL", "date": buy_past},
+                ],
+            )
+            is False
+        )
 
     def test_estimate_total_no_tax_in_breakdown(self):
         model = DefaultCostModel()
@@ -657,7 +695,9 @@ class TestPortfolioSnapshot:
 
 class TestOrderDataclass:
     def test_order_defaults(self):
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10
+        )
         assert order.status == OrderStatus.PENDING
         assert order.order_type == OrderType.MARKET
         assert order.limit_price is None
@@ -666,7 +706,9 @@ class TestOrderDataclass:
         assert order.fill_quantity is None
 
     def test_order_transition(self):
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10
+        )
         order.transition(OrderStatus.VALIDATED, "passed")
         assert order.status == OrderStatus.VALIDATED
         assert len(order.status_history) == 1
@@ -675,7 +717,9 @@ class TestOrderDataclass:
         assert order.status_history[0]["reason"] == "passed"
 
     def test_order_multiple_transitions(self):
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10
+        )
         order.transition(OrderStatus.VALIDATED)
         order.transition(OrderStatus.COSTED)
         order.transition(OrderStatus.RISK_APPROVED)
@@ -813,9 +857,7 @@ class TestRiskEngineSellOrders:
         p = Portfolio(initial_cash=100_000)
         p.open_position("AAPL", 100, 100.0)
         re = RiskEngine(max_open_positions=1)
-        order = Order(
-            signal_id="s1", strategy_id="t", symbol="AAPL", side=Side.SELL, quantity=10
-        )
+        order = Order(signal_id="s1", strategy_id="t", symbol="AAPL", side=Side.SELL, quantity=10)
         result = re.check_order(order, p, 100.0)
         assert result.approved
 
@@ -824,9 +866,7 @@ class TestRiskEngineSellOrders:
         p.open_position("AAPL", 1000, 100.0)
         p.update_prices({"AAPL": 100.0})
         re = RiskEngine(max_position_pct=0.20)
-        order = Order(
-            signal_id="s1", strategy_id="t", symbol="AAPL", side=Side.SELL, quantity=100
-        )
+        order = Order(signal_id="s1", strategy_id="t", symbol="AAPL", side=Side.SELL, quantity=100)
         result = re.check_order(order, p, 100.0)
         assert result.approved
 
@@ -835,18 +875,14 @@ class TestRiskEngineDailyCount:
     def test_count_increments_on_approval(self):
         p = Portfolio(initial_cash=100_000)
         re = RiskEngine(max_daily_trades=5)
-        order = Order(
-            signal_id="s1", strategy_id="t", symbol="AAPL", side=Side.BUY, quantity=10
-        )
+        order = Order(signal_id="s1", strategy_id="t", symbol="AAPL", side=Side.BUY, quantity=10)
         re.check_order(order, p, 100.0)
         assert re.daily_trade_count == 1
 
     def test_count_does_not_increment_on_rejection(self):
         p = Portfolio(initial_cash=100_000)
         re = RiskEngine(max_daily_trades=0)
-        order = Order(
-            signal_id="s1", strategy_id="t", symbol="AAPL", side=Side.BUY, quantity=10
-        )
+        order = Order(signal_id="s1", strategy_id="t", symbol="AAPL", side=Side.BUY, quantity=10)
         re.check_order(order, p, 100.0)
         assert re.daily_trade_count == 0
 
@@ -864,7 +900,11 @@ class TestRiskCheckResult:
 class TestRiskEngineCircuitBreakerEdgeCases:
     def test_circuit_breaker_exactly_at_threshold(self):
         p = Portfolio(initial_cash=100_000)
-        re = RiskEngine(circuit_breaker_drawdown_pct=0.10, max_position_pct=1.0, max_single_order_value=1_000_000)
+        re = RiskEngine(
+            circuit_breaker_drawdown_pct=0.10,
+            max_position_pct=1.0,
+            max_single_order_value=1_000_000,
+        )
         p.open_position("AAPL", 100, 500.0)
         p.update_prices({"AAPL": 400.0})
         order = Order(signal_id="s1", strategy_id="t", symbol="AAPL", side=Side.BUY, quantity=1)
@@ -874,7 +914,11 @@ class TestRiskEngineCircuitBreakerEdgeCases:
 
     def test_circuit_breaker_below_threshold_passes(self):
         p = Portfolio(initial_cash=100_000)
-        re = RiskEngine(circuit_breaker_drawdown_pct=0.10, max_position_pct=1.0, max_single_order_value=1_000_000)
+        re = RiskEngine(
+            circuit_breaker_drawdown_pct=0.10,
+            max_position_pct=1.0,
+            max_single_order_value=1_000_000,
+        )
         p.open_position("AAPL", 100, 500.0)
         p.update_prices({"AAPL": 480.0})
         order = Order(signal_id="s1", strategy_id="t", symbol="AAPL", side=Side.BUY, quantity=1)
@@ -907,7 +951,9 @@ class TestRiskEngineCircuitBreakerEdgeCases:
 
 class TestBacktestConfig:
     def test_defaults(self):
-        cfg = BacktestConfig(strategy_name="test", symbol="AAPL", start_date="2024-01-01", end_date="2024-12-31")
+        cfg = BacktestConfig(
+            strategy_name="test", symbol="AAPL", start_date="2024-01-01", end_date="2024-12-31"
+        )
         assert cfg.initial_capital == 100_000.0
         assert cfg.min_bars == 50
         assert cfg.debug is False
@@ -979,7 +1025,13 @@ class TestBacktestRunnerIntegration:
         rng = np.random.default_rng(42)
         close = 100 + np.cumsum(rng.normal(0, 0.5, 60))
         df = pd.DataFrame(
-            {"open": close - 0.1, "high": close + 0.5, "low": close - 0.5, "close": close, "volume": rng.integers(100_000, 1_000_000, 60)},
+            {
+                "open": close - 0.1,
+                "high": close + 0.5,
+                "low": close - 0.5,
+                "close": close,
+                "volume": rng.integers(100_000, 1_000_000, 60),
+            },
             index=dates,
         )
 
@@ -991,7 +1043,13 @@ class TestBacktestRunnerIntegration:
                 return []
 
         provider = _SynthProvider(df)
-        config = BacktestConfig(strategy_name="hold", symbol="TEST", start_date="2024-01-01", end_date="2024-03-31", min_bars=5)
+        config = BacktestConfig(
+            strategy_name="hold",
+            symbol="TEST",
+            start_date="2024-01-01",
+            end_date="2024-03-31",
+            min_bars=5,
+        )
         runner = BacktestRunner(config=config, strategy=HoldStrat(), provider=provider)
         result = await runner.run()
         assert len(result.equity_curve) > 0

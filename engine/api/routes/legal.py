@@ -28,6 +28,7 @@ logger = structlog.get_logger()
 
 _MD_SPECIAL_RE = re.compile(r"([\\`*_{}\[\]()#+\-.!|~>])")
 
+
 async def _optional_user(
     request: Request,
     db: AsyncSession = Depends(get_db),

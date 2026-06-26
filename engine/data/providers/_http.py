@@ -106,9 +106,7 @@ async def _read_capped(
             continue
         if len(buf) + len(chunk) > cap:
             if strict:
-                raise FatalProviderError(
-                    f"{provider} response too large: exceeded {cap} bytes"
-                )
+                raise FatalProviderError(f"{provider} response too large: exceeded {cap} bytes")
             buf.extend(chunk[: cap - len(buf)])
             break
         buf.extend(chunk)
@@ -241,9 +239,7 @@ class HTTPProviderBase:
                             f"{self.capability.name} HTTP {status}: {preview}"
                         )
                     if status in AUTH_STATUS:
-                        raise FatalProviderError(
-                            f"{self.capability.name} auth error {status}"
-                        )
+                        raise FatalProviderError(f"{self.capability.name} auth error {status}")
                     if status >= HTTP_CLIENT_ERROR_MIN:
                         preview = redact_secrets(
                             (await _read_capped(response, ERROR_BODY_PREVIEW)).decode(
@@ -263,9 +259,7 @@ class HTTPProviderBase:
                         provider=self.capability.name,
                     )
             except httpx.TimeoutException as exc:
-                raise TransientProviderError(
-                    f"{self.capability.name} timeout"
-                ) from exc
+                raise TransientProviderError(f"{self.capability.name} timeout") from exc
             except httpx.RequestError as exc:
                 raise TransientProviderError(
                     f"{self.capability.name} network: {type(exc).__name__}"
@@ -276,9 +270,7 @@ class HTTPProviderBase:
 
                 return _json.loads(body)
             except ValueError as exc:
-                raise FatalProviderError(
-                    f"{self.capability.name} returned non-JSON"
-                ) from exc
+                raise FatalProviderError(f"{self.capability.name} returned non-JSON") from exc
 
         return await call_with_retry(call, provider=self.capability.name)
 

@@ -38,6 +38,7 @@ we explain *why*, not *what*.
 | Call the REST / WebSocket API | [`api-reference.md`](api-reference.md) |
 | Run the engine locally | [`development.md`](development.md) |
 | Ship a release | [`deployment.md`](deployment.md) · [`RELEASING.md`](RELEASING.md) |
+| Drive the engine from an LLM assistant / MCP client | [`architecture/mcp.md`](architecture/mcp.md) · [`adr/0012-mcp-server.md`](adr/0012-mcp-server.md) |
 | Write a strategy plugin | [`PLUGIN_DEV_GUIDE.md`](PLUGIN_DEV_GUIDE.md) · [`architecture/plugins.md`](architecture/plugins.md) |
 | Understand non-obvious design choices | [`adr/`](adr/README.md) |
 | Operate the running system | [`operations/slos.md`](operations/slos.md) · [`operations/runbooks/`](operations/runbooks/README.md) |
@@ -54,6 +55,7 @@ docs/
 ├── architecture/                   ← component-by-component "current state"
 │   ├── overview.md
 │   ├── database.md                 ← migration policy, table inventory
+│   ├── mcp.md                      ← MCP server (tools/resources/auth/transport)
 │   └── plugins.md                  ← plugin SDK + registry
 ├── adr/                            ← architecture decision records (why we chose X)
 │   ├── 0001-scaffold-tech-choices.md
@@ -66,7 +68,8 @@ docs/
 │   ├── 0008-pluggable-metrics-backend.md
 │   ├── 0009-cross-replica-eventbus-bridge.md
 │   ├── 0010-coverage-ramp-policy.md
-│   └── 0011-roadmap-manifest.md
+│   ├── 0011-roadmap-manifest.md
+│   └── 0012-mcp-server.md
 ├── api-reference.md                ← every HTTP/WS route, auth, schemas
 ├── data-model.md                   ← entities, relationships, invariants
 ├── deployment.md                   ← infra requirements, env, rollout
@@ -115,6 +118,7 @@ same PR (enforced in CODEOWNERS, not yet in CI):
 | New / changed DB model or migration | `data-model.md` + `architecture/database.md` |
 | New env var | `deployment.md` + `architecture/overview.md` "Configuration" |
 | New SLO or alert | `operations/slos.md` + matching runbook under `operations/runbooks/` |
+| New / changed MCP tool or resource | `architecture/mcp.md` |
 | Major architectural decision | new ADR under `adr/` from `adr/template.md` |
 
 Stale docs are a bug. If you find one, open an issue tagged `docs` or

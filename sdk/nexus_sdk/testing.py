@@ -19,7 +19,9 @@ class MockCostModel:
         self.spread_bps = spread_bps
         self.slippage_bps = slippage_bps
 
-    def estimate_total(self, symbol: str, quantity: int, price: float, side: str, avg_volume: int = 0):
+    def estimate_total(
+        self, symbol: str, quantity: int, price: float, side: str, avg_volume: int = 0
+    ):
         spread = price * (self.spread_bps / 10_000)
         slippage = price * (self.slippage_bps / 10_000) * quantity
         return CostBreakdown(

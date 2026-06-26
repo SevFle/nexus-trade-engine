@@ -39,9 +39,7 @@ class TestUserFromJwt:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            resp = await ac.get(
-                "/test", headers={"Authorization": f"Bearer {expired_token}"}
-            )
+            resp = await ac.get("/test", headers={"Authorization": f"Bearer {expired_token}"})
             assert resp.status_code == 401
 
     async def test_nonexistent_user_returns_401(self, db_session):
@@ -63,9 +61,7 @@ class TestUserFromJwt:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            resp = await ac.get(
-                "/test", headers={"Authorization": f"Bearer {fake_token}"}
-            )
+            resp = await ac.get("/test", headers={"Authorization": f"Bearer {fake_token}"})
             assert resp.status_code == 401
             assert "not found" in resp.json()["detail"].lower()
 
@@ -83,9 +79,7 @@ class TestUserFromJwt:
         db_session.add(user)
         await db_session.flush()
 
-        token = create_access_token(
-            sub=str(user.id), email=user.email, role=user.role
-        )
+        token = create_access_token(sub=str(user.id), email=user.email, role=user.role)
 
         @app.get("/test")
         async def handler(user: User = Depends(get_current_user)):
@@ -98,9 +92,7 @@ class TestUserFromJwt:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            resp = await ac.get(
-                "/test", headers={"Authorization": f"Bearer {token}"}
-            )
+            resp = await ac.get("/test", headers={"Authorization": f"Bearer {token}"})
             assert resp.status_code == 401
             assert "disabled" in resp.json()["detail"].lower()
 
@@ -118,9 +110,7 @@ class TestUserFromJwt:
         db_session.add(user)
         await db_session.flush()
 
-        token = create_access_token(
-            sub=str(user.id), email=user.email, role=user.role
-        )
+        token = create_access_token(sub=str(user.id), email=user.email, role=user.role)
 
         @app.get("/test")
         async def handler(user: User = Depends(get_current_user)):
@@ -133,9 +123,7 @@ class TestUserFromJwt:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            resp = await ac.get(
-                "/test", headers={"Authorization": f"Bearer {token}"}
-            )
+            resp = await ac.get("/test", headers={"Authorization": f"Bearer {token}"})
             assert resp.status_code == 200
             assert resp.json()["role"] == "quant_dev"
 
@@ -155,9 +143,7 @@ class TestRequireApiScopeIntegration:
         db_session.add(user)
         await db_session.flush()
 
-        token = create_access_token(
-            sub=str(user.id), email=user.email, role=user.role
-        )
+        token = create_access_token(sub=str(user.id), email=user.email, role=user.role)
 
         @app.get("/test")
         async def handler(user: User = Depends(require_api_scope("admin"))):
@@ -170,7 +156,5 @@ class TestRequireApiScopeIntegration:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            resp = await ac.get(
-                "/test", headers={"Authorization": f"Bearer {token}"}
-            )
+            resp = await ac.get("/test", headers={"Authorization": f"Bearer {token}"})
             assert resp.status_code == 200

@@ -78,18 +78,14 @@ class RetentionPolicy:
 
 DEFAULT_POLICIES: Mapping[str, RetentionPolicy] = {
     "ohlcv_1m": RetentionPolicy("ohlcv_1m", retain_days=90, compress_after_days=30),
-    "ohlcv_1d": RetentionPolicy(
-        "ohlcv_1d", retain_days=None, compress_after_days=365
-    ),
+    "ohlcv_1d": RetentionPolicy("ohlcv_1d", retain_days=None, compress_after_days=365),
     "backtest_results": RetentionPolicy("backtest_results", retain_days=None),
     "trade_log": RetentionPolicy("trade_log", retain_days=None),
     "portfolio_snapshots": RetentionPolicy(
         "portfolio_snapshots", retain_days=365, compress_after_days=90
     ),
     "webhook_deliveries": RetentionPolicy("webhook_deliveries", retain_days=30),
-    "evaluation_log": RetentionPolicy(
-        "evaluation_log", retain_days=90, compress_after_days=30
-    ),
+    "evaluation_log": RetentionPolicy("evaluation_log", retain_days=90, compress_after_days=30),
 }
 
 

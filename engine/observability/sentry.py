@@ -11,9 +11,7 @@ from engine.observability.redact import _scrub_dict, _scrub_value
 logger = logging.getLogger(__name__)
 
 
-def _before_send(
-    event: dict[str, Any], _hint: dict[str, Any]
-) -> dict[str, Any]:
+def _before_send(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any]:
     """Sentry ``before_send`` hook.
 
     Reuses the structlog redaction logic (``engine.observability.redact``) to

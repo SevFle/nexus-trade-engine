@@ -11,11 +11,26 @@ permissions:
 
 jobs:
   release-please:
-    if: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
+    # NOTE: do NOT put a job-level `if: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}`
+    # guard here. A job-level guard makes the whole workflow run *skip* when
+    # the token is absent, and a skipped run never reports `success`, so any
+    # required-status-check / merge queue gating on this workflow fails
+    # permanently (the check stays "pending"/"skipped" forever). Instead the
+    # guard lives on the release-please *step* below: the job always runs and
+    # posts a green conclusion, and only the action itself is conditional.
     runs-on: [self-hosted, nexus]
     steps:
-      - uses: googleapis/release-please-action@v4
+      - if: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
+        uses: googleapis/release-please-action@v4
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      # Fallback so the job ALWAYS posts a concrete `success` step conclusion.
+      # When RELEASE_PLEASE_TOKEN is unset the action step above is skipped; a
+      # skipped-only job still resolves to `success`, but an explicit green
+      # step makes the outcome unambiguous for required status checks /
+      # merge queues that key off individual step statuses (see the job-level
+      # guard note above).
+      - if: ${{ secrets.RELEASE_PLEASE_TOKEN == '' }}
+        run: 'echo release-please skipped: RELEASE_PLEASE_TOKEN is not set'

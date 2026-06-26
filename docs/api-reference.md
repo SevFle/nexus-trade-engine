@@ -428,6 +428,26 @@ still per-process, but event distribution is cross-replica.
   ([`BodySizeLimitMiddleware`](../engine/api/body_size_limit.py)).
 - **Provider errors**: see Market data section above.
 
+## MCP server (non-HTTP surface)
+
+The engine also exposes its capabilities to LLM assistants and other MCP
+clients via a Model Context Protocol server in [`engine/mcp/`](../engine/mcp/).
+This is **not** an HTTP/WebSocket route mounted by `router.py` — it is a
+separate JSON-RPC surface with its own settings object (`NEXUS_MCP_*`) and
+its own transport (stdio-first, http optional).
+
+It advertises nine tools (`run_backtest`, `get_portfolio_status`,
+`get_positions`, `get_orders`, `list_strategies`, `get_strategy_details`,
+`get_market_data`, `get_cost_model`, `get_performance_metrics`) and five
+static resources. Auth reuses the engine JWT + RBAC hierarchy (same
+`ROLE_HIERARCHY` as above), so a principal is identical across surfaces.
+
+See [`architecture/mcp.md`](architecture/mcp.md) for the full tool catalog,
+resource URIs, auth/pagination/rate-limit model, and the configuration
+table, and [`adr/0012-mcp-server.md`](adr/0012-mcp-server.md) for the
+rationale. Note the [known limitation](known-limitations.md): the runnable
+transport bootstrap is not yet shipped.
+
 ## Cross-cutting middleware
 
 Applied in reverse order in [`create_app`](../engine/app.py#L154) so the

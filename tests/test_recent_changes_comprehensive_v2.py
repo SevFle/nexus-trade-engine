@@ -8,6 +8,7 @@ Targets:
 - engine/events/webhook_dispatcher.py (_backoff_delay, canonical_payload edge cases)
 - engine/core/live/kill_switch.py (edge cases: empty reason, observers, re-engage)
 """
+
 from __future__ import annotations
 
 import uuid
@@ -65,7 +66,9 @@ class TestStrategyManifest:
 
     def test_requires_gpu_optional_not_required(self):
         m = StrategyManifest(
-            id="x", name="X", version="0.1.0",
+            id="x",
+            name="X",
+            version="0.1.0",
             resources=ResourceLimits(gpu="optional"),
         )
         assert m.requires_gpu() is False
@@ -92,7 +95,9 @@ class TestStrategyManifest:
 
     def test_serialization_round_trip(self):
         m = StrategyManifest(
-            id="rsi", name="RSI", version="1.0.0",
+            id="rsi",
+            name="RSI",
+            version="1.0.0",
             resources=ResourceLimits(max_memory="2GB"),
         )
         data = m.model_dump()
@@ -577,9 +582,7 @@ class TestPluginRegistryHelpers:
         (strat_dir / "manifest.yaml").write_text(
             "id: valid\nname: Valid Strategy\nversion: 1.0.0\n"
         )
-        (strat_dir / "strategy.py").write_text(
-            "class Strategy: pass\n"
-        )
+        (strat_dir / "strategy.py").write_text("class Strategy: pass\n")
         result = discover_strategies(tmp_path)
         assert "valid_strat" in result
         assert result["valid_strat"]["manifest"]["id"] == "valid"
@@ -594,9 +597,7 @@ class TestPluginRegistryHelpers:
         from engine.plugins.registry import load_strategy_class
 
         strategy_file = tmp_path / "strategy.py"
-        strategy_file.write_text(
-            "class Strategy:\n    name = 'test'\n"
-        )
+        strategy_file.write_text("class Strategy:\n    name = 'test'\n")
         cls = load_strategy_class(str(strategy_file))
         instance = cls()
         assert instance.name == "test"

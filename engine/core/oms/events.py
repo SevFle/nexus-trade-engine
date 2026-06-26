@@ -77,13 +77,7 @@ class ExpireEvent(_BaseEvent):
 
 # Algebraic-data-type alias — every concrete event in the system.
 OrderEvent = (
-    SubmitEvent
-    | AckEvent
-    | PartialFillEvent
-    | FillEvent
-    | CancelEvent
-    | RejectEvent
-    | ExpireEvent
+    SubmitEvent | AckEvent | PartialFillEvent | FillEvent | CancelEvent | RejectEvent | ExpireEvent
 )
 
 

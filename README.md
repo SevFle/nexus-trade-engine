@@ -138,6 +138,8 @@ key entry points:
   components, request lifecycle, configuration.
 - [API reference](docs/api-reference.md) — every HTTP and WebSocket
   route, auth model, error semantics.
+- [MCP server](docs/architecture/mcp.md) — LLM-assistant surface (tools &
+  resources, auth, transport) over Model Context Protocol.
 - [Data model](docs/data-model.md) — entities, relationships,
   invariants.
 - [Development setup](docs/development.md) — local stack, tests,

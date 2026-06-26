@@ -121,9 +121,7 @@ def compute_total_market_impact(
         eta=eta,
         horizon_days=horizon_days,
     )
-    perm = compute_permanent_impact(
-        temp, permanent_fraction=permanent_fraction
-    )
+    perm = compute_permanent_impact(temp, permanent_fraction=permanent_fraction)
     return temp, perm, temp + perm
 
 

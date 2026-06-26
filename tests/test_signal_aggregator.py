@@ -104,9 +104,7 @@ class TestWeighted:
         assert out[0].side == Side.BUY
 
     def test_unknown_strategy_defaults_to_unit_weight(self):
-        agg = SignalAggregator(
-            AggregationMethod.WEIGHTED, strategy_weights={"s1": 0.5}
-        )
+        agg = SignalAggregator(AggregationMethod.WEIGHTED, strategy_weights={"s1": 0.5})
         out = agg.aggregate(
             [
                 _batch("s1", _sig("AAPL", Side.BUY, "s1")),
@@ -160,9 +158,7 @@ class TestIndependent:
             ]
         )
         assert len(out) == 3
-        sides = sorted(
-            (s.symbol, s.side.value, s.strategy_id) for s in out
-        )
+        sides = sorted((s.symbol, s.side.value, s.strategy_id) for s in out)
         assert sides == [
             ("AAPL", "buy", "s1"),
             ("AAPL", "sell", "s3"),

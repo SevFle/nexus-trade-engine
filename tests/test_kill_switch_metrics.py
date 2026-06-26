@@ -28,9 +28,7 @@ def _counter_total(backend: RecordingBackend, name: str) -> float:
     return sum(v for (n, _t), v in backend.counters.items() if n == name)
 
 
-def _counter_with(
-    backend: RecordingBackend, name: str, tags: dict[str, str]
-) -> float:
+def _counter_with(backend: RecordingBackend, name: str, tags: dict[str, str]) -> float:
     expected = tuple(sorted(tags.items()))
     return sum(
         v
@@ -56,12 +54,7 @@ class TestEngageMetrics:
         changed = ks.engage(reason="manual", actor="operator")
 
         assert changed is True
-        assert (
-            _counter_with(
-                metrics, "kill_switch.engaged", {"actor": "operator"}
-            )
-            == 1
-        )
+        assert _counter_with(metrics, "kill_switch.engaged", {"actor": "operator"}) == 1
         assert _counter_total(metrics, "kill_switch.engage_noop") == 0
         assert _gauge_value(metrics, "kill_switch.state") == 1.0
 
@@ -73,12 +66,7 @@ class TestEngageMetrics:
         # Real engagements: still exactly one.
         assert _counter_total(metrics, "kill_switch.engaged") == 1
         # Noop bumped under the second actor.
-        assert (
-            _counter_with(
-                metrics, "kill_switch.engage_noop", {"actor": "live_loop"}
-            )
-            == 1
-        )
+        assert _counter_with(metrics, "kill_switch.engage_noop", {"actor": "live_loop"}) == 1
         # Gauge stayed at 1.
         assert _gauge_value(metrics, "kill_switch.state") == 1.0
 
@@ -88,25 +76,16 @@ class TestDisengageMetrics:
         ks = KillSwitch(metrics=metrics)
         ks.engage(reason="manual", actor="operator")
 
-        changed = ks.disengage(
-            confirmation=_DISENGAGE_TOKEN, actor="operator"
-        )
+        changed = ks.disengage(confirmation=_DISENGAGE_TOKEN, actor="operator")
 
         assert changed is True
-        assert (
-            _counter_with(
-                metrics, "kill_switch.disengaged", {"actor": "operator"}
-            )
-            == 1
-        )
+        assert _counter_with(metrics, "kill_switch.disengaged", {"actor": "operator"}) == 1
         assert _gauge_value(metrics, "kill_switch.state") == 0.0
 
     def test_disengage_when_already_disengaged_emits_nothing(self, metrics):
         ks = KillSwitch(metrics=metrics)
 
-        changed = ks.disengage(
-            confirmation=_DISENGAGE_TOKEN, actor="operator"
-        )
+        changed = ks.disengage(confirmation=_DISENGAGE_TOKEN, actor="operator")
 
         assert changed is False
         assert _counter_total(metrics, "kill_switch.disengaged") == 0
@@ -115,9 +94,7 @@ class TestDisengageMetrics:
 
 
 class TestRoundTrip:
-    def test_engage_disengage_engage_records_two_engaged_two_state_writes(
-        self, metrics
-    ):
+    def test_engage_disengage_engage_records_two_engaged_two_state_writes(self, metrics):
         ks = KillSwitch(metrics=metrics)
         ks.engage(reason="r1", actor="op")
         ks.disengage(confirmation=_DISENGAGE_TOKEN, actor="op")

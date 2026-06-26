@@ -47,9 +47,7 @@ class Study:
         max_trials: int | None = None,
     ) -> None:
         if direction not in ("maximize", "minimize"):
-            raise ValueError(
-                f"direction must be 'maximize' or 'minimize', got {direction!r}"
-            )
+            raise ValueError(f"direction must be 'maximize' or 'minimize', got {direction!r}")
         if max_trials is not None and max_trials <= 0:
             raise ValueError("max_trials must be positive when set")
         self.specs = specs
@@ -70,9 +68,7 @@ class Study:
         if n_trials <= 0:
             raise ValueError("n_trials must be positive")
         capped = n_trials if self.max_trials is None else min(n_trials, self.max_trials)
-        return self._run(
-            random_search(self.specs, capped, seed=seed), sampler="random"
-        )
+        return self._run(random_search(self.specs, capped, seed=seed), sampler="random")
 
     # ------------------------------------------------------------------
     # Internals
@@ -103,9 +99,7 @@ class Study:
                     index=index,
                     params=params,
                 )
-                trials.append(
-                    Trial(index=index, params=params, error="objective returned NaN")
-                )
+                trials.append(Trial(index=index, params=params, error="objective returned NaN"))
                 continue
             trials.append(Trial(index=index, params=params, score=score))
 

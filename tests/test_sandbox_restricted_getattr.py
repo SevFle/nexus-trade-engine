@@ -201,9 +201,7 @@ class TestRestrictedGetattrUnit:
             self._deactivate(sandbox)
 
     @pytest.mark.parametrize("attr", sorted(_BLOCKED_ATTRS))
-    def test_blocked_attr_increments_errors(
-        self, sandbox: StrategySandbox, attr: str
-    ) -> None:
+    def test_blocked_attr_increments_errors(self, sandbox: StrategySandbox, attr: str) -> None:
         assert sandbox.metrics.errors == 0
         self._activate(sandbox)
         try:
@@ -228,9 +226,7 @@ class TestRestrictedGetattrUnit:
         assert sandbox.metrics.errors == 1
         assert attr in (sandbox.metrics.last_error or "")
 
-    def test_normal_attr_passes_through(
-        self, sandbox: StrategySandbox
-    ) -> None:
+    def test_normal_attr_passes_through(self, sandbox: StrategySandbox) -> None:
         self._activate(sandbox)
         try:
             obj = type("T", (), {"value": 99})()
@@ -251,9 +247,7 @@ class TestRestrictedGetattrUnit:
         finally:
             self._deactivate(sandbox)
 
-    def test_missing_attr_with_default_returns_default(
-        self, sandbox: StrategySandbox
-    ) -> None:
+    def test_missing_attr_with_default_returns_default(self, sandbox: StrategySandbox) -> None:
         self._activate(sandbox)
         try:
             obj = type("T", (), {})()
@@ -267,9 +261,7 @@ class TestRestrictedGetattrUnit:
 
 
 class TestErrorRegistrationViaEvaluate:
-    async def test_direct_attack_registers_error(
-        self, manifest: StrategyManifest
-    ) -> None:
+    async def test_direct_attack_registers_error(self, manifest: StrategyManifest) -> None:
         """``getattr(fn, '__globals__')`` with no default → error counted."""
         sandbox = StrategySandbox(_GetattrGlobalsStrategy(), manifest)
         try:
@@ -280,9 +272,7 @@ class TestErrorRegistrationViaEvaluate:
         finally:
             sandbox.cleanup()
 
-    async def test_sneaky_catch_registers_error(
-        self, manifest: StrategyManifest
-    ) -> None:
+    async def test_sneaky_catch_registers_error(self, manifest: StrategyManifest) -> None:
         """When the attacker swallows the PermissionError, the violation
         must still be recorded in ``metrics.errors``."""
         sandbox = StrategySandbox(_SneakyCatchGlobalsStrategy(), manifest)
@@ -294,9 +284,7 @@ class TestErrorRegistrationViaEvaluate:
         finally:
             sandbox.cleanup()
 
-    async def test_sneaky_default_registers_error(
-        self, manifest: StrategyManifest
-    ) -> None:
+    async def test_sneaky_default_registers_error(self, manifest: StrategyManifest) -> None:
         """The 3-arg ``getattr(fn, '__globals__', None)`` form must still
         be recorded as a security violation even though no exception
         propagates."""
@@ -309,9 +297,7 @@ class TestErrorRegistrationViaEvaluate:
         finally:
             sandbox.cleanup()
 
-    async def test_multiple_blocked_attrs_all_counted(
-        self, manifest: StrategyManifest
-    ) -> None:
+    async def test_multiple_blocked_attrs_all_counted(self, manifest: StrategyManifest) -> None:
         """Each blocked-attribute probe is counted individually."""
         sandbox = StrategySandbox(_MultipleBlockedAttrStrategy(), manifest)
         try:
@@ -321,9 +307,7 @@ class TestErrorRegistrationViaEvaluate:
         finally:
             sandbox.cleanup()
 
-    async def test_subclasses_attack_registers_error(
-        self, manifest: StrategyManifest
-    ) -> None:
+    async def test_subclasses_attack_registers_error(self, manifest: StrategyManifest) -> None:
         sandbox = StrategySandbox(_GetattrSubclassesStrategy(), manifest)
         try:
             signals = await sandbox.safe_evaluate(None, None, None)
@@ -351,9 +335,7 @@ class TestErrorRegistrationViaEvaluate:
 
 
 class TestNoDoubleCounting:
-    async def test_direct_attack_not_double_counted(
-        self, manifest: StrategyManifest
-    ) -> None:
+    async def test_direct_attack_not_double_counted(self, manifest: StrategyManifest) -> None:
         """When ``_restricted_getattr`` raises and the exception propagates
         to ``_evaluate_inner``, the error must be counted exactly once."""
         sandbox = StrategySandbox(_GetattrGlobalsStrategy(), manifest)
@@ -363,9 +345,7 @@ class TestNoDoubleCounting:
         finally:
             sandbox.cleanup()
 
-    async def test_flag_resets_between_evaluations(
-        self, manifest: StrategyManifest
-    ) -> None:
+    async def test_flag_resets_between_evaluations(self, manifest: StrategyManifest) -> None:
         """The ``_getattr_violation_counted`` flag must reset between
         evaluations so a *later* non-getattr error is still counted."""
         sandbox = StrategySandbox(_SneakyCatchGlobalsStrategy(), manifest)
@@ -453,9 +433,7 @@ class TestBuiltinsInjection:
         sandbox.cleanup()
         assert builtins.getattr is original
 
-    def test_strategy_getattr_goes_through_hook(
-        self, manifest: StrategyManifest
-    ) -> None:
+    def test_strategy_getattr_goes_through_hook(self, manifest: StrategyManifest) -> None:
         """Inside an activated sandbox, a bare ``getattr()`` call is
         intercepted — proving the hook is installed in the namespace the
         strategy code actually uses."""
@@ -477,6 +455,7 @@ class TestDefaultArgumentSafety:
     def test_default_never_leaks_real_globals(self, sandbox: StrategySandbox) -> None:
         """The 3-arg form must return the caller's default, never the real
         ``__globals__`` dict."""
+
         def _sample_fn() -> None:
             pass
 

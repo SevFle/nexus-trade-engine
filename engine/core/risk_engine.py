@@ -58,7 +58,9 @@ class RiskEngine:
         self.circuit_breaker_active = False
         self.daily_trade_count = 0
 
-    def check_order(self, order: Order, portfolio: Portfolio, market_price: float) -> RiskCheckResult:
+    def check_order(
+        self, order: Order, portfolio: Portfolio, market_price: float
+    ) -> RiskCheckResult:
         """
         Run all pre-trade risk checks.
         Returns approved=False with reason if any check fails.

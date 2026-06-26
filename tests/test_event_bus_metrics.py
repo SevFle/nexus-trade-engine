@@ -27,9 +27,7 @@ def _counter_total(backend: RecordingBackend, name: str) -> float:
     return sum(v for (n, _t), v in backend.counters.items() if n == name)
 
 
-def _counter_with(
-    backend: RecordingBackend, name: str, tags: dict[str, str]
-) -> float:
+def _counter_with(backend: RecordingBackend, name: str, tags: dict[str, str]) -> float:
     expected = tuple(sorted(tags.items()))
     return sum(
         v
@@ -95,9 +93,7 @@ class TestHandlerDurationAndErrors:
 
         await bus.publish(Event(EventType.SIGNAL_EMITTED))
 
-        observations = _histogram_observations(
-            metrics, "event_bus.handler_duration_ms"
-        )
+        observations = _histogram_observations(metrics, "event_bus.handler_duration_ms")
         assert len(observations) == 1
         tags, values = observations[0]
         assert ("event_type", "signal.emitted") in tags
@@ -125,9 +121,7 @@ class TestHandlerDurationAndErrors:
             == 1
         )
         # Histogram still gets the (failed) attempt.
-        observations = _histogram_observations(
-            metrics, "event_bus.handler_duration_ms"
-        )
+        observations = _histogram_observations(metrics, "event_bus.handler_duration_ms")
         assert len(observations) == 1
 
     async def test_one_failing_handler_does_not_block_other_handlers(self, metrics):
@@ -144,9 +138,7 @@ class TestHandlerDurationAndErrors:
 
         good.assert_awaited_once()
         # Two histogram observations (one per handler), one error counter.
-        observations = _histogram_observations(
-            metrics, "event_bus.handler_duration_ms"
-        )
+        observations = _histogram_observations(metrics, "event_bus.handler_duration_ms")
         assert sum(len(vs) for _, vs in observations) == 2
         assert _counter_total(metrics, "event_bus.handler_error") == 1
 

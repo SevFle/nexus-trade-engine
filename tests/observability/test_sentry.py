@@ -131,8 +131,7 @@ class TestCloseSentry:
             close_sentry()
 
         assert any(
-            "sentry.flush_timeout" in rec.message
-            or rec.message == "sentry.flush_timeout"
+            "sentry.flush_timeout" in rec.message or rec.message == "sentry.flush_timeout"
             for rec in caplog.records
         )
 
@@ -146,9 +145,7 @@ class TestCloseSentry:
         ):
             close_sentry()
 
-        assert not any(
-            "flush_timeout" in rec.message for rec in caplog.records
-        )
+        assert not any("flush_timeout" in rec.message for rec in caplog.records)
 
 
 class TestBeforeSend:

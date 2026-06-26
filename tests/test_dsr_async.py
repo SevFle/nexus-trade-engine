@@ -1,5 +1,6 @@
 """Comprehensive async tests for engine.privacy.dsr — record_request,
 list_user_requests, and transition using the test DB session."""
+
 from __future__ import annotations
 
 import uuid
@@ -55,9 +56,7 @@ class TestRecordRequest:
             await record_request(db_session, user_id=test_user.id, kind="export", sla_days=-5)
 
     async def test_custom_sla_days(self, db_session: AsyncSession, test_user):
-        row = await record_request(
-            db_session, user_id=test_user.id, kind="delete", sla_days=7
-        )
+        row = await record_request(db_session, user_id=test_user.id, kind="delete", sla_days=7)
         assert row.sla_due_at is not None
 
     async def test_with_note(self, db_session: AsyncSession, test_user):

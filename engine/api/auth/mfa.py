@@ -52,17 +52,13 @@ def generate_totp_secret(*, n_bytes: int = 20) -> str:
 def _decode_secret(secret_b32: str) -> bytes:
     padding = (-len(secret_b32)) % 8
     try:
-        return base64.b32decode(
-            secret_b32.upper() + "=" * padding, casefold=False
-        )
+        return base64.b32decode(secret_b32.upper() + "=" * padding, casefold=False)
     except (ValueError, TypeError) as exc:
         msg = f"secret is not valid base32: {exc}"
         raise MFAError(msg) from exc
 
 
-def _hotp(
-    secret_b32: str, counter: int, *, digits: int = _DEFAULT_DIGITS
-) -> str:
+def _hotp(secret_b32: str, counter: int, *, digits: int = _DEFAULT_DIGITS) -> str:
     """RFC 4226 HMAC-One-Time-Password."""
     if digits < _MIN_DIGITS or digits > _MAX_DIGITS:
         msg = f"digits must be in [{_MIN_DIGITS}, {_MAX_DIGITS}]; got {digits}"

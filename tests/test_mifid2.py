@@ -76,7 +76,9 @@ class TestValidation:
     def test_naive_datetime_rejected(self):
         # RTS 22 requires UTC. Naive datetimes are ambiguous.
         with pytest.raises(ValueError):
-            _txn(trading_datetime=datetime(2024, 6, 1, 14, 30, 15, tzinfo=UTC).replace(tzinfo=None))
+            _txn(
+                trading_datetime=datetime(2024, 6, 1, 14, 30, 15, tzinfo=UTC).replace(tzinfo=None)
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -180,19 +182,10 @@ class TestCsv:
         # +02:00 timezone — should convert to 12:30:15Z.
         cest = timezone(timedelta(hours=2))
         out = transactions_to_csv(
-            [
-                _txn(
-                    trading_datetime=datetime(
-                        2024, 6, 1, 14, 30, 15, tzinfo=cest
-                    )
-                )
-            ]
+            [_txn(trading_datetime=datetime(2024, 6, 1, 14, 30, 15, tzinfo=cest))]
         )
         _, body = _parse(out)
-        assert any(
-            cell == "2024-06-01T12:30:15Z"
-            for cell in body[0]
-        )
+        assert any(cell == "2024-06-01T12:30:15Z" for cell in body[0])
 
     def test_empty_optional_venue_id_renders_blank(self):
         out = transactions_to_csv([_txn(venue_transaction_id=None)])
@@ -335,15 +328,9 @@ class TestTransmissionFields10And19:
         header, body = _parse(out)
         idx = {col: i for i, col in enumerate(header)}
         assert body[0][idx["buyer_transmission_indicator"]] == "true"
-        assert (
-            body[0][idx["buyer_transmitting_firm_id"]]
-            == "529900TXBUY1234567X"
-        )
+        assert body[0][idx["buyer_transmitting_firm_id"]] == "529900TXBUY1234567X"
         assert body[0][idx["seller_transmission_indicator"]] == "true"
-        assert (
-            body[0][idx["seller_transmitting_firm_id"]]
-            == "529900TXSEL1234567Y"
-        )
+        assert body[0][idx["seller_transmitting_firm_id"]] == "529900TXSEL1234567Y"
 
     def test_transmission_block_sits_between_decision_maker_and_capacity(
         self,
