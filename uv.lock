@@ -1469,6 +1469,7 @@ dependencies = [
     { name = "taskiq" },
     { name = "taskiq-fastapi" },
     { name = "taskiq-redis" },
+    { name = "tzdata" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "valkey" },
 ]
@@ -1532,6 +1533,7 @@ requires-dist = [
     { name = "taskiq", specifier = ">=0.11.0" },
     { name = "taskiq-fastapi", specifier = ">=0.3.0" },
     { name = "taskiq-redis", specifier = ">=1.0.0" },
+    { name = "tzdata", specifier = ">=2024.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
     { name = "valkey", specifier = ">=6.0.0" },
 ]

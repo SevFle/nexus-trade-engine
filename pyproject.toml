@@ -33,6 +33,10 @@ dependencies = [
     "python-multipart>=0.0.9",
     "mcp>=1.0.0",
     "sse-starlette>=3.4.0",
+    # zoneinfo has no bundled IANA tz database on minimal Python images
+    # (e.g. the python:3.12 CI container); ship tzdata so ZoneInfo("US/Eastern")
+    # and friends resolve at runtime.
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]
