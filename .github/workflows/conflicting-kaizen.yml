@@ -1,0 +1,52 @@
+name: Close conflicting kaizen PRs
+
+# Finds open PRs opened by the kaizen autonomous engine (head branch
+# prefix `kaizen/`) that have merge conflicts GitHub cannot auto-resolve,
+# then either logs which PRs *would* be closed (DRY_RUN=true, the
+# default) or actually closes them with an explanatory comment
+# (DRY_RUN=false).
+#
+# Dry-run first (#491) lets us validate the selection query against real
+# repo state before enabling live auto-close (#489).
+#
+# See: scripts/close_conflicting_kaizen_prs.py
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Log what would be closed without actually closing it (recommended)"
+        required: false
+        type: boolean
+        default: true
+  schedule:
+    # Nightly 04:11 UTC — off-peak dry-run validation of the selection
+    # query so drift is caught before live auto-close is enabled.
+    - cron: "11 4 * * *"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  sweep:
+    name: ${{ github.event.inputs.dry_run == 'false' && 'Close' || 'Dry-run' }} conflicting kaizen PRs
+    runs-on: [self-hosted, nexus]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # `gh` is preinstalled on the runner and authenticates via the
+      # GITHUB_TOKEN env var. Scheduled runs have no `inputs.*` context,
+      # so default to the safe dry-run.
+      - name: Run conflicting-kaizen sweep
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'true' }}
+        run: |
+          set -euo pipefail
+          python scripts/close_conflicting_kaizen_prs.py
