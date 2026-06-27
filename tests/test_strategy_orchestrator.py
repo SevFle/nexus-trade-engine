@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import threading
 
 import pytest
 
@@ -101,6 +102,33 @@ class _NoIdStrategy:
 
 class _NoEvaluateStrategy:
     id = "has-id-but-no-evaluate"
+
+
+class _AsyncCallable:
+    """A *callable-instance* strategy: the object itself is the evaluator
+    via an async ``__call__``, and ``evaluate`` delegates to it.
+
+    This exercises the dispatch path with an awaitable produced by
+    invoking a callable instance (rather than a plain ``async def
+    evaluate``) and proves the orchestrator still recognises and awaits
+    it through the ``inspect.isawaitable`` branch.
+    """
+
+    def __init__(self, sid: str, signals: list[Signal]) -> None:
+        self._id = sid
+        self._signals = signals
+
+    @property
+    def id(self) -> str:
+        return self._id
+
+    async def __call__(self, market_data, cost_model) -> list[Signal]:
+        return [s.model_copy() for s in self._signals]
+
+    async def evaluate(self, market_data, cost_model) -> list[Signal]:
+        # Delegate to the callable instance so the awaitable returned by
+        # ``__call__`` flows through ``evaluate`` and out to the dispatcher.
+        return await self(market_data, cost_model)
 
 
 # Sentinel values passed as market_data / cost_model. These are
@@ -306,14 +334,10 @@ class TestEvaluateAll:
         # Different symbols resolve independently in one pass.
         orch = StrategyOrchestrator()
         orch.register(
-            _RecordingStrategy(
-                "a", [_sig("AAPL", Side.BUY, "a"), _sig("MSFT", Side.SELL, "a")]
-            )
+            _RecordingStrategy("a", [_sig("AAPL", Side.BUY, "a"), _sig("MSFT", Side.SELL, "a")])
         )
         orch.register(
-            _RecordingStrategy(
-                "b", [_sig("AAPL", Side.BUY, "b"), _sig("MSFT", Side.BUY, "b")]
-            )
+            _RecordingStrategy("b", [_sig("AAPL", Side.BUY, "b"), _sig("MSFT", Side.BUY, "b")])
         )
 
         result = await orch.evaluate_all(_MARKET, _COSTS)
@@ -356,9 +380,7 @@ class TestWeightedOverride:
         orch = StrategyOrchestrator()
         orch.register(_RecordingStrategy("b1", [_sig("AAPL", Side.BUY, "b1")]))
         orch.register(_RecordingStrategy("b2", [_sig("AAPL", Side.BUY, "b2")]))
-        orch.register(
-            _RecordingStrategy("s1", [_sig("AAPL", Side.SELL, "s1")]), weight=1.5
-        )
+        orch.register(_RecordingStrategy("s1", [_sig("AAPL", Side.SELL, "s1")]), weight=1.5)
 
         result = await orch.evaluate_all(_MARKET, _COSTS, aggregation="weighted")
 
@@ -491,11 +513,7 @@ class TestRegistryMutationDuringEvaluate:
 
             async def evaluate(self, market_data, cost_model):
                 # Mutate the registry mid-cycle.
-                orch.register(
-                    _RecordingStrategy(
-                        "late", [_sig("AAPL", Side.SELL, "late")]
-                    )
-                )
+                orch.register(_RecordingStrategy("late", [_sig("AAPL", Side.SELL, "late")]))
                 return [_sig("AAPL", Side.BUY, "early")]
 
         orch.register(_RegisteringStrategy())
@@ -590,9 +608,7 @@ class TestMutationIsolation:
                 cost_model["fee_bps"] = 999.0
                 return [_sig("AAPL", Side.BUY, "mutator")]
 
-        observer = _RecordingStrategy(
-            "observer", [_sig("AAPL", Side.BUY, "observer")]
-        )
+        observer = _RecordingStrategy("observer", [_sig("AAPL", Side.BUY, "observer")])
 
         orch = StrategyOrchestrator()
         orch.register(_MutatingStrategy())
@@ -624,3 +640,164 @@ class TestMutationIsolation:
         b_md = b.received[0][0]
         assert a_md == b_md  # equal by value ...
         assert a_md is not b_md  # ... but independent objects
+
+
+# --------------------------------------------------------------------- #
+# Dispatch path: the per-strategy try/except block in ``evaluate_all``.
+# It calls ``strategy.evaluate(md, cm)`` first, then branches on
+# ``inspect.isawaitable(raw)``. The async branch wraps the already-obtained
+# awaitable in ``asyncio.wait_for``; the sync branch returns ``raw``
+# directly with NO thread-pool executor (the sync call has already
+# completed by the time the branch is reached).
+# --------------------------------------------------------------------- #
+
+
+class TestDispatchStrategy:
+    """Targeted coverage for the sync/async dispatch mechanics."""
+
+    async def test_callable_instance_async_call_is_dispatched(self):
+        # THE required regression: a callable-instance class whose
+        # evaluation entry point is an async ``__call__`` must be
+        # dispatched and its returned awaitable awaited correctly.
+        sigs = [
+            _sig("AAPL", Side.BUY, "callable"),
+            _sig("MSFT", Side.SELL, "callable"),
+        ]
+        strategy = _AsyncCallable("callable", sigs)
+        assert callable(strategy)  # it really is a callable instance
+
+        orch = StrategyOrchestrator()
+        orch.register(strategy)
+
+        result = await orch.evaluate_all(_MARKET, _COSTS)
+
+        # The awaitable produced by __call__ was awaited: both signals
+        # materialised, were batched, and aggregated cleanly.
+        assert result.errors == {}
+        assert {s.symbol: s.side for s in result.signals} == {
+            "AAPL": Side.BUY,
+            "MSFT": Side.SELL,
+        }
+        assert [b.strategy_id for b in result.batches] == ["callable"]
+
+    async def test_sync_evaluate_returned_list_used_directly(self):
+        # The sync path returns ``raw`` directly. A plain list returned
+        # by a non-async evaluate must flow through unchanged (no
+        # awaiting, no executor wrapping).
+        class _ListStrategy:
+            id = "list"
+
+            def evaluate(self, market_data, cost_model):
+                return [_sig("AAPL", Side.BUY, "list")]
+
+        orch = StrategyOrchestrator()
+        orch.register(_ListStrategy())
+
+        result = await orch.evaluate_all(_MARKET, _COSTS)
+
+        assert result.errors == {}
+        assert [b.strategy_id for b in result.batches] == ["list"]
+        assert result.batches[0].signals[0].side == Side.BUY
+        assert result.signals[0].side == Side.BUY
+
+    async def test_sync_evaluate_runs_in_event_loop_thread(self):
+        # The sync path does NOT offload to a thread-pool executor: the
+        # strategy executes inline in the running event loop's thread.
+        # A non-awaitable return value is the signal that the sync
+        # branch was taken (raw returned directly).
+        main_thread = threading.get_ident()
+        seen: list[int] = []
+
+        class _ThreadProbeStrategy:
+            id = "probe"
+
+            def evaluate(self, market_data, cost_model):
+                seen.append(threading.get_ident())
+                return []  # non-awaitable -> sync branch
+
+        orch = StrategyOrchestrator()
+        orch.register(_ThreadProbeStrategy())
+
+        await orch.evaluate_all(_MARKET, _COSTS)
+
+        # Ran synchronously in the event-loop thread, not a worker.
+        assert seen == [main_thread]
+
+    async def test_async_evaluate_coroutine_is_awaited(self):
+        # The async path recognises the coroutine via isawaitable and
+        # awaits it (wrapped in wait_for), so the produced signals reach
+        # the batch. Distinguished from sync: evaluate is a coroutine fn.
+        class _CoroutineStrategy:
+            id = "coro"
+
+            async def evaluate(self, market_data, cost_model):
+                await asyncio.sleep(0)  # yields to the loop once
+                return [_sig("AAPL", Side.SELL, "coro")]
+
+        orch = StrategyOrchestrator()
+        orch.register(_CoroutineStrategy())
+
+        result = await orch.evaluate_all(_MARKET, _COSTS)
+
+        assert result.errors == {}
+        assert result.signals[0].side == Side.SELL
+
+    async def test_dispatch_materialises_non_list_iterable(self):
+        # ``list(raw) if raw else []`` accepts any iterable, e.g. a
+        # generator returned by a sync evaluate, not just a real list.
+        class _GeneratorStrategy:
+            id = "gen"
+
+            def evaluate(self, market_data, cost_model):
+                yield _sig("AAPL", Side.BUY, "gen")
+                yield _sig("MSFT", Side.SELL, "gen")
+
+        orch = StrategyOrchestrator()
+        orch.register(_GeneratorStrategy())
+
+        result = await orch.evaluate_all(_MARKET, _COSTS)
+
+        assert result.errors == {}
+        emitted = result.batches[0].signals
+        assert {s.symbol: s.side for s in emitted} == {
+            "AAPL": Side.BUY,
+            "MSFT": Side.SELL,
+        }
+
+    async def test_sync_evaluate_returning_none_yields_empty_batch(self):
+        # Falsy sync result is treated as an empty batch, not an error.
+        class _NoneSyncStrategy:
+            id = "none-sync"
+
+            def evaluate(self, market_data, cost_model):
+                return None
+
+        orch = StrategyOrchestrator()
+        orch.register(_RecordingStrategy("a", [_sig("AAPL", Side.BUY, "a")]))
+        orch.register(_NoneSyncStrategy())
+
+        result = await orch.evaluate_all(_MARKET, _COSTS)
+
+        assert result.errors == {}
+        assert [b.strategy_id for b in result.batches] == ["a", "none-sync"]
+        assert result.batches[1].signals == []
+
+    async def test_sync_strategy_raising_is_isolated(self):
+        # A sync evaluate that raises is recorded as an error and does
+        # not abort the cycle (same isolation contract as async raises).
+        class _RaisingSyncStrategy:
+            id = "boom"
+
+            def evaluate(self, market_data, cost_model):
+                raise ValueError("sync crash")
+
+        orch = StrategyOrchestrator()
+        orch.register(_RecordingStrategy("good", [_sig("AAPL", Side.BUY, "good")]))
+        orch.register(_RaisingSyncStrategy())
+
+        result = await orch.evaluate_all(_MARKET, _COSTS)
+
+        assert "boom" in result.errors
+        assert "ValueError" in result.errors["boom"]
+        assert [b.strategy_id for b in result.batches] == ["good"]
+        assert result.signals[0].side == Side.BUY
