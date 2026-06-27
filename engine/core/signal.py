@@ -24,6 +24,7 @@ class Side(StrEnum):
 
 class SignalStrength(StrEnum):
     """How confident the strategy is in this signal."""
+
     STRONG = "strong"
     MODERATE = "moderate"
     WEAK = "weak"

@@ -70,10 +70,23 @@ class TestKurtosis:
         # Long-tailed series with heavy outliers → positive excess kurtosis.
         out = kurtosis(
             [
-                0.0, 0.0, 0.0, 0.0, 0.0,
-                0.0, 0.0, 0.0, 0.0, 0.0,
-                0.0, 0.0, 0.0, 0.0, 0.0,
-                10.0, -10.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                10.0,
+                -10.0,
             ]
         )
         assert out > 0
@@ -154,9 +167,7 @@ class TestCVaR:
         assert conditional_value_at_risk([]) == 0.0
 
     def test_all_positive_returns_zero(self):
-        assert (
-            conditional_value_at_risk([0.01, 0.02, 0.03, 0.04, 0.05]) == 0.0
-        )
+        assert conditional_value_at_risk([0.01, 0.02, 0.03, 0.04, 0.05]) == 0.0
 
     def test_cvar_geq_var(self):
         # CVaR (mean of tail) is always ≥ VaR (boundary of tail).

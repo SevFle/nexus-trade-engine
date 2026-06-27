@@ -62,9 +62,7 @@ class YearEndPosition:
 
     def __post_init__(self) -> None:
         if self.acquired > self.year_end:
-            raise ValueError(
-                f"acquired {self.acquired} is after year_end {self.year_end}"
-            )
+            raise ValueError(f"acquired {self.acquired} is after year_end {self.year_end}")
         if self.basis < 0:
             raise ValueError("basis must be non-negative")
         if self.year_end_fmv < 0:

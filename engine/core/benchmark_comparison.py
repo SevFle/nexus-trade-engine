@@ -54,17 +54,16 @@ def beta(
     ``0.0``; an inverse-correlated portfolio returns negative.
     """
     if len(portfolio_returns) != len(benchmark_returns):
-        raise ValueError(
-            f"length mismatch: {len(portfolio_returns)} "
-            f"vs {len(benchmark_returns)}"
-        )
+        raise ValueError(f"length mismatch: {len(portfolio_returns)} vs {len(benchmark_returns)}")
     n = len(portfolio_returns)
     if n < 2:
         return 0.0
     mp = _mean(portfolio_returns)
     mb = _mean(benchmark_returns)
     cov = (
-        sum((p - mp) * (b - mb) for p, b in zip(portfolio_returns, benchmark_returns, strict=False))
+        sum(
+            (p - mp) * (b - mb) for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
+        )
         / n
     )
     var_b = sum((b - mb) ** 2 for b in benchmark_returns) / n
@@ -91,10 +90,7 @@ def jensen_alpha(
     if annualisation_factor <= 0:
         raise ValueError("annualisation_factor must be > 0")
     if len(portfolio_returns) != len(benchmark_returns):
-        raise ValueError(
-            f"length mismatch: {len(portfolio_returns)} "
-            f"vs {len(benchmark_returns)}"
-        )
+        raise ValueError(f"length mismatch: {len(portfolio_returns)} vs {len(benchmark_returns)}")
     n = len(portfolio_returns)
     if n < 2:
         return 0.0
@@ -125,15 +121,8 @@ def up_capture_ratio(
     of the up move.
     """
     if len(portfolio_returns) != len(benchmark_returns):
-        raise ValueError(
-            f"length mismatch: {len(portfolio_returns)} "
-            f"vs {len(benchmark_returns)}"
-        )
-    pairs = [
-        (p, b)
-        for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
-        if b > 0
-    ]
+        raise ValueError(f"length mismatch: {len(portfolio_returns)} vs {len(benchmark_returns)}")
+    pairs = [(p, b) for p, b in zip(portfolio_returns, benchmark_returns, strict=False) if b > 0]
     if not pairs:
         return 0.0
     p_compound = _compounded_return([p for p, _ in pairs])
@@ -154,15 +143,8 @@ def down_capture_ratio(
     defensive signal); ``> 1`` means it amplified the loss.
     """
     if len(portfolio_returns) != len(benchmark_returns):
-        raise ValueError(
-            f"length mismatch: {len(portfolio_returns)} "
-            f"vs {len(benchmark_returns)}"
-        )
-    pairs = [
-        (p, b)
-        for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
-        if b < 0
-    ]
+        raise ValueError(f"length mismatch: {len(portfolio_returns)} vs {len(benchmark_returns)}")
+    pairs = [(p, b) for p, b in zip(portfolio_returns, benchmark_returns, strict=False) if b < 0]
     if not pairs:
         return 0.0
     p_compound = _compounded_return([p for p, _ in pairs])
@@ -200,18 +182,14 @@ def correlation(
     length-mismatch / zero-variance inputs.
     """
     if len(portfolio_returns) != len(benchmark_returns):
-        raise ValueError(
-            f"length mismatch: {len(portfolio_returns)} "
-            f"vs {len(benchmark_returns)}"
-        )
+        raise ValueError(f"length mismatch: {len(portfolio_returns)} vs {len(benchmark_returns)}")
     n = len(portfolio_returns)
     if n < 2:
         return 0.0
     mp = _mean(portfolio_returns)
     mb = _mean(benchmark_returns)
     num = sum(
-        (p - mp) * (b - mb)
-        for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
+        (p - mp) * (b - mb) for p, b in zip(portfolio_returns, benchmark_returns, strict=False)
     )
     dp = math.sqrt(sum((p - mp) ** 2 for p in portfolio_returns))
     db = math.sqrt(sum((b - mb) ** 2 for b in benchmark_returns))

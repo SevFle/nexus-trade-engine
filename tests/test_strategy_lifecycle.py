@@ -27,9 +27,7 @@ class TestLinearPath:
     async def test_draft_to_backtest_no_evidence_required(self, service):
         sid = "s-1"
         await service.set_stage(sid, LifecycleStage.DRAFT)
-        out = await service.promote(
-            sid, target=LifecycleStage.BACKTEST, evidence=_ev()
-        )
+        out = await service.promote(sid, target=LifecycleStage.BACKTEST, evidence=_ev())
         assert out.target == LifecycleStage.BACKTEST
 
     @pytest.mark.asyncio
@@ -37,9 +35,7 @@ class TestLinearPath:
         sid = "s-1"
         await service.set_stage(sid, LifecycleStage.BACKTEST)
         with pytest.raises(InvalidTransitionError):
-            await service.promote(
-                sid, target=LifecycleStage.PAPER, evidence=_ev()
-            )
+            await service.promote(sid, target=LifecycleStage.PAPER, evidence=_ev())
 
     @pytest.mark.asyncio
     async def test_backtest_to_paper_with_valid_evidence(self, service):
@@ -60,9 +56,7 @@ class TestLinearPath:
             await service.promote(
                 sid,
                 target=LifecycleStage.PAPER,
-                evidence=_ev(
-                    backtest_id="bt-1", sharpe=0.1, max_drawdown_pct=8.0
-                ),
+                evidence=_ev(backtest_id="bt-1", sharpe=0.1, max_drawdown_pct=8.0),
             )
 
     @pytest.mark.asyncio
@@ -117,18 +111,14 @@ class TestRetire:
     async def test_retire_allowed_from_live(self, service):
         sid = "s-1"
         await service.set_stage(sid, LifecycleStage.LIVE)
-        out = await service.promote(
-            sid, target=LifecycleStage.RETIRED, evidence=_ev()
-        )
+        out = await service.promote(sid, target=LifecycleStage.RETIRED, evidence=_ev())
         assert out.target == LifecycleStage.RETIRED
 
     @pytest.mark.asyncio
     async def test_retire_allowed_from_paper(self, service):
         sid = "s-1"
         await service.set_stage(sid, LifecycleStage.PAPER)
-        out = await service.promote(
-            sid, target=LifecycleStage.RETIRED, evidence=_ev()
-        )
+        out = await service.promote(sid, target=LifecycleStage.RETIRED, evidence=_ev())
         assert out.target == LifecycleStage.RETIRED
 
     @pytest.mark.asyncio
@@ -136,9 +126,7 @@ class TestRetire:
         sid = "s-1"
         await service.set_stage(sid, LifecycleStage.RETIRED)
         with pytest.raises(InvalidTransitionError):
-            await service.promote(
-                sid, target=LifecycleStage.DRAFT, evidence=_ev()
-            )
+            await service.promote(sid, target=LifecycleStage.DRAFT, evidence=_ev())
 
 
 class TestHistory:
@@ -146,9 +134,7 @@ class TestHistory:
     async def test_transitions_recorded_in_order(self, service):
         sid = "s-1"
         await service.set_stage(sid, LifecycleStage.DRAFT)
-        await service.promote(
-            sid, target=LifecycleStage.BACKTEST, evidence=_ev()
-        )
+        await service.promote(sid, target=LifecycleStage.BACKTEST, evidence=_ev())
         await service.promote(
             sid,
             target=LifecycleStage.PAPER,
@@ -166,9 +152,7 @@ class TestHistory:
         sid = "s-1"
         await service.set_stage(sid, LifecycleStage.DRAFT)
         with pytest.raises(InvalidTransitionError):
-            await service.promote(
-                sid, target=LifecycleStage.LIVE, evidence=_ev()
-            )
+            await service.promote(sid, target=LifecycleStage.LIVE, evidence=_ev())
         history = await service.history(sid)
         assert len(history) == 1
         assert history[0].target == LifecycleStage.DRAFT
@@ -205,9 +189,7 @@ class TestSanityCaps:
             await service.promote(
                 sid,
                 target=LifecycleStage.PAPER,
-                evidence=_ev(
-                    backtest_id="bt-1", sharpe=999.0, max_drawdown_pct=8.0
-                ),
+                evidence=_ev(backtest_id="bt-1", sharpe=999.0, max_drawdown_pct=8.0),
             )
 
     @pytest.mark.asyncio

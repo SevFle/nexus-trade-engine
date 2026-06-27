@@ -67,9 +67,7 @@ class TestUsShape:
 
 class TestGbShape:
     def test_gb_summary_flattens_to_flat_columns(self):
-        summary = report_for_jurisdiction(
-            "GB", [_disp(proceeds="15000", cost="10000")]
-        )
+        summary = report_for_jurisdiction("GB", [_disp(proceeds="15000", cost="10000")])
 
         header, values = _parse(flatten_summary_to_csv(summary))
         assert {
@@ -90,9 +88,7 @@ class TestGbShape:
 
 class TestDeShape:
     def test_de_summary_flattens_with_kest_breakdown(self):
-        summary = report_for_jurisdiction(
-            "DE", [_disp(proceeds="6000", cost="1000")]
-        )
+        summary = report_for_jurisdiction("DE", [_disp(proceeds="6000", cost="1000")])
 
         header, values = _parse(flatten_summary_to_csv(summary))
         idx = {col: i for i, col in enumerate(header)}
@@ -103,9 +99,7 @@ class TestDeShape:
 
 class TestFrShape:
     def test_fr_summary_flattens_with_pfu_breakdown(self):
-        summary = report_for_jurisdiction(
-            "FR", [_disp(proceeds="6000", cost="5000")]
-        )
+        summary = report_for_jurisdiction("FR", [_disp(proceeds="6000", cost="5000")])
 
         header, values = _parse(flatten_summary_to_csv(summary))
         idx = {col: i for i, col in enumerate(header)}
@@ -121,9 +115,7 @@ class TestFrShape:
 
 class TestDeterminism:
     def test_same_input_yields_same_csv(self):
-        summary = report_for_jurisdiction(
-            "GB", [_disp(proceeds="15000", cost="10000")]
-        )
+        summary = report_for_jurisdiction("GB", [_disp(proceeds="15000", cost="10000")])
         a = flatten_summary_to_csv(summary)
         b = flatten_summary_to_csv(summary)
         assert a == b

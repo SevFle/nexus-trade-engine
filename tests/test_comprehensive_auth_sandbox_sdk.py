@@ -73,9 +73,7 @@ class TestGoogleAuthorizeUrl:
         assert "state=random-csrf-state" in url
         assert "accounts.google.com" in url
 
-    def test_get_authorize_url_with_empty_state(
-        self, google_provider, google_settings
-    ):
+    def test_get_authorize_url_with_empty_state(self, google_provider, google_settings):
         url = google_provider.get_authorize_url(state="")
         assert "state=" not in url
 
@@ -97,9 +95,7 @@ class TestGitHubAuthorizeUrl:
         assert "state=csrf-token-123" in url
         assert "github.com/login/oauth/authorize" in url
 
-    def test_get_authorize_url_with_empty_state(
-        self, github_provider, github_settings
-    ):
+    def test_get_authorize_url_with_empty_state(self, github_provider, github_settings):
         url = github_provider.get_authorize_url(state="")
         assert "state=" not in url
 
@@ -190,6 +186,7 @@ class TestSandboxErrorPatterns:
 
             def on_bar(self, _s, _p):
                 import os  # noqa: F401
+
                 return []
 
         sandbox = StrategySandbox(_ImportOs(), manifest)

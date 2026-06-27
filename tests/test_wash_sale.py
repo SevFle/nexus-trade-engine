@@ -204,7 +204,5 @@ class TestExplicitBasis:
             _trade("b2", "AAPL", TradeSide.BUY, "10", "85", 10),
         ]
         # Sale gross = 800. If basis = 800, loss = 0.
-        adjustments = detect_wash_sales(
-            trades, cost_basis_for={"s1": Decimal("800")}
-        )
+        adjustments = detect_wash_sales(trades, cost_basis_for={"s1": Decimal("800")})
         assert adjustments == []

@@ -264,9 +264,7 @@ class TestRequiresAcceptanceBoolean:
         assert "must-accept" in slugs
         assert "info-only" not in slugs
 
-    async def test_default_requires_acceptance_is_true(
-        self, sqlite_session: AsyncSession
-    ) -> None:
+    async def test_default_requires_acceptance_is_true(self, sqlite_session: AsyncSession) -> None:
         """Mapped column declares ``default=True`` — verify the default
         fires on INSERT so callers that forget to set it don't silently
         disable consent enforcement."""
@@ -423,9 +421,7 @@ class TestMigrationModelParity:
         reachable from the alembic version tree."""
         import importlib
 
-        module = importlib.import_module(
-            "engine.db.migrations.versions.004_legal_documents"
-        )
+        module = importlib.import_module("engine.db.migrations.versions.004_legal_documents")
         assert module.revision == "004_legal_documents"
         assert module.down_revision is not None, (
             "004_legal_documents must chain off a prior revision so it runs "
@@ -438,9 +434,7 @@ class TestMigrationModelParity:
         on removals."""
         import importlib
 
-        migration = importlib.import_module(
-            "engine.db.migrations.versions.004_legal_documents"
-        )
+        migration = importlib.import_module("engine.db.migrations.versions.004_legal_documents")
 
         # Introspect what create_table would build by capturing op commands
         # is heavy — instead we just import the model table and assert that

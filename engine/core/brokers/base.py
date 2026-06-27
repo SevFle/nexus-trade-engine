@@ -81,8 +81,8 @@ class SubmittedOrder:
     events back to the originating in-process order.
     """
 
-    order_id: uuid.UUID            # OMS-side order id (the input)
-    broker_order_id: str           # broker's id for the same order
+    order_id: uuid.UUID  # OMS-side order id (the input)
+    broker_order_id: str  # broker's id for the same order
 
 
 # ---------------------------------------------------------------------------

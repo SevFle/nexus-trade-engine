@@ -1,4 +1,5 @@
 """Tests for engine.privacy.export — helper functions and collect_user_data error path."""
+
 from __future__ import annotations
 
 import uuid
@@ -101,7 +102,9 @@ class TestRowToDictExtended:
     def test_none_value_included(self):
         class _FakeRow:
             def __init__(self):
-                self.__table__ = type("_Table", (), {"columns": [type("C", (), {"name": "field"})]})()
+                self.__table__ = type(
+                    "_Table", (), {"columns": [type("C", (), {"name": "field"})]}
+                )()
                 self.field = None
 
         result = _row_to_dict(_FakeRow())
@@ -110,7 +113,9 @@ class TestRowToDictExtended:
     def test_uuid_stringified(self):
         class _FakeRow:
             def __init__(self):
-                self.__table__ = type("_Table", (), {"columns": [type("C", (), {"name": "uid"})]})()
+                self.__table__ = type(
+                    "_Table", (), {"columns": [type("C", (), {"name": "uid"})]}
+                )()
                 self.uid = uuid.UUID("12345678-1234-1234-1234-123456789abc")
 
         result = _row_to_dict(_FakeRow())
@@ -119,7 +124,9 @@ class TestRowToDictExtended:
     def test_datetime_serialised(self):
         class _FakeRow:
             def __init__(self):
-                self.__table__ = type("_Table", (), {"columns": [type("C", (), {"name": "created_at"})]})()
+                self.__table__ = type(
+                    "_Table", (), {"columns": [type("C", (), {"name": "created_at"})]}
+                )()
                 self.created_at = datetime(2026, 5, 3, tzinfo=UTC)
 
         out = _row_to_dict(_FakeRow())

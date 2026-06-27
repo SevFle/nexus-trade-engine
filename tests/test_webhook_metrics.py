@@ -89,9 +89,7 @@ def _counter_total(backend: RecordingBackend, name: str) -> float:
     return sum(v for (n, _tags), v in backend.counters.items() if n == name)
 
 
-def _counter_with(
-    backend: RecordingBackend, name: str, tags: dict[str, str]
-) -> float:
+def _counter_with(backend: RecordingBackend, name: str, tags: dict[str, str]) -> float:
     expected = tuple(sorted(tags.items()))
     return sum(
         v
@@ -111,9 +109,7 @@ class TestSuccessPath:
         self, session_factory, http_mock, metrics, no_sleep
     ):
         factory, session = session_factory
-        http_mock.post.return_value = httpx.Response(
-            200, request=httpx.Request("POST", "/")
-        )
+        http_mock.post.return_value = httpx.Response(200, request=httpx.Request("POST", "/"))
         dispatcher = WebhookDispatcher(
             bus=EventBus(),
             session_factory=factory,
@@ -149,9 +145,7 @@ class TestNonRetryablePath:
         self, session_factory, http_mock, metrics, no_sleep
     ):
         factory, session = session_factory
-        http_mock.post.return_value = httpx.Response(
-            404, request=httpx.Request("POST", "/")
-        )
+        http_mock.post.return_value = httpx.Response(404, request=httpx.Request("POST", "/"))
         dispatcher = WebhookDispatcher(
             bus=EventBus(),
             session_factory=factory,
@@ -179,9 +173,7 @@ class TestExhaustedPath:
         self, session_factory, http_mock, metrics, no_sleep
     ):
         factory, session = session_factory
-        http_mock.post.return_value = httpx.Response(
-            503, request=httpx.Request("POST", "/")
-        )
+        http_mock.post.return_value = httpx.Response(503, request=httpx.Request("POST", "/"))
         dispatcher = WebhookDispatcher(
             bus=EventBus(),
             session_factory=factory,
@@ -190,9 +182,7 @@ class TestExhaustedPath:
             metrics=metrics,
         )
 
-        await dispatcher.dispatch_one(
-            session, _FakeConfig(max_retries=3), "test.event", {}
-        )
+        await dispatcher.dispatch_one(session, _FakeConfig(max_retries=3), "test.event", {})
 
         assert _counter_total(metrics, "webhook.attempts") == 3
         assert _counter_total(metrics, "webhook.delivered") == 0
@@ -221,9 +211,7 @@ class TestExhaustedPath:
             metrics=metrics,
         )
 
-        await dispatcher.dispatch_one(
-            session, _FakeConfig(max_retries=3), "test.event", {}
-        )
+        await dispatcher.dispatch_one(session, _FakeConfig(max_retries=3), "test.event", {})
 
         # Two attempts: first network_error, second 200.
         assert _counter_total(metrics, "webhook.attempts") == 2
@@ -246,18 +234,14 @@ class TestDefaultBackend:
         set_metrics(recording)
         try:
             factory, session = session_factory
-            http_mock.post.return_value = httpx.Response(
-                200, request=httpx.Request("POST", "/")
-            )
+            http_mock.post.return_value = httpx.Response(200, request=httpx.Request("POST", "/"))
             dispatcher = WebhookDispatcher(
                 bus=EventBus(),
                 session_factory=factory,
                 http_client=http_mock,
                 sleep_fn=no_sleep,
             )
-            await dispatcher.dispatch_one(
-                session, _FakeConfig(), "test.event", {}
-            )
+            await dispatcher.dispatch_one(session, _FakeConfig(), "test.event", {})
             assert _counter_total(recording, "webhook.delivered") == 1
         finally:
             set_metrics(NullBackend())

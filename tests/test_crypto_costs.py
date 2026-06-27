@@ -31,63 +31,43 @@ class TestConstants:
 class TestPerpetualFunding:
     def test_long_pays_positive_rate(self):
         # $100k notional, +1 bp funding rate, long pays $10.
-        out = perpetual_funding_payment(
-            Decimal("100000"), Decimal("0.0001"), side="long"
-        )
+        out = perpetual_funding_payment(Decimal("100000"), Decimal("0.0001"), side="long")
         assert out == Decimal("-10.00")
 
     def test_short_receives_positive_rate(self):
-        out = perpetual_funding_payment(
-            Decimal("100000"), Decimal("0.0001"), side="short"
-        )
+        out = perpetual_funding_payment(Decimal("100000"), Decimal("0.0001"), side="short")
         assert out == Decimal("10.00")
 
     def test_long_receives_negative_rate(self):
         # Negative funding flips the direction: long receives.
-        out = perpetual_funding_payment(
-            Decimal("100000"), Decimal("-0.0001"), side="long"
-        )
+        out = perpetual_funding_payment(Decimal("100000"), Decimal("-0.0001"), side="long")
         assert out == Decimal("10.00")
 
     def test_short_pays_negative_rate(self):
-        out = perpetual_funding_payment(
-            Decimal("100000"), Decimal("-0.0001"), side="short"
-        )
+        out = perpetual_funding_payment(Decimal("100000"), Decimal("-0.0001"), side="short")
         assert out == Decimal("-10.00")
 
     def test_zero_notional_zero_payment(self):
-        assert (
-            perpetual_funding_payment(
-                Decimal("0"), Decimal("0.0001"), side="long"
-            )
-            == Decimal("0.00")
+        assert perpetual_funding_payment(Decimal("0"), Decimal("0.0001"), side="long") == Decimal(
+            "0.00"
         )
 
     def test_zero_rate_zero_payment(self):
-        assert (
-            perpetual_funding_payment(
-                Decimal("100000"), Decimal("0"), side="long"
-            )
-            == Decimal("0.00")
+        assert perpetual_funding_payment(Decimal("100000"), Decimal("0"), side="long") == Decimal(
+            "0.00"
         )
 
     def test_negative_notional_rejected(self):
         with pytest.raises(ValueError):
-            perpetual_funding_payment(
-                Decimal("-1"), Decimal("0.0001"), side="long"
-            )
+            perpetual_funding_payment(Decimal("-1"), Decimal("0.0001"), side="long")
 
     def test_invalid_side_rejected(self):
         with pytest.raises(ValueError):
-            perpetual_funding_payment(
-                Decimal("100"), Decimal("0.0001"), side="bothways"
-            )
+            perpetual_funding_payment(Decimal("100"), Decimal("0.0001"), side="bothways")
 
     def test_zero_hours_rejected(self):
         with pytest.raises(ValueError):
-            perpetual_funding_payment(
-                Decimal("100"), Decimal("0.0001"), side="long", hours=0
-            )
+            perpetual_funding_payment(Decimal("100"), Decimal("0.0001"), side="long", hours=0)
 
 
 # ---------------------------------------------------------------------------
@@ -103,17 +83,13 @@ class TestFxConversion:
         assert fee == Decimal("0.92")
 
     def test_zero_fee_returns_full_conversion(self):
-        net, fee = fx_conversion(
-            Decimal("1000"), Decimal("0.92"), fee_bps=Decimal("0")
-        )
+        net, fee = fx_conversion(Decimal("1000"), Decimal("0.92"), fee_bps=Decimal("0"))
         assert net == Decimal("920.00")
         assert fee == Decimal("0.00")
 
     def test_high_fee_for_exotic_pair(self):
         # 100 bps fee — typical for exotic forex pairs.
-        net, fee = fx_conversion(
-            Decimal("1000"), Decimal("0.92"), fee_bps=Decimal("100")
-        )
+        net, fee = fx_conversion(Decimal("1000"), Decimal("0.92"), fee_bps=Decimal("100"))
         assert fee == Decimal("9.20")
         assert net == Decimal("910.80")
 
@@ -132,9 +108,7 @@ class TestFxConversion:
 
     def test_negative_fee_rejected(self):
         with pytest.raises(ValueError):
-            fx_conversion(
-                Decimal("100"), Decimal("0.92"), fee_bps=Decimal("-1")
-            )
+            fx_conversion(Decimal("100"), Decimal("0.92"), fee_bps=Decimal("-1"))
 
 
 # ---------------------------------------------------------------------------

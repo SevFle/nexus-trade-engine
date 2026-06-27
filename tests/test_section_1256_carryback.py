@@ -50,9 +50,7 @@ class TestNoOp:
         assert result.forward_carry == Decimal("0.00")
 
     def test_no_prior_years_carries_full_loss_forward(self):
-        result = apply_section_1256_carryback(
-            Decimal("5000"), []
-        )
+        result = apply_section_1256_carryback(Decimal("5000"), [])
 
         assert result.loss_absorbed == Decimal("0.00")
         assert result.per_year == ()
@@ -79,9 +77,7 @@ class TestSingleYear:
         )
 
         assert result.loss_absorbed == Decimal("2000.00")
-        assert result.per_year == (
-            CarrybackAbsorption(year=2022, amount=Decimal("2000.00")),
-        )
+        assert result.per_year == (CarrybackAbsorption(year=2022, amount=Decimal("2000.00")),)
         assert result.forward_carry == Decimal("0.00")
 
     def test_loss_above_prior_gain_carries_remainder(self):
@@ -91,9 +87,7 @@ class TestSingleYear:
         )
 
         assert result.loss_absorbed == Decimal("3000.00")
-        assert result.per_year == (
-            CarrybackAbsorption(year=2022, amount=Decimal("3000.00")),
-        )
+        assert result.per_year == (CarrybackAbsorption(year=2022, amount=Decimal("3000.00")),)
         assert result.forward_carry == Decimal("5000.00")
 
     def test_zero_prior_gain_skipped(self):

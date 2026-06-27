@@ -40,7 +40,9 @@ async def list_strategies(
     _arguments: dict[str, Any],
 ) -> dict[str, Any]:
     discovered = _discover(services)
-    strategies = [_summarize(name, entry.get("manifest") or {}) for name, entry in discovered.items()]
+    strategies = [
+        _summarize(name, entry.get("manifest") or {}) for name, entry in discovered.items()
+    ]
     return to_jsonable({"count": len(strategies), "strategies": strategies})
 
 

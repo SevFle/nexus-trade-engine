@@ -183,7 +183,5 @@ class TestEventCompatibility:
         # actual event shapes.
         from datetime import UTC, datetime
 
-        ev: OrderEvent = AckEvent(
-            occurred_at=datetime.now(tz=UTC), broker_order_id="X"
-        )
+        ev: OrderEvent = AckEvent(occurred_at=datetime.now(tz=UTC), broker_order_id="X")
         assert isinstance(ev, AckEvent)

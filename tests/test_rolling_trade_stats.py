@@ -126,9 +126,7 @@ class TestRollingCalmar:
 
     def test_drawdown_present_returns_finite(self):
         # 100 → 90 → 100 → 110 with window 4: ann_ret > 0, max_dd = 0.10.
-        out = rolling_calmar(
-            [100.0, 90.0, 100.0, 110.0], 4, periods_per_year=252
-        )
+        out = rolling_calmar([100.0, 90.0, 100.0, 110.0], 4, periods_per_year=252)
         assert out[-1] is not None
         assert out[-1] > 0
 

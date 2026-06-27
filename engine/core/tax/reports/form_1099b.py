@@ -67,9 +67,7 @@ class LotDisposition:
 
     def __post_init__(self) -> None:
         if self.acquired > self.sold:
-            raise ValueError(
-                f"acquired {self.acquired} is after sold {self.sold}"
-            )
+            raise ValueError(f"acquired {self.acquired} is after sold {self.sold}")
         if self.proceeds < 0:
             raise ValueError("proceeds must be non-negative")
         if self.cost_basis < 0:
@@ -128,9 +126,7 @@ def generate_1099b_rows(
             # Wash-sale adjustment: positive = disallowed loss added back.
             adjustment += d.wash_sale_disallowed
         codes = "".join(codes_parts)
-        gain_loss = (d.proceeds - d.cost_basis + adjustment).quantize(
-            Decimal("0.01")
-        )
+        gain_loss = (d.proceeds - d.cost_basis + adjustment).quantize(Decimal("0.01"))
         rows.append(
             Schedule1099BRow(
                 description=d.description,

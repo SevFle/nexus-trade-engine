@@ -1,4 +1,5 @@
 """Tests for engine.db.session — get_engine, get_session_factory, dispose_engine."""
+
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker

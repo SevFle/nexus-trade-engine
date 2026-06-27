@@ -118,9 +118,7 @@ class TestSectorConcentration:
 
 class TestAssetClassConcentration:
     def test_above_cap(self):
-        gate = RiskGate(
-            RiskLimits(max_asset_class_concentration_pct={"crypto": 0.10})
-        )
+        gate = RiskGate(RiskLimits(max_asset_class_concentration_pct={"crypto": 0.10}))
         out = gate.check(
             _intent(asset_class="crypto", notional=8_000.0),
             _state(
@@ -134,17 +132,13 @@ class TestAssetClassConcentration:
 
 class TestVelocity:
     def test_within_window(self):
-        gate = RiskGate(
-            RiskLimits(max_orders_per_window=3, velocity_window_seconds=60)
-        )
+        gate = RiskGate(RiskLimits(max_orders_per_window=3, velocity_window_seconds=60))
         for _ in range(3):
             out = gate.check(_intent(), _state())
             assert out.approved is True
 
     def test_exceeds_window(self):
-        gate = RiskGate(
-            RiskLimits(max_orders_per_window=2, velocity_window_seconds=60)
-        )
+        gate = RiskGate(RiskLimits(max_orders_per_window=2, velocity_window_seconds=60))
         gate.check(_intent(), _state())
         gate.check(_intent(), _state())
         out = gate.check(_intent(), _state())
@@ -241,9 +235,7 @@ class TestValidation:
             )
 
     def test_zero_total_value_skips_concentration_checks(self):
-        gate = RiskGate(
-            RiskLimits(max_sector_concentration_pct={"tech": 0.10})
-        )
+        gate = RiskGate(RiskLimits(max_sector_concentration_pct={"tech": 0.10}))
         out = gate.check(_intent(), _state(total_value=0.0))
         assert out.approved is True
 
@@ -323,9 +315,7 @@ class TestThreadSafety:
         # list mutation during iteration).
         import threading as _t
 
-        gate = RiskGate(
-            RiskLimits(max_orders_per_window=500, velocity_window_seconds=60)
-        )
+        gate = RiskGate(RiskLimits(max_orders_per_window=500, velocity_window_seconds=60))
 
         errors: list[BaseException] = []
 

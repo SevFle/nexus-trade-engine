@@ -38,9 +38,7 @@ api_router.include_router(
     tags=["backtest"],
     dependencies=[Depends(require_legal_acceptance)],
 )
-api_router.include_router(
-    client_errors_router, prefix="/api/v1/client", tags=["client"]
-)
+api_router.include_router(client_errors_router, prefix="/api/v1/client", tags=["client"])
 api_router.include_router(legal_router, tags=["legal"])
 api_router.include_router(portfolio_router, prefix="/api/v1/portfolio", tags=["portfolio"])
 api_router.include_router(strategies_router, prefix="/api/v1/strategies", tags=["strategies"])

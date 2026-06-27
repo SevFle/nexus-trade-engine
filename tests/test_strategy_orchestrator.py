@@ -306,14 +306,10 @@ class TestEvaluateAll:
         # Different symbols resolve independently in one pass.
         orch = StrategyOrchestrator()
         orch.register(
-            _RecordingStrategy(
-                "a", [_sig("AAPL", Side.BUY, "a"), _sig("MSFT", Side.SELL, "a")]
-            )
+            _RecordingStrategy("a", [_sig("AAPL", Side.BUY, "a"), _sig("MSFT", Side.SELL, "a")])
         )
         orch.register(
-            _RecordingStrategy(
-                "b", [_sig("AAPL", Side.BUY, "b"), _sig("MSFT", Side.BUY, "b")]
-            )
+            _RecordingStrategy("b", [_sig("AAPL", Side.BUY, "b"), _sig("MSFT", Side.BUY, "b")])
         )
 
         result = await orch.evaluate_all(_MARKET, _COSTS)
@@ -356,9 +352,7 @@ class TestWeightedOverride:
         orch = StrategyOrchestrator()
         orch.register(_RecordingStrategy("b1", [_sig("AAPL", Side.BUY, "b1")]))
         orch.register(_RecordingStrategy("b2", [_sig("AAPL", Side.BUY, "b2")]))
-        orch.register(
-            _RecordingStrategy("s1", [_sig("AAPL", Side.SELL, "s1")]), weight=1.5
-        )
+        orch.register(_RecordingStrategy("s1", [_sig("AAPL", Side.SELL, "s1")]), weight=1.5)
 
         result = await orch.evaluate_all(_MARKET, _COSTS, aggregation="weighted")
 
@@ -491,11 +485,7 @@ class TestRegistryMutationDuringEvaluate:
 
             async def evaluate(self, market_data, cost_model):
                 # Mutate the registry mid-cycle.
-                orch.register(
-                    _RecordingStrategy(
-                        "late", [_sig("AAPL", Side.SELL, "late")]
-                    )
-                )
+                orch.register(_RecordingStrategy("late", [_sig("AAPL", Side.SELL, "late")]))
                 return [_sig("AAPL", Side.BUY, "early")]
 
         orch.register(_RegisteringStrategy())
@@ -590,9 +580,7 @@ class TestMutationIsolation:
                 cost_model["fee_bps"] = 999.0
                 return [_sig("AAPL", Side.BUY, "mutator")]
 
-        observer = _RecordingStrategy(
-            "observer", [_sig("AAPL", Side.BUY, "observer")]
-        )
+        observer = _RecordingStrategy("observer", [_sig("AAPL", Side.BUY, "observer")])
 
         orch = StrategyOrchestrator()
         orch.register(_MutatingStrategy())

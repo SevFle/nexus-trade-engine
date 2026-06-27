@@ -73,9 +73,7 @@ class CoinGeckoDataProvider(HTTPProviderBase, IDataProvider):
         if period not in PERIOD_DAYS:
             raise FatalProviderError(f"coingecko invalid period {period}")
 
-        cache_key = ProviderCache.make_key(
-            "coingecko", "ohlcv", symbol=symbol, period=period
-        )
+        cache_key = ProviderCache.make_key("coingecko", "ohlcv", symbol=symbol, period=period)
         cached = await self._cache.get_dataframe(cache_key)
         if cached is not None:
             return cached
@@ -131,9 +129,7 @@ class CoinGeckoDataProvider(HTTPProviderBase, IDataProvider):
                 )
         return out
 
-    async def get_options_chain(
-        self, symbol: str, expiry: str | None = None
-    ) -> pd.DataFrame:
+    async def get_options_chain(self, symbol: str, expiry: str | None = None) -> pd.DataFrame:
         raise FatalProviderError("coingecko has no options data")
 
     async def get_orderbook(self, symbol: str, depth: int = 20) -> pd.DataFrame:

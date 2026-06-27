@@ -26,9 +26,7 @@ from engine.data.providers import (
 
 def _make_df() -> pd.DataFrame:
     """Two-bar OHLCV frame with a tz-aware UTC index."""
-    idx = pd.to_datetime(
-        ["2026-01-02T00:00:00Z", "2026-01-03T00:00:00Z"], utc=True
-    )
+    idx = pd.to_datetime(["2026-01-02T00:00:00Z", "2026-01-03T00:00:00Z"], utc=True)
     return pd.DataFrame(
         {
             "open": [100.0, 102.0],
@@ -56,9 +54,7 @@ class _FakeProvider(IDataProvider):
         df: pd.DataFrame | None = None,
         latest_price: float | None = 105.5,
     ) -> None:
-        self.capability = DataProviderCapability(
-            name=name, asset_classes=asset_classes
-        )
+        self.capability = DataProviderCapability(name=name, asset_classes=asset_classes)
         self._df = df if df is not None else _make_df()
         self._latest = latest_price
         self.calls: list[tuple[str, str, str]] = []
@@ -75,9 +71,7 @@ class _FakeProvider(IDataProvider):
     async def get_multiple_prices(self, symbols: list[str]) -> dict[str, float]:
         return {s: self._latest for s in symbols if self._latest is not None}
 
-    async def get_options_chain(
-        self, symbol: str, expiry: str | None = None
-    ) -> pd.DataFrame:
+    async def get_options_chain(self, symbol: str, expiry: str | None = None) -> pd.DataFrame:
         return pd.DataFrame()
 
     async def get_orderbook(self, symbol: str, depth: int = 20) -> pd.DataFrame:
@@ -141,9 +135,7 @@ class TestDetectAssetClass:
 class TestBarsEndpoint:
     @pytest.mark.asyncio
     async def test_happy_path_equity(self, client):
-        provider = _FakeProvider(
-            "fake-equity", frozenset({AssetClass.EQUITY})
-        )
+        provider = _FakeProvider("fake-equity", frozenset({AssetClass.EQUITY}))
         _register(provider)
 
         res = await client.get("/api/v1/market-data/AAPL/bars")
@@ -164,9 +156,7 @@ class TestBarsEndpoint:
 
     @pytest.mark.asyncio
     async def test_passes_period_and_interval_to_provider(self, client):
-        provider = _FakeProvider(
-            "fake-equity", frozenset({AssetClass.EQUITY})
-        )
+        provider = _FakeProvider("fake-equity", frozenset({AssetClass.EQUITY}))
         _register(provider)
 
         res = await client.get(
@@ -194,18 +184,12 @@ class TestBarsEndpoint:
 
     @pytest.mark.asyncio
     async def test_provider_override_pins_adapter(self, client):
-        primary = _FakeProvider(
-            "primary", frozenset({AssetClass.EQUITY})
-        )
-        secondary = _FakeProvider(
-            "secondary", frozenset({AssetClass.EQUITY})
-        )
+        primary = _FakeProvider("primary", frozenset({AssetClass.EQUITY}))
+        secondary = _FakeProvider("secondary", frozenset({AssetClass.EQUITY}))
         _register(primary, priority=1)
         _register(secondary, priority=2)
 
-        res = await client.get(
-            "/api/v1/market-data/AAPL/bars", params={"provider": "secondary"}
-        )
+        res = await client.get("/api/v1/market-data/AAPL/bars", params={"provider": "secondary"})
         assert res.status_code == 200
         body = res.json()
         assert body["provider"] == "secondary"
@@ -214,12 +198,8 @@ class TestBarsEndpoint:
 
     @pytest.mark.asyncio
     async def test_provider_override_unknown_returns_404(self, client):
-        _register(
-            _FakeProvider("primary", frozenset({AssetClass.EQUITY}))
-        )
-        res = await client.get(
-            "/api/v1/market-data/AAPL/bars", params={"provider": "nope"}
-        )
+        _register(_FakeProvider("primary", frozenset({AssetClass.EQUITY})))
+        res = await client.get("/api/v1/market-data/AAPL/bars", params={"provider": "nope"})
         assert res.status_code == 404
 
     @pytest.mark.asyncio
@@ -312,14 +292,10 @@ class TestQuoteEndpoint:
             priority=1,
         )
         _register(
-            _FakeProvider(
-                "secondary", frozenset({AssetClass.EQUITY}), latest_price=2.0
-            ),
+            _FakeProvider("secondary", frozenset({AssetClass.EQUITY}), latest_price=2.0),
             priority=2,
         )
-        res = await client.get(
-            "/api/v1/market-data/AAPL/quote", params={"provider": "secondary"}
-        )
+        res = await client.get("/api/v1/market-data/AAPL/quote", params={"provider": "secondary"})
         assert res.status_code == 200
         assert res.json()["provider"] == "secondary"
         assert res.json()["price"] == 2.0
@@ -327,9 +303,7 @@ class TestQuoteEndpoint:
     @pytest.mark.asyncio
     async def test_unknown_provider_returns_404(self, client):
         _register(_FakeProvider("primary", frozenset({AssetClass.EQUITY})))
-        res = await client.get(
-            "/api/v1/market-data/AAPL/quote", params={"provider": "ghost"}
-        )
+        res = await client.get("/api/v1/market-data/AAPL/quote", params={"provider": "ghost"})
         assert res.status_code == 404
 
 
