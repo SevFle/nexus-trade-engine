@@ -107,9 +107,7 @@ class TestEmpty:
 class TestNetGain:
     def test_pure_gain_splits_60_40(self):
         # +10,000 net → 4,000 short + 6,000 long.
-        s = summarize_form6781(
-            [_contract(proceeds="60000", cost="50000")]
-        )
+        s = summarize_form6781([_contract(proceeds="60000", cost="50000")])
 
         assert s.net_gain_loss == Decimal("10000.00")
         assert s.short_term_amount == Decimal("4000.00")
@@ -129,9 +127,7 @@ class TestNetGain:
         assert s.long_term_amount == Decimal("2400.00")
 
     def test_short_long_sum_back_to_net_gain(self):
-        s = summarize_form6781(
-            [_contract(proceeds="60001", cost="50000")]
-        )
+        s = summarize_form6781([_contract(proceeds="60001", cost="50000")])
 
         # Both halves should add to the net within rounding.
         assert s.short_term_amount + s.long_term_amount == s.net_gain_loss
@@ -140,9 +136,7 @@ class TestNetGain:
 class TestNetLoss:
     def test_loss_splits_60_40_keeps_signs(self):
         # -10,000 net → -4,000 short + -6,000 long.
-        s = summarize_form6781(
-            [_contract(proceeds="40000", cost="50000")]
-        )
+        s = summarize_form6781([_contract(proceeds="40000", cost="50000")])
 
         assert s.net_gain_loss == Decimal("-10000.00")
         assert s.short_term_amount == Decimal("-4000.00")

@@ -80,9 +80,7 @@ class ConnectionManager:
     # Subscriptions
     # ------------------------------------------------------------------
 
-    async def subscribe(
-        self, user_id: uuid.UUID, ws: WebSocket, topics: list[str]
-    ) -> set[str]:
+    async def subscribe(self, user_id: uuid.UUID, ws: WebSocket, topics: list[str]) -> set[str]:
         """Add ``topics`` to this connection's subscription set.
 
         Unknown topics are silently dropped — the route handler is
@@ -97,9 +95,7 @@ class ConnectionManager:
             user_conns[ws] |= valid
             return set(user_conns[ws])
 
-    async def unsubscribe(
-        self, user_id: uuid.UUID, ws: WebSocket, topics: list[str]
-    ) -> set[str]:
+    async def unsubscribe(self, user_id: uuid.UUID, ws: WebSocket, topics: list[str]) -> set[str]:
         async with self._lock:
             user_conns = self._conns.get(user_id)
             if user_conns is None or ws not in user_conns:

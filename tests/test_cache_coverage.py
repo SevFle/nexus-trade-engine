@@ -62,7 +62,9 @@ class TestMemoryFallback:
     async def test_memory_set_and_get_dataframe(self):
         cache = ProviderCache(url=None)
         key = ProviderCache.make_key("test", "df", sym="AAPL")
-        df = pd.DataFrame({"close": [100.0, 101.0]}, index=pd.date_range("2024-01-01", periods=2, tz=UTC))
+        df = pd.DataFrame(
+            {"close": [100.0, 101.0]}, index=pd.date_range("2024-01-01", periods=2, tz=UTC)
+        )
         await cache.set_dataframe(key, df, ttl_seconds=60)
         result = await cache.get_dataframe(key)
         assert result is not None

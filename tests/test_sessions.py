@@ -76,9 +76,7 @@ class TestIdleTimeout:
     async def test_idle_timeout_expires_session(self, store):
         svc = SessionService(
             store=store,
-            config=SessionConfig(
-                idle_timeout_sec=10, absolute_timeout_sec=86_400
-            ),
+            config=SessionConfig(idle_timeout_sec=10, absolute_timeout_sec=86_400),
         )
         s = await svc.create(_user(), "d", "1.2.3.4", "ua")
         await store.save(
@@ -109,9 +107,7 @@ class TestAbsoluteTimeout:
     async def test_absolute_timeout_kills_long_lived_session(self, store):
         svc = SessionService(
             store=store,
-            config=SessionConfig(
-                idle_timeout_sec=86_400, absolute_timeout_sec=10
-            ),
+            config=SessionConfig(idle_timeout_sec=86_400, absolute_timeout_sec=10),
         )
         s = await svc.create(_user(), "d", "1.2.3.4", "ua")
         await store.save(
@@ -162,9 +158,7 @@ class TestRevocation:
             await service.touch(s.id)
 
     @pytest.mark.asyncio
-    async def test_revoke_all_for_user_kills_all_sessions(
-        self, service: SessionService, store
-    ):
+    async def test_revoke_all_for_user_kills_all_sessions(self, service: SessionService, store):
         u = _user()
         a = await service.create(u, "a", "1.2.3.4", "ua")
         b = await service.create(u, "b", "1.2.3.4", "ua")
@@ -177,9 +171,7 @@ class TestRevocation:
 
 class TestListing:
     @pytest.mark.asyncio
-    async def test_list_for_user_excludes_revoked_by_default(
-        self, service: SessionService
-    ):
+    async def test_list_for_user_excludes_revoked_by_default(self, service: SessionService):
         u = _user()
         a = await service.create(u, "a", "1.2.3.4", "ua")
         await service.create(u, "b", "1.2.3.4", "ua")
@@ -215,9 +207,7 @@ class TestInputValidation:
     @pytest.mark.asyncio
     async def test_oversize_device_label_rejected(self, service: SessionService):
         with pytest.raises(ValueError, match="device_label"):
-            await service.create(
-                _user(), "x" * 1000, "1.2.3.4", "ua"
-            )
+            await service.create(_user(), "x" * 1000, "1.2.3.4", "ua")
 
     @pytest.mark.asyncio
     async def test_oversize_ip_rejected(self, service: SessionService):
@@ -232,16 +222,12 @@ class TestInputValidation:
 
 class TestNotFoundDistinctFromRevoked:
     @pytest.mark.asyncio
-    async def test_unknown_session_raises_not_found(
-        self, service: SessionService
-    ):
+    async def test_unknown_session_raises_not_found(self, service: SessionService):
         with pytest.raises(SessionNotFoundError):
             await service.touch("definitely-not-real")
 
     @pytest.mark.asyncio
-    async def test_error_messages_do_not_leak_token(
-        self, service: SessionService
-    ):
+    async def test_error_messages_do_not_leak_token(self, service: SessionService):
         s = await service.create(_user(), "d", "1.2.3.4", "ua")
         await service.revoke(s.id)
         with pytest.raises(SessionRevokedError) as exc:
@@ -263,9 +249,7 @@ class TestConcurrencySafety:
             ),
         )
         u = _user()
-        await asyncio.gather(
-            *(svc.create(u, f"d-{i}", "1.2.3.4", "ua") for i in range(10))
-        )
+        await asyncio.gather(*(svc.create(u, f"d-{i}", "1.2.3.4", "ua") for i in range(10)))
         active = await svc.list_active_for_user(u)
         assert len(active) <= 2
 

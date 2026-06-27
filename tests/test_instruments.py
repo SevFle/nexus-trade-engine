@@ -105,12 +105,8 @@ class TestUidUniqueness:
         assert a.uid != b.uid
 
     def test_two_options_with_different_strikes_distinct(self):
-        a = Instrument.option(
-            "AAPL", 200.0, date(2026, 6, 19), OptionType.CALL
-        )
-        b = Instrument.option(
-            "AAPL", 210.0, date(2026, 6, 19), OptionType.CALL
-        )
+        a = Instrument.option("AAPL", 200.0, date(2026, 6, 19), OptionType.CALL)
+        b = Instrument.option("AAPL", 210.0, date(2026, 6, 19), OptionType.CALL)
         assert a.uid != b.uid
 
     def test_spot_vs_perp_vs_future_uids_distinct(self):
@@ -183,9 +179,7 @@ class TestSerializationRoundtrip:
 class TestStrikeBoundary:
     def test_zero_strike_rejected(self):
         with pytest.raises((ValueError, TypeError)):
-            Instrument.option(
-                "AAPL", 0.0, date(2026, 6, 19), OptionType.CALL
-            )
+            Instrument.option("AAPL", 0.0, date(2026, 6, 19), OptionType.CALL)
 
 
 class TestInstrumentValidation:
@@ -198,16 +192,12 @@ class TestInstrumentValidation:
 
     def test_negative_strike_rejected(self):
         with pytest.raises((ValueError, TypeError)):
-            Instrument.option(
-                "AAPL", -1.0, date(2026, 6, 19), OptionType.CALL
-            )
+            Instrument.option("AAPL", -1.0, date(2026, 6, 19), OptionType.CALL)
 
 
 class TestSerialization:
     def test_round_trip_through_dict(self):
-        inst = Instrument.option(
-            "AAPL", 200.0, date(2026, 6, 19), OptionType.CALL
-        )
+        inst = Instrument.option("AAPL", 200.0, date(2026, 6, 19), OptionType.CALL)
         as_dict = inst.model_dump(mode="json")
         rebuilt = Instrument.model_validate(as_dict)
         assert rebuilt.uid == inst.uid

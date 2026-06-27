@@ -206,9 +206,7 @@ class Instrument(BaseModel):
         )
 
     @classmethod
-    def etf(
-        cls, symbol: str, *, exchange: str | None = None, currency: str = "USD"
-    ) -> Instrument:
+    def etf(cls, symbol: str, *, exchange: str | None = None, currency: str = "USD") -> Instrument:
         return cls(
             symbol=symbol,
             asset_class=InstrumentAssetClass.ETF,
@@ -217,9 +215,7 @@ class Instrument(BaseModel):
         )
 
     @classmethod
-    def crypto(
-        cls, base: str, quote: str, *, exchange: str | None = None
-    ) -> Instrument:
+    def crypto(cls, base: str, quote: str, *, exchange: str | None = None) -> Instrument:
         return cls(
             symbol=f"{base}/{quote}",
             asset_class=InstrumentAssetClass.CRYPTO,
@@ -230,9 +226,7 @@ class Instrument(BaseModel):
         )
 
     @classmethod
-    def crypto_perp(
-        cls, base: str, quote: str, *, exchange: str | None = None
-    ) -> Instrument:
+    def crypto_perp(cls, base: str, quote: str, *, exchange: str | None = None) -> Instrument:
         return cls(
             symbol=f"{base}/{quote}:PERP",
             asset_class=InstrumentAssetClass.CRYPTO_PERP,

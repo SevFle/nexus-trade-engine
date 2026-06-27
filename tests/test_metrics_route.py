@@ -40,9 +40,7 @@ class TestRecordingBackendExposed:
         assert "test_metric" in resp.text
         assert "# TYPE test_metric counter" in resp.text
 
-    async def test_renders_live_state_per_request(
-        self, client: AsyncClient, _restore_backend
-    ):
+    async def test_renders_live_state_per_request(self, client: AsyncClient, _restore_backend):
         backend = PrometheusBackend()
         set_metrics(backend)
 
@@ -85,9 +83,7 @@ class TestNullBackendPlaceholder:
 
 
 class TestUnauthenticated:
-    async def test_route_does_not_require_auth(
-        self, client: AsyncClient, _restore_backend
-    ):
+    async def test_route_does_not_require_auth(self, client: AsyncClient, _restore_backend):
         # The route does not depend on any auth dependency. Operators
         # restrict access via reverse-proxy / network ACLs (standard
         # Prometheus pattern). This guard exists so a careless dependency

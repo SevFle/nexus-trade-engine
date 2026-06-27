@@ -30,9 +30,7 @@ class User(Base):
     # except retention-critical background jobs is halted (e.g. live
     # trading auto-stops). The user can still authenticate to manage
     # their privacy settings — this is *not* account deactivation.
-    processing_restricted: Mapped[bool] = mapped_column(
-        default=False, server_default="false"
-    )
+    processing_restricted: Mapped[bool] = mapped_column(default=False, server_default="false")
     role: Mapped[str] = mapped_column(String(20), default="user")
     auth_provider: Mapped[str] = mapped_column(String(20), default="local")
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -166,9 +164,7 @@ class WebhookDelivery(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, index=True
     )
-    delivered_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class BacktestResult(Base):
@@ -380,9 +376,7 @@ class ConsentRecord(Base):
     withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
-    __table_args__ = (
-        Index("ix_consent_user_purpose_time", "user_id", "purpose", "created_at"),
-    )
+    __table_args__ = (Index("ix_consent_user_purpose_time", "user_id", "purpose", "created_at"),)
 
 
 class DeletionSchedule(Base):

@@ -119,9 +119,7 @@ class TestMiddleware429:
         assert "Retry-After" in r.headers
 
     @pytest.mark.asyncio
-    async def test_429_response_carries_rate_limit_headers(
-        self, client: AsyncClient
-    ):
+    async def test_429_response_carries_rate_limit_headers(self, client: AsyncClient):
         for _ in range(3):
             r = await client.get("/ping")
         assert r.status_code == 429
@@ -173,9 +171,7 @@ class TestKeyingXFF:
     async def test_xff_trusted_when_proxy_depth_one(self):
         # depth=1: rightmost XFF entry is trusted; spoofed leftmost
         # values are ignored. Two distinct rightmost IPs => two buckets.
-        cfg = RateLimitConfig(
-            default_per_minute=60, default_burst=1, trusted_proxy_depth=1
-        )
+        cfg = RateLimitConfig(default_per_minute=60, default_burst=1, trusted_proxy_depth=1)
         app = _build_app(cfg)
         async with AsyncClient(
             transport=ASGITransport(app=app),
@@ -200,9 +196,7 @@ class TestRetryAfterClamping:
         # 429 builder must never see `inf`.
         from engine.api.rate_limit import RateLimitMiddleware
 
-        resp = RateLimitMiddleware._build_429(
-            burst=1, remaining=0, retry_after=float("inf")
-        )
+        resp = RateLimitMiddleware._build_429(burst=1, remaining=0, retry_after=float("inf"))
         assert resp.status_code == 429
         # Retry-After header is a finite int seconds value.
         assert int(resp.headers["Retry-After"]) <= 86_400
@@ -224,9 +218,7 @@ class TestHeadersDefaultOff:
     async def test_no_disclosure_by_default(self):
         cfg = RateLimitConfig(default_per_minute=60, default_burst=2)
         app = _build_app(cfg)
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             r = await ac.get("/ping")
             assert "X-RateLimit-Limit" not in r.headers
             assert "X-RateLimit-Remaining" not in r.headers
@@ -237,9 +229,7 @@ class TestConcurrency:
     async def test_simultaneous_consumes_do_not_exceed_capacity(self):
         backend = InMemoryBucketBackend()
         bucket = TokenBucket(backend, capacity=3, refill_per_sec=0.0)
-        results = await asyncio.gather(
-            *(bucket.consume("c") for _ in range(10))
-        )
+        results = await asyncio.gather(*(bucket.consume("c") for _ in range(10)))
         passed = sum(1 for ok, _, _ in results if ok)
         assert passed == 3
 
@@ -324,9 +314,7 @@ class TestValkeyBucketBackend:
     async def test_concurrent_consumes_respect_capacity(self, valkey_client):
         backend = ValkeyBucketBackend(valkey_client)
         bucket = TokenBucket(backend, capacity=3, refill_per_sec=0.0)
-        results = await asyncio.gather(
-            *(bucket.consume("c") for _ in range(10))
-        )
+        results = await asyncio.gather(*(bucket.consume("c") for _ in range(10)))
         passed = sum(1 for ok, _, _ in results if ok)
         assert passed == 3
 
@@ -395,9 +383,7 @@ class TestAuthExtractor:
         sub = str(uuid.uuid4())
         payload = {"sub": sub, "role": "admin"}
         ex = AuthExtractor(jwt_decode=lambda token: payload)
-        scope = _scope(
-            headers=[(b"authorization", b"Bearer some.token.here")]
-        )
+        scope = _scope(headers=[(b"authorization", b"Bearer some.token.here")])
         principal, role = ex.resolve(scope)
         assert principal == f"user:{sub}"
         assert role == "admin"
@@ -531,9 +517,7 @@ class TestPerUserKeying:
             role_tiers={"admin": (60, 5)},
         )
         app = _build_app_with_role_tiers(cfg)
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             # Burst is 5 for admin tier — first five must succeed.
             for _ in range(5):
                 r = await ac.get("/ping", headers=_bearer_header(admin_jwt))
@@ -547,9 +531,7 @@ class TestPerUserKeying:
             role_tiers={"admin": (60, 5)},
         )
         app = _build_app_with_role_tiers(cfg)
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             r = await ac.get("/ping")  # no auth → IP bucket, burst=1
             assert r.status_code == 200
             r = await ac.get("/ping")
@@ -563,9 +545,7 @@ class TestPerUserKeying:
             role_tiers={"admin": (1, 2), "viewer": (1, 2)},
         )
         app = _build_app_with_role_tiers(cfg)
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             # Admin uses up its 2-token bucket.
             for _ in range(2):
                 r = await ac.get("/ping", headers=_bearer_header(admin_jwt))
@@ -582,9 +562,7 @@ class TestPerUserKeying:
         # share the IP bucket and the second is rate-limited.
         cfg = RateLimitConfig(default_per_minute=1, default_burst=1)
         app = _build_app_with_role_tiers(cfg)
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             r1 = await ac.get("/ping", headers=_bearer_header("not.a.real.token"))
             r2 = await ac.get("/ping", headers=_bearer_header("not.a.real.token"))
             assert r1.status_code == 200
@@ -594,22 +572,14 @@ class TestPerUserKeying:
     async def test_api_key_keyed_by_prefix(self, monkeypatch):
         cfg = RateLimitConfig(default_per_minute=1, default_burst=1)
         app = _build_app_with_role_tiers(cfg)
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             # Two distinct 12-char prefixes get independent buckets.
-            r1 = await ac.get(
-                "/ping", headers={"X-API-Key": "nxs_live_aaaaaaaaaaaa"}
-            )
-            r2 = await ac.get(
-                "/ping", headers={"X-API-Key": "nxs_live_bbbbbbbbbbbb"}
-            )
+            r1 = await ac.get("/ping", headers={"X-API-Key": "nxs_live_aaaaaaaaaaaa"})
+            r2 = await ac.get("/ping", headers={"X-API-Key": "nxs_live_bbbbbbbbbbbb"})
             assert r1.status_code == 200
             assert r2.status_code == 200
             # Repeat of first prefix should hit its own 1-token bucket.
-            r3 = await ac.get(
-                "/ping", headers={"X-API-Key": "nxs_live_aaaaaaaaaaaa"}
-            )
+            r3 = await ac.get("/ping", headers={"X-API-Key": "nxs_live_aaaaaaaaaaaa"})
             assert r3.status_code == 429
 
 
@@ -623,9 +593,7 @@ class TestRouteOverridesStillWin:
             overrides={"/ping": (1, 1)},  # tight per-route cap
         )
         app = _build_app_with_role_tiers(cfg)
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             r = await ac.get("/ping", headers=_bearer_header(admin_jwt))
             assert r.status_code == 200
             r = await ac.get("/ping", headers=_bearer_header(admin_jwt))
@@ -640,9 +608,7 @@ class TestRouteOverridesStillWin:
 
 class TestValkeyIntegration:
     @pytest.mark.asyncio
-    async def test_per_user_role_tier_with_valkey_backend(
-        self, valkey_client, admin_jwt
-    ):
+    async def test_per_user_role_tier_with_valkey_backend(self, valkey_client, admin_jwt):
         cfg = RateLimitConfig(
             default_per_minute=1,
             default_burst=1,
@@ -650,9 +616,7 @@ class TestValkeyIntegration:
         )
         backend = ValkeyBucketBackend(valkey_client)
         app = _build_app_with_role_tiers(cfg, backend=backend)
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             for _ in range(3):
                 r = await ac.get("/ping", headers=_bearer_header(admin_jwt))
                 assert r.status_code == 200
@@ -672,11 +636,10 @@ class TestValkeyIntegration:
         app_a = _build_app_with_role_tiers(cfg, backend=backend_a)
         app_b = _build_app_with_role_tiers(cfg, backend=backend_b)
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app_a), base_url="http://a"
-        ) as ac_a, AsyncClient(
-            transport=ASGITransport(app=app_b), base_url="http://b"
-        ) as ac_b:
+        async with (
+            AsyncClient(transport=ASGITransport(app=app_a), base_url="http://a") as ac_a,
+            AsyncClient(transport=ASGITransport(app=app_b), base_url="http://b") as ac_b,
+        ):
             r1 = await ac_a.get("/ping")
             r2 = await ac_b.get("/ping")
             assert r1.status_code == 200
@@ -961,9 +924,7 @@ class TestCorrelationIdIn429:
             span_id="span-1",
         )
         try:
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 r1 = await ac.get("/ping")
                 assert r1.status_code == 200
                 r2 = await ac.get("/ping")
@@ -982,9 +943,7 @@ class TestValkeyBackendRetryAfterClamping:
     @pytest.mark.asyncio
     async def test_huge_retry_after_is_clamped(self, valkey_client):
         backend = ValkeyBucketBackend(valkey_client)
-        bucket = TokenBucket(
-            backend, capacity=1, refill_per_sec=0.0001
-        )
+        bucket = TokenBucket(backend, capacity=1, refill_per_sec=0.0001)
         await bucket.consume("k")
         _, _, retry = await bucket.consume("k")
         # 1 / 0.0001 = 10000s — within range, no clamp needed.
@@ -999,9 +958,7 @@ class TestBearerApiKeyFallback:
     def test_bearer_with_short_nxs_returns_none(self):
         # Less than 12 chars → can't form a prefix.
         ex = AuthExtractor(jwt_decode=lambda _: None)
-        scope = _scope(
-            headers=[(b"authorization", b"Bearer nxs_short")]
-        )
+        scope = _scope(headers=[(b"authorization", b"Bearer nxs_short")])
         assert ex.resolve(scope) == (None, None)
 
     def test_bearer_with_nxs_token_does_not_call_jwt_decode(self):
@@ -1012,11 +969,7 @@ class TestBearerApiKeyFallback:
             return {"sub": "should-not-reach"}
 
         ex = AuthExtractor(jwt_decode=_decode)
-        scope = _scope(
-            headers=[
-                (b"authorization", b"Bearer nxs_live_abcdefghijklmn")
-            ]
-        )
+        scope = _scope(headers=[(b"authorization", b"Bearer nxs_live_abcdefghijklmn")])
         principal, _ = ex.resolve(scope)
         assert principal == "apikey:nxs_live_abc"
         # The JWT decode path must NOT have been called.

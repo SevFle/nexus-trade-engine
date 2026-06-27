@@ -252,6 +252,4 @@ class TestKeys:
         # the gap visible.
         from engine.core.oms.persistence import _STATUS_PROJECTION
 
-        assert {s.value for s in OrderStatus} == {
-            s.value for s in _STATUS_PROJECTION
-        }
+        assert {s.value for s in OrderStatus} == {s.value for s in _STATUS_PROJECTION}

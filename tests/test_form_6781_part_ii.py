@@ -127,10 +127,7 @@ class TestAggregation:
         assert s.total_allowed_loss == Decimal("1500.00")
         assert s.total_deferred_loss == Decimal("500.00")
         # Sanity: allowed + deferred always equals recognized total.
-        assert (
-            s.total_allowed_loss + s.total_deferred_loss
-            == s.total_recognized_loss
-        )
+        assert s.total_allowed_loss + s.total_deferred_loss == s.total_recognized_loss
 
 
 # ---------------------------------------------------------------------------

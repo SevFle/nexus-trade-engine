@@ -123,9 +123,7 @@ class LineageService:
     async def get(self, node_id: str) -> LineageNode | None:
         return await self.store.get_node(node_id)
 
-    async def link(
-        self, *, parent_id: str, child_id: str, relation: str
-    ) -> LineageEdge:
+    async def link(self, *, parent_id: str, child_id: str, relation: str) -> LineageEdge:
         if not relation.strip():
             msg = "relation must be non-empty"
             raise LineageError(msg)

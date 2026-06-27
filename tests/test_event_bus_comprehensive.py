@@ -1,4 +1,5 @@
 """Comprehensive tests for engine/events/bus.py — targeting uncovered lines 119-127, 130-132."""
+
 from __future__ import annotations
 
 import json

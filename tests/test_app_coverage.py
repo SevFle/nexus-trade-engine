@@ -145,17 +145,13 @@ class TestRateLimitBackendSelection:
         assert mw is not None
         assert isinstance(mw.kwargs["backend"], InMemoryBucketBackend)
 
-    def test_valkey_enabled_but_no_client_falls_back_to_in_memory(
-        self, monkeypatch
-    ):
+    def test_valkey_enabled_but_no_client_falls_back_to_in_memory(self, monkeypatch):
         """When ``rate_limit_valkey_enabled=True`` but the lifespan has not
         yet set ``app.state.valkey`` (the case in unit tests), the backend
         falls back to InMemoryBucketBackend and a warning is emitted."""
         from structlog.testing import capture_logs
 
-        monkeypatch.setattr(
-            "engine.app.settings.rate_limit_valkey_enabled", True
-        )
+        monkeypatch.setattr("engine.app.settings.rate_limit_valkey_enabled", True)
         # app.state.valkey is NOT set — lifespan hasn't run.
         with capture_logs() as cap_logs:
             app = create_app()
@@ -178,9 +174,7 @@ class TestRateLimitBackendSelection:
         app has ``state.valkey`` set before ``_build_rate_limit_backend``
         is invoked.
         """
-        monkeypatch.setattr(
-            "engine.app.settings.rate_limit_valkey_enabled", True
-        )
+        monkeypatch.setattr("engine.app.settings.rate_limit_valkey_enabled", True)
 
         fake_valkey = MagicMock(name="fake_valkey")
         original_init = FastAPI.__init__
@@ -200,12 +194,8 @@ class TestRateLimitBackendSelection:
 
     def test_valkey_backend_uses_configured_key_ttl(self, monkeypatch):
         """The ``rate_limit_valkey_key_ttl_sec`` setting propagates."""
-        monkeypatch.setattr(
-            "engine.app.settings.rate_limit_valkey_enabled", True
-        )
-        monkeypatch.setattr(
-            "engine.app.settings.rate_limit_valkey_key_ttl_sec", 7200
-        )
+        monkeypatch.setattr("engine.app.settings.rate_limit_valkey_enabled", True)
+        monkeypatch.setattr("engine.app.settings.rate_limit_valkey_key_ttl_sec", 7200)
 
         original_init = FastAPI.__init__
 
@@ -489,7 +479,6 @@ class TestSetupSentryGuard:
 
         # The warning about sentry setup failure should NOT have been logged.
         sentry_warning_calls = [
-            c for c in mock_logger.warning.call_args_list
-            if "sentry" in str(c).lower()
+            c for c in mock_logger.warning.call_args_list if "sentry" in str(c).lower()
         ]
         assert sentry_warning_calls == []

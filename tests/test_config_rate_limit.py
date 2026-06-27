@@ -75,9 +75,7 @@ class TestRoleTiersInvalidJson:
         assert settings.rate_limit_role_tiers_map == {}
 
     def test_trailing_garbage_returns_empty(self):
-        settings = _make(
-            rate_limit_role_tiers='{"admin": [10, 5]} extra garbage'
-        )
+        settings = _make(rate_limit_role_tiers='{"admin": [10, 5]} extra garbage')
         assert settings.rate_limit_role_tiers_map == {}
 
 
@@ -216,9 +214,7 @@ class TestRoleTiersIntegrationWithApp:
         from engine.api.rate_limit import RateLimitConfig, RateLimitMiddleware
         from engine.app import create_app
 
-        monkeypatch.setattr(
-            "engine.app.settings.rate_limit_role_tiers", ""
-        )
+        monkeypatch.setattr("engine.app.settings.rate_limit_role_tiers", "")
         app = create_app()
         rl_mw = next(
             (m for m in app.user_middleware if m.cls is RateLimitMiddleware),
@@ -233,9 +229,7 @@ class TestRoleTiersIntegrationWithApp:
         from engine.api.rate_limit import RateLimitConfig, RateLimitMiddleware
         from engine.app import create_app
 
-        monkeypatch.setattr(
-            "engine.app.settings.rate_limit_role_tiers", "this is not json"
-        )
+        monkeypatch.setattr("engine.app.settings.rate_limit_role_tiers", "this is not json")
         app = create_app()
         rl_mw = next(
             (m for m in app.user_middleware if m.cls is RateLimitMiddleware),

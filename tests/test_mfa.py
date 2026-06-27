@@ -101,10 +101,7 @@ class TestURI:
         )
         parsed = urlparse(uri)
         assert "Nexus" in parsed.path
-        assert (
-            "alice%40example.com" in parsed.path
-            or "alice@example.com" in parsed.path
-        )
+        assert "alice%40example.com" in parsed.path or "alice@example.com" in parsed.path
         params = parse_qs(parsed.query)
         assert params["secret"] == ["JBSWY3DPEHPK3PXP"]
         assert params["issuer"] == ["Nexus"]
@@ -117,9 +114,7 @@ class TestValidation:
 
     def test_negative_window_rejected(self):
         with pytest.raises(MFAError):
-            verify_totp(
-                _RFC_SECRET_B32, "123456", now=0, step=30, window=-1
-            )
+            verify_totp(_RFC_SECRET_B32, "123456", now=0, step=30, window=-1)
 
     def test_zero_step_rejected(self):
         with pytest.raises(MFAError):

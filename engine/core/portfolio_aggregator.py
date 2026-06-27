@@ -65,9 +65,7 @@ def combined_equity_curve(
         return []
     lengths = {len(c) for c in curves}
     if len(lengths) > 1:
-        raise ValueError(
-            f"all equity curves must have equal length; got {sorted(lengths)}"
-        )
+        raise ValueError(f"all equity curves must have equal length; got {sorted(lengths)}")
     n = next(iter(lengths))
     if n == 0:
         return []
@@ -107,9 +105,7 @@ def correlation_matrix(
         return {}
     lengths = {len(s) for s in return_series.values()}
     if len(lengths) > 1:
-        raise ValueError(
-            f"all return series must have equal length; got {sorted(lengths)}"
-        )
+        raise ValueError(f"all return series must have equal length; got {sorted(lengths)}")
     out: dict[str, dict[str, float]] = {k: {} for k in keys}
     for i, a in enumerate(keys):
         for j, b in enumerate(keys):

@@ -55,9 +55,7 @@ class TestRollingBeta:
             assert v == pytest.approx(-1.0)
 
     def test_constant_benchmark_zero_beta(self):
-        out = rolling_beta(
-            [0.01, 0.02, 0.03], [0.05, 0.05, 0.05], 3
-        )
+        out = rolling_beta([0.01, 0.02, 0.03], [0.05, 0.05, 0.05], 3)
         assert out[2] == 0.0
 
     def test_length_mismatch_rejected(self):
@@ -79,9 +77,7 @@ class TestRollingAlpha:
         assert rolling_alpha([], [], 3) == []
 
     def test_first_indices_none(self):
-        out = rolling_alpha(
-            [0.01, 0.02, 0.03], [0.01, 0.02, 0.03], 3
-        )
+        out = rolling_alpha([0.01, 0.02, 0.03], [0.01, 0.02, 0.03], 3)
         assert out[:2] == [None, None]
 
     def test_perfect_replicator_zero_alpha(self):
@@ -127,9 +123,7 @@ class TestRollingTrackingError:
         assert rolling_tracking_error([], [], 3) == []
 
     def test_first_indices_none(self):
-        out = rolling_tracking_error(
-            [0.01, 0.02, 0.03], [0.01, 0.02, 0.03], 3
-        )
+        out = rolling_tracking_error([0.01, 0.02, 0.03], [0.01, 0.02, 0.03], 3)
         assert out[:2] == [None, None]
         assert out[2] is not None
 
@@ -161,9 +155,7 @@ class TestRollingTrackingError:
 
     def test_zero_annualisation_rejected(self):
         with pytest.raises(ValueError, match="annualisation_factor"):
-            rolling_tracking_error(
-                [0.01, 0.02], [0.01, 0.02], 2, annualisation_factor=0
-            )
+            rolling_tracking_error([0.01, 0.02], [0.01, 0.02], 2, annualisation_factor=0)
 
     def test_length_mismatch_rejected(self):
         with pytest.raises(ValueError, match="length mismatch"):
@@ -180,9 +172,7 @@ class TestRollingInformationRatio:
         assert rolling_information_ratio([], [], 3) == []
 
     def test_first_indices_none(self):
-        out = rolling_information_ratio(
-            [0.01, 0.02, 0.03], [0.01, 0.02, 0.03], 3
-        )
+        out = rolling_information_ratio([0.01, 0.02, 0.03], [0.01, 0.02, 0.03], 3)
         assert out[:2] == [None, None]
         assert out[2] is not None
 

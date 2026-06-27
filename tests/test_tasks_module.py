@@ -1,4 +1,5 @@
 """Tests for engine.tasks package — validates module structure and imports."""
+
 from __future__ import annotations
 
 import sys
@@ -13,7 +14,7 @@ class TestTasksModule:
         mock_broker_inst = MagicMock()
         mock_broker_inst.with_result_backend.return_value = mock_broker_inst
         mock_broker_inst.with_middlewares.return_value = mock_broker_inst
-        mock_broker_inst.task = lambda: (lambda f: f)
+        mock_broker_inst.task = lambda: lambda f: f
 
         mods_to_remove = [k for k in sys.modules if k.startswith("engine.tasks")]
         saved = {m: sys.modules.pop(m) for m in mods_to_remove}

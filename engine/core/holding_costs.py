@@ -123,10 +123,7 @@ def reinvestment_residual_cash(
     spent = (shares_purchased * reinvestment_price).quantize(_TWOPLACES)
     residual = (cash_amount - spent).quantize(_TWOPLACES)
     if residual < 0:
-        raise ValueError(
-            "shares_purchased exceeds what cash_amount can buy at "
-            "reinvestment_price"
-        )
+        raise ValueError("shares_purchased exceeds what cash_amount can buy at reinvestment_price")
     return residual
 
 

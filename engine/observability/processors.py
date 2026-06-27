@@ -19,9 +19,7 @@ if TYPE_CHECKING:
 _ALWAYS_KEEP = frozenset({"warning", "warn", "error", "critical"})
 
 
-def add_service_metadata(
-    _logger: WrappedLogger, _name: str, event_dict: EventDict
-) -> EventDict:
+def add_service_metadata(_logger: WrappedLogger, _name: str, event_dict: EventDict) -> EventDict:
     """Attach service / env / version to every record without overwriting."""
     event_dict.setdefault("service", settings.app_name)
     event_dict.setdefault("env", settings.app_env)
@@ -39,9 +37,7 @@ def add_correlation_context(
     return event_dict
 
 
-def sampling_filter(
-    _logger: WrappedLogger, method_name: str, event_dict: EventDict
-) -> EventDict:
+def sampling_filter(_logger: WrappedLogger, method_name: str, event_dict: EventDict) -> EventDict:
     """Drop a configurable fraction of info/debug records.
 
     warn/error/critical always pass. info/debug pass according to

@@ -68,7 +68,9 @@ class EventType(StrEnum):
 class Event:
     """A single event payload."""
 
-    def __init__(self, event_type: EventType, data: dict[str, Any] | None = None, source: str = "engine"):
+    def __init__(
+        self, event_type: EventType, data: dict[str, Any] | None = None, source: str = "engine"
+    ):
         self.event_type = event_type
         self.data = data or {}
         self.source = source

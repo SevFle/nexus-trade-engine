@@ -130,14 +130,10 @@ async def list_webhooks(
     return [_to_response(cfg) for cfg in result.scalars().all()]
 
 
-async def _get_owned(
-    webhook_id: uuid.UUID, user: User, db: AsyncSession
-) -> WebhookConfig:
+async def _get_owned(webhook_id: uuid.UUID, user: User, db: AsyncSession) -> WebhookConfig:
     cfg = await db.get(WebhookConfig, webhook_id)
     if cfg is None or cfg.user_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
     return cfg
 
 

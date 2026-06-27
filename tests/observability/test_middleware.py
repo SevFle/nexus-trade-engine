@@ -72,9 +72,7 @@ class TestRequestId:
 class TestContextLeak:
     @pytest.mark.asyncio
     async def test_context_cleared_after_response(self, client: AsyncClient):
-        await client.get(
-            "/echo", headers={"X-Correlation-Id": "leak-check-abc-123"}
-        )
+        await client.get("/echo", headers={"X-Correlation-Id": "leak-check-abc-123"})
         # Each ASGI request runs in its own task; outer test scope must
         # never inherit the request-scoped correlation id.
         assert ctx.get_correlation_id() is None
@@ -82,9 +80,7 @@ class TestContextLeak:
 
 class TestConcurrentRequests:
     @pytest.mark.asyncio
-    async def test_concurrent_requests_keep_isolated_ids(
-        self, client: AsyncClient
-    ):
+    async def test_concurrent_requests_keep_isolated_ids(self, client: AsyncClient):
         import asyncio
 
         async def fire(cid: str) -> str:

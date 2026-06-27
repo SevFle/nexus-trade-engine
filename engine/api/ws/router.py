@@ -81,15 +81,11 @@ async def ws_endpoint(ws: WebSocket) -> None:
 
     await ws.accept()
 
-    auth_result = await authenticate_websocket(
-        ws, rate_limiter=_state.rate_limiter
-    )
+    auth_result = await authenticate_websocket(ws, rate_limiter=_state.rate_limiter)
 
     if isinstance(auth_result, tuple):
         code, reason = auth_result
-        error_msg = ErrorMessage(
-            code="AUTH_INVALID", message=reason
-        )
+        error_msg = ErrorMessage(code="AUTH_INVALID", message=reason)
         with contextlib.suppress(Exception):
             await ws.send_json(error_msg.model_dump(mode="json"))
         with contextlib.suppress(Exception):
@@ -142,9 +138,7 @@ async def ws_endpoint(ws: WebSocket) -> None:
                 )
                 continue
 
-            should_break = await _dispatch_message(
-                ws, msg, connection_id, session
-            )
+            should_break = await _dispatch_message(ws, msg, connection_id, session)
             if should_break:
                 break
 
@@ -217,9 +211,7 @@ async def _dispatch_message(
         return False
 
     if msg.type == "unsubscribe":
-        result = await _state.resolver.handle_unsubscribe(
-            connection_id, msg, session.user_id
-        )
+        result = await _state.resolver.handle_unsubscribe(connection_id, msg, session.user_id)
         await _safe_send(
             ws,
             AckMessage(
@@ -238,8 +230,6 @@ async def _safe_send(ws: WebSocket, msg) -> None:
         await ws.send_json(msg.model_dump(mode="json"))
 
 
-async def _close_ws(
-    ws: WebSocket, *, code: int, reason: str
-) -> None:
+async def _close_ws(ws: WebSocket, *, code: int, reason: str) -> None:
     with contextlib.suppress(Exception):
         await ws.close(code=code, reason=reason)

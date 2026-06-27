@@ -7,6 +7,7 @@ Covers:
 - engine/api/routes/legal.py (documents, accept, acceptances, attributions)
 - engine/app.py (_configure_data_providers, _build_auth_registry, create_app)
 """
+
 from __future__ import annotations
 
 import uuid
@@ -301,7 +302,9 @@ class TestMFARoutes:
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_current_user] = lambda: user
         transport = ASGITransport(app=app)
-        with patch("engine.api.routes.mfa.begin_enrollment", side_effect=MFAServiceError("svc fail")):
+        with patch(
+            "engine.api.routes.mfa.begin_enrollment", side_effect=MFAServiceError("svc fail")
+        ):
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 resp = await ac.post("/api/v1/auth/mfa/enroll")
                 assert resp.status_code == 503
@@ -695,7 +698,11 @@ class TestLegalRoutesExtended:
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.post(
                 "/api/v1/legal/accept",
-                json={"acceptances": [{"document_slug": "terms-of-service", "document_version": "1.0"}]},
+                json={
+                    "acceptances": [
+                        {"document_slug": "terms-of-service", "document_version": "1.0"}
+                    ]
+                },
             )
             assert resp.status_code == 200
             assert "accepted" in resp.json()

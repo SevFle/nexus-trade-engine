@@ -86,14 +86,20 @@ def _extract_scopes(token_data: dict) -> list[str]:
     role = token_data.get("role", "viewer")
     role_scopes: dict[str, list[str]] = {
         "admin": [
-            "read:portfolio", "read:portfolio:all",
-            "read:orders", "read:orders:all",
-            "read:strategies", "read:strategies:all",
+            "read:portfolio",
+            "read:portfolio:all",
+            "read:orders",
+            "read:orders:all",
+            "read:strategies",
+            "read:strategies:all",
         ],
         "portfolio_manager": [
-            "read:portfolio", "read:portfolio:all",
-            "read:orders", "read:orders:all",
-            "read:strategies", "read:strategies:all",
+            "read:portfolio",
+            "read:portfolio:all",
+            "read:orders",
+            "read:orders:all",
+            "read:strategies",
+            "read:strategies:all",
         ],
         "quant_dev": ["read:portfolio", "read:orders", "read:strategies"],
         "developer": ["read:portfolio", "read:orders", "read:strategies"],
@@ -104,9 +110,7 @@ def _extract_scopes(token_data: dict) -> list[str]:
     return role_scopes.get(role, role_scopes["viewer"])
 
 
-async def _receive_auth_token(
-    ws: WebSocket, auth_timeout: float
-) -> str | tuple[int, str]:
+async def _receive_auth_token(ws: WebSocket, auth_timeout: float) -> str | tuple[int, str]:
     try:
         msg = await asyncio.wait_for(ws.receive_json(), timeout=auth_timeout)
     except TimeoutError:
@@ -141,9 +145,7 @@ async def authenticate_websocket(
     if rate_limiter is not None:
         allowed = await rate_limiter.check(remote_ip)
         if not allowed:
-            ws_metrics.metrics.counter(
-                "sev_ws_auth_failures_total", tags={"reason": "ratelimit"}
-            )
+            ws_metrics.metrics.counter("sev_ws_auth_failures_total", tags={"reason": "ratelimit"})
             logger.warning("ws.auth_rate_limited", remote_ip=remote_ip)
             return WS_CLOSE_AUTH_INVALID, "auth rate limited"
 

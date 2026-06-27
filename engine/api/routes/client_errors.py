@@ -91,9 +91,7 @@ class ClientErrorReport(BaseModel):
         try:
             uuid.UUID(v)
         except ValueError as exc:
-            raise ValueError(
-                "error_id must be a UUID"
-            ) from exc
+            raise ValueError("error_id must be a UUID") from exc
         return v
 
 
@@ -106,9 +104,7 @@ class ClientErrorAck(BaseModel):
     status_code=HTTPStatus.CREATED,
     response_model=ClientErrorAck,
 )
-async def report_client_error(
-    payload: ClientErrorReport, request: Request
-) -> ClientErrorAck:
+async def report_client_error(payload: ClientErrorReport, request: Request) -> ClientErrorAck:
     error_id = payload.error_id or str(uuid.uuid4())
     client_host = request.client.host if request.client else None
     logger.error(

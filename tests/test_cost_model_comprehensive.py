@@ -113,8 +113,13 @@ class TestCostBreakdownEdgeCases:
         )
         d = cb.as_dict()
         assert set(d.keys()) == {
-            "commission", "spread", "slippage", "exchange_fee",
-            "tax_estimate", "currency_conversion", "total",
+            "commission",
+            "spread",
+            "slippage",
+            "exchange_fee",
+            "tax_estimate",
+            "currency_conversion",
+            "total",
         }
 
     def test_as_dict_values(self):
@@ -248,8 +253,12 @@ class TestTaxMultiLot:
         sell_date = datetime(2026, 1, 1, tzinfo=UTC)
         model = DefaultCostModel(short_term_tax_rate=0.37)
         lots = [
-            TaxLot(symbol="AAPL", quantity=100, purchase_price=100.0,
-                   purchase_date=sell_date - timedelta(days=30)),
+            TaxLot(
+                symbol="AAPL",
+                quantity=100,
+                purchase_price=100.0,
+                purchase_date=sell_date - timedelta(days=30),
+            ),
         ]
         tax = model.estimate_tax("AAPL", 150.0, 50, lots, TaxMethod.FIFO, sell_date=sell_date)
         expected = (150.0 - 100.0) * 50 * 0.37
@@ -262,10 +271,18 @@ class TestTaxMultiLot:
             long_term_tax_rate=0.20,
         )
         lots = [
-            TaxLot(symbol="AAPL", quantity=50, purchase_price=100.0,
-                   purchase_date=sell_date - timedelta(days=400)),
-            TaxLot(symbol="AAPL", quantity=50, purchase_price=120.0,
-                   purchase_date=sell_date - timedelta(days=30)),
+            TaxLot(
+                symbol="AAPL",
+                quantity=50,
+                purchase_price=100.0,
+                purchase_date=sell_date - timedelta(days=400),
+            ),
+            TaxLot(
+                symbol="AAPL",
+                quantity=50,
+                purchase_price=120.0,
+                purchase_date=sell_date - timedelta(days=30),
+            ),
         ]
         tax = model.estimate_tax("AAPL", 150.0, 100, lots, TaxMethod.FIFO, sell_date=sell_date)
         long_term_gain = (150.0 - 100.0) * 50
@@ -277,10 +294,18 @@ class TestTaxMultiLot:
         sell_date = datetime(2026, 1, 1, tzinfo=UTC)
         model = DefaultCostModel(short_term_tax_rate=0.37, long_term_tax_rate=0.20)
         lots = [
-            TaxLot(symbol="AAPL", quantity=50, purchase_price=80.0,
-                   purchase_date=sell_date - timedelta(days=400)),
-            TaxLot(symbol="AAPL", quantity=50, purchase_price=140.0,
-                   purchase_date=sell_date - timedelta(days=30)),
+            TaxLot(
+                symbol="AAPL",
+                quantity=50,
+                purchase_price=80.0,
+                purchase_date=sell_date - timedelta(days=400),
+            ),
+            TaxLot(
+                symbol="AAPL",
+                quantity=50,
+                purchase_price=140.0,
+                purchase_date=sell_date - timedelta(days=30),
+            ),
         ]
         tax = model.estimate_tax("AAPL", 150.0, 50, lots, TaxMethod.LIFO, sell_date=sell_date)
         expected = (150.0 - 140.0) * 50 * 0.37
@@ -290,8 +315,12 @@ class TestTaxMultiLot:
         sell_date = datetime(2026, 1, 1, tzinfo=UTC)
         model = DefaultCostModel()
         lots = [
-            TaxLot(symbol="AAPL", quantity=100, purchase_price=200.0,
-                   purchase_date=sell_date - timedelta(days=30)),
+            TaxLot(
+                symbol="AAPL",
+                quantity=100,
+                purchase_price=200.0,
+                purchase_date=sell_date - timedelta(days=30),
+            ),
         ]
         tax = model.estimate_tax("AAPL", 150.0, 100, lots, TaxMethod.FIFO, sell_date=sell_date)
         assert tax.amount == 0.0
@@ -300,8 +329,12 @@ class TestTaxMultiLot:
         sell_date = datetime(2026, 1, 1, tzinfo=UTC)
         model = DefaultCostModel(short_term_tax_rate=0.37)
         lots = [
-            TaxLot(symbol="AAPL", quantity=1000, purchase_price=100.0,
-                   purchase_date=sell_date - timedelta(days=10)),
+            TaxLot(
+                symbol="AAPL",
+                quantity=1000,
+                purchase_price=100.0,
+                purchase_date=sell_date - timedelta(days=10),
+            ),
         ]
         tax = model.estimate_tax("AAPL", 110.0, 1, lots, TaxMethod.FIFO, sell_date=sell_date)
         expected = (110.0 - 100.0) * 1 * 0.37
@@ -315,7 +348,9 @@ class TestTaxLotEdgeCases:
     def test_is_long_term_exactly_365_days(self):
         now = datetime(2026, 1, 1, tzinfo=UTC)
         lot = TaxLot(
-            symbol="AAPL", quantity=100, purchase_price=100.0,
+            symbol="AAPL",
+            quantity=100,
+            purchase_price=100.0,
             purchase_date=now - timedelta(days=365),
         )
         assert lot.is_long_term(as_of=now) is True
@@ -323,21 +358,27 @@ class TestTaxLotEdgeCases:
     def test_is_long_term_364_days(self):
         now = datetime(2026, 1, 1, tzinfo=UTC)
         lot = TaxLot(
-            symbol="AAPL", quantity=100, purchase_price=100.0,
+            symbol="AAPL",
+            quantity=100,
+            purchase_price=100.0,
             purchase_date=now - timedelta(days=364),
         )
         assert lot.is_long_term(as_of=now) is False
 
     def test_is_long_term_default_as_of(self):
         lot = TaxLot(
-            symbol="AAPL", quantity=100, purchase_price=100.0,
+            symbol="AAPL",
+            quantity=100,
+            purchase_price=100.0,
             purchase_date=datetime.now(UTC) - timedelta(days=400),
         )
         assert lot.is_long_term() is True
 
     def test_cost_basis_with_large_numbers(self):
         lot = TaxLot(
-            symbol="AAPL", quantity=1_000_000, purchase_price=500.0,
+            symbol="AAPL",
+            quantity=1_000_000,
+            purchase_price=500.0,
             purchase_date=datetime.now(UTC),
         )
         assert lot.cost_basis == 500_000_000.0
@@ -398,7 +439,10 @@ class TestWashSaleAdjustmentEdgeCases:
         model = DefaultCostModel()
         sell_date = datetime.now(UTC)
         result = model.calculate_wash_sale_adjustment(
-            "AAPL", sell_date, -500.0, [],
+            "AAPL",
+            sell_date,
+            -500.0,
+            [],
         )
         assert result["is_wash_sale"] is False
         assert result["adjustment"] == 0.0
@@ -408,7 +452,12 @@ class TestWashSaleAdjustmentEdgeCases:
         model = DefaultCostModel()
         sell_date = datetime.now(UTC)
         buy_history = [
-            {"symbol": "AAPL", "date": sell_date - timedelta(days=10), "price": 100.0, "quantity": 50},
+            {
+                "symbol": "AAPL",
+                "date": sell_date - timedelta(days=10),
+                "price": 100.0,
+                "quantity": 50,
+            },
         ]
         result = model.calculate_wash_sale_adjustment("AAPL", sell_date, 500.0, buy_history)
         assert result["is_wash_sale"] is False
@@ -417,7 +466,12 @@ class TestWashSaleAdjustmentEdgeCases:
         model = DefaultCostModel()
         sell_date = datetime.now(UTC)
         buy_history = [
-            {"symbol": "AAPL", "date": sell_date - timedelta(days=10), "price": 100.0, "quantity": 50},
+            {
+                "symbol": "AAPL",
+                "date": sell_date - timedelta(days=10),
+                "price": 100.0,
+                "quantity": 50,
+            },
         ]
         result = model.calculate_wash_sale_adjustment("AAPL", sell_date, 0.0, buy_history)
         assert result["is_wash_sale"] is False
@@ -427,8 +481,18 @@ class TestWashSaleAdjustmentEdgeCases:
         sell_date = datetime.now(UTC)
         loss = -600.0
         buy_history = [
-            {"symbol": "AAPL", "date": sell_date - timedelta(days=5), "price": 140.0, "quantity": 100},
-            {"symbol": "AAPL", "date": sell_date - timedelta(days=15), "price": 145.0, "quantity": 200},
+            {
+                "symbol": "AAPL",
+                "date": sell_date - timedelta(days=5),
+                "price": 140.0,
+                "quantity": 100,
+            },
+            {
+                "symbol": "AAPL",
+                "date": sell_date - timedelta(days=15),
+                "price": 145.0,
+                "quantity": 200,
+            },
         ]
         result = model.calculate_wash_sale_adjustment("AAPL", sell_date, loss, buy_history)
         assert result["is_wash_sale"] is True
