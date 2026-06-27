@@ -8,6 +8,7 @@ isolation, and aggregation-mode aliasing.
 
 from __future__ import annotations
 
+import asyncio
 import math
 
 import pytest
@@ -102,10 +103,13 @@ class _NoEvaluateStrategy:
     id = "has-id-but-no-evaluate"
 
 
-# Sentinel objects passed as market_data / cost_model so tests can verify
-# every strategy received the *same* object by identity.
-_MARKET = object()
-_COSTS = object()
+# Sentinel values passed as market_data / cost_model. These are
+# deep-copyable, value-comparable dicts (not bare objects) so tests can
+# assert that every strategy received an *equal* copy of the same source
+# data while the orchestrator still guarantees each gets its own
+# independent deep copy (mutation isolation).
+_MARKET = {"prices": {"AAPL": 150.0, "MSFT": 300.0}}
+_COSTS = {"fee_bps": 5.0, "spread_bps": 1.0}
 
 
 # --------------------------------------------------------------------- #
@@ -236,8 +240,10 @@ class TestEvaluateAll:
         assert result.signals[0].symbol == "AAPL"
 
     async def test_all_strategies_receive_same_inputs(self):
-        # The whole point of the orchestrator: identical market_data and
-        # cost_model reach every strategy by object identity.
+        # The whole point of the orchestrator: equal copies of the same
+        # source market_data and cost_model reach every strategy. Each
+        # strategy gets its own deep copy (see test_mutation_isolation),
+        # so we assert value equality rather than object identity.
         a = _RecordingStrategy("a", [_sig("AAPL", Side.BUY, "a")])
         b = _RecordingStrategy("b", [_sig("AAPL", Side.BUY, "b")])
         c = _RecordingStrategy("c", [_sig("AAPL", Side.BUY, "c")])
@@ -464,3 +470,157 @@ class TestResultShape:
         # HOLD-only is not a no-op (no-op == empty result).
         assert not result.is_noop
         assert result.trade_signals == []
+
+
+# --------------------------------------------------------------------- #
+# Robustness fixes: registry mutation during evaluation, per-strategy
+# timeouts, and mutation isolation between strategies.
+# --------------------------------------------------------------------- #
+
+
+class TestRegistryMutationDuringEvaluate:
+    async def test_register_during_evaluate_does_not_crash(self):
+        # Without a snapshot, a strategy that registers a sibling while
+        # the orchestrator is iterating raises "dictionary changed size
+        # during iteration". The snapshot keeps the cycle stable; the
+        # late sibling is picked up on the *next* cycle.
+        orch = StrategyOrchestrator()
+
+        class _RegisteringStrategy:
+            id = "early"
+
+            async def evaluate(self, market_data, cost_model):
+                # Mutate the registry mid-cycle.
+                orch.register(
+                    _RecordingStrategy(
+                        "late", [_sig("AAPL", Side.SELL, "late")]
+                    )
+                )
+                return [_sig("AAPL", Side.BUY, "early")]
+
+        orch.register(_RegisteringStrategy())
+
+        result = await orch.evaluate_all(_MARKET, _COSTS)
+
+        # The cycle completed instead of raising.
+        assert [b.strategy_id for b in result.batches] == ["early"]
+        # The registration took effect for the registry...
+        assert "late" in orch
+        # ...but the latecomer did not run this cycle.
+        assert "late" not in {b.strategy_id for b in result.batches}
+
+    async def test_unregister_during_evaluate_does_not_crash(self):
+        # Symmetric: unregistering a sibling mid-cycle must not raise.
+        orch = StrategyOrchestrator()
+
+        class _UnregisteringStrategy:
+            id = "keeper"
+
+            async def evaluate(self, market_data, cost_model):
+                orch.unregister("victim")
+                return [_sig("AAPL", Side.BUY, "keeper")]
+
+        orch.register(_UnregisteringStrategy())
+        orch.register(_RecordingStrategy("victim", [_sig("AAPL", Side.SELL, "victim")]))
+
+        result = await orch.evaluate_all(_MARKET, _COSTS)
+
+        # Both ran (snapshot captured both before the mutation).
+        assert {b.strategy_id for b in result.batches} == {"keeper", "victim"}
+        assert "victim" not in orch  # removal took effect afterwards
+
+
+class TestStrategyTimeout:
+    async def test_slow_async_strategy_times_out_and_is_recorded(self):
+        # A strategy whose evaluate() exceeds the configured timeout is
+        # cancelled and recorded as a TimeoutError error result; the
+        # remaining strategies still contribute.
+        orch = StrategyOrchestrator(eval_timeout=0.05)
+        good = _RecordingStrategy("good", [_sig("AAPL", Side.BUY, "good")])
+
+        class _SlowStrategy:
+            id = "slow"
+
+            async def evaluate(self, market_data, cost_model):
+                # Far beyond the 0.05s cap; wait_for cancels us.
+                await asyncio.sleep(5.0)
+                return [_sig("AAPL", Side.BUY, "slow")]  # never reached
+
+        orch.register(good)
+        orch.register(_SlowStrategy())
+
+        result = await orch.evaluate_all(_MARKET, _COSTS)
+
+        # Timeout surfaced as a distinct error entry.
+        assert "slow" in result.errors
+        assert "TimeoutError" in result.errors["slow"]
+        assert "0.05" in result.errors["slow"]
+        # The healthy strategy still produced a batch and a decision.
+        assert [b.strategy_id for b in result.batches] == ["good"]
+        assert result.signals[0].side == Side.BUY
+        assert result.strategy_count == 2  # both registered
+
+    async def test_default_timeout_is_thirty_seconds(self):
+        orch = StrategyOrchestrator()
+        assert math.isclose(orch._eval_timeout, 30.0)
+
+    @pytest.mark.parametrize("bad", [0, -1, float("nan"), float("inf"), float("-inf")])
+    def test_constructor_rejects_invalid_timeout(self, bad):
+        with pytest.raises(StrategyOrchestratorError):
+            StrategyOrchestrator(eval_timeout=bad)
+
+    def test_constructor_rejects_non_numeric_timeout(self):
+        with pytest.raises(StrategyOrchestratorError):
+            StrategyOrchestrator(eval_timeout="soon")  # type: ignore[arg-type]
+
+
+class TestMutationIsolation:
+    async def test_each_strategy_receives_its_own_deep_copy(self):
+        # A strategy that mutates the market_data / cost_model handed to
+        # it must not poison its siblings or the caller's originals.
+        market = {"prices": {"AAPL": 150.0}}
+        costs = {"fee_bps": 5.0}
+
+        class _MutatingStrategy:
+            id = "mutator"
+
+            async def evaluate(self, market_data, cost_model):
+                # Mutate the copy we received in place.
+                market_data["prices"]["AAPL"] = 999.0
+                cost_model["fee_bps"] = 999.0
+                return [_sig("AAPL", Side.BUY, "mutator")]
+
+        observer = _RecordingStrategy(
+            "observer", [_sig("AAPL", Side.BUY, "observer")]
+        )
+
+        orch = StrategyOrchestrator()
+        orch.register(_MutatingStrategy())
+        orch.register(observer)
+
+        await orch.evaluate_all(market, costs)
+
+        # The caller's originals are untouched.
+        assert market == {"prices": {"AAPL": 150.0}}
+        assert costs == {"fee_bps": 5.0}
+        # The sibling observed the original, unmutated data.
+        observed_md, observed_cm = observer.received[0]
+        assert observed_md == {"prices": {"AAPL": 150.0}}
+        assert observed_cm == {"fee_bps": 5.0}
+
+    async def test_strategies_receive_distinct_copies(self):
+        # Even when no mutation happens, the objects handed to two
+        # strategies are distinct (proving the copy is per-strategy, not
+        # a single shared deepcopy).
+        a = _RecordingStrategy("a", [_sig("AAPL", Side.BUY, "a")])
+        b = _RecordingStrategy("b", [_sig("AAPL", Side.BUY, "b")])
+        orch = StrategyOrchestrator()
+        orch.register(a)
+        orch.register(b)
+
+        await orch.evaluate_all(_MARKET, _COSTS)
+
+        a_md = a.received[0][0]
+        b_md = b.received[0][0]
+        assert a_md == b_md  # equal by value ...
+        assert a_md is not b_md  # ... but independent objects

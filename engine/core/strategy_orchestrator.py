@@ -43,6 +43,8 @@ Relationship to SignalAggregator
 
 from __future__ import annotations
 
+import asyncio
+import copy
 import inspect
 import math
 from dataclasses import dataclass, field
@@ -189,10 +191,25 @@ class StrategyOrchestrator:
     market data and cost model.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, eval_timeout: float = 30.0) -> None:
         # Insertion-ordered so evaluate_all iterates deterministically.
         self._strategies: dict[str, StrategyLike] = {}
         self._weights: dict[str, float] = {}
+        # Per-strategy ``evaluate()`` wall-clock cap. A strategy that
+        # exceeds it is recorded as an error result rather than stalling
+        # the whole cycle. 30s matches the platform's overall strategy
+        # SLA; tighten via the constructor for latency-sensitive paths.
+        try:
+            value = float(eval_timeout)
+        except (TypeError, ValueError) as exc:
+            raise StrategyOrchestratorError(
+                f"eval_timeout must be a number, got {eval_timeout!r}"
+            ) from exc
+        if not math.isfinite(value) or value <= 0:
+            raise StrategyOrchestratorError(
+                f"eval_timeout must be a finite, positive number, got {eval_timeout!r}"
+            )
+        self._eval_timeout = value
 
     # -- registry introspection ----------------------------------------
 
@@ -266,7 +283,9 @@ class StrategyOrchestrator:
         Parameters
         ----------
         market_data, cost_model:
-            Forwarded verbatim to each strategy's ``evaluate``.
+            Forwarded to each strategy's ``evaluate`` as an independent
+            deep copy, so one strategy mutating them cannot leak to its
+            siblings or the caller's originals.
         aggregation:
             One of ``majority`` (default), ``majority_vote`` (alias), or
             ``weighted``.
@@ -276,7 +295,10 @@ class StrategyOrchestrator:
         OrchestrationResult
             ``signals`` holds the aggregated decisions; ``batches`` the
             raw per-strategy signals; ``errors`` maps any failed
-            strategy id to its error message.
+            strategy id (raised *or* timed out) to its error message.
+            A strategy that exceeds the configured ``eval_timeout`` is
+            reported as a ``TimeoutError`` entry rather than stalling
+            the cycle.
 
         Raises
         ------
@@ -302,13 +324,44 @@ class StrategyOrchestrator:
 
         batches: list[SignalBatch] = []
         errors: dict[str, str] = {}
-        for sid, strategy in self._strategies.items():
+        # Snapshot the registry before iterating. A strategy that
+        # registers / unregisters a sibling mid-cycle (e.g. from inside
+        # its own evaluate) must not mutate the dict we are walking,
+        # which would otherwise raise "dictionary changed size during
+        # iteration". Strategies added during this cycle are
+        # intentionally excluded from it - they will run on the next.
+        for sid, strategy in list(self._strategies.items()):
+            # Hand each strategy its own deep copy so a misbehaving
+            # plugin that mutates market_data / cost_model cannot poison
+            # its siblings or the caller's originals. The copies are
+            # recreated per strategy so cross-strategy comparisons stay
+            # apples-to-apples.
+            md = copy.deepcopy(market_data)
+            cm = copy.deepcopy(cost_model)
             try:
-                raw = strategy.evaluate(market_data, cost_model)
+                raw = strategy.evaluate(md, cm)
                 # Support both sync (returns list) and async (returns
-                # coroutine) strategies transparently.
+                # coroutine) strategies transparently. Only the async
+                # path is bounded by the per-strategy timeout - a sync
+                # call has already completed by the time we get here.
                 if inspect.isawaitable(raw):
-                    raw = await raw
+                    raw = await asyncio.wait_for(
+                        raw, timeout=self._eval_timeout
+                    )
+            except TimeoutError as exc:
+                # Catch TimeoutError before the generic handler below:
+                # it is a subclass of OSError/Exception and must be
+                # reported distinctly as a timeout, not a crash.
+                logger.warning(
+                    "orchestrator.strategy_timeout",
+                    strategy_id=sid,
+                    timeout=self._eval_timeout,
+                )
+                errors[sid] = (
+                    f"{type(exc).__name__}: evaluate exceeded "
+                    f"{self._eval_timeout}s timeout"
+                )
+                continue
             except Exception as exc:
                 logger.exception(
                     "orchestrator.strategy_failed", strategy_id=sid
