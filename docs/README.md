@@ -34,6 +34,8 @@ we explain *why*, not *what*.
 | If you want to… | Read this |
 |------------------|-----------|
 | Get a 10-minute mental model of the system | [`architecture/overview.md`](architecture/overview.md) |
+| Understand the MCP surface (and its current gap) | [`architecture/mcp-server.md`](architecture/mcp-server.md) |
+| Understand multi-strategy voting | [`architecture/orchestrator.md`](architecture/orchestrator.md) |
 | Understand every table and its constraints | [`data-model.md`](data-model.md) |
 | Call the REST / WebSocket API | [`api-reference.md`](api-reference.md) |
 | Run the engine locally | [`development.md`](development.md) |
@@ -52,7 +54,9 @@ docs/
 ├── architecture/                   ← component-by-component "current state"
 │   ├── overview.md
 │   ├── database.md                 ← migration policy, table inventory
-│   └── plugins.md                  ← plugin SDK + registry
+│   ├── plugins.md                  ← plugin SDK + registry
+│   ├── mcp-server.md               ← MCP tool/resource surface (library only today)
+│   └── orchestrator.md             ← multi-strategy StrategyOrchestrator (library only today)
 ├── adr/                            ← architecture decision records (why we chose X)
 │   ├── 0001-scaffold-tech-choices.md
 │   ├── 0002-auth-rbac.md
@@ -108,6 +112,7 @@ same PR (enforced in CODEOWNERS, not yet in CI):
 | Code change | Required doc update |
 |---|---|
 | New / changed HTTP route | `api-reference.md` |
+| New MCP tool / resource | `architecture/mcp-server.md` |
 | New / changed DB model or migration | `data-model.md` + `architecture/database.md` |
 | New env var | `deployment.md` + `architecture/overview.md` "Configuration" |
 | New SLO or alert | `operations/slos.md` + matching runbook under `operations/runbooks/` |

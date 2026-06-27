@@ -117,7 +117,11 @@ The k6 surface deliberately does not cover:
 
 - Authentication flows that involve MFA.
 - WebSocket traffic (waiting on #7).
-- MCP server traffic (waiting on #104–#106).
+- MCP server traffic (the `engine/mcp/` module landed in #959 but has no
+  transport entrypoint yet — see
+  [known-limitations.md](../known-limitations.md) and
+  [architecture/mcp-server.md](../architecture/mcp-server.md)). Re-add
+  when the server bootstrap ships.
 - Spike / stress profiles for capacity planning. Add when needed.
 
 ## Related

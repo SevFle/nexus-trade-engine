@@ -320,6 +320,15 @@ Templates: `generic`, `discord`, `slack`, `telegram`.
 DSR rows are auditable under GDPR Art. 12 (one-month SLA tracked in
 `sla_due_at`).
 
+The `users.processing_restricted` flag (migration 013) backs the
+GDPR Art. 18 *right to restriction*. It is data-only today: no route
+sets it, but `engine/privacy/deletion.py` clears it on purge. When a
+route lands to set it, the engine is expected to halt all processing
+except retention-critical background jobs (e.g. live trading
+auto-stops) while still letting the user authenticate to manage their
+privacy settings. See [`data-model.md`](data-model.md) for the column
+contract.
+
 ## WebSocket
 
 `WS /api/v1/ws`. The active implementation is the `engine/api/ws/`
