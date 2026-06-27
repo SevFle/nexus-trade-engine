@@ -37,9 +37,10 @@ The schema is owned by the Alembic migration chain in
 | 010   | `webhook_configs` + `webhook_deliveries` (gh#80).              |
 | 011   | `api_keys` — long-lived scoped credentials for SDK / headless access (gh#94). |
 | 012   | `dsr_requests` — GDPR / CCPA data-subject-request audit log (gh#157). |
+| 013   | `users.processing_restricted` — GDPR Art. 18 right-to-restriction flag (gh#157). Backfills the column the model + `engine/privacy/deletion.py` already referenced. |
 
 Run `alembic history` for the source of truth. The next free revision
-number is `013`.
+number is `014`.
 
 ## Critical tables
 
@@ -49,6 +50,8 @@ runbook at [`docs/operations/backup-and-recovery.md`](../operations/backup-and-r
 - **`users`** — primary identity. Password hashes are bcrypt; MFA
   TOTP secrets are Fernet-encrypted with the engine's
   `MFA_ENCRYPTION_KEY` (see [auth-mfa runbook](../operations/runbooks/auth-mfa.md)).
+  Carries the `processing_restricted` flag (rev 013, GDPR Art. 18) —
+  see `data-model.md` for the semantics.
 - **`backtest_results`** — every run a user has ever submitted. The
   `score_breakdown` JSONB column is the per-dimension score map from
   the strategy evaluator.

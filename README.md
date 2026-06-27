@@ -136,6 +136,11 @@ key entry points:
 
 - [Architecture overview](docs/architecture/overview.md) — system
   components, request lifecycle, configuration.
+- [MCP server](docs/architecture/mcp-server.md) — the Model Context
+  Protocol surface for LLM agents (library only today; gap called out
+  up front).
+- [Strategy orchestrator](docs/architecture/orchestrator.md) —
+  multi-strategy weighted/majority voting (library only today).
 - [API reference](docs/api-reference.md) — every HTTP and WebSocket
   route, auth model, error semantics.
 - [Data model](docs/data-model.md) — entities, relationships,
@@ -185,6 +190,12 @@ on the public API surface or not production-validated.
 - [~] WebSocket real-time streams *(partial — see
       [known-limitations](docs/known-limitations.md): connection registry
       is process-local)*
+- [~] MCP server *(partial — `engine/mcp/` ships the tool/resource/
+      auth/pagination stack but **no server entrypoint**; see
+      [mcp-server.md](docs/architecture/mcp-server.md))*
+- [~] Strategy orchestrator *(partial — `engine/core/strategy_orchestrator.py`
+      implements weighted/majority voting but has no caller outside its
+      own unit tests; see [orchestrator.md](docs/architecture/orchestrator.md))*
 - [ ] React dashboard MVP *(missing)*
 - [ ] Observability export *(OpenTelemetry/Prometheus/Sentry wired but
       SLI metric coverage incomplete — see [SLO doc](docs/operations/slos.md))*

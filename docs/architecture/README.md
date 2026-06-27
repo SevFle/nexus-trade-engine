@@ -16,10 +16,15 @@ For *why* we made specific structural choices, see
    data ownership.
 3. **[plugins.md](plugins.md)** — plugin SDK and the registry that
    loads strategies / data providers / execution backends at runtime.
-4. **[`docs/operations/`](../operations/)** — how the running system is
+4. **[mcp-server.md](mcp-server.md)** — the MCP tool/resource surface
+   for LLM agents. Library-only today; the gap is called out up front.
+5. **[orchestrator.md](orchestrator.md)** — the multi-strategy
+   `StrategyOrchestrator` (weighted/majority voting). Library-only
+   today; the integration gap is called out up front.
+6. **[`docs/operations/`](../operations/)** — how the running system is
    monitored, backed up, and recovered. Lives next to the runbooks
    that on-call uses.
-5. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
+7. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
    Read these before proposing a change that contradicts them.
 
 ## Existing diagrams

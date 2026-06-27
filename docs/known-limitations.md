@@ -14,6 +14,35 @@ Priority legend:
 
 ---
 
+## P0 — MCP server has no transport / entrypoint
+
+**Where**: [`engine/mcp/`](../engine/mcp/) — the whole module.
+
+`feat(mcp): implement MCP server for trade engine (#959)` landed the
+*implementation* of the MCP surface (tool catalogue in
+[`tool_definitions.py`](../engine/mcp/tool_definitions.py), request
+dispatch in [`handlers.py`](../engine/mcp/handlers.py), per-tool
+adapters, resources, auth, rate limiting, pagination, observability,
+errors). What it did **not** land is the server itself: there is no
+`FastMCP()` instance, no `python -m engine.mcp` runner, no stdio or
+HTTP transport bootstrap in the tree. `pyproject.toml` even lists
+`engine/mcp/server.py` in its lint-ignore map, but that file does not
+exist on `main`.
+
+**Impact**: the MCP surface is unreachable from any real assistant.
+The module is exercised only by its unit tests and by code that
+imports the adapters directly. The README's "AI-native" pitch and the
+MCP-related roadmap line both rest on a server that isn't there.
+
+**Workaround today**: none at the wire level. If you need LLM-driven
+engine access today, call the REST API from the assistant's tool
+shim. The MCP adapters are reusable building blocks — see
+[`architecture/mcp-server.md`](architecture/mcp-server.md) for the
+exact gap (a `server.py` + entrypoint + worker service) that has to
+land before this is callable.
+
+---
+
 ## P0 — Backtest results are not persisted
 
 **Where**: [`engine/api/routes/backtest.py:22`](../engine/api/routes/backtest.py#L22)
@@ -35,6 +64,31 @@ balancer need sticky sessions on `/api/v1/backtest/*`.
 **Fix path**: switch `_run_backtest_background` to write to
 `backtest_results` and the GET handler to query by `id` + `user_id`.
 The `BackgroundTasks` call should become a TaskIQ enqueue.
+
+---
+
+## P1 — StrategyOrchestrator landed but is not wired to anything
+
+**Where**: [`engine/core/strategy_orchestrator.py`](../engine/core/strategy_orchestrator.py)
+
+The multi-strategy orchestrator (commit `578259b`) is fully
+implemented — weighted/majority voting, per-strategy timeout, deep-
+copied inputs, registry snapshot before iteration, rich
+`OrchestrationResult` with per-strategy provenance and errors. It is
+on the roadmap as "StrategyOrchestrator (multi-strategy) [partial]".
+
+**Impact**: nothing in `engine/api/`, `engine/tasks/`, the live loop,
+or the strategy evaluator constructs or invokes it. It has no caller
+outside its own unit tests, so multi-strategy voting is not reachable
+from any running surface. The README's "AI-native plugin trading
+framework" framing assumes this component is in the hot path.
+
+**Workaround today**: single-strategy only. If you genuinely need
+multi-strategy voting today, instantiate `StrategyOrchestrator` in
+your own code — the public API is stable and documented in
+[`architecture/orchestrator.md`](architecture/orchestrator.md). The
+integration gap (a construct site + result persistence + evaluator
+hookup) is the work that has to land to close this item.
 
 ---
 

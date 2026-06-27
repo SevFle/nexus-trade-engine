@@ -167,6 +167,7 @@ without reading the source.
 | Adding…                               | Goes in                                         |
 |---------------------------------------|--------------------------------------------------|
 | A new HTTP endpoint                   | `engine/api/routes/<area>.py`, registered in `engine/api/router.py` |
+| A new MCP tool / resource             | `engine/mcp/tool_definitions.py` (+ adapter under `engine/mcp/adapters/`); see [mcp-server.md](mcp-server.md). Note: no server entrypoint ships yet. |
 | A new background job                  | `engine/tasks/`                                  |
 | A new strategy / data provider / executor | A strategy package under [`strategies/<name>/`](../../strategies/) (manifest + `strategy.py`); a data provider via `engine/data/providers/` + the YAML registry. See [plugins.md](plugins.md). |
 | A new outbound integration (webhook template) | Extend [`engine/events/webhook_dispatcher.py:render_template`](../../engine/events/webhook_dispatcher.py) and the `_VALID_TEMPLATES` set in `routes/webhooks.py`. |
