@@ -18,15 +18,42 @@ evolves independently from the instrument taxonomy (what the engine
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Mapping  # noqa: TC003
 from datetime import date  # noqa: TC003 - needed at runtime by pydantic
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+import structlog
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 if TYPE_CHECKING:
     from engine.data.providers.base import AssetClass as ProviderAssetClass
+
+logger = structlog.get_logger()
+
+
+def _safe_deepcopy(value: Any) -> Any:
+    """Deep-copy ``value``, falling back to a shallow copy when impossible.
+
+    ``copy.deepcopy`` raises ``TypeError``/``ValueError`` on objects it
+    cannot pickle (thread locks, file handles, lambdas, third-party
+    structs). ``Instrument`` itself only carries scalars, but subclasses or
+    extra fields may attach un-copyable values; we degrade to a shallow
+    copy of the container instead of crashing ``model_copy`` wholesale.
+    """
+    try:
+        return copy.deepcopy(value)
+    except (TypeError, ValueError) as exc:
+        logger.warning(
+            "instrument.model_copy.deepcopy_failed",
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        try:
+            return copy.copy(value)
+        except TypeError:
+            return value
 
 
 class InstrumentAssetClass(StrEnum):
