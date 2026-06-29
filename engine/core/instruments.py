@@ -18,6 +18,7 @@ evolves independently from the instrument taxonomy (what the engine
 
 from __future__ import annotations
 
+from collections.abc import Mapping  # noqa: TC003
 from datetime import date  # noqa: TC003 - needed at runtime by pydantic
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -173,6 +174,34 @@ class Instrument(BaseModel):
                 pass
         return self
 
+    def model_copy(  # type: ignore[override]
+        self,
+        *,
+        update: Mapping[str, Any] | None = None,
+        deep: bool = False,
+    ) -> Instrument:
+        """Return a copy, re-running every validator on the new field set.
+
+        Pydantic's default ``model_copy`` short-circuits validation: it
+        splats the ``update`` values straight into ``__dict__``. Because
+        ``validate_assignment`` only governs attribute *assignment*
+        (``inst.symbol = ...``), a ``model_copy(update={"symbol": " x "})``
+        would happily yield an instrument whose symbol violates the
+        whitespace invariant — silently bypassing every check above.
+
+        We intercept the ``update`` dict, merge it on top of
+        ``model_dump()``, and rebuild through ``model_validate`` so the
+        symbol/whitespace validator and every asset-class invariant run
+        again on the merged field set. With no ``update`` we fall
+        through to the cheap parent copy so callers that only want a
+        distinct instance keep the original O(1) behaviour (and ``deep``
+        still applies there).
+        """
+        if not update:
+            return super().model_copy(update=update, deep=deep)
+        merged: dict[str, Any] = {**self.model_dump(), **update}
+        return type(self).model_validate(merged)
+
     # ── Derived properties ───────────────────────────────────────────
 
     @property
@@ -229,9 +258,7 @@ class Instrument(BaseModel):
         )
 
     @classmethod
-    def etf(
-        cls, symbol: str, *, exchange: str | None = None, currency: str = "USD"
-    ) -> Instrument:
+    def etf(cls, symbol: str, *, exchange: str | None = None, currency: str = "USD") -> Instrument:
         return cls(
             symbol=symbol,
             asset_class=InstrumentAssetClass.ETF,
@@ -240,9 +267,7 @@ class Instrument(BaseModel):
         )
 
     @classmethod
-    def crypto(
-        cls, base: str, quote: str, *, exchange: str | None = None
-    ) -> Instrument:
+    def crypto(cls, base: str, quote: str, *, exchange: str | None = None) -> Instrument:
         return cls(
             symbol=f"{base}/{quote}",
             asset_class=InstrumentAssetClass.CRYPTO,
@@ -253,9 +278,7 @@ class Instrument(BaseModel):
         )
 
     @classmethod
-    def crypto_perp(
-        cls, base: str, quote: str, *, exchange: str | None = None
-    ) -> Instrument:
+    def crypto_perp(cls, base: str, quote: str, *, exchange: str | None = None) -> Instrument:
         return cls(
             symbol=f"{base}/{quote}:PERP",
             asset_class=InstrumentAssetClass.CRYPTO_PERP,
