@@ -112,6 +112,10 @@ class Instrument(BaseModel):
     expiration: date | None = Field(default=None)
     option_type: OptionType | None = Field(default=None)
     multiplier: int = Field(default=1, ge=1)
+    is_section_1256: bool | None = Field(
+        default=None,
+        description="US-tax 1256 flag; None means 'not specified'.",
+    )
 
     @field_validator("symbol")
     @classmethod
@@ -146,6 +150,13 @@ class Instrument(BaseModel):
                 if not (self.base_asset and self.quote_asset):
                     msg = "Forex requires base_asset and quote_asset"
                     raise ValueError(msg)
+            case InstrumentAssetClass.FUTURE:
+                # Regulated futures are Section 1256 contracts under US
+                # tax law. ``None`` means "not specified" → the model
+                # promotes it to the statutory default. An explicit bool
+                # from the caller always wins.
+                if self.is_section_1256 is None:
+                    self.is_section_1256 = True
             case _:
                 pass
         return self
@@ -206,9 +217,7 @@ class Instrument(BaseModel):
         )
 
     @classmethod
-    def etf(
-        cls, symbol: str, *, exchange: str | None = None, currency: str = "USD"
-    ) -> Instrument:
+    def etf(cls, symbol: str, *, exchange: str | None = None, currency: str = "USD") -> Instrument:
         return cls(
             symbol=symbol,
             asset_class=InstrumentAssetClass.ETF,
@@ -217,9 +226,7 @@ class Instrument(BaseModel):
         )
 
     @classmethod
-    def crypto(
-        cls, base: str, quote: str, *, exchange: str | None = None
-    ) -> Instrument:
+    def crypto(cls, base: str, quote: str, *, exchange: str | None = None) -> Instrument:
         return cls(
             symbol=f"{base}/{quote}",
             asset_class=InstrumentAssetClass.CRYPTO,
@@ -230,9 +237,7 @@ class Instrument(BaseModel):
         )
 
     @classmethod
-    def crypto_perp(
-        cls, base: str, quote: str, *, exchange: str | None = None
-    ) -> Instrument:
+    def crypto_perp(cls, base: str, quote: str, *, exchange: str | None = None) -> Instrument:
         return cls(
             symbol=f"{base}/{quote}:PERP",
             asset_class=InstrumentAssetClass.CRYPTO_PERP,
@@ -277,6 +282,34 @@ class Instrument(BaseModel):
             expiration=expiration,
             option_type=option_type,
             multiplier=multiplier,
+            currency=currency,
+        )
+
+    @classmethod
+    def future(
+        cls,
+        symbol: str,
+        *,
+        expiration: date | None = None,
+        multiplier: int = 1,
+        is_section_1256: bool | None = None,
+        exchange: str | None = None,
+        currency: str = "USD",
+    ) -> Instrument:
+        """Build a regulated (exchange-traded) future.
+
+        ``multiplier`` is the contract multiplier (e.g. 50 for the E-mini
+        S&P). ``is_section_1256`` defaults to ``None``; the model
+        validator promotes it to ``True`` for futures unless the caller
+        passes an explicit ``bool``. ``expiration`` feeds ``uid``.
+        """
+        return cls(
+            symbol=symbol,
+            asset_class=InstrumentAssetClass.FUTURE,
+            expiration=expiration,
+            multiplier=multiplier,
+            is_section_1256=is_section_1256,
+            exchange=exchange,
             currency=currency,
         )
 

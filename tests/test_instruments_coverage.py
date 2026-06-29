@@ -192,3 +192,184 @@ class TestCoerce:
     def test_coerce_none(self):
         with pytest.raises(TypeError, match="cannot coerce"):
             Instrument.coerce(None)
+
+
+class TestFutureFactory:
+    """Coverage for the regulated ``future()`` factory."""
+
+    def test_future_basic_defaults(self):
+        inst = Instrument.future("ES")
+        assert inst.asset_class == InstrumentAssetClass.FUTURE
+        assert inst.symbol == "ES"
+        assert inst.currency == "USD"
+        assert inst.multiplier == 1
+        assert inst.expiration is None
+        assert inst.exchange is None
+        assert inst.is_derivative is True
+
+    def test_future_default_is_section_1256_promoted_to_true(self):
+        # None default → validator promotes to the statutory default (True)
+        # for regulated futures.
+        inst = Instrument.future("ES")
+        assert inst.is_section_1256 is True
+
+    def test_future_explicit_true_respected(self):
+        inst = Instrument.future("ES", is_section_1256=True)
+        assert inst.is_section_1256 is True
+
+    def test_future_explicit_false_respected(self):
+        # An explicit bool from the caller always wins over the default.
+        inst = Instrument.future("ES", is_section_1256=False)
+        assert inst.is_section_1256 is False
+
+    def test_future_sets_multiplier(self):
+        # The factory must populate the canonical ``multiplier`` field
+        # (not a legacy ``contract_multiplier``).
+        inst = Instrument.future("ES", multiplier=50)
+        assert inst.multiplier == 50
+
+    def test_future_with_expiration_uid(self):
+        inst = Instrument.future("ES", expiration=date(2026, 12, 19), multiplier=50)
+        assert inst.uid == "ES_20261219"
+
+    def test_future_without_expiration_uid_falls_back_to_symbol(self):
+        inst = Instrument.future("ES")
+        assert inst.uid == "ES"
+
+    def test_future_exchange_passthrough(self):
+        inst = Instrument.future("ES", exchange="CME")
+        assert inst.exchange == "CME"
+
+    def test_future_currency_passthrough(self):
+        inst = Instrument.future("ES", currency="EUR")
+        assert inst.currency == "EUR"
+
+    def test_future_contract_value_is_none(self):
+        # contract_value is option-specific; futures expose multiplier only.
+        inst = Instrument.future("ES", multiplier=50)
+        assert inst.contract_value is None
+
+    def test_future_explicit_none_is_treated_as_default(self):
+        # Passing None explicitly == "not specified" → promoted to True.
+        inst = Instrument.future("ES", is_section_1256=None)
+        assert inst.is_section_1256 is True
+
+
+class TestIsSection1256ValidatorSemantics:
+    """The validator drives ``is_section_1256`` for futures only."""
+
+    def test_direct_future_construction_promotes_none(self):
+        inst = Instrument(
+            symbol="ES",
+            asset_class=InstrumentAssetClass.FUTURE,
+        )
+        assert inst.is_section_1256 is True
+
+    def test_direct_future_construction_respects_explicit_false(self):
+        inst = Instrument(
+            symbol="ES",
+            asset_class=InstrumentAssetClass.FUTURE,
+            is_section_1256=False,
+        )
+        assert inst.is_section_1256 is False
+
+    @pytest.mark.parametrize(
+        "factory",
+        [
+            lambda: Instrument.equity("AAPL"),
+            lambda: Instrument.etf("SPY"),
+            lambda: Instrument.crypto("BTC", "USDT"),
+            lambda: Instrument.crypto_perp("BTC", "USDT"),
+            lambda: Instrument.forex("EUR", "USD"),
+            lambda: Instrument.option("AAPL", 200.0, date(2026, 6, 19), OptionType.CALL),
+        ],
+    )
+    def test_non_future_classes_leave_is_section_1256_none(self, factory):
+        inst = factory()
+        assert inst.is_section_1256 is None
+
+    def test_crypto_future_is_not_1256_by_default(self):
+        # Crypto futures are NOT regulated futures → flag stays unset.
+        inst = Instrument(
+            symbol="BTC/USDT",
+            asset_class=InstrumentAssetClass.CRYPTO_FUTURE,
+            base_asset="BTC",
+            quote_asset="USDT",
+            expiration=date(2026, 3, 28),
+        )
+        assert inst.is_section_1256 is None
+
+
+class TestFutureMultiplierValidation:
+    """``multiplier`` uses Field(ge=1) — guard the boundary."""
+
+    def test_future_zero_multiplier_rejected(self):
+        with pytest.raises((ValueError, TypeError)):
+            Instrument.future("ES", multiplier=0)
+
+    def test_future_negative_multiplier_rejected(self):
+        with pytest.raises((ValueError, TypeError)):
+            Instrument.future("ES", multiplier=-1)
+
+    def test_future_unit_multiplier_accepted(self):
+        inst = Instrument.future("ES", multiplier=1)
+        assert inst.multiplier == 1
+
+
+class TestFutureSerialization:
+    def test_future_default_roundtrips_and_keeps_flag(self):
+        inst = Instrument.future("ES", expiration=date(2026, 12, 19), multiplier=50)
+        rebuilt = Instrument.model_validate(inst.model_dump(mode="json"))
+        assert rebuilt.asset_class == InstrumentAssetClass.FUTURE
+        assert rebuilt.is_section_1256 is True
+        assert rebuilt.uid == inst.uid
+
+    def test_future_explicit_false_roundtrips(self):
+        inst = Instrument.future("ES", is_section_1256=False)
+        rebuilt = Instrument.model_validate(inst.model_dump(mode="json"))
+        assert rebuilt.is_section_1256 is False
+
+    def test_future_json_dump_includes_flag(self):
+        import json
+
+        inst = Instrument.future("ES")
+        payload = json.loads(inst.model_dump_json())
+        assert payload["asset_class"] == "future"
+        assert payload["is_section_1256"] is True
+
+
+class TestFutureUidUniqueness:
+    def test_two_dated_futures_same_symbol_distinct(self):
+        a = Instrument.future("ES", expiration=date(2026, 3, 20))
+        b = Instrument.future("ES", expiration=date(2026, 6, 19))
+        assert a.uid != b.uid
+
+    def test_future_vs_crypto_future_uids_distinct(self):
+        reg = Instrument.future("ES", expiration=date(2026, 12, 19))
+        # Different symbol space, but confirm no accidental collision shape.
+        assert reg.uid == "ES_20261219"
+
+
+class TestRemovedLegacyFieldsAreAbsent:
+    """Lock in the clean schema: no legacy aliases linger."""
+
+    def test_no_contract_multiplier_field(self):
+        fields = Instrument.model_fields
+        assert "contract_multiplier" not in fields
+        assert "multiplier" in fields
+
+    def test_no_expiry_date_field(self):
+        fields = Instrument.model_fields
+        assert "expiry_date" not in fields
+        assert "expiration" in fields
+
+    def test_factory_has_no_legacy_kwargs(self):
+        import inspect
+
+        sig = inspect.signature(Instrument.future)
+        params = set(sig.parameters)
+        assert "multiplier" in params
+        assert "expiration" in params
+        assert "is_section_1256" in params
+        assert "contract_multiplier" not in params
+        assert "expiry_date" not in params
