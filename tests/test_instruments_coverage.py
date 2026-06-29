@@ -291,3 +291,88 @@ class TestExpiryDateAlias:
         rebuilt = Instrument.model_validate(original)
         assert rebuilt.uid == original.uid
         assert rebuilt.option_type == OptionType.CALL
+
+
+class TestSymbolNormalization:
+    """The symbol field_validator canonicalizes via strip().upper()."""
+
+    def test_lowercased_symbol_is_uppercased(self):
+        assert Instrument.equity("aapl").symbol == "AAPL"
+
+    def test_surrounding_whitespace_is_trimmed(self):
+        assert Instrument.equity("  aapl  ").symbol == "AAPL"
+
+    def test_whitespace_and_case_combined(self):
+        assert Instrument.equity("  msft\n").symbol == "MSFT"
+
+    def test_already_canonical_is_idempotent(self):
+        assert Instrument.equity("AAPL").symbol == "AAPL"
+
+    def test_empty_after_strip_still_rejected(self):
+        with pytest.raises(pydantic.ValidationError):
+            Instrument.equity("   ")
+        with pytest.raises(pydantic.ValidationError):
+            Instrument.equity("")
+
+    def test_normalized_symbol_flows_into_uid(self):
+        assert Instrument.equity(" aapl ").uid == "AAPL"
+
+    def test_from_string_uppercases(self):
+        assert Instrument.from_string("goog").symbol == "GOOG"
+
+
+class TestFrozenModel:
+    """model_config frozen=True — instances are immutable."""
+
+    def test_model_config_is_frozen(self):
+        assert Instrument.model_config["frozen"] is True
+
+    def test_reassigning_symbol_raises(self):
+        inst = Instrument.equity("AAPL")
+        with pytest.raises(pydantic.ValidationError):
+            inst.symbol = "MSFT"
+
+    def test_reassigning_other_field_raises(self):
+        inst = Instrument.equity("AAPL")
+        with pytest.raises(pydantic.ValidationError):
+            inst.exchange = "NASDAQ"
+
+    def test_model_copy_is_the_mutation_path(self):
+        inst = Instrument.equity("AAPL")
+        updated = inst.model_copy(update={"exchange": "NASDAQ"})
+        assert inst.exchange is None
+        assert updated.exchange == "NASDAQ"
+        assert updated.symbol == "AAPL"
+
+    def test_instances_are_hashable(self):
+        # frozen models are hashable so they can live in sets / be keys.
+        a = Instrument.equity("AAPL")
+        assert {a, a} == {a}
+
+
+class TestDecimalsField:
+    """decimals is an optional precision field bounded to [0, 36]."""
+
+    def test_defaults_to_none(self):
+        assert Instrument.equity("AAPL").decimals is None
+
+    @pytest.mark.parametrize("value", [0, 6, 18, 36])
+    def test_values_within_bounds_accepted(self, value):
+        inst = Instrument(
+            symbol="X", asset_class=InstrumentAssetClass.EQUITY, decimals=value
+        )
+        assert inst.decimals == value
+
+    @pytest.mark.parametrize("value", [-1, 37, 100])
+    def test_values_outside_bounds_rejected(self, value):
+        with pytest.raises(pydantic.ValidationError):
+            Instrument(
+                symbol="X", asset_class=InstrumentAssetClass.EQUITY, decimals=value
+            )
+
+    def test_round_trips_through_model_dump(self):
+        inst = Instrument(
+            symbol="X", asset_class=InstrumentAssetClass.EQUITY, decimals=8
+        )
+        rebuilt = Instrument.model_validate(inst.model_dump())
+        assert rebuilt.decimals == 8

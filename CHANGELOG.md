@@ -13,6 +13,7 @@ edit this file by hand — it is regenerated as part of every release PR.
 ## [Unreleased]
 
 ### Fixed
+- (fix) Harden `CoinInstrument` in `engine/core/instruments.py`: set `model_config["frozen"]=` for immutability, add `field_validator` normalizing `symbol` via `strip().upper()`, and add `le=36` upper bound on `decimals` to prevent memory-exhaustion DoS
 - (fix) Fix check ordering in `engine/core/execution/live.py` `execute()` and the two failing tests in `tests/test_execution_backends.py`
 
 ### Internal

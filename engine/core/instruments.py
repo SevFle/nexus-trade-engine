@@ -84,7 +84,7 @@ _DERIVATIVE_CLASSES = frozenset(
 class Instrument(BaseModel):
     """Canonical, typed representation of any tradable instrument."""
 
-    model_config = {"frozen": False, "validate_assignment": True}
+    model_config = {"frozen": True, "validate_assignment": True}
 
     # Identity
     symbol: str = Field(
@@ -106,6 +106,9 @@ class Instrument(BaseModel):
     pip_size: float | None = Field(default=None)
     lot_size: int | None = Field(default=None)
 
+    # Price/amount decimal precision (e.g. ERC-20-style token decimals).
+    decimals: int | None = Field(default=None, ge=0, le=36)
+
     # Options
     underlying: str | None = Field(default=None)
     strike: float | None = Field(default=None, gt=0.0)
@@ -115,11 +118,18 @@ class Instrument(BaseModel):
 
     @field_validator("symbol")
     @classmethod
-    def _symbol_no_whitespace(cls, v: str) -> str:
-        if not v.strip() or v.strip() != v:
-            msg = "symbol must be non-empty and contain no leading/trailing whitespace"
+    def _normalize_symbol(cls, v: str) -> str:
+        """Canonicalize the symbol by trimming and upper-casing.
+
+        ``" aapl "`` and ``"aapl"`` both collapse to the canonical
+        ``"AAPL"``. An all-whitespace value normalizes to the empty
+        string, which is rejected here (and again by ``min_length=1``).
+        """
+        normalized = v.strip().upper()
+        if not normalized:
+            msg = "symbol must be non-empty"
             raise ValueError(msg)
-        return v
+        return normalized
 
     @model_validator(mode="before")
     @classmethod

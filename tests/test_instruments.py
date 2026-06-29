@@ -163,6 +163,8 @@ class TestSymbolValidation:
         for raw in ("AAPL", "EUR/USD", "BRK/B", "AAPL "):
             inst = Instrument.from_string(raw)
             assert inst.asset_class == InstrumentAssetClass.EQUITY
+            # The symbol field_validator normalizes via strip().upper().
+            assert inst.symbol == raw.strip().upper()
 
 
 class TestSerializationRoundtrip:
