@@ -16,6 +16,7 @@ from mcp import types
 if TYPE_CHECKING:
     from engine.mcp.adapters import EngineServices
 
+
 # Canonical URIs.  Defined on a namespace so they resolve as *value* patterns
 # (dotted names) inside ``match`` — bare names there are capture patterns.
 class _Uris:

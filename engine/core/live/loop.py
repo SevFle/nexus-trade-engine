@@ -158,9 +158,7 @@ class LiveLoop:
                 "oms.submit.outcome",
                 tags={**base_tags, "outcome": "broker_auth_error"},
             )
-            self._kill_switch.engage(
-                reason="broker_auth_error", actor="live_loop"
-            )
+            self._kill_switch.engage(reason="broker_auth_error", actor="live_loop")
             raise
         except BrokerRejectError as exc:
             updated = order.apply_event(
@@ -218,9 +216,7 @@ class LiveLoop:
         """
         oms_id = self._broker_to_oms.get(broker_order_id)
         if oms_id is None:
-            raise UnknownOrderError(
-                f"no order tracked for broker id {broker_order_id!r}"
-            )
+            raise UnknownOrderError(f"no order tracked for broker id {broker_order_id!r}")
         order = self._by_oms_id[oms_id]
         updated = order.apply_event(event)
         self._track(updated)

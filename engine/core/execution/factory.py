@@ -39,9 +39,7 @@ def register_backend(name: str, backend_cls: type[ExecutionBackend]) -> None:
         raise ValueError("backend name must be non-empty")
     name = name.lower().strip()
     if not issubclass(backend_cls, ExecutionBackend):
-        raise TypeError(
-            f"{backend_cls.__name__} must be a subclass of ExecutionBackend"
-        )
+        raise TypeError(f"{backend_cls.__name__} must be a subclass of ExecutionBackend")
     with _LOCK:
         _REGISTRY[name] = backend_cls
     logger.info("execution.backend_registered", name=name, cls=backend_cls.__name__)
@@ -87,10 +85,7 @@ def create_backend(
 
     if cls is None:
         available = sorted(set(_BUILTIN_BACKENDS.keys()) | set(_REGISTRY.keys()))
-        raise ValueError(
-            f"Unknown execution backend: {name!r}. "
-            f"Available: {available}"
-        )
+        raise ValueError(f"Unknown execution backend: {name!r}. Available: {available}")
 
     backend = _construct_backend(cls, name, **kwargs)
     logger.info(

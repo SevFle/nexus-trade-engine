@@ -598,6 +598,7 @@ class TestTradeRecordTracking:
 class TestPortfolioStateAlias:
     def test_portfolio_state_is_snapshot(self):
         from engine.core.portfolio import PortfolioState
+
         assert PortfolioState is PortfolioSnapshot
 
 

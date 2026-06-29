@@ -43,9 +43,7 @@ class ConnectionInfo:
     last_seen: float = field(default_factory=time.monotonic)
     connected_at: float = field(default_factory=time.monotonic)
     metadata: dict[str, Any] = field(default_factory=dict)
-    sender_task: asyncio.Task[None] | None = field(
-        default=None, repr=False
-    )
+    sender_task: asyncio.Task[None] | None = field(default=None, repr=False)
 
 
 class ConnectionManager:
@@ -79,13 +77,9 @@ class ConnectionManager:
         connection_id = uuid.uuid4().hex
         async with self._lock:
             if self._shutting_down:
-                raise ConnectionLimitError(
-                    code=1011, reason="server shutting down"
-                )
+                raise ConnectionLimitError(code=1011, reason="server shutting down")
             if len(self._connections) >= self._max_connections:
-                raise ConnectionLimitError(
-                    code=1011, reason="max connections reached"
-                )
+                raise ConnectionLimitError(code=1011, reason="max connections reached")
             info = ConnectionInfo(
                 websocket=ws,
                 user_id=user_id,
@@ -172,10 +166,7 @@ class ConnectionManager:
 
         sent = 0
         results = await asyncio.gather(
-            *(
-                self._send_one(cid, message)
-                for cid in snapshot
-            ),
+            *(self._send_one(cid, message) for cid in snapshot),
             return_exceptions=True,
         )
         for r in results:
@@ -201,9 +192,7 @@ class ConnectionManager:
             if info is None:
                 return
             if len(info.rooms) >= self._max_subscriptions + 1:
-                raise SubscriptionLimitError(
-                    code=1008, reason="max subscriptions reached"
-                )
+                raise SubscriptionLimitError(code=1008, reason="max subscriptions reached")
             self._rooms.setdefault(room, set()).add(connection_id)
             info.rooms.add(room)
         ws_metrics.metrics.gauge(
@@ -256,9 +245,7 @@ class ConnectionManager:
         return frozenset(self._rooms.get(room, set()))
 
     def stats(self) -> dict[str, Any]:
-        queue_depths = sorted(
-            [info.send_queue.qsize() for info in self._connections.values()]
-        )
+        queue_depths = sorted([info.send_queue.qsize() for info in self._connections.values()])
         return {
             "active_connections": len(self._connections),
             "total_rooms": len(self._rooms),

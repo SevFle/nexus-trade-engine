@@ -211,9 +211,7 @@ class SecretsService:
                 "held; run reencrypt_all to drain the previous slot first"
             )
             raise SecretsError(msg)
-        self._master_key = MasterKey(
-            current=new_current, previous=self._master_key.current
-        )
+        self._master_key = MasterKey(current=new_current, previous=self._master_key.current)
 
     def drop_previous_key(self) -> None:
         """Forget the previous key. Call only after :meth:`reencrypt_all` succeeds."""

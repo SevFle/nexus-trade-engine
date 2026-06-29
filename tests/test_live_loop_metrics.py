@@ -111,9 +111,7 @@ def _counter_total(backend: RecordingBackend, name: str) -> float:
     return sum(v for (n, _t), v in backend.counters.items() if n == name)
 
 
-def _counter_with(
-    backend: RecordingBackend, name: str, tags: dict[str, str]
-) -> float:
+def _counter_with(backend: RecordingBackend, name: str, tags: dict[str, str]) -> float:
     expected = tuple(sorted(tags.items()))
     return sum(
         v
@@ -141,9 +139,7 @@ class TestSubmitHappyPath:
     async def test_emits_attempted_and_submitted_outcome(self, metrics):
         ks = KillSwitch()
         broker = PaperBroker(price_for=lambda s: Decimal("100"))
-        loop = LiveLoop(
-            broker=broker, risk=_gate(kill_switch=ks), metrics=metrics
-        )
+        loop = LiveLoop(broker=broker, risk=_gate(kill_switch=ks), metrics=metrics)
 
         await loop.submit(_market_buy())
 
@@ -170,9 +166,7 @@ class TestRiskRejected:
         ks = KillSwitch()
         ks.engage(reason="manual", actor="test")
         broker = PaperBroker(price_for=lambda s: Decimal("100"))
-        loop = LiveLoop(
-            broker=broker, risk=_gate(kill_switch=ks), metrics=metrics
-        )
+        loop = LiveLoop(broker=broker, risk=_gate(kill_switch=ks), metrics=metrics)
 
         await loop.submit(_market_buy())
 
@@ -265,9 +259,7 @@ class TestEventApplied:
     async def test_ack_then_fill_emits_event_applied_with_status(self, metrics):
         ks = KillSwitch()
         broker = PaperBroker(price_for=lambda s: Decimal("100"))
-        loop = LiveLoop(
-            broker=broker, risk=_gate(kill_switch=ks), metrics=metrics
-        )
+        loop = LiveLoop(broker=broker, risk=_gate(kill_switch=ks), metrics=metrics)
 
         order = await loop.submit(_market_buy())
         assert order.broker_order_id is not None

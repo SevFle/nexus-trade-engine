@@ -192,13 +192,8 @@ class MiFID2Transaction:
             raise ValueError("quantity must be positive")
         if self.price < 0:
             raise ValueError("price must be non-negative")
-        if (
-            self.trading_datetime.tzinfo is None
-            or self.trading_datetime.utcoffset() is None
-        ):
-            raise ValueError(
-                "trading_datetime must be timezone-aware (UTC required by RTS 22)"
-            )
+        if self.trading_datetime.tzinfo is None or self.trading_datetime.utcoffset() is None:
+            raise ValueError("trading_datetime must be timezone-aware (UTC required by RTS 22)")
         if self.short_sale_indicator and self.short_sale_indicator not in {
             ShortSaleIndicator.SESH.value,
             ShortSaleIndicator.SSEX.value,

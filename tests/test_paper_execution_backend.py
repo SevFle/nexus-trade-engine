@@ -211,9 +211,7 @@ class TestFillProbability:
 
     async def test_fill_failure_emits_metric(self):
         metrics = RecordingBackend()
-        backend = PaperExecutionBackend(
-            fill_probability=0.0, random_seed=42, metrics=metrics
-        )
+        backend = PaperExecutionBackend(fill_probability=0.0, random_seed=42, metrics=metrics)
         await backend.connect()
         await backend.execute(_FakeOrder(), 100.0, _make_cost())
         key = ("paper_backend.execute", (("outcome", "fill_rejected"),))
@@ -582,34 +580,24 @@ class TestFillStats:
 class TestMetricsIntegration:
     async def test_filled_emits_slippage_histogram(self):
         metrics = RecordingBackend()
-        backend = PaperExecutionBackend(
-            fill_probability=1.0, random_seed=42, metrics=metrics
-        )
+        backend = PaperExecutionBackend(fill_probability=1.0, random_seed=42, metrics=metrics)
         await backend.connect()
-        await backend.execute(
-            _FakeOrder(side=_FakeSide.BUY, quantity=100), 100.0, _make_cost()
-        )
+        await backend.execute(_FakeOrder(side=_FakeSide.BUY, quantity=100), 100.0, _make_cost())
         key = ("paper_backend.slippage_bps", (("side", "buy"),))
         assert key in metrics.histograms
         assert len(metrics.histograms[key]) == 1
 
     async def test_sell_side_metrics_tagged(self):
         metrics = RecordingBackend()
-        backend = PaperExecutionBackend(
-            fill_probability=1.0, random_seed=42, metrics=metrics
-        )
+        backend = PaperExecutionBackend(fill_probability=1.0, random_seed=42, metrics=metrics)
         await backend.connect()
-        await backend.execute(
-            _FakeOrder(side=_FakeSide.SELL, quantity=100), 100.0, _make_cost()
-        )
+        await backend.execute(_FakeOrder(side=_FakeSide.SELL, quantity=100), 100.0, _make_cost())
         key = ("paper_backend.slippage_bps", (("side", "sell"),))
         assert key in metrics.histograms
 
     async def test_execute_filled_counter(self):
         metrics = RecordingBackend()
-        backend = PaperExecutionBackend(
-            fill_probability=1.0, random_seed=42, metrics=metrics
-        )
+        backend = PaperExecutionBackend(fill_probability=1.0, random_seed=42, metrics=metrics)
         await backend.connect()
         await backend.execute(_FakeOrder(), 100.0, _make_cost())
         key = ("paper_backend.execute", (("outcome", "filled"),))

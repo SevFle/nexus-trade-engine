@@ -61,9 +61,7 @@ class TestInformation:
 
     def test_zero_active_returns_yields_zero(self):
         # No tracking error.
-        assert compute_information_ratio(
-            [0.01, 0.01, 0.01], [0.01, 0.01, 0.01]
-        ) == 0.0
+        assert compute_information_ratio([0.01, 0.01, 0.01], [0.01, 0.01, 0.01]) == 0.0
 
     def test_consistent_outperformance_yields_positive(self):
         # Slightly noisy outperformance — produces a positive IR with

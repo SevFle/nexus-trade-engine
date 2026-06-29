@@ -21,9 +21,7 @@ from engine.core.metrics_extras import (
 class TestTreynor:
     def test_known_value(self):
         # 12 % return, 5 % rf, beta 1.2 → (0.12 - 0.05) / 1.2 ≈ 0.0583
-        assert compute_treynor_ratio(0.12, 0.05, 1.2) == pytest.approx(
-            0.0583, rel=1e-3
-        )
+        assert compute_treynor_ratio(0.12, 0.05, 1.2) == pytest.approx(0.0583, rel=1e-3)
 
     def test_zero_beta_returns_zero(self):
         assert compute_treynor_ratio(0.12, 0.05, 0.0) == 0.0
@@ -78,9 +76,7 @@ class TestSterling:
 
     def test_custom_floor(self):
         # 20 % avg DD - 5 % floor = 15 % denominator → 30 / 15 = 2.0.
-        assert compute_sterling_ratio(
-            30.0, 20.0, drawdown_floor_pct=5.0
-        ) == pytest.approx(2.0)
+        assert compute_sterling_ratio(30.0, 20.0, drawdown_floor_pct=5.0) == pytest.approx(2.0)
 
 
 # ---------------------------------------------------------------------------
@@ -97,24 +93,18 @@ class TestKRatio:
         # A near-perfect exponential has tiny float-precision residuals
         # → K-Ratio is huge but finite. The helper's se=0 short-circuit
         # only triggers when residuals are literally zero.
-        curve = [100.0 * (1.001 ** i) for i in range(50)]
+        curve = [100.0 * (1.001**i) for i in range(50)]
         result = compute_k_ratio(curve)
         assert result > 1e6
         assert math.isfinite(result)
 
     def test_noisy_uptrend_yields_positive_k_ratio(self):
         # Trend + small noise → positive slope, finite SE → K-Ratio > 0.
-        curve = [
-            100.0 * (1.001 ** i) + (-1) ** i
-            for i in range(50)
-        ]
+        curve = [100.0 * (1.001**i) + (-1) ** i for i in range(50)]
         assert compute_k_ratio(curve) > 0.0
 
     def test_downtrend_yields_negative_k_ratio(self):
-        curve = [
-            100.0 * (0.999 ** i) + (-1) ** i
-            for i in range(50)
-        ]
+        curve = [100.0 * (0.999**i) + (-1) ** i for i in range(50)]
         assert compute_k_ratio(curve) < 0.0
 
     def test_non_positive_value_returns_zero(self):

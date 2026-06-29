@@ -465,9 +465,7 @@ class TestM6HoldAndWrongSymbolSignals:
             def on_bar(self, state, portfolio):
                 self._bar_count += 1
                 if self._bar_count == 60:
-                    return [
-                        Signal(symbol="WRONG", side=Side.BUY, quantity=10, strategy_id="test")
-                    ]
+                    return [Signal(symbol="WRONG", side=Side.BUY, quantity=10, strategy_id="test")]
                 return []
 
         df = _make_ohlcv(100)
@@ -480,9 +478,7 @@ class TestM6HoldAndWrongSymbolSignals:
             initial_capital=100_000.0,
             min_bars=_MIN_BARS,
         )
-        runner = BacktestRunner(
-            config=config, strategy=WrongSymbolStrategy(), provider=provider
-        )
+        runner = BacktestRunner(config=config, strategy=WrongSymbolStrategy(), provider=provider)
         result = await runner.run()
         assert len(result.trades) == 0
 
@@ -503,9 +499,7 @@ class TestM7UnfilledOrderSkipped:
                 self._bar_count += 1
                 if self._bar_count == 60:
                     return [
-                        Signal(
-                            symbol="TEST", side=Side.SELL, quantity=100, strategy_id="test"
-                        )
+                        Signal(symbol="TEST", side=Side.SELL, quantity=100, strategy_id="test")
                     ]
                 return []
 
@@ -541,9 +535,7 @@ class TestM8EvaluationFailure:
             initial_capital=100_000.0,
             min_bars=_MIN_BARS,
         )
-        runner = BacktestRunner(
-            config=config, strategy=BuySellStrategy(), provider=provider
-        )
+        runner = BacktestRunner(config=config, strategy=BuySellStrategy(), provider=provider)
         result = await runner.run()
         assert result.metrics is not None
         assert result.final_capital > 0

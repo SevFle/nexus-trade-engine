@@ -48,9 +48,7 @@ class TestParameterSpace:
         assert not d.contains("yellow")
 
     def test_space_construction(self):
-        space = ParameterSpace(
-            {"x": ContinuousFloat(0.0, 10.0), "y": DiscreteInt(0, 10)}
-        )
+        space = ParameterSpace({"x": ContinuousFloat(0.0, 10.0), "y": DiscreteInt(0, 10)})
         assert "x" in space.dimensions
         assert "y" in space.dimensions
 
@@ -74,9 +72,7 @@ class TestGridSearch:
         assert result.best_score == pytest.approx(0.0)
 
     def test_grid_iterates_full_cartesian_product(self):
-        space = ParameterSpace(
-            {"x": DiscreteInt(low=0, high=2), "y": DiscreteInt(low=0, high=1)}
-        )
+        space = ParameterSpace({"x": DiscreteInt(low=0, high=2), "y": DiscreteInt(low=0, high=1)})
         opt = GridSearchOptimizer()
         result = optimize(lambda p: -1.0, space, opt, n_trials=None)
         assert result.n_trials_run == 6
@@ -102,9 +98,7 @@ class TestRandomSearch:
         assert a.best_params == b.best_params
 
     def test_random_categorical_finds_best(self):
-        space = ParameterSpace(
-            {"color": Categorical(choices=("red", "green", "blue"))}
-        )
+        space = ParameterSpace({"color": Categorical(choices=("red", "green", "blue"))})
         opt = RandomSearchOptimizer(seed=11)
         result = optimize(_categorical_obj, space, opt, n_trials=200)
         assert result.best_params == {"color": "green"}
@@ -143,9 +137,7 @@ class TestGenetic:
 class TestResult:
     def test_result_has_history(self):
         space = ParameterSpace({"x": ContinuousFloat(0.0, 10.0)})
-        result = optimize(
-            _bowl, space, RandomSearchOptimizer(seed=0), n_trials=10
-        )
+        result = optimize(_bowl, space, RandomSearchOptimizer(seed=0), n_trials=10)
         assert len(result.history) == 10
         for trial in result.history:
             assert "params" in trial
@@ -178,9 +170,7 @@ class TestValidation:
         def bad(params: dict) -> float:
             return float("nan")
 
-        result = optimize(
-            bad, space, RandomSearchOptimizer(seed=0), n_trials=5
-        )
+        result = optimize(bad, space, RandomSearchOptimizer(seed=0), n_trials=5)
         assert result.best_score == float("-inf")
 
     def test_empty_space_rejected(self):

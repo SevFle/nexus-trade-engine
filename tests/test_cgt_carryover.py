@@ -51,9 +51,7 @@ class TestCarryoverConstructor:
 
 class TestNoPrior:
     def test_pure_gain_below_aea_no_taxable_no_carry(self):
-        result = apply_cgt_carryover(
-            [_disp(proceeds="12000", cost="10000")]
-        )
+        result = apply_cgt_carryover([_disp(proceeds="12000", cost="10000")])
 
         assert isinstance(result, CgtApplication)
         assert result.summary.net_gain == Decimal("2000.00")
@@ -64,18 +62,14 @@ class TestNoPrior:
 
     def test_pure_gain_above_aea_taxable_no_carry(self):
         # +£10,000 gain → £3,000 AEA, £7,000 taxable.
-        result = apply_cgt_carryover(
-            [_disp(proceeds="20000", cost="10000")]
-        )
+        result = apply_cgt_carryover([_disp(proceeds="20000", cost="10000")])
 
         assert result.summary.taxable_gain == Decimal("7000.00")
         assert result.taxable_gain_after_carryover == Decimal("7000.00")
         assert result.next_year_carryover.loss == Decimal("0.00")
 
     def test_pure_loss_year_carries_forward(self):
-        result = apply_cgt_carryover(
-            [_disp(proceeds="500", cost="2000")]
-        )
+        result = apply_cgt_carryover([_disp(proceeds="500", cost="2000")])
 
         assert result.summary.net_loss == Decimal("1500.00")
         assert result.taxable_gain_after_carryover == Decimal("0.00")
@@ -92,9 +86,7 @@ class TestPriorLossAfterAea:
         # +£2,000 gain, all under AEA. Prior £5,000 loss should not be
         # consumed; AEA absorbs the whole gain.
         prior = CgtCarryover(loss=Decimal("5000"))
-        result = apply_cgt_carryover(
-            [_disp(proceeds="12000", cost="10000")], prior
-        )
+        result = apply_cgt_carryover([_disp(proceeds="12000", cost="10000")], prior)
 
         assert result.summary.taxable_gain == Decimal("0.00")
         assert result.carryover_loss_used == Decimal("0.00")
@@ -104,9 +96,7 @@ class TestPriorLossAfterAea:
         # +£10,000 gain → £7,000 taxable post-AEA.
         # Prior £4,000 loss → £3,000 taxable; £0 prior left.
         prior = CgtCarryover(loss=Decimal("4000"))
-        result = apply_cgt_carryover(
-            [_disp(proceeds="20000", cost="10000")], prior
-        )
+        result = apply_cgt_carryover([_disp(proceeds="20000", cost="10000")], prior)
 
         assert result.summary.taxable_gain == Decimal("7000.00")
         assert result.carryover_loss_used == Decimal("4000.00")
@@ -117,9 +107,7 @@ class TestPriorLossAfterAea:
         # +£10,000 gain → £7,000 taxable. Prior £15,000 loss absorbs
         # the £7,000 taxable; £8,000 prior left for next year.
         prior = CgtCarryover(loss=Decimal("15000"))
-        result = apply_cgt_carryover(
-            [_disp(proceeds="20000", cost="10000")], prior
-        )
+        result = apply_cgt_carryover([_disp(proceeds="20000", cost="10000")], prior)
 
         assert result.carryover_loss_used == Decimal("7000.00")
         assert result.taxable_gain_after_carryover == Decimal("0.00")
@@ -135,9 +123,7 @@ class TestCompoundLosses:
     def test_prior_plus_current_loss_compounds_carryover(self):
         # Prior £2,000 + current -£1,500 = £3,500 carryover.
         prior = CgtCarryover(loss=Decimal("2000"))
-        result = apply_cgt_carryover(
-            [_disp(proceeds="500", cost="2000")], prior
-        )
+        result = apply_cgt_carryover([_disp(proceeds="500", cost="2000")], prior)
 
         assert result.summary.net_loss == Decimal("1500.00")
         assert result.next_year_carryover.loss == Decimal("3500.00")
@@ -184,6 +170,4 @@ class TestValidation:
 
     def test_negative_prior_loss_rejected(self):
         with pytest.raises(ValueError):
-            apply_cgt_carryover(
-                [], CgtCarryover(loss=Decimal("-0.01"))
-            )
+            apply_cgt_carryover([], CgtCarryover(loss=Decimal("-0.01")))

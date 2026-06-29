@@ -14,6 +14,7 @@ This conftest provides:
 
 Intentionally empty — session-scoped asyncio loop is configured in pyproject.toml.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -43,6 +44,7 @@ async def _noop_legal_acceptance() -> None:
     don't exercise legal re-acceptance flows, so we short-circuit it here.
     """
     return
+
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

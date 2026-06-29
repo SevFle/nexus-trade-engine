@@ -53,9 +53,7 @@ class TestPutGet:
             await service.put("", "v")
 
     @pytest.mark.asyncio
-    async def test_whitespace_only_name_rejected(
-        self, service: SecretsService
-    ) -> None:
+    async def test_whitespace_only_name_rejected(self, service: SecretsService) -> None:
         with pytest.raises(SecretsError):
             await service.put("   ", "v")
 
@@ -65,9 +63,7 @@ class TestPutGet:
             await service.put("k", "")
 
     @pytest.mark.asyncio
-    async def test_name_normalized_consistently(
-        self, service: SecretsService
-    ) -> None:
+    async def test_name_normalized_consistently(self, service: SecretsService) -> None:
         await service.put("  api_key  ", "v")
         assert await service.get("api_key") == "v"
         assert await service.get("  api_key  ") == "v"
@@ -78,9 +74,7 @@ class TestPutGet:
         assert await service.get("密钥") == "v"
 
     @pytest.mark.asyncio
-    async def test_corrupted_ciphertext_raises(
-        self, service: SecretsService
-    ) -> None:
+    async def test_corrupted_ciphertext_raises(self, service: SecretsService) -> None:
         from engine.core.secrets import SecretRecord
 
         await service.store.put_record(
@@ -95,9 +89,7 @@ class TestPutGet:
             await service.get("garbage")
 
     @pytest.mark.asyncio
-    async def test_get_whitespace_only_name_rejected(
-        self, service: SecretsService
-    ) -> None:
+    async def test_get_whitespace_only_name_rejected(self, service: SecretsService) -> None:
         with pytest.raises(SecretsError):
             await service.get("   ")
 
@@ -114,9 +106,7 @@ class TestDelete:
         await service.delete("never-existed")
 
     @pytest.mark.asyncio
-    async def test_delete_whitespace_only_name_rejected(
-        self, service: SecretsService
-    ) -> None:
+    async def test_delete_whitespace_only_name_rejected(self, service: SecretsService) -> None:
         with pytest.raises(SecretsError):
             await service.delete("   ")
 
@@ -141,9 +131,7 @@ class TestRotation:
         assert await service.get("k") == "v"
 
     @pytest.mark.asyncio
-    async def test_reencrypt_all_uses_new_key(
-        self, service: SecretsService
-    ) -> None:
+    async def test_reencrypt_all_uses_new_key(self, service: SecretsService) -> None:
         await service.put("k", "v")
         old_record = await service.store.get_record("k")
         assert old_record is not None
@@ -157,9 +145,7 @@ class TestRotation:
         assert await service.get("k") == "v"
 
     @pytest.mark.asyncio
-    async def test_drop_previous_key_after_reencrypt(
-        self, service: SecretsService
-    ) -> None:
+    async def test_drop_previous_key_after_reencrypt(self, service: SecretsService) -> None:
         await service.put("k", "v")
         new_key = generate_master_key()
         service.rotate_master_key(new_current=new_key)
@@ -170,13 +156,9 @@ class TestRotation:
     @pytest.mark.asyncio
     async def test_decrypt_fails_without_either_key(self) -> None:
         store = InMemorySecretStore()
-        svc1 = SecretsService(
-            store=store, master_key=MasterKey(current=generate_master_key())
-        )
+        svc1 = SecretsService(store=store, master_key=MasterKey(current=generate_master_key()))
         await svc1.put("k", "v")
-        svc2 = SecretsService(
-            store=store, master_key=MasterKey(current=generate_master_key())
-        )
+        svc2 = SecretsService(store=store, master_key=MasterKey(current=generate_master_key()))
         with pytest.raises(SecretsError):
             await svc2.get("k")
 
@@ -193,9 +175,7 @@ class TestRotation:
         from engine.core.secrets import SecretRecord
 
         store = InMemorySecretStore()
-        svc = SecretsService(
-            store=store, master_key=MasterKey(current=generate_master_key())
-        )
+        svc = SecretsService(store=store, master_key=MasterKey(current=generate_master_key()))
         await svc.put("good", "v")
         # Insert a record that decrypts under neither key.
         await store.put_record(
@@ -222,9 +202,7 @@ class TestRotation:
         from engine.core.secrets import SecretRecord
 
         store = InMemorySecretStore()
-        svc = SecretsService(
-            store=store, master_key=MasterKey(current=generate_master_key())
-        )
+        svc = SecretsService(store=store, master_key=MasterKey(current=generate_master_key()))
         await store.put_record(
             SecretRecord(
                 name="prod_stripe_key",
@@ -265,14 +243,10 @@ class TestMasterKey:
         with pytest.raises(SecretsError):
             MasterKey(current=generate_master_key(), previous=b"garbage")
 
-    def test_rotate_rejects_invalid_new_key(
-        self, service: SecretsService
-    ) -> None:
+    def test_rotate_rejects_invalid_new_key(self, service: SecretsService) -> None:
         with pytest.raises(SecretsError):
             service.rotate_master_key(new_current=b"")
 
-    def test_rotate_rejects_short_new_key(
-        self, service: SecretsService
-    ) -> None:
+    def test_rotate_rejects_short_new_key(self, service: SecretsService) -> None:
         with pytest.raises(SecretsError, match="32 bytes"):
             service.rotate_master_key(new_current=b"tooshort")

@@ -45,9 +45,7 @@ def grid_search(specs: list[ParamSpec]) -> Iterator[dict[str, Any]]:
     yield from _cartesian(specs, 0, {})
 
 
-def _cartesian(
-    specs: list[ParamSpec], i: int, acc: dict[str, Any]
-) -> Iterator[dict[str, Any]]:
+def _cartesian(specs: list[ParamSpec], i: int, acc: dict[str, Any]) -> Iterator[dict[str, Any]]:
     if i == len(specs):
         yield dict(acc)
         return

@@ -298,9 +298,7 @@ class TestPortfolioSnapshot:
                 "TSLA": {"market_value": 25_000.0},
             },
         )
-        total_weight = sum(
-            snap.allocation_weight(s) for s in ["AAPL", "MSFT", "TSLA"]
-        )
+        total_weight = sum(snap.allocation_weight(s) for s in ["AAPL", "MSFT", "TSLA"])
         assert total_weight == pytest.approx(1.0)
 
     def test_realized_pnl_tracking(self):
@@ -358,10 +356,7 @@ class TestPortfolioSnapshot:
         assert "Positions: 1" in s
 
     def test_many_positions(self):
-        positions = {
-            f"SYM{i}": {"qty": i, "market_value": float(i * 100)}
-            for i in range(50)
-        }
+        positions = {f"SYM{i}": {"qty": i, "market_value": float(i * 100)} for i in range(50)}
         snap = PortfolioSnapshot(
             total_value=127_500.0,
             positions=positions,

@@ -53,9 +53,7 @@ class TestCarryoverConstructors:
         assert c.total == Decimal("0.00")
 
     def test_total_quantises_to_two_decimals(self):
-        c = CapitalLossCarryover(
-            short_term=Decimal("100.123"), long_term=Decimal("50.456")
-        )
+        c = CapitalLossCarryover(short_term=Decimal("100.123"), long_term=Decimal("50.456"))
         assert c.total == Decimal("150.58")
 
 
@@ -143,9 +141,7 @@ class TestPriorYearCarryover:
         # Prior: $4,000 short carry. Current: +5,000 long.
         # Prior absorbs into short leg: short_net = 0 - 4000 = -4000.
         # Combined: -4000 + 5000 = +1000 → no loss this year, no carry.
-        prior = CapitalLossCarryover(
-            short_term=Decimal("4000"), long_term=Decimal("0")
-        )
+        prior = CapitalLossCarryover(short_term=Decimal("4000"), long_term=Decimal("0"))
         result = apply_carryover(_summary(short="0", long_="5000"), prior)
 
         assert result.current_year_deduction == Decimal("0.00")
@@ -154,9 +150,7 @@ class TestPriorYearCarryover:
     def test_prior_loss_plus_current_loss_compounds_carryover(self):
         # Prior: $2,000 short carry. Current: -1,000 short, 0 long.
         # Combined short loss: 3,000. $3,000 deducted, no carryover.
-        prior = CapitalLossCarryover(
-            short_term=Decimal("2000"), long_term=Decimal("0")
-        )
+        prior = CapitalLossCarryover(short_term=Decimal("2000"), long_term=Decimal("0"))
         result = apply_carryover(_summary(short="-1000", long_="0"), prior)
 
         assert result.current_year_deduction == Decimal("3000.00")
@@ -165,9 +159,7 @@ class TestPriorYearCarryover:
     def test_prior_loss_plus_current_loss_above_cap_carries_remainder(self):
         # Prior: $5,000 short. Current: -3,000 short. Combined = -8,000
         # short. $3,000 deducted → $5,000 short carry.
-        prior = CapitalLossCarryover(
-            short_term=Decimal("5000"), long_term=Decimal("0")
-        )
+        prior = CapitalLossCarryover(short_term=Decimal("5000"), long_term=Decimal("0"))
         result = apply_carryover(_summary(short="-3000", long_="0"), prior)
 
         assert result.current_year_deduction == Decimal("3000.00")
@@ -206,9 +198,7 @@ class TestValidation:
         with pytest.raises(ValueError):
             apply_carryover(
                 _summary(short="0", long_="0"),
-                CapitalLossCarryover(
-                    short_term=Decimal("-1"), long_term=Decimal("0")
-                ),
+                CapitalLossCarryover(short_term=Decimal("-1"), long_term=Decimal("0")),
             )
 
     def test_zero_or_negative_cap_rejected(self):

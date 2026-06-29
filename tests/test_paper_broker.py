@@ -163,9 +163,7 @@ class TestCancel:
         result = await broker.submit(order)
         await broker.drain_events()
 
-        await broker.cancel(
-            order_id=order.id, broker_order_id=result.broker_order_id
-        )
+        await broker.cancel(order_id=order.id, broker_order_id=result.broker_order_id)
         events = await broker.drain_events()
         assert len(events) == 1
         assert isinstance(events[0], CancelEvent)
@@ -175,9 +173,7 @@ class TestCancel:
     async def test_cancel_unknown_rejected(self):
         broker = PaperBroker(price_for=_prices({}))
         with pytest.raises(BrokerRejectError) as exc_info:
-            await broker.cancel(
-                order_id=uuid.uuid4(), broker_order_id="PAPER-nope"
-            )
+            await broker.cancel(order_id=uuid.uuid4(), broker_order_id="PAPER-nope")
         assert exc_info.value.broker_code == "NOT_PENDING"
 
     async def test_cancel_after_fill_rejected(self):

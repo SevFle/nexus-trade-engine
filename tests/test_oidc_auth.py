@@ -156,7 +156,10 @@ class TestOIDCDiscovery:
         )
         fake_client = _FakeAsyncClient(get_responses=[resp])
 
-        with patch("httpx.AsyncClient", return_value=fake_client), pytest.raises(httpx.HTTPStatusError):
+        with (
+            patch("httpx.AsyncClient", return_value=fake_client),
+            pytest.raises(httpx.HTTPStatusError),
+        ):
             await oidc_provider._get_discovery()
 
 
@@ -225,12 +228,8 @@ class TestOIDCAuthenticate:
 
     async def test_authenticate_token_exchange_fails(self, oidc_provider, mock_settings):
         disc_resp = _FakeHttpxResponse(json_data=DISCOVERY_DOC)
-        token_resp = _FakeHttpxResponse(
-            raise_error=Exception("Token exchange failed")
-        )
-        fake_client = _FakeAsyncClient(
-            get_responses=[disc_resp], post_responses=[token_resp]
-        )
+        token_resp = _FakeHttpxResponse(raise_error=Exception("Token exchange failed"))
+        fake_client = _FakeAsyncClient(get_responses=[disc_resp], post_responses=[token_resp])
 
         mock_db = AsyncMock(spec=AsyncSession)
         with patch("httpx.AsyncClient", return_value=fake_client):
@@ -239,14 +238,10 @@ class TestOIDCAuthenticate:
         assert result.success is False
         assert "OIDC authentication failed" in result.error
 
-    async def test_authenticate_no_matching_kid(
-        self, oidc_provider, mock_settings, rsa_keys
-    ):
+    async def test_authenticate_no_matching_kid(self, oidc_provider, mock_settings, rsa_keys):
         private_key, pub_key = rsa_keys
         _jwk_dict, kid = _make_jwk_kid(pub_key)
-        id_token = _sign_id_token(
-            {"sub": "x", "email": "x@x.com"}, private_key, kid
-        )
+        id_token = _sign_id_token({"sub": "x", "email": "x@x.com"}, private_key, kid)
 
         disc_resp = _FakeHttpxResponse(json_data=DISCOVERY_DOC)
         token_resp = _FakeHttpxResponse(json_data={"id_token": id_token})
@@ -263,9 +258,7 @@ class TestOIDCAuthenticate:
         assert result.success is False
         assert "OIDC authentication failed" in result.error
 
-    async def test_authenticate_happy_path_new_user(
-        self, oidc_provider, mock_settings, rsa_keys
-    ):
+    async def test_authenticate_happy_path_new_user(self, oidc_provider, mock_settings, rsa_keys):
         fake_client = _build_full_mock_client(
             rsa_keys,
             {
@@ -295,9 +288,7 @@ class TestOIDCAuthenticate:
         assert result.user_info.roles == ["admin"]
         mock_db.add.assert_called_once()
 
-    async def test_authenticate_existing_oidc_user(
-        self, oidc_provider, mock_settings, rsa_keys
-    ):
+    async def test_authenticate_existing_oidc_user(self, oidc_provider, mock_settings, rsa_keys):
         from engine.db.models import User
 
         fake_client = _build_full_mock_client(
@@ -370,9 +361,7 @@ class TestOIDCAuthenticate:
         assert result.success is False
         assert "different provider" in result.error
 
-    async def test_authenticate_disabled_user(
-        self, oidc_provider, mock_settings, rsa_keys
-    ):
+    async def test_authenticate_disabled_user(self, oidc_provider, mock_settings, rsa_keys):
         from engine.db.models import User
 
         fake_client = _build_full_mock_client(

@@ -321,8 +321,10 @@ class TestOIDCDiscoveryEdgeCases:
                 "Bad Gateway", request=MagicMock(), response=MagicMock(status_code=502)
             )
         )
-        with patch("httpx.AsyncClient", return_value=_FakeClient(get_responses=[resp])), \
-             pytest.raises(httpx.HTTPStatusError):
+        with (
+            patch("httpx.AsyncClient", return_value=_FakeClient(get_responses=[resp])),
+            pytest.raises(httpx.HTTPStatusError),
+        ):
             await oidc_provider._get_discovery()
 
     async def test_discovery_ftp_scheme_rejected(self, oidc_provider, mock_settings):
@@ -336,11 +338,11 @@ class TestOIDCDiscoveryEdgeCases:
             await oidc_provider._get_discovery()
 
     async def test_discovery_network_unreachable(self, oidc_provider, mock_settings):
-        resp = _FakeResponse(
-            raise_error=httpx.ConnectError("Connection refused")
-        )
-        with patch("httpx.AsyncClient", return_value=_FakeClient(get_responses=[resp])), \
-             pytest.raises(httpx.ConnectError):
+        resp = _FakeResponse(raise_error=httpx.ConnectError("Connection refused"))
+        with (
+            patch("httpx.AsyncClient", return_value=_FakeClient(get_responses=[resp])),
+            pytest.raises(httpx.ConnectError),
+        ):
             await oidc_provider._get_discovery()
 
 
@@ -349,7 +351,9 @@ class TestOIDCJWKSEdgeCases:
         _, _pub = rsa_keys
         disc_resp = _FakeResponse(json_data=DISCOVERY_DOC)
         jwks_resp = _FakeResponse(json_data={})
-        with patch("httpx.AsyncClient", return_value=_FakeClient(get_responses=[disc_resp, jwks_resp])):
+        with patch(
+            "httpx.AsyncClient", return_value=_FakeClient(get_responses=[disc_resp, jwks_resp])
+        ):
             result = await oidc_provider._get_jwks()
         assert result == {}
 
@@ -360,8 +364,12 @@ class TestOIDCJWKSEdgeCases:
                 "Not Found", request=MagicMock(), response=MagicMock(status_code=404)
             )
         )
-        with patch("httpx.AsyncClient", return_value=_FakeClient(get_responses=[disc_resp, jwks_resp])), \
-             pytest.raises(httpx.HTTPStatusError):
+        with (
+            patch(
+                "httpx.AsyncClient", return_value=_FakeClient(get_responses=[disc_resp, jwks_resp])
+            ),
+            pytest.raises(httpx.HTTPStatusError),
+        ):
             await oidc_provider._get_jwks()
 
 
@@ -414,9 +422,7 @@ class TestOIDCAuthenticateEdgeCases:
         assert result.success is False
         assert "OIDC authentication failed" in result.error
 
-    async def test_cache_reuse_across_auth_calls(
-        self, oidc_provider, mock_settings, rsa_keys
-    ):
+    async def test_cache_reuse_across_auth_calls(self, oidc_provider, mock_settings, rsa_keys):
         call_count = 0
 
         class CountingClient(_FakeClient):
@@ -458,9 +464,7 @@ class TestOIDCAuthenticateEdgeCases:
 
         assert call_count <= 3
 
-    async def test_new_user_creation_with_no_roles(
-        self, oidc_provider, mock_settings, rsa_keys
-    ):
+    async def test_new_user_creation_with_no_roles(self, oidc_provider, mock_settings, rsa_keys):
         client = _full_client(
             rsa_keys,
             {"sub": "no-role-user", "email": "norole@test.com", "name": "No Role"},
@@ -707,9 +711,7 @@ class TestJWTEdgeCases:
         monkeypatch.setenv("NEXUS_SECRET_KEY", "test-key")
         s = Settings()
         monkeypatch.setattr("engine.api.auth.jwt.settings", s)
-        token = create_access_token(
-            sub="u1", email="user@例え.com", role="admin", provider="oidc"
-        )
+        token = create_access_token(sub="u1", email="user@例え.com", role="admin", provider="oidc")
         payload = decode_token(token)
         assert payload is not None
         assert payload["email"] == "user@例え.com"
@@ -778,7 +780,9 @@ class TestJWTEdgeCases:
 
 
 class TestOIDCIntegrationWithDB:
-    async def test_new_user_created_in_db(self, oidc_provider, mock_settings, rsa_keys, db_session):
+    async def test_new_user_created_in_db(
+        self, oidc_provider, mock_settings, rsa_keys, db_session
+    ):
         client = _full_client(
             rsa_keys,
             {"sub": "db-user-1", "email": "dbuser@test.com", "name": "DB User", "roles": ["user"]},
@@ -791,7 +795,9 @@ class TestOIDCIntegrationWithDB:
         assert result.user_info.email == "dbuser@test.com"
         await db_session.commit()
 
-    async def test_existing_user_lookup_in_db(self, oidc_provider, mock_settings, rsa_keys, db_session):
+    async def test_existing_user_lookup_in_db(
+        self, oidc_provider, mock_settings, rsa_keys, db_session
+    ):
 
         from engine.db.models import User
 
@@ -816,7 +822,9 @@ class TestOIDCIntegrationWithDB:
         assert result.success is True
         assert result.user_info.email == "exist@test.com"
 
-    async def test_disabled_user_rejected_in_db(self, oidc_provider, mock_settings, rsa_keys, db_session):
+    async def test_disabled_user_rejected_in_db(
+        self, oidc_provider, mock_settings, rsa_keys, db_session
+    ):
         from engine.db.models import User
 
         user = User(

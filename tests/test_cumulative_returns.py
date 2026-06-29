@@ -171,15 +171,11 @@ class TestTrackingError:
 
     def test_constant_active_zero_te(self):
         # Constant excess return → no variance → TE 0.
-        out = tracking_error(
-            [0.05, 0.05, 0.05, 0.05], [0.02, 0.02, 0.02, 0.02]
-        )
+        out = tracking_error([0.05, 0.05, 0.05, 0.05], [0.02, 0.02, 0.02, 0.02])
         assert out == pytest.approx(0.0, abs=1e-12)
 
     def test_non_constant_active_positive_te(self):
-        out = tracking_error(
-            [0.10, -0.05, 0.10, -0.05], [0.05, 0.05, 0.05, 0.05]
-        )
+        out = tracking_error([0.10, -0.05, 0.10, -0.05], [0.05, 0.05, 0.05, 0.05])
         assert out > 0
 
     def test_length_mismatch_rejected(self):
@@ -214,9 +210,7 @@ class TestBeatingBenchmarkPct:
 
     def test_mixed(self):
         # 2 of 4 beat.
-        out = beating_benchmark_pct(
-            [0.10, 0.01, 0.10, 0.01], [0.05, 0.05, 0.05, 0.05]
-        )
+        out = beating_benchmark_pct([0.10, 0.01, 0.10, 0.01], [0.05, 0.05, 0.05, 0.05])
         assert out == pytest.approx(0.5)
 
     def test_ties_not_counted_as_beating(self):

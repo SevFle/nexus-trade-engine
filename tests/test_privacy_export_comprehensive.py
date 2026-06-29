@@ -4,6 +4,7 @@ _jsonify boundary values, _row_to_dict deny-list mechanics, and DSR module cover
 Targets the most recently changed code: the backtest-join fix in collect_user_data (gh#157)
 and the _jsonify / _row_to_dict helper functions.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -304,7 +305,14 @@ class TestCollectUserDataExportStructure:
     async def test_all_collection_fields_are_lists(self, db_session, full_user):
         uid, *_ = full_user
         result = await collect_user_data(db_session, uid)
-        for key in ("portfolios", "backtests", "webhooks", "api_keys", "dsr_history", "legal_acceptances"):
+        for key in (
+            "portfolios",
+            "backtests",
+            "webhooks",
+            "api_keys",
+            "dsr_history",
+            "legal_acceptances",
+        ):
             assert isinstance(result[key], list), f"{key} should be a list"
 
 
@@ -412,12 +420,20 @@ class TestCollectUserDataBacktestsJoin:
         uid_a = uuid.uuid4()
         uid_b = uuid.uuid4()
         user_a = User(
-            id=uid_a, email="a@x.com", display_name="A",
-            is_active=True, role="user", auth_provider="local",
+            id=uid_a,
+            email="a@x.com",
+            display_name="A",
+            is_active=True,
+            role="user",
+            auth_provider="local",
         )
         user_b = User(
-            id=uid_b, email="b@x.com", display_name="B",
-            is_active=True, role="user", auth_provider="local",
+            id=uid_b,
+            email="b@x.com",
+            display_name="B",
+            is_active=True,
+            role="user",
+            auth_provider="local",
         )
         db_session.add_all([user_a, user_b])
         await db_session.flush()
@@ -615,9 +631,7 @@ class TestRecordRequest:
             await record_request(db_session, user_id=dsr_user.id, kind="export", sla_days=0)
 
     async def test_custom_sla_days(self, db_session, dsr_user):
-        row = await record_request(
-            db_session, user_id=dsr_user.id, kind="export", sla_days=15
-        )
+        row = await record_request(db_session, user_id=dsr_user.id, kind="export", sla_days=15)
         assert row.sla_due_at is not None
 
     async def test_note_stored(self, db_session, dsr_user):

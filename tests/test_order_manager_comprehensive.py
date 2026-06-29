@@ -71,57 +71,85 @@ def om(cost_model, risk_engine, portfolio, backend):
 
 class TestOrderModel:
     def test_order_default_status_is_pending(self):
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10
+        )
         assert order.status == OrderStatus.PENDING
 
     def test_order_default_type_is_market(self):
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10
+        )
         assert order.order_type == OrderType.MARKET
 
     def test_order_with_limit_type(self):
         order = Order(
-            signal_id="s1", strategy_id="strat", symbol="AAPL",
-            side=Side.BUY, quantity=10, order_type=OrderType.LIMIT, limit_price=99.0,
+            signal_id="s1",
+            strategy_id="strat",
+            symbol="AAPL",
+            side=Side.BUY,
+            quantity=10,
+            order_type=OrderType.LIMIT,
+            limit_price=99.0,
         )
         assert order.order_type == OrderType.LIMIT
         assert order.limit_price == 99.0
 
     def test_order_with_stop_type(self):
         order = Order(
-            signal_id="s1", strategy_id="strat", symbol="AAPL",
-            side=Side.BUY, quantity=10, order_type=OrderType.STOP,
+            signal_id="s1",
+            strategy_id="strat",
+            symbol="AAPL",
+            side=Side.BUY,
+            quantity=10,
+            order_type=OrderType.STOP,
         )
         assert order.order_type == OrderType.STOP
 
     def test_order_with_stop_limit_type(self):
         order = Order(
-            signal_id="s1", strategy_id="strat", symbol="AAPL",
-            side=Side.BUY, quantity=10, order_type=OrderType.STOP_LIMIT, limit_price=95.0,
+            signal_id="s1",
+            strategy_id="strat",
+            symbol="AAPL",
+            side=Side.BUY,
+            quantity=10,
+            order_type=OrderType.STOP_LIMIT,
+            limit_price=95.0,
         )
         assert order.order_type == OrderType.STOP_LIMIT
 
     def test_order_default_fill_fields_are_none(self):
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10
+        )
         assert order.fill_price is None
         assert order.fill_quantity is None
         assert order.filled_at is None
         assert order.cost_breakdown is None
 
     def test_order_has_uuid_id(self):
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10
+        )
         assert len(order.id) == 36
         assert "-" in order.id
 
     def test_order_has_created_at(self):
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10
+        )
         assert isinstance(order.created_at, datetime)
 
     def test_order_status_history_starts_empty(self):
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10
+        )
         assert order.status_history == []
 
     def test_transition_records_history(self):
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10
+        )
         order.transition(OrderStatus.VALIDATED, "passed checks")
         assert len(order.status_history) == 1
         entry = order.status_history[0]
@@ -131,7 +159,9 @@ class TestOrderModel:
         assert "timestamp" in entry
 
     def test_transition_multiple_times(self):
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10
+        )
         order.transition(OrderStatus.VALIDATED)
         order.transition(OrderStatus.COSTED)
         order.transition(OrderStatus.RISK_APPROVED)
@@ -139,7 +169,9 @@ class TestOrderModel:
         assert order.status == OrderStatus.RISK_APPROVED
 
     def test_transition_with_empty_reason(self):
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=10
+        )
         order.transition(OrderStatus.VALIDATED)
         assert order.status_history[0]["reason"] == ""
 
@@ -147,8 +179,17 @@ class TestOrderModel:
 class TestOrderStatusEnum:
     def test_all_status_values(self):
         expected = {
-            "pending", "validated", "costed", "risk_approved", "risk_rejected",
-            "submitted", "filled", "partially_filled", "cancelled", "rejected", "failed",
+            "pending",
+            "validated",
+            "costed",
+            "risk_approved",
+            "risk_rejected",
+            "submitted",
+            "filled",
+            "partially_filled",
+            "cancelled",
+            "rejected",
+            "failed",
         }
         actual = {s.value for s in OrderStatus}
         assert actual == expected
@@ -207,36 +248,48 @@ class TestCalculateQuantity:
 class TestValidateOrder:
     def test_zero_quantity_rejected(self, cost_model, risk_engine, portfolio):
         om = OrderManager(cost_model=cost_model, risk_engine=risk_engine, portfolio=portfolio)
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=0)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=0
+        )
         assert om._validate_order(order, 100.0) is False
 
     def test_negative_quantity_rejected(self, cost_model, risk_engine, portfolio):
         om = OrderManager(cost_model=cost_model, risk_engine=risk_engine, portfolio=portfolio)
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=-5)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=-5
+        )
         assert om._validate_order(order, 100.0) is False
 
     def test_buy_exact_cash_allowed(self, cost_model, risk_engine, portfolio):
         om = OrderManager(cost_model=cost_model, risk_engine=risk_engine, portfolio=portfolio)
         qty = int(100_000.0 // 100.0)
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=qty)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=qty
+        )
         assert om._validate_order(order, 100.0) is True
 
     def test_buy_one_over_cash_rejected(self, cost_model, risk_engine, portfolio):
         om = OrderManager(cost_model=cost_model, risk_engine=risk_engine, portfolio=portfolio)
         qty = int(100_000.0 // 100.0) + 1
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=qty)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.BUY, quantity=qty
+        )
         assert om._validate_order(order, 100.0) is False
 
     def test_sell_exact_quantity_held_allowed(self, cost_model, risk_engine, portfolio):
         om = OrderManager(cost_model=cost_model, risk_engine=risk_engine, portfolio=portfolio)
         portfolio.open_position("AAPL", 10, 100.0)
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.SELL, quantity=10)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.SELL, quantity=10
+        )
         assert om._validate_order(order, 100.0) is True
 
     def test_sell_one_more_than_held_rejected(self, cost_model, risk_engine, portfolio):
         om = OrderManager(cost_model=cost_model, risk_engine=risk_engine, portfolio=portfolio)
         portfolio.open_position("AAPL", 10, 100.0)
-        order = Order(signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.SELL, quantity=11)
+        order = Order(
+            signal_id="s1", strategy_id="strat", symbol="AAPL", side=Side.SELL, quantity=11
+        )
         assert om._validate_order(order, 100.0) is False
 
 
@@ -454,7 +507,10 @@ class TestCostRejectionDetailed:
         manager.set_execution_backend(FakeBackend())
 
         signal = Signal.buy(
-            symbol="AAPL", strategy_id="test", quantity=10, max_cost_pct=0.00001,
+            symbol="AAPL",
+            strategy_id="test",
+            quantity=10,
+            max_cost_pct=0.00001,
         )
         order = await manager.process_signal(signal, market_price=150.0)
         assert order.status == OrderStatus.RISK_REJECTED

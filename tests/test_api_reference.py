@@ -81,9 +81,7 @@ class TestSuggestEndpoint:
         assert body["suggestions"][0]["record"]["primary_ticker"] == "MSFT"
 
     async def test_typo_tolerant(self, reference_client: AsyncClient):
-        r = await reference_client.get(
-            "/api/v1/reference/suggest", params={"q": "Aple"}
-        )
+        r = await reference_client.get("/api/v1/reference/suggest", params={"q": "Aple"})
         assert r.status_code == HTTPStatus.OK
         body = r.json()
         tickers = [s["record"]["primary_ticker"] for s in body["suggestions"]]
@@ -94,9 +92,7 @@ class TestSuggestEndpoint:
         assert r.status_code == HTTPStatus.BAD_REQUEST
 
     async def test_query_too_long_returns_400(self, reference_client: AsyncClient):
-        r = await reference_client.get(
-            "/api/v1/reference/suggest", params={"q": "x" * 200}
-        )
+        r = await reference_client.get("/api/v1/reference/suggest", params={"q": "x" * 200})
         assert r.status_code == HTTPStatus.BAD_REQUEST
 
     async def test_default_limit(self, reference_client: AsyncClient):
@@ -106,9 +102,7 @@ class TestSuggestEndpoint:
         assert len(body["suggestions"]) <= 10
 
     async def test_explicit_limit_respected(self, reference_client: AsyncClient):
-        r = await reference_client.get(
-            "/api/v1/reference/suggest", params={"q": "A", "limit": 1}
-        )
+        r = await reference_client.get("/api/v1/reference/suggest", params={"q": "A", "limit": 1})
         assert r.status_code == HTTPStatus.OK
         body = r.json()
         assert len(body["suggestions"]) <= 1
@@ -130,18 +124,12 @@ class TestSuggestEndpoint:
             assert s["record"]["asset_class"] == "crypto"
 
     async def test_no_match_returns_empty_list(self, reference_client: AsyncClient):
-        r = await reference_client.get(
-            "/api/v1/reference/suggest", params={"q": "xyznotapresent"}
-        )
+        r = await reference_client.get("/api/v1/reference/suggest", params={"q": "xyznotapresent"})
         assert r.status_code == HTTPStatus.OK
         assert r.json()["suggestions"] == []
 
-    async def test_response_schema_has_completion_and_score(
-        self, reference_client: AsyncClient
-    ):
-        r = await reference_client.get(
-            "/api/v1/reference/suggest", params={"q": "Micro"}
-        )
+    async def test_response_schema_has_completion_and_score(self, reference_client: AsyncClient):
+        r = await reference_client.get("/api/v1/reference/suggest", params={"q": "Micro"})
         body = r.json()
         first = body["suggestions"][0]
         assert "completion" in first
@@ -153,35 +141,25 @@ class TestSuggestEndpoint:
     ):
         # Frontend dropdown needs both ticker and company name visible
         # on every row regardless of which one matched the query.
-        r = await reference_client.get(
-            "/api/v1/reference/suggest", params={"q": "Micro"}
-        )
+        r = await reference_client.get("/api/v1/reference/suggest", params={"q": "Micro"})
         body = r.json()
         first = body["suggestions"][0]
         assert first["symbol"] == "MSFT"
         assert first["name"] == "Microsoft Corp."
 
-    async def test_display_combines_symbol_and_name(
-        self, reference_client: AsyncClient
-    ):
+    async def test_display_combines_symbol_and_name(self, reference_client: AsyncClient):
         # When the query matches only the ticker, the dropdown row must
         # still show the company name so the user can confirm.
-        r = await reference_client.get(
-            "/api/v1/reference/suggest", params={"q": "AAPL"}
-        )
+        r = await reference_client.get("/api/v1/reference/suggest", params={"q": "AAPL"})
         body = r.json()
         first = body["suggestions"][0]
         assert "AAPL" in first["display"]
         assert "Apple" in first["display"]
 
-    async def test_name_match_still_shows_symbol(
-        self, reference_client: AsyncClient
-    ):
+    async def test_name_match_still_shows_symbol(self, reference_client: AsyncClient):
         # Reverse: query matched the company name; the symbol still has
         # to be visible on the row.
-        r = await reference_client.get(
-            "/api/v1/reference/suggest", params={"q": "Berkshire"}
-        )
+        r = await reference_client.get("/api/v1/reference/suggest", params={"q": "Berkshire"})
         body = r.json()
         first = body["suggestions"][0]
         assert first["symbol"] == "BRK.B"

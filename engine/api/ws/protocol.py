@@ -79,9 +79,7 @@ class EventMessage(BaseModel):
     room: str
     payload: dict[str, Any] = Field(default_factory=dict)
     seq: int = Field(default=0, ge=0)
-    ts: str | None = Field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    ts: str | None = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class PongMessage(BaseModel):

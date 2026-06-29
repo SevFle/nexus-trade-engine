@@ -68,17 +68,11 @@ class _MomentumStrategy(IStrategy):
             if sma is None:
                 continue
             if price > sma * 1.01:
-                signals.append(
-                    Signal.buy(symbol, strategy_id=self.id, weight=0.8)
-                )
+                signals.append(Signal.buy(symbol, strategy_id=self.id, weight=0.8))
             elif price < sma * 0.99:
-                signals.append(
-                    Signal.sell(symbol, strategy_id=self.id, weight=0.8)
-                )
+                signals.append(Signal.sell(symbol, strategy_id=self.id, weight=0.8))
             else:
-                signals.append(
-                    Signal.hold(symbol, strategy_id=self.id)
-                )
+                signals.append(Signal.hold(symbol, strategy_id=self.id))
         return signals
 
     def get_config_schema(self) -> dict:
@@ -136,8 +130,12 @@ class _UniverseScorer(IScoringStrategy):
                 symbol=symbol,
                 composite_score=min(100.0, max(0.0, composite)),
                 factor_scores={
-                    "quality": FactorScore(factor_name="quality", z_score=quality_raw, raw_value=quality_raw),
-                    "momentum": FactorScore(factor_name="momentum", z_score=momentum_raw, raw_value=momentum_raw),
+                    "quality": FactorScore(
+                        factor_name="quality", z_score=quality_raw, raw_value=quality_raw
+                    ),
+                    "momentum": FactorScore(
+                        factor_name="momentum", z_score=momentum_raw, raw_value=momentum_raw
+                    ),
                 },
             )
             scores.append(score)
@@ -567,15 +565,28 @@ class TestIStrategyDefaults:
     def test_default_author(self):
         class _MinimalStrategy(IStrategy):
             @property
-            def id(self): return "test"
+            def id(self):
+                return "test"
+
             @property
-            def name(self): return "Test"
+            def name(self):
+                return "Test"
+
             @property
-            def version(self): return "1.0"
-            async def initialize(self, config): pass
-            async def dispose(self): pass
-            async def evaluate(self, portfolio, market, costs): return []
-            def get_config_schema(self): return {}
+            def version(self):
+                return "1.0"
+
+            async def initialize(self, config):
+                pass
+
+            async def dispose(self):
+                pass
+
+            async def evaluate(self, portfolio, market, costs):
+                return []
+
+            def get_config_schema(self):
+                return {}
 
         s = _MinimalStrategy()
         assert s.author == "unknown"
@@ -584,15 +595,28 @@ class TestIStrategyDefaults:
     async def test_default_hooks(self):
         class _MinimalStrategy(IStrategy):
             @property
-            def id(self): return "test"
+            def id(self):
+                return "test"
+
             @property
-            def name(self): return "Test"
+            def name(self):
+                return "Test"
+
             @property
-            def version(self): return "1.0"
-            async def initialize(self, config): pass
-            async def dispose(self): pass
-            async def evaluate(self, portfolio, market, costs): return []
-            def get_config_schema(self): return {}
+            def version(self):
+                return "1.0"
+
+            async def initialize(self, config):
+                pass
+
+            async def dispose(self):
+                pass
+
+            async def evaluate(self, portfolio, market, costs):
+                return []
+
+            def get_config_schema(self):
+                return {}
 
         s = _MinimalStrategy()
         await s.on_order_fill({"symbol": "AAPL", "qty": 100})
@@ -613,9 +637,7 @@ class TestPortfolioSnapshotEdgeCases:
                 "GOOGL": {"market_value": 50_000.0},
             },
         )
-        total_weight = sum(
-            snap.allocation_weight(s) for s in ["AAPL", "MSFT", "GOOGL"]
-        )
+        total_weight = sum(snap.allocation_weight(s) for s in ["AAPL", "MSFT", "GOOGL"])
         assert abs(total_weight - 1.0) < 1e-10
 
     def test_summary_single_position(self):

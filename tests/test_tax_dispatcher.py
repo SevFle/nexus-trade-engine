@@ -108,9 +108,7 @@ class TestUsRouting:
 class TestGbRouting:
     def test_gb_returns_cgt_summary_with_aea_applied(self):
         # +£5,000 gain → £3,000 AEA (2024-25), £2,000 taxable.
-        result = report_for_jurisdiction(
-            "GB", [_disp(proceeds="15000", cost="10000")]
-        )
+        result = report_for_jurisdiction("GB", [_disp(proceeds="15000", cost="10000")])
 
         assert isinstance(result, CgtSummary)
         assert result.net_gain == Decimal("5000.00")
@@ -122,9 +120,7 @@ class TestDeRouting:
     def test_de_returns_kest_summary_routed_to_equity_bucket(self):
         # +5,000 EUR equity → 1,000 EUR allowance, 4,000 EUR taxable.
         # Expected: KESt 1,000 / SolZ 55 / total 1,055.
-        result = report_for_jurisdiction(
-            "DE", [_disp(proceeds="6000", cost="1000")]
-        )
+        result = report_for_jurisdiction("DE", [_disp(proceeds="6000", cost="1000")])
 
         assert isinstance(result, KestSummary)
         assert result.equity_net == Decimal("5000.00")
@@ -136,9 +132,7 @@ class TestDeRouting:
 class TestFrRouting:
     def test_fr_returns_pfu_summary(self):
         # +1,000 EUR gain → 30 % flat tax = 300.
-        result = report_for_jurisdiction(
-            "FR", [_disp(proceeds="6000", cost="5000")]
-        )
+        result = report_for_jurisdiction("FR", [_disp(proceeds="6000", cost="5000")])
 
         assert isinstance(result, PfuSummary)
         assert result.net_gain == Decimal("1000.00")

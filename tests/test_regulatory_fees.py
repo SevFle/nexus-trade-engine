@@ -42,9 +42,7 @@ class TestConstants:
 
 class TestSecSection31:
     def test_buy_returns_zero(self):
-        assert (
-            sec_section_31_fee(Decimal("100000"), side="buy") == Decimal("0.00")
-        )
+        assert sec_section_31_fee(Decimal("100000"), side="buy") == Decimal("0.00")
 
     def test_known_sell_at_default_rate(self):
         # $1,000,000 sell * $20.60 / $1,000,000 = $20.60.
@@ -145,29 +143,19 @@ class TestOccClearingFee:
 class TestMarginInterest:
     def test_one_day_accrual_known_value(self):
         # $100,000 borrowed x 8.5 % / 365 = ~$23.29 / day.
-        out = daily_margin_interest(
-            Decimal("100000"), Decimal("0.085")
-        )
+        out = daily_margin_interest(Decimal("100000"), Decimal("0.085"))
         assert out == Decimal("23.29")
 
     def test_multi_day_accrual_scales_linearly(self):
         # Same loan over 30 days ≈ $698.63.
-        out = daily_margin_interest(
-            Decimal("100000"), Decimal("0.085"), days=30
-        )
+        out = daily_margin_interest(Decimal("100000"), Decimal("0.085"), days=30)
         assert out == Decimal("698.63")
 
     def test_zero_borrowed_zero_interest(self):
-        assert (
-            daily_margin_interest(Decimal("0"), Decimal("0.05"))
-            == Decimal("0.00")
-        )
+        assert daily_margin_interest(Decimal("0"), Decimal("0.05")) == Decimal("0.00")
 
     def test_zero_rate_zero_interest(self):
-        assert (
-            daily_margin_interest(Decimal("100000"), Decimal("0"))
-            == Decimal("0.00")
-        )
+        assert daily_margin_interest(Decimal("100000"), Decimal("0")) == Decimal("0.00")
 
     def test_negative_amount_rejected(self):
         with pytest.raises(ValueError):
@@ -179,6 +167,4 @@ class TestMarginInterest:
 
     def test_zero_days_per_year_rejected(self):
         with pytest.raises(ValueError):
-            daily_margin_interest(
-                Decimal("100"), Decimal("0.05"), days_per_year=0
-            )
+            daily_margin_interest(Decimal("100"), Decimal("0.05"), days_per_year=0)

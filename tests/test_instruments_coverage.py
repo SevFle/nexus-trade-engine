@@ -285,9 +285,7 @@ class TestExpiryDateAlias:
         assert inst.asset_class == InstrumentAssetClass.EQUITY
 
     def test_model_instance_input_round_trips(self):
-        original = Instrument.option(
-            "AAPL", 200.0, date(2026, 6, 19), OptionType.CALL
-        )
+        original = Instrument.option("AAPL", 200.0, date(2026, 6, 19), OptionType.CALL)
         rebuilt = Instrument.model_validate(original)
         assert rebuilt.uid == original.uid
         assert rebuilt.option_type == OptionType.CALL

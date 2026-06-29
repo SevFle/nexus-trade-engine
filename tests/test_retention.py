@@ -215,9 +215,7 @@ class TestDecideAction:
 
     def test_keep_forever_with_compress_returns_compress_when_old(self):
         p = RetentionPolicy("ohlcv_1d", retain_days=None, compress_after_days=365)
-        assert (
-            decide_action(_ago(400), p, now=NOW) is RetentionAction.COMPRESS
-        )
+        assert decide_action(_ago(400), p, now=NOW) is RetentionAction.COMPRESS
 
 
 # ---------------------------------------------------------------------------
