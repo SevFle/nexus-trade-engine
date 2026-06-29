@@ -121,6 +121,29 @@ class Instrument(BaseModel):
             raise ValueError(msg)
         return v
 
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_expiry_date_alias(cls, data: Any) -> Any:
+        """Fold the legacy ``expiry_date`` alias into ``expiration``.
+
+        Accepts dicts, pydantic models, or plain attribute-bearing objects.
+        When ``expiration`` is unset but ``expiry_date`` is supplied, the
+        alias value is copied across so the canonical field is populated;
+        the alias key is then dropped so it cannot linger as an extra.
+        """
+        if not isinstance(data, dict):
+            if hasattr(data, "model_dump"):
+                data = data.model_dump()
+            elif hasattr(data, "__dict__"):
+                data = dict(vars(data))
+            else:
+                return data
+        if "expiry_date" in data:
+            if data.get("expiration") is None:
+                data["expiration"] = data["expiry_date"]
+            del data["expiry_date"]
+        return data
+
     @model_validator(mode="after")
     def _enforce_class_invariants(self) -> Instrument:
         """Each asset class requires its own field set."""
@@ -278,6 +301,34 @@ class Instrument(BaseModel):
             option_type=option_type,
             multiplier=multiplier,
             currency=currency,
+        )
+
+    @classmethod
+    def future(
+        cls,
+        symbol: str,
+        expiration: date,
+        *,
+        exchange: str | None = None,
+        currency: str = "USD",
+        multiplier: int = 1,
+    ) -> Instrument:
+        """Dated futures contract factory.
+
+        Normalizes ``symbol`` to upper case. Raises ``TypeError`` when
+        ``symbol`` is not a string so callers get a clear error instead
+        of an opaque ``AttributeError`` from the ``.upper()`` call.
+        """
+        if not isinstance(symbol, str):
+            msg = f"symbol must be a string, got {type(symbol).__name__}"
+            raise TypeError(msg)
+        return cls(
+            symbol=symbol.upper(),
+            asset_class=InstrumentAssetClass.FUTURE,
+            expiration=expiration,
+            exchange=exchange,
+            currency=currency,
+            multiplier=multiplier,
         )
 
     @classmethod

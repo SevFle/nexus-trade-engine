@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
+import pydantic
 import pytest
 
 from engine.core.instruments import (
@@ -192,3 +193,101 @@ class TestCoerce:
     def test_coerce_none(self):
         with pytest.raises(TypeError, match="cannot coerce"):
             Instrument.coerce(None)
+
+
+class TestFutureFactory:
+    def test_future_uppercases_symbol(self):
+        inst = Instrument.future("es", date(2026, 12, 19), exchange="CME")
+        assert inst.asset_class == InstrumentAssetClass.FUTURE
+        assert inst.symbol == "ES"
+        assert inst.exchange == "CME"
+        assert inst.expiration == date(2026, 12, 19)
+        assert inst.uid == "ES_20261219"
+        assert inst.is_derivative is True
+
+    def test_future_already_upper_unchanged(self):
+        inst = Instrument.future("CL", date(2026, 6, 19))
+        assert inst.symbol == "CL"
+        assert inst.uid == "CL_20260619"
+
+    @pytest.mark.parametrize("bad_symbol", [None, 42, 3.14, ["ES"], {"ES"}])
+    def test_future_rejects_non_string_symbol(self, bad_symbol):
+        with pytest.raises(TypeError, match="symbol must be a string"):
+            Instrument.future(bad_symbol, date(2026, 12, 19))
+
+    def test_future_multiplier(self):
+        inst = Instrument.future("ES", date(2026, 12, 19), multiplier=50)
+        assert inst.multiplier == 50
+
+
+class TestExpiryDateAlias:
+    def test_expiry_date_copied_when_expiration_absent(self):
+        inst = Instrument.model_validate(
+            {
+                "symbol": "ES",
+                "asset_class": "future",
+                "expiry_date": date(2026, 12, 19),
+            }
+        )
+        assert inst.expiration == date(2026, 12, 19)
+        assert inst.uid == "ES_20261219"
+
+    def test_expiry_date_dropped_in_favour_of_expiration(self):
+        # When both are supplied the canonical ``expiration`` wins and
+        # the alias is ignored (not stored as a stray extra).
+        inst = Instrument.model_validate(
+            {
+                "symbol": "ES",
+                "asset_class": "future",
+                "expiration": date(2027, 1, 1),
+                "expiry_date": date(2020, 1, 1),
+            }
+        )
+        assert inst.expiration == date(2027, 1, 1)
+
+    def test_option_via_expiry_date_alias(self):
+        inst = Instrument.model_validate(
+            {
+                "symbol": "AAPL_20260619_C_200.00",
+                "asset_class": "option",
+                "underlying": "AAPL",
+                "strike": 200.0,
+                "option_type": "call",
+                "expiry_date": date(2026, 6, 19),
+            }
+        )
+        assert inst.expiration == date(2026, 6, 19)
+        assert inst.uid == "AAPL_20260619_C_200.00"
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            None,
+            42,
+            "not-a-dict",
+        ],
+    )
+    def test_non_dict_non_object_input_left_for_pydantic(self, payload):
+        # Bare scalars/strings have neither model_dump nor __dict__, so
+        # the validator returns them untouched and pydantic reports the
+        # structural error itself.
+        with pytest.raises(pydantic.ValidationError):
+            Instrument.model_validate(payload)
+
+    def test_object_input_converted_to_dict(self):
+        class RawInstrument:
+            def __init__(self) -> None:
+                self.symbol = "AAPL"
+                self.asset_class = InstrumentAssetClass.EQUITY
+
+        inst = Instrument.model_validate(RawInstrument())
+        assert inst.symbol == "AAPL"
+        assert inst.asset_class == InstrumentAssetClass.EQUITY
+
+    def test_model_instance_input_round_trips(self):
+        original = Instrument.option(
+            "AAPL", 200.0, date(2026, 6, 19), OptionType.CALL
+        )
+        rebuilt = Instrument.model_validate(original)
+        assert rebuilt.uid == original.uid
+        assert rebuilt.option_type == OptionType.CALL
