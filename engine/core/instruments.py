@@ -113,6 +113,25 @@ class Instrument(BaseModel):
     option_type: OptionType | None = Field(default=None)
     multiplier: int = Field(default=1, ge=1)
 
+    # Futures (regulated futures contracts / Section 1256)
+    contract_multiplier: int = Field(
+        default=1,
+        ge=1,
+        description="Units per contract — e.g. ES=$50/point, CL=1000 bbl",
+    )
+    expiry_date: date | None = Field(
+        default=None,
+        description="Futures contract expiry / final settlement date",
+    )
+    is_section_1256: bool = Field(
+        default=False,
+        description=(
+            "US \u00a71256 60/40 mark-to-market treatment. Regulated futures "
+            "contracts default to True; set False for a \u00a71256(d) opt-out "
+            "or non-qualifying contracts."
+        ),
+    )
+
     @field_validator("symbol")
     @classmethod
     def _symbol_no_whitespace(cls, v: str) -> str:
@@ -146,6 +165,15 @@ class Instrument(BaseModel):
                 if not (self.base_asset and self.quote_asset):
                     msg = "Forex requires base_asset and quote_asset"
                     raise ValueError(msg)
+            case InstrumentAssetClass.FUTURE:
+                # ``contract_multiplier`` has a floor of 1 at the field
+                # level, so nothing else is structurally required for a
+                # future. Regulated futures contracts qualify for
+                # \u00a71256 60/40 treatment by default; only auto-enable
+                # it when the caller did not explicitly pass the flag,
+                # leaving room for a \u00a71256(d) opt-out.
+                if "is_section_1256" not in self.model_fields_set:
+                    object.__setattr__(self, "is_section_1256", True)
             case _:
                 pass
         return self
@@ -168,8 +196,13 @@ class Instrument(BaseModel):
             yyyymmdd = self.expiration.strftime("%Y%m%d")
             cp = "C" if self.option_type == OptionType.CALL else "P"
             return f"{self.underlying}_{yyyymmdd}_{cp}_{self.strike:.2f}"
-        if ac == InstrumentAssetClass.FUTURE and self.expiration:
-            return f"{self.symbol}_{self.expiration.strftime('%Y%m%d')}"
+        if ac == InstrumentAssetClass.FUTURE:
+            # Prefer the futures-specific ``expiry_date``, falling back to
+            # the shared ``expiration`` field so legacy constructions keep
+            # producing the same uid.
+            exp = self.expiry_date or self.expiration
+            if exp:
+                return f"{self.symbol}_{exp.strftime('%Y%m%d')}"
         if ac == InstrumentAssetClass.CRYPTO and self.base_asset and self.quote_asset:
             return f"{self.base_asset}/{self.quote_asset}"
         if ac == InstrumentAssetClass.CRYPTO_PERP and self.base_asset and self.quote_asset:
@@ -277,6 +310,33 @@ class Instrument(BaseModel):
             expiration=expiration,
             option_type=option_type,
             multiplier=multiplier,
+            currency=currency,
+        )
+
+    @classmethod
+    def future(
+        cls,
+        symbol: str,
+        *,
+        contract_multiplier: int = 1,
+        expiry_date: date | None = None,
+        is_section_1256: bool = True,
+        exchange: str | None = None,
+        currency: str = "USD",
+    ) -> Instrument:
+        """Regulated futures contract (e.g. CME ES, NYMEX CL).
+
+        Defaults to US \u00a71256 60/40 tax treatment, the canonical regime
+        for listed/index futures. Pass ``is_section_1256=False`` for a
+        \u00a71256(d) opt-out or non-qualifying contracts.
+        """
+        return cls(
+            symbol=symbol,
+            asset_class=InstrumentAssetClass.FUTURE,
+            contract_multiplier=contract_multiplier,
+            expiry_date=expiry_date,
+            is_section_1256=is_section_1256,
+            exchange=exchange,
             currency=currency,
         )
 

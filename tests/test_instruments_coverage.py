@@ -192,3 +192,108 @@ class TestCoerce:
     def test_coerce_none(self):
         with pytest.raises(TypeError, match="cannot coerce"):
             Instrument.coerce(None)
+
+
+class TestFuturesFactory:
+    """Regulated futures contracts — data-model foundation (SEV-223+)."""
+
+    def test_future_factory_basic(self):
+        inst = Instrument.future(
+            "ES",
+            contract_multiplier=50,
+            expiry_date=date(2026, 12, 19),
+            exchange="CME",
+            currency="USD",
+        )
+        assert inst.asset_class == InstrumentAssetClass.FUTURE
+        assert inst.symbol == "ES"
+        assert inst.contract_multiplier == 50
+        assert inst.expiry_date == date(2026, 12, 19)
+        assert inst.exchange == "CME"
+        assert inst.currency == "USD"
+        # A future is a derivative.
+        assert inst.is_derivative is True
+        # uid embeds the expiry so distinct contracts never collapse.
+        assert inst.uid == "ES_20261219"
+
+    def test_future_uid_without_expiry_falls_back_to_symbol(self):
+        # No expiry or expiration → bare symbol uid (continuous/index style).
+        inst = Instrument.future("ES", contract_multiplier=50)
+        assert inst.uid == "ES"
+
+    def test_future_uid_prefers_expiry_date_over_legacy_expiration(self):
+        inst = Instrument(
+            symbol="ES",
+            asset_class=InstrumentAssetClass.FUTURE,
+            expiry_date=date(2026, 12, 19),
+            expiration=date(2025, 6, 20),
+        )
+        assert inst.uid == "ES_20261219"
+
+
+class TestFuturesFieldValidation:
+    def test_contract_multiplier_defaults_to_one(self):
+        inst = Instrument.future("ES")
+        assert inst.contract_multiplier == 1
+
+    def test_zero_contract_multiplier_rejected(self):
+        with pytest.raises((ValueError, TypeError)):
+            Instrument.future("ES", contract_multiplier=0)
+
+    def test_negative_contract_multiplier_rejected(self):
+        with pytest.raises((ValueError, TypeError)):
+            Instrument.future("ES", contract_multiplier=-50)
+
+    def test_expiry_date_is_optional(self):
+        inst = Instrument.future("ES", contract_multiplier=50)
+        assert inst.expiry_date is None
+
+
+class TestSection1256Flag:
+    def test_factory_defaults_section_1256_true(self):
+        inst = Instrument.future("ES", contract_multiplier=50)
+        assert inst.is_section_1256 is True
+
+    def test_direct_construction_auto_enables_section_1256(self):
+        # Constructing a FUTURE directly (no factory) still defaults to
+        # §1256 treatment so callers can't accidentally skip it.
+        inst = Instrument(
+            symbol="ES",
+            asset_class=InstrumentAssetClass.FUTURE,
+            contract_multiplier=50,
+        )
+        assert inst.is_section_1256 is True
+
+    def test_section_1256_opt_out_respected(self):
+        # §1256(d) opt-out (or non-qualifying contract) must survive both
+        # factory and direct construction paths.
+        via_factory = Instrument.future(
+            "ES", contract_multiplier=50, is_section_1256=False
+        )
+        assert via_factory.is_section_1256 is False
+
+        direct = Instrument(
+            symbol="ES",
+            asset_class=InstrumentAssetClass.FUTURE,
+            contract_multiplier=50,
+            is_section_1256=False,
+        )
+        assert direct.is_section_1256 is False
+
+    def test_non_future_instruments_default_section_1256_false(self):
+        assert Instrument.equity("AAPL").is_section_1256 is False
+        assert Instrument.crypto("BTC", "USDT").is_section_1256 is False
+
+    def test_future_round_trips_section_1256_flag(self):
+        inst = Instrument.future(
+            "CL",
+            contract_multiplier=1000,
+            expiry_date=date(2026, 3, 20),
+            is_section_1256=True,
+        )
+        rebuilt = Instrument.model_validate(inst.model_dump(mode="json"))
+        assert rebuilt.asset_class == InstrumentAssetClass.FUTURE
+        assert rebuilt.contract_multiplier == 1000
+        assert rebuilt.expiry_date == date(2026, 3, 20)
+        assert rebuilt.is_section_1256 is True
+        assert rebuilt.uid == inst.uid
