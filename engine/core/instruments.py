@@ -229,9 +229,7 @@ class Instrument(BaseModel):
         )
 
     @classmethod
-    def etf(
-        cls, symbol: str, *, exchange: str | None = None, currency: str = "USD"
-    ) -> Instrument:
+    def etf(cls, symbol: str, *, exchange: str | None = None, currency: str = "USD") -> Instrument:
         return cls(
             symbol=symbol,
             asset_class=InstrumentAssetClass.ETF,
@@ -240,9 +238,7 @@ class Instrument(BaseModel):
         )
 
     @classmethod
-    def crypto(
-        cls, base: str, quote: str, *, exchange: str | None = None
-    ) -> Instrument:
+    def crypto(cls, base: str, quote: str, *, exchange: str | None = None) -> Instrument:
         return cls(
             symbol=f"{base}/{quote}",
             asset_class=InstrumentAssetClass.CRYPTO,
@@ -253,9 +249,7 @@ class Instrument(BaseModel):
         )
 
     @classmethod
-    def crypto_perp(
-        cls, base: str, quote: str, *, exchange: str | None = None
-    ) -> Instrument:
+    def crypto_perp(cls, base: str, quote: str, *, exchange: str | None = None) -> Instrument:
         return cls(
             symbol=f"{base}/{quote}:PERP",
             asset_class=InstrumentAssetClass.CRYPTO_PERP,
@@ -359,7 +353,105 @@ class Instrument(BaseModel):
         raise TypeError(msg)
 
 
+class CoinInstrument(BaseModel):
+    """A single cryptocurrency coin/token as a *base asset*.
+
+    Complements :class:`Instrument`, which models tradable *pairs*
+    (e.g. ``BTC/USDT``), by describing the underlying coin itself with
+    the on-chain metadata — settlement :attr:`chain` and
+    :attr:`decimals` precision — required for custody, on-chain
+    accounting, and fee math.
+
+    ``decimals`` follows the EVM/ERC-20 convention (8 for BTC/satoshi,
+    18 for ETH/wei, 6 for USDC). ``chain`` is ``None`` when the coin is
+    chain-agnostic or its native chain is implied, otherwise it names
+    the settlement network (e.g. ``"ethereum"``, ``"bitcoin"``,
+    ``"solana"``).
+    """
+
+    model_config = {"frozen": False, "validate_assignment": True}
+
+    asset_class: InstrumentAssetClass = Field(
+        default=InstrumentAssetClass.CRYPTO,
+        description="Discriminator — always CRYPTO for a CoinInstrument.",
+    )
+    symbol: str = Field(
+        ...,
+        min_length=1,
+        description="Canonical coin ticker — e.g. 'BTC', 'ETH', 'USDC'.",
+    )
+    chain: str | None = Field(
+        default=None,
+        description=(
+            "Settlement chain — e.g. 'ethereum', 'bitcoin'. None when native or chain-agnostic."
+        ),
+    )
+    decimals: int = Field(
+        default=8,
+        ge=0,
+        description=("Smallest-unit precision: 8 (satoshi), 18 (wei), 6 (USDC)."),
+    )
+
+    @field_validator("symbol")
+    @classmethod
+    def _symbol_no_whitespace(cls, v: str) -> str:
+        if not v.strip() or v.strip() != v:
+            msg = "symbol must be non-empty and contain no leading/trailing whitespace"
+            raise ValueError(msg)
+        return v
+
+    @property
+    def smallest_unit(self) -> int:
+        """Integer factor representing one whole coin: ``10 ** decimals``.
+
+        e.g. ``10 ** 8 == 100_000_000`` satoshis per BTC.
+        """
+        return 10**self.decimals
+
+    @classmethod
+    def crypto(
+        cls,
+        symbol: str,
+        *,
+        chain: str | None = None,
+        decimals: int = 8,
+    ) -> CoinInstrument:
+        """Factory for a coin instrument with a strict string guard.
+
+        Mirrors :meth:`Instrument.future`'s input hygiene but raises
+        ``ValueError`` (not ``TypeError``) on a non-string ``symbol`` so
+        callers branching on the value-error family get a single,
+        consistent contract. Without this guard a ``None`` or ``int``
+        ``symbol`` would surface as an opaque ``AttributeError`` deep
+        inside pydantic validation.
+
+        Parameters
+        ----------
+        symbol:
+            Canonical coin ticker (e.g. ``"BTC"``).
+        chain:
+            Optional settlement chain name.
+        decimals:
+            Decimal precision; defaults to 8 (satoshi).
+
+        Examples
+        --------
+        >>> CoinInstrument.crypto("BTC", chain="bitcoin", decimals=8)
+        CoinInstrument(...)
+        """
+        if not isinstance(symbol, str):
+            # NOTE: TRY004 prefers TypeError for type guards, but this
+            # factory's input contract deliberately raises ValueError
+            # (per spec) so callers branching on the value-error family
+            # get a single, consistent contract — distinct from
+            # Instrument.future(), which raises TypeError.
+            msg = f"symbol must be a string, got {type(symbol).__name__}"
+            raise ValueError(msg)  # noqa: TRY004 - intentional value-error contract
+        return cls(symbol=symbol, chain=chain, decimals=decimals)
+
+
 __all__ = [
+    "CoinInstrument",
     "Instrument",
     "InstrumentAssetClass",
     "OptionType",

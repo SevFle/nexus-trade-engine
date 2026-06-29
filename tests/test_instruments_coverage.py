@@ -8,6 +8,7 @@ import pydantic
 import pytest
 
 from engine.core.instruments import (
+    CoinInstrument,
     Instrument,
     InstrumentAssetClass,
     OptionType,
@@ -285,9 +286,103 @@ class TestExpiryDateAlias:
         assert inst.asset_class == InstrumentAssetClass.EQUITY
 
     def test_model_instance_input_round_trips(self):
-        original = Instrument.option(
-            "AAPL", 200.0, date(2026, 6, 19), OptionType.CALL
-        )
+        original = Instrument.option("AAPL", 200.0, date(2026, 6, 19), OptionType.CALL)
         rebuilt = Instrument.model_validate(original)
         assert rebuilt.uid == original.uid
         assert rebuilt.option_type == OptionType.CALL
+
+
+class TestCoinInstrumentEnum:
+    """Enum membership: CRYPTO is present on the canonical instrument enum."""
+
+    def test_crypto_is_enum_member(self):
+        assert InstrumentAssetClass.CRYPTO in InstrumentAssetClass
+
+    def test_crypto_enum_value(self):
+        assert InstrumentAssetClass.CRYPTO.value == "crypto"
+
+    def test_coin_instrument_defaults_to_crypto_asset_class(self):
+        coin = CoinInstrument.crypto("BTC")
+        assert coin.asset_class is InstrumentAssetClass.CRYPTO
+
+
+class TestCoinInstrumentFactory:
+    """crypto() factory: valid construction + isinstance(symbol, str) guard."""
+
+    @pytest.mark.parametrize(
+        ("symbol", "chain", "decimals"),
+        [
+            ("BTC", "bitcoin", 8),
+            ("ETH", "ethereum", 18),
+            ("USDC", "ethereum", 6),
+            ("SOL", "solana", 9),
+            ("DOGE", None, 8),
+        ],
+    )
+    def test_valid_construction(self, symbol, chain, decimals):
+        coin = CoinInstrument.crypto(symbol, chain=chain, decimals=decimals)
+        assert coin.symbol == symbol
+        assert coin.chain == chain
+        assert coin.decimals == decimals
+        assert coin.asset_class == InstrumentAssetClass.CRYPTO
+
+    @pytest.mark.parametrize("bad_symbol", [None, 42, 3.14, ["BTC"], ("ETH",), {"x": 1}])
+    def test_non_string_symbol_rejected(self, bad_symbol):
+        with pytest.raises(ValueError, match="symbol must be a string"):
+            CoinInstrument.crypto(bad_symbol)
+
+    def test_int_symbol_rejected_with_explicit_message(self):
+        # The task calls out int rejection explicitly — assert the
+        # reported type name is surfaced for clear diagnostics.
+        with pytest.raises(ValueError, match="int"):
+            CoinInstrument.crypto(123)
+
+    def test_factory_chain_and_decimals_override(self):
+        coin = CoinInstrument.crypto("USDC", chain="ethereum", decimals=6)
+        assert coin.chain == "ethereum"
+        assert coin.decimals == 6
+        assert coin.smallest_unit == 1_000_000
+
+
+class TestCoinInstrumentDefaults:
+    """Field defaults: chain=None, decimals=8."""
+
+    def test_defaults_when_only_symbol_supplied(self):
+        coin = CoinInstrument.crypto("BTC")
+        assert coin.chain is None
+        assert coin.decimals == 8
+
+    def test_defaults_via_direct_construction(self):
+        coin = CoinInstrument(symbol="ETH")
+        assert coin.chain is None
+        assert coin.decimals == 8
+        assert coin.asset_class == InstrumentAssetClass.CRYPTO
+
+    def test_smallest_unit_default_decimals(self):
+        # 10 ** 8 satoshis per BTC.
+        assert CoinInstrument.crypto("BTC").smallest_unit == 100_000_000
+
+
+class TestCoinInstrumentValidation:
+    """Pydantic-level invariants on the CoinInstrument model itself."""
+
+    def test_empty_symbol_rejected(self):
+        with pytest.raises((ValueError, TypeError)):
+            CoinInstrument(symbol="")
+
+    def test_whitespace_symbol_rejected(self):
+        with pytest.raises((ValueError, TypeError)):
+            CoinInstrument(symbol="  BTC  ")
+
+    def test_negative_decimals_rejected(self):
+        with pytest.raises((ValueError, TypeError)):
+            CoinInstrument(symbol="BTC", decimals=-1)
+
+    def test_symbol_whitespace_guard_fires_via_factory(self):
+        with pytest.raises((ValueError, TypeError)):
+            CoinInstrument.crypto("   ")
+
+    def test_assignment_validates(self):
+        coin = CoinInstrument.crypto("BTC")
+        with pytest.raises((ValueError, TypeError)):
+            coin.symbol = ""
