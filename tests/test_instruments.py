@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
+import pydantic
 import pytest
 
 from engine.core.instruments import (
@@ -105,12 +106,8 @@ class TestUidUniqueness:
         assert a.uid != b.uid
 
     def test_two_options_with_different_strikes_distinct(self):
-        a = Instrument.option(
-            "AAPL", 200.0, date(2026, 6, 19), OptionType.CALL
-        )
-        b = Instrument.option(
-            "AAPL", 210.0, date(2026, 6, 19), OptionType.CALL
-        )
+        a = Instrument.option("AAPL", 200.0, date(2026, 6, 19), OptionType.CALL)
+        b = Instrument.option("AAPL", 210.0, date(2026, 6, 19), OptionType.CALL)
         assert a.uid != b.uid
 
     def test_spot_vs_perp_vs_future_uids_distinct(self):
@@ -183,9 +180,7 @@ class TestSerializationRoundtrip:
 class TestStrikeBoundary:
     def test_zero_strike_rejected(self):
         with pytest.raises((ValueError, TypeError)):
-            Instrument.option(
-                "AAPL", 0.0, date(2026, 6, 19), OptionType.CALL
-            )
+            Instrument.option("AAPL", 0.0, date(2026, 6, 19), OptionType.CALL)
 
 
 class TestInstrumentValidation:
@@ -198,20 +193,39 @@ class TestInstrumentValidation:
 
     def test_negative_strike_rejected(self):
         with pytest.raises((ValueError, TypeError)):
-            Instrument.option(
-                "AAPL", -1.0, date(2026, 6, 19), OptionType.CALL
-            )
+            Instrument.option("AAPL", -1.0, date(2026, 6, 19), OptionType.CALL)
 
 
 class TestSerialization:
     def test_round_trip_through_dict(self):
-        inst = Instrument.option(
-            "AAPL", 200.0, date(2026, 6, 19), OptionType.CALL
-        )
+        inst = Instrument.option("AAPL", 200.0, date(2026, 6, 19), OptionType.CALL)
         as_dict = inst.model_dump(mode="json")
         rebuilt = Instrument.model_validate(as_dict)
         assert rebuilt.uid == inst.uid
         assert rebuilt.option_type == OptionType.CALL
+
+
+class TestModelCopyRevalidates:
+    def test_model_copy_reruns_all_validators(self):
+        # Pydantic's default ``model_copy`` bypasses validation: it pokes
+        # the ``update`` values straight into __dict__, so a whitespace-
+        # laden symbol would sneak through. The override merges the
+        # update with ``model_dump()`` and rebuilds via
+        # ``model_validate``, re-running every validator — so the bad
+        # update is rejected exactly as ``Instrument.equity(" x ")`` is.
+        inst = Instrument.equity("AAPL")
+        with pytest.raises((ValueError, pydantic.ValidationError)):
+            inst.model_copy(update={"symbol": " x "})
+
+        # A valid update still round-trips and the original is untouched.
+        copy = inst.model_copy(update={"symbol": "MSFT"})
+        assert copy.symbol == "MSFT"
+        assert copy.uid == "MSFT"
+        assert inst.symbol == "AAPL"
+
+        # No-arg copy keeps the fast parent path (distinct instance).
+        assert inst.model_copy() is not inst
+        assert inst.model_copy().symbol == "AAPL"
 
 
 class TestFromString:
