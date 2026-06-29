@@ -574,6 +574,113 @@ class TestStrategyTimeout:
             StrategyOrchestrator(eval_timeout="soon")  # type: ignore[arg-type]
 
 
+# ---------------------------------------------------------------------
+# Evaluate-dispatch regression guard
+# ---------------------------------------------------------------------
+
+
+class TestAwaitableReturnRegression:
+    """Regression guard for the evaluate dispatch.
+
+    The dispatch must decide whether to await the *return value* of
+    ``evaluate`` via ``inspect.isawaitable`` rather than whether
+    ``evaluate`` was declared ``async`` (``inspect.iscoroutinefunction``).
+
+    A class can expose a *sync* ``evaluate`` that returns a coroutine
+    produced by another async helper (a common pattern when a strategy
+    adapts a third-party async callable, or wraps ``asyncio.to_thread``).
+    The orchestrator must still await the returned value, otherwise it
+    would treat the live coroutine object as the signal list and crash
+    with ``TypeError: cannot 'coroutine' object is not iterable`` (or
+    worse, silently emit garbage). This is exactly the case the older
+    ``iscoroutinefunction``-based dispatch mishandled.
+    """
+
+    async def test_sync_method_returning_awaitable_is_awaited(self):
+        # ``evaluate`` is a plain ``def`` (NOT ``async def``) but returns a
+        # coroutine. ``iscoroutinefunction`` would report False here and
+        # the old code path would never await the result.
+        class _AwaitableReturningStrategy:
+            id = "awaitable"
+
+            def evaluate(self, market_data, cost_model):  # not async def
+                async def _impl():
+                    return [_sig("AAPL", Side.BUY, "awaitable")]
+
+                return _impl()
+
+        orch = StrategyOrchestrator()
+        orch.register(_AwaitableReturningStrategy())
+
+        result = await orch.evaluate_all(_MARKET, _COSTS)
+
+        # The coroutine was awaited and its signals captured, not treated
+        # as a bare list.
+        assert [b.strategy_id for b in result.batches] == ["awaitable"]
+        assert len(result.batches[0].signals) == 1
+        assert result.batches[0].signals[0].side == Side.BUY
+        assert result.signals[0].symbol == "AAPL"
+        assert result.signals[0].side == Side.BUY
+
+    async def test_returned_awaitable_is_bounded_by_timeout(self):
+        # The awaitable returned by a sync evaluate must still be subject
+        # to the per-strategy timeout: it is cancelled and recorded as a
+        # TimeoutError error entry, and the remaining strategies still
+        # contribute. This proves the timeout covers the awaitable result,
+        # not just the synchronous call frame.
+        class _SlowAwaitableStrategy:
+            id = "slow-awaitable"
+
+            def evaluate(self, market_data, cost_model):  # not async def
+                async def _impl():
+                    # Far beyond the 0.05s cap; wait_for cancels us.
+                    await asyncio.sleep(5.0)
+                    return [_sig("AAPL", Side.BUY, "slow-awaitable")]
+
+                return _impl()
+
+        orch = StrategyOrchestrator(eval_timeout=0.05)
+        orch.register(_SlowAwaitableStrategy())
+        orch.register(_RecordingStrategy("good", [_sig("AAPL", Side.BUY, "good")]))
+
+        result = await orch.evaluate_all(_MARKET, _COSTS)
+
+        assert "slow-awaitable" in result.errors
+        assert "TimeoutError" in result.errors["slow-awaitable"]
+        assert [b.strategy_id for b in result.batches] == ["good"]
+        assert result.signals[0].side == Side.BUY
+
+    async def test_mixed_sync_async_and_awaitable_strategies(self):
+        # All three dispatch shapes coexist in a single cycle: a plain
+        # sync ``evaluate`` returning a list, an ``async def evaluate``
+        # returning a coroutine, and a sync ``evaluate`` returning an
+        # awaitable. Each must contribute its signals correctly.
+        class _AwaitableStrategy:
+            id = "awaits"
+
+            def evaluate(self, market_data, cost_model):
+                async def _impl():
+                    return [_sig("AAPL", Side.BUY, "awaits")]
+
+                return _impl()
+
+        orch = StrategyOrchestrator()
+        orch.register(_SyncStrategy("sync", [_sig("AAPL", Side.BUY, "sync")]))
+        orch.register(_RecordingStrategy("async", [_sig("AAPL", Side.BUY, "async")]))
+        orch.register(_AwaitableStrategy())
+
+        result = await orch.evaluate_all(_MARKET, _COSTS)
+
+        assert result.errors == {}
+        assert {b.strategy_id for b in result.batches} == {
+            "sync",
+            "async",
+            "awaits",
+        }
+        # 3 BUY votes -> unanimous BUY.
+        assert result.signals[0].side == Side.BUY
+
+
 class TestMutationIsolation:
     async def test_each_strategy_receives_its_own_deep_copy(self):
         # A strategy that mutates the market_data / cost_model handed to
