@@ -228,6 +228,85 @@ class TestModelCopyRevalidates:
         assert inst.model_copy().symbol == "AAPL"
 
 
+class TestModelCopyDeepIsolatesNestedMutables:
+    """``model_copy(update=..., deep=True)`` must yield fully independent
+    nested mutable values.
+
+    The override's update branch rebuilds via ``model_validate``. That
+    re-runs the field validators, but for nested mutables it cannot
+    reach into (custom/arbitrary types especially) pydantic passes the
+    *same* object reference through, so the copy and the original would
+    share the mutable and a mutation in one would leak into the other.
+    ``deep=True`` promises a truly independent copy, so the merged
+    payload is deep-copied before validation.
+    """
+
+    @staticmethod
+    def _mutable_model():
+        # A nested mutable type that pydantic treats as an arbitrary
+        # type and therefore passes *by reference* during validation —
+        # this is the field shape that makes the deep-copy contract
+        # observable (pydantic deep-copies plain lists/dicts itself, so
+        # those don't surface the bug).
+        class Notes:
+            def __init__(self, items):
+                self.items = list(items)
+
+        class TaggedInstrument(Instrument):
+            # Subclasses inherit Instrument.model_config (validate_assignment,
+            # frozen=False); we only add the opt-in needed to accept the
+            # custom ``Notes`` type, which pydantic then passes *by
+            # reference* during validation — the field shape that makes
+            # the deep-copy contract observable.
+            model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+            notes: Notes | None = None
+
+        return TaggedInstrument, Notes
+
+    def test_deep_copy_update_does_not_share_nested_mutable(self):
+        TaggedInstrument, _Notes = self._mutable_model()
+        orig = TaggedInstrument(
+            symbol="AAPL",
+            asset_class=InstrumentAssetClass.EQUITY,
+            notes=_Notes(["a", "b"]),
+        )
+
+        copy = orig.model_copy(update={"symbol": "MSFT"}, deep=True)
+
+        # The nested mutable is a distinct object — not the original's.
+        assert copy.notes is not orig.notes
+
+    def test_mutating_deep_copy_does_not_leak_into_original(self):
+        TaggedInstrument, _Notes = self._mutable_model()
+        orig = TaggedInstrument(
+            symbol="AAPL",
+            asset_class=InstrumentAssetClass.EQUITY,
+            notes=_Notes(["a", "b"]),
+        )
+
+        copy = orig.model_copy(update={"symbol": "MSFT"}, deep=True)
+        copy.notes.items.append("MUT")
+
+        # Original is untouched even after mutating the copy's nested mutable.
+        assert orig.notes.items == ["a", "b"]
+        assert copy.notes.items == ["a", "b", "MUT"]
+
+    def test_deep_copy_update_still_revalidates_and_applies_update(self):
+        inst = Instrument.equity("AAPL")
+        deep_copy = inst.model_copy(update={"symbol": "MSFT"}, deep=True)
+
+        assert deep_copy.symbol == "MSFT"
+        assert deep_copy.uid == "MSFT"
+        assert inst.symbol == "AAPL"  # original untouched
+
+    def test_deep_copy_update_re_runs_validators(self):
+        # deep=True must not short-circuit revalidation: a bad update is
+        # rejected just like the deep=False / plain update path.
+        inst = Instrument.equity("AAPL")
+        with pytest.raises((ValueError, pydantic.ValidationError)):
+            inst.model_copy(update={"symbol": " x "}, deep=True)
+
+
 class TestFromString:
     def test_from_string_equity(self):
         inst = Instrument.from_string("AAPL")

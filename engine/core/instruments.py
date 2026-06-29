@@ -18,6 +18,7 @@ evolves independently from the instrument taxonomy (what the engine
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Mapping  # noqa: TC003
 from datetime import date  # noqa: TC003 - needed at runtime by pydantic
 from enum import StrEnum
@@ -200,6 +201,16 @@ class Instrument(BaseModel):
         if not update:
             return super().model_copy(update=update, deep=deep)
         merged: dict[str, Any] = {**self.model_dump(), **update}
+        if deep:
+            # ``model_validate`` only re-runs the field validators; for
+            # nested mutable values it cannot reach into (custom/
+            # arbitrary types, or collections pydantic copies by default
+            # today but is free to stop copying tomorrow) it passes the
+            # *same* object reference through. ``deep=True`` promises a
+            # fully independent copy, so deep-copy the merged payload
+            # before validation — this is what makes the contract hold
+            # for every field type, not just the scalar ones above.
+            merged = copy.deepcopy(merged)
         return type(self).model_validate(merged)
 
     # ── Derived properties ───────────────────────────────────────────
