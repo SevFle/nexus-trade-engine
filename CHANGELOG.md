@@ -13,6 +13,7 @@ edit this file by hand — it is regenerated as part of every release PR.
 ## [Unreleased]
 
 ### Fixed
+- (fix) Fix `_auto_section_1256` guard in `engine/core/instruments.py`: the auto-detection condition checked field presence (`'is_section_1256' not in self.model_fields_set`) instead of the value, so explicitly passing `None` bypassed auto-detection. Changed to check `if self.is_section_1256 is None` so explicit `None` triggers auto-detection correctly.
 - (fix) Fix check ordering in `engine/core/execution/live.py` `execute()` and the two failing tests in `tests/test_execution_backends.py`
 
 ### Internal

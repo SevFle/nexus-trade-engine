@@ -227,3 +227,170 @@ class TestFromString:
     def test_from_string_forex_short_pair_does_not_crash(self):
         inst = Instrument.from_string("EUR/USD")
         assert inst.symbol == "EUR/USD"
+
+
+class TestFutureFactory:
+    """The future() factory sets multiplier to the contract size and
+    classifies as a derivative — there is no separate contract_multiplier."""
+
+    def test_es_contract_size_defaults_multiplier_to_50(self):
+        inst = Instrument.future("ES", expiration=date(2026, 12, 19))
+        assert inst.asset_class == InstrumentAssetClass.FUTURE
+        assert inst.multiplier == 50  # $50 x index, the ES contract size
+        assert inst.expiration == date(2026, 12, 19)
+        assert inst.is_derivative is True
+        assert inst.uid == "ES_20261219"
+
+    def test_known_contract_sizes(self):
+        assert Instrument.future("NQ").multiplier == 20
+        assert Instrument.future("CL").multiplier == 1000
+        assert Instrument.future("GC").multiplier == 100
+
+    def test_unknown_symbol_defaults_multiplier_to_one(self):
+        inst = Instrument.future("WIDGET")
+        assert inst.multiplier == 1
+
+    def test_explicit_multiplier_overrides_contract_size(self):
+        inst = Instrument.future("ES", multiplier=500)
+        assert inst.multiplier == 500
+
+    def test_no_contract_multiplier_field_exists(self):
+        # The refactor removed contract_multiplier in favour of multiplier.
+        assert "contract_multiplier" not in Instrument.model_fields
+        inst = Instrument.future("ES")
+        assert not hasattr(inst, "contract_multiplier")
+
+    def test_case_insensitive_symbol_lookup(self):
+        assert Instrument.future("es").multiplier == 50
+
+
+class TestSection1256AutoDetection:
+    """is_section_1256 defaults to None and is auto-set from its value."""
+
+    def test_future_auto_detected_via_factory(self):
+        # Factory omits the kwarg -> validator auto-detects True for futures.
+        inst = Instrument.future("ES")
+        assert inst.is_section_1256 is True
+
+    def test_future_auto_detected_via_direct_construction(self):
+        inst = Instrument(
+            symbol="NQ",
+            asset_class=InstrumentAssetClass.FUTURE,
+        )
+        assert inst.is_section_1256 is True
+
+    def test_future_explicit_none_still_auto_detects_true(self):
+        # Regression: an explicit is_section_1256=None must auto-detect to
+        # True for futures. A field-presence check (model_fields_set) would
+        # wrongly leave it as None because the key *is* present; the
+        # value check (self.is_section_1256 is None) resolves it correctly.
+        inst = Instrument(
+            symbol="ES",
+            asset_class=InstrumentAssetClass.FUTURE,
+            is_section_1256=None,
+        )
+        assert inst.is_section_1256 is True
+
+    def test_factory_explicit_none_still_auto_detects_true(self):
+        # Same regression through the future() factory passthrough.
+        inst = Instrument.future("ES", is_section_1256=None)
+        assert inst.is_section_1256 is True
+
+    def test_non_future_auto_detected_false(self):
+        assert Instrument.equity("AAPL").is_section_1256 is False
+        assert Instrument.etf("SPY").is_section_1256 is False
+        assert Instrument.crypto("BTC", "USDT").is_section_1256 is False
+        assert Instrument.option(
+            "AAPL", 200.0, date(2026, 6, 19), OptionType.CALL
+        ).is_section_1256 is False
+
+    def test_factory_explicit_override_respected(self):
+        inst = Instrument.future("ES", is_section_1256=False)
+        assert inst.is_section_1256 is False
+
+    def test_direct_explicit_override_respected(self):
+        inst = Instrument(
+            symbol="ES",
+            asset_class=InstrumentAssetClass.FUTURE,
+            is_section_1256=False,
+        )
+        assert inst.is_section_1256 is False
+
+    def test_default_field_value_is_none_before_construction(self):
+        # The field's declared default is None (auto-detect sentinel).
+        assert Instrument.model_fields["is_section_1256"].default is None
+
+
+class TestNoDuplicateFields:
+    """Guards against re-introducing the removed duplicate fields."""
+
+    def test_no_expiry_date_field(self):
+        assert "expiry_date" not in Instrument.model_fields
+
+    def test_no_contract_multiplier_field(self):
+        assert "contract_multiplier" not in Instrument.model_fields
+
+    def test_single_canonical_date_and_size_fields(self):
+        # expiration and multiplier are the only canonical fields for these.
+        assert "expiration" in Instrument.model_fields
+        assert "multiplier" in Instrument.model_fields
+
+
+class TestExpiryDateAlias:
+    """expiration is canonical; a conflicting expiry_date must raise."""
+
+    def test_conflicting_dates_raise(self):
+        with pytest.raises(ValueError, match="expiry_date"):
+            Instrument(
+                symbol="ES",
+                asset_class=InstrumentAssetClass.FUTURE,
+                expiration=date(2026, 12, 19),
+                expiry_date=date(2026, 6, 19),
+            )
+
+    def test_conflicting_dates_raise_via_validate(self):
+        with pytest.raises(ValueError, match="expiration"):
+            Instrument.model_validate(
+                {
+                    "symbol": "ES",
+                    "asset_class": "future",
+                    "expiration": "2026-12-19",
+                    "expiry_date": "2026-06-19",
+                }
+            )
+
+    def test_equal_dates_tolerated_and_expiration_kept(self):
+        # Legacy callers passing the same value on both keys stay compatible.
+        inst = Instrument.model_validate(
+            {
+                "symbol": "ES",
+                "asset_class": "future",
+                "expiration": "2026-12-19",
+                "expiry_date": "2026-12-19",
+            }
+        )
+        assert inst.expiration == date(2026, 12, 19)
+        # expiry_date is not a field, so it never lands on the instance.
+        assert not hasattr(inst, "expiry_date")
+
+    def test_expiry_date_alone_is_ignored_not_stored(self):
+        # expiration stays canonical: passing only the alias is a no-op.
+        inst = Instrument.model_validate(
+            {
+                "symbol": "ES",
+                "asset_class": "future",
+                "expiry_date": "2026-12-19",
+            }
+        )
+        assert inst.expiration is None
+        assert not hasattr(inst, "expiry_date")
+
+
+class TestFutureSerialization:
+    def test_future_round_trips_through_dict(self):
+        inst = Instrument.future("ES", expiration=date(2026, 12, 19))
+        rebuilt = Instrument.model_validate(inst.model_dump(mode="json"))
+        assert rebuilt.asset_class == InstrumentAssetClass.FUTURE
+        assert rebuilt.multiplier == 50
+        assert rebuilt.is_section_1256 is True
+        assert rebuilt.uid == inst.uid
