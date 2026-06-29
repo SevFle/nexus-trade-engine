@@ -80,6 +80,30 @@ _DERIVATIVE_CLASSES = frozenset(
     }
 )
 
+# Asset classes that are US Section 1256 contracts by default (60/40 tax
+# treatment). Used by the auto-detecting ``is_section_1256`` validator when
+# the caller does not state an explicit value.
+_SECTION_1256_CLASSES = frozenset({InstrumentAssetClass.FUTURE})
+
+# Well-known exchange-traded futures contract sizes (units per contract).
+# Used by :meth:`Instrument.future` to default ``multiplier`` from the
+# symbol, mirroring how ``multiplier`` already encodes "size per contract"
+# for options (e.g. 100 shares). There is deliberately NO separate
+# ``contract_multiplier`` field — ``multiplier`` is the single canonical
+# representation of "units per contract" for every asset class.
+_FUTURE_CONTRACT_SIZES: dict[str, int] = {
+    "ES": 50,  # CME E-mini S&P 500 — $50 x index
+    "NQ": 20,  # CME E-mini Nasdaq-100 — $20 x index
+    "YM": 5,  # CBOT E-mini Dow — $5 x index
+    "RTY": 50,  # CME E-mini Russell 2000 — $50 x index
+    "CL": 1000,  # NYMEX WTI crude — 1 000 barrels
+    "GC": 100,  # COMEX gold — 100 troy oz
+    "SI": 5000,  # COMEX silver — 5 000 troy oz
+    "ZC": 5000,  # CBOT corn — 5 000 bushels
+    "ZS": 5000,  # CBOT soybeans — 5 000 bushels
+    "ZN": 1000,  # CBOT 10-Year Treasury — $1 000 face
+}
+
 
 class Instrument(BaseModel):
     """Canonical, typed representation of any tradable instrument."""
@@ -111,7 +135,16 @@ class Instrument(BaseModel):
     strike: float | None = Field(default=None, gt=0.0)
     expiration: date | None = Field(default=None)
     option_type: OptionType | None = Field(default=None)
-    multiplier: int = Field(default=1, ge=1)
+    multiplier: int = Field(default=1, ge=1, description="Units per contract")
+
+    # Tax classification (US Section 1256 — 60/40 treatment). A ``None``
+    # input means "auto-detect"; the ``_auto_section_1256`` model validator
+    # resolves it to a concrete bool at construction time based on the asset
+    # class. Callers may override by passing an explicit ``True``/``False``.
+    is_section_1256: bool | None = Field(
+        default=None,
+        description="US 60/40 tax-treatment flag; auto-detected when omitted",
+    )
 
     @field_validator("symbol")
     @classmethod
@@ -120,6 +153,28 @@ class Instrument(BaseModel):
             msg = "symbol must be non-empty and contain no leading/trailing whitespace"
             raise ValueError(msg)
         return v
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_expiry_date_alias(cls, data: Any) -> Any:
+        """Keep ``expiration`` canonical.
+
+        ``expiry_date`` is intentionally NOT a model field (no duplicate
+        date fields). If a caller nonetheless supplies both ``expiry_date``
+        and ``expiration`` with *differing* values we fail loudly rather
+        than silently dropping one. Equal values are tolerated (and the
+        alias is discarded) so that legacy callers stay compatible.
+        """
+        if isinstance(data, dict):
+            expiry = data.get("expiry_date")
+            expiration = data.get("expiration")
+            if expiry is not None and expiration is not None and expiry != expiration:
+                msg = (
+                    "Both 'expiry_date' and 'expiration' were provided with "
+                    "differing values; set only 'expiration' (the canonical field)."
+                )
+                raise ValueError(msg)
+        return data
 
     @model_validator(mode="after")
     def _enforce_class_invariants(self) -> Instrument:
@@ -148,6 +203,25 @@ class Instrument(BaseModel):
                     raise ValueError(msg)
             case _:
                 pass
+        return self
+
+    @model_validator(mode="after")
+    def _auto_section_1256(self) -> Instrument:
+        """Auto-set ``is_section_1256`` when the caller omitted it.
+
+        Detection is driven by ``model_fields_set`` so that an explicit
+        caller value (including the ``future()`` factory passing through an
+        override) is always honoured, while an omitted value is resolved
+        from the asset class. ``object.__setattr__`` is used because the
+        model has ``validate_assignment=True`` and a plain assignment would
+        re-run every model validator.
+        """
+        if "is_section_1256" not in self.model_fields_set:
+            object.__setattr__(
+                self,
+                "is_section_1256",
+                self.asset_class in _SECTION_1256_CLASSES,
+            )
         return self
 
     # ── Derived properties ───────────────────────────────────────────
@@ -215,6 +289,41 @@ class Instrument(BaseModel):
             exchange=exchange,
             currency=currency,
         )
+
+    @classmethod
+    def future(
+        cls,
+        symbol: str,
+        *,
+        expiration: date | None = None,
+        exchange: str | None = None,
+        currency: str = "USD",
+        multiplier: int | None = None,
+        is_section_1256: bool | None = None,
+    ) -> Instrument:
+        """Exchange-traded future.
+
+        ``multiplier`` defaults to the contract size for well-known symbols
+        (e.g. 50 for ES). Pass ``is_section_1256=None`` (the default) to let
+        the model auto-detect the 60/40 flag — when omitted from the
+        constructor kwargs the validator resolves it from the asset class.
+        """
+        size = (
+            multiplier
+            if multiplier is not None
+            else _FUTURE_CONTRACT_SIZES.get(symbol.upper(), 1)
+        )
+        kwargs: dict[str, Any] = {
+            "symbol": symbol,
+            "asset_class": InstrumentAssetClass.FUTURE,
+            "expiration": expiration,
+            "exchange": exchange,
+            "currency": currency,
+            "multiplier": size,
+        }
+        if is_section_1256 is not None:
+            kwargs["is_section_1256"] = is_section_1256
+        return cls(**kwargs)
 
     @classmethod
     def crypto(
