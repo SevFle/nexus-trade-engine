@@ -33,7 +33,7 @@ import structlog
 from engine.api.websocket.manager import Topic
 
 if TYPE_CHECKING:
-    from engine.api.websocket.manager import ConnectionManager
+    from engine.api.websocket.manager import UserTopicManager
     from engine.events.bus import EventBus, EventType
 
 
@@ -94,7 +94,7 @@ class EventToWebSocketBridge:
         self,
         *,
         bus: EventBus,
-        manager: ConnectionManager,
+        manager: UserTopicManager,
     ) -> None:
         self._bus = bus
         self._manager = manager
