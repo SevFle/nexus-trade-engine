@@ -260,9 +260,7 @@ class ConnectionManager:
         try:
             await ws.send_json(message)
         except WebSocketDisconnect:
-            logger.info(
-                "ws.send_disconnected", connection_id=connection_id
-            )
+            logger.info("ws.send_disconnected", connection_id=connection_id)
             return False
         except Exception as exc:
             logger.warning(
@@ -272,6 +270,7 @@ class ConnectionManager:
                 error_message=str(exc)[:200],
             )
             return False
+        return True
 
     async def _cleanup_failed(self, connection_ids: list[str]) -> None:
         """Detach every id whose send failed and prune their memberships."""
@@ -313,9 +312,7 @@ class ConnectionManager:
 
     def get_subscriptions(self, connection_id: str) -> frozenset[str]:
         return frozenset(
-            ch
-            for ch, members in self.channel_subscriptions.items()
-            if connection_id in members
+            ch for ch, members in self.channel_subscriptions.items() if connection_id in members
         )
 
 
@@ -368,9 +365,7 @@ class UserTopicManager:
     # Subscriptions
     # ------------------------------------------------------------------
 
-    async def subscribe(
-        self, user_id: uuid.UUID, ws: WebSocket, topics: list[str]
-    ) -> set[str]:
+    async def subscribe(self, user_id: uuid.UUID, ws: WebSocket, topics: list[str]) -> set[str]:
         """Add ``topics`` to this connection's subscription set.
 
         Unknown topics are silently dropped — the route handler is
@@ -385,9 +380,7 @@ class UserTopicManager:
             user_conns[ws] |= valid
             return set(user_conns[ws])
 
-    async def unsubscribe(
-        self, user_id: uuid.UUID, ws: WebSocket, topics: list[str]
-    ) -> set[str]:
+    async def unsubscribe(self, user_id: uuid.UUID, ws: WebSocket, topics: list[str]) -> set[str]:
         async with self._lock:
             user_conns = self._conns.get(user_id)
             if user_conns is None or ws not in user_conns:
