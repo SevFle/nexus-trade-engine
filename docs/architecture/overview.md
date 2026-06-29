@@ -11,6 +11,8 @@ flows through them.
 ```mermaid
 flowchart LR
     FE["React frontend<br/>(frontend/)"] -->|HTTPS · JSON · WS| API
+    AGENT["LLM agent<br/>(MCP client)"] -.->|JSON-RPC<br/>stdio / HTTP| MCP["engine/mcp/<br/>tools · resources"]
+    MCP -.->|backtest · cost model| CORE
     subgraph engine["engine/ (FastAPI app)"]
         API["api/<br/>routers · auth · WS"]
         CORE["core/<br/>backtest · OMS · risk"]
@@ -70,6 +72,7 @@ React app under `frontend/`.
 | [`engine/data/`](../../engine/data/)              | Market data providers and the registry that picks one at runtime. |
 | [`engine/db/`](../../engine/db/)                  | SQLAlchemy models, async session factory, Alembic migrations. |
 | [`engine/events/`](../../engine/events/)          | Event bus + outbound webhook dispatcher (gh#80). |
+| [`engine/mcp/`](../../engine/mcp/)                  | Model Context Protocol server: exposes a read-only tool/resource surface to LLM agents over stdio or HTTP. Not mounted in the FastAPI app — it runs as a separate process. See [mcp-server.md](../mcp-server.md). |
 | [`engine/observability/`](../../engine/observability/) | Structlog wiring, lineage middleware, pluggable metrics backend (gh#34). |
 | [`engine/plugins/`](../../engine/plugins/)        | Plugin SDK and runtime registry. See [plugins.md](plugins.md). |
 | [`engine/tasks/`](../../engine/tasks/)            | TaskIQ worker definitions for async work (backtests, scheduled jobs). |
@@ -167,6 +170,7 @@ without reading the source.
 | Adding…                               | Goes in                                         |
 |---------------------------------------|--------------------------------------------------|
 | A new HTTP endpoint                   | `engine/api/routes/<area>.py`, registered in `engine/api/router.py` |
+| A new MCP tool / resource             | `engine/mcp/tool_definitions.py` (+ adapter in `engine/mcp/adapters/`); see [mcp-server.md](../mcp-server.md) |
 | A new background job                  | `engine/tasks/`                                  |
 | A new strategy / data provider / executor | A strategy package under [`strategies/<name>/`](../../strategies/) (manifest + `strategy.py`); a data provider via `engine/data/providers/` + the YAML registry. See [plugins.md](plugins.md). |
 | A new outbound integration (webhook template) | Extend [`engine/events/webhook_dispatcher.py:render_template`](../../engine/events/webhook_dispatcher.py) and the `_VALID_TEMPLATES` set in `routes/webhooks.py`. |

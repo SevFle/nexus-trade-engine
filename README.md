@@ -138,6 +138,8 @@ key entry points:
   components, request lifecycle, configuration.
 - [API reference](docs/api-reference.md) — every HTTP and WebSocket
   route, auth model, error semantics.
+- [MCP server](docs/mcp-server.md) — the Model Context Protocol surface
+  for LLM agents (tools, resources, auth, config).
 - [Data model](docs/data-model.md) — entities, relationships,
   invariants.
 - [Development setup](docs/development.md) — local stack, tests,
@@ -185,6 +187,10 @@ on the public API surface or not production-validated.
 - [~] WebSocket real-time streams *(partial — see
       [known-limitations](docs/known-limitations.md): connection registry
       is process-local)*
+- [~] MCP server *(partial — tools, resources, and auth are implemented
+      in [`engine/mcp/`](docs/mcp-server.md); the runnable transport entry
+      point (`server.py`) is not yet on disk, so the surface cannot be
+      started today)*
 - [ ] React dashboard MVP *(missing)*
 - [ ] Observability export *(OpenTelemetry/Prometheus/Sentry wired but
       SLI metric coverage incomplete — see [SLO doc](docs/operations/slos.md))*
