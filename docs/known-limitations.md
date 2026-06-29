@@ -151,6 +151,53 @@ not depend on the worker process for backtest isolation today.
 
 ---
 
+<a id="mcp"></a>
+## P1 — MCP server is a library, not a runnable process
+
+**Where**: [`engine/mcp/`](../engine/mcp/)
+
+The MCP module ships every component an MCP server needs — declarative
+[`tool_definitions.py`](../engine/mcp/tool_definitions.py) (9 tools),
+[`handlers.py`](../engine/mcp/handlers.py) dispatch with schema validation +
+cursor pagination + result-size guards, [`auth.py`](../engine/mcp/auth.py)
+(JWT + static API-key table, reusing the REST `ROLE_HIERARCHY`), a
+per-principal [`rate_limiter.py`](../engine/mcp/rate_limiter.py),
+[`resources.py`](../engine/mcp/resources.py), [`config.py`](../engine/mcp/config.py)
+under the `NEXUS_MCP_` prefix, and [`observability.py`](../engine/mcp/observability.py).
+
+What is **missing** is the transport-binding entry point
+`engine/mcp/server.py` — the module that instantiates the `mcp.server`
+`Server`, wires `tools/list` · `tools/call` · `resources/list` ·
+`resources/read` to `dispatch_tool` / `read_resource` / `list_resources`,
+threads `extract_principal` + `RateLimiter` through every call, and runs
+the `stdio`/`http` transport. There is no `Server(...)` instantiation,
+no `__main__`, and no `[project.scripts]` entry anywhere in the repo.
+`pyproject.toml` still references the file
+(`"engine/mcp/server.py" = ["PLR0911"]`), which is why CI/lint expect
+it.
+
+**Impact**: the MCP surface cannot be started today. The tool/resource/
+auth contract is implemented and unit-tested, but no client (Claude
+Desktop, a custom agent, …) can connect to it. `.env.example` also does
+not list the `NEXUS_MCP_*` vars, so operators have no inventory of the
+knobs without reading [`config.py`](../engine/mcp/config.py).
+
+**Workaround today**: none at runtime. To exercise the components,
+instantiate `EngineServices` (online or `for_testing`) and call
+`dispatch_tool(...)` / `read_resource(...)` directly from a script or
+test — exactly what [`tests/mcp/`](../tests/mcp/) does. See
+[`mcp-server.md`](mcp-server.md) for the contract a future `server.py`
+must bind.
+
+**Fix path**: write `engine/mcp/server.py` that binds the transport to
+the existing `dispatch_tool` / `read_resource` / `extract_principal` /
+`RateLimiter`, add a `[project.scripts]` entry (e.g.
+`nexus-mcp = engine.mcp.server:main`), and add the `NEXUS_MCP_*` block
+to `.env.example` in the same PR. The PLR0911 ignore already in
+`pyproject.toml` anticipates the multi-branch transport dispatcher.
+
+---
+
 ## P2 — Per-route ignore list in `pyproject.toml` is large
 
 **Where**: [`pyproject.toml`](../pyproject.toml) lines 73–130.
