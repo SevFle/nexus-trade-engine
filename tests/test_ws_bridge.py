@@ -11,7 +11,7 @@ from engine.api.websocket.bridge import (
     extract_user_id,
     topic_for_event_type,
 )
-from engine.api.websocket.manager import ConnectionManager, Topic
+from engine.api.websocket.manager import Topic, UserTopicManager
 
 # ---------------------------------------------------------------------------
 # topic_for_event_type
@@ -111,7 +111,7 @@ class _FakeWS:
 @pytest.fixture
 async def setup():
     bus = _FakeBus()
-    manager = ConnectionManager()
+    manager = UserTopicManager()
     bridge = EventToWebSocketBridge(bus=bus, manager=manager)
     bridge.attach(["order.filled", "portfolio.updated"])
     return bus, manager, bridge

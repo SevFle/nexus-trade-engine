@@ -8,8 +8,8 @@ import pytest
 
 from engine.api.websocket.manager import (
     VALID_TOPICS,
-    ConnectionManager,
     Topic,
+    UserTopicManager,
     get_manager,
 )
 
@@ -36,8 +36,8 @@ class _FakeWS:
 
 
 @pytest.fixture
-def manager() -> ConnectionManager:
-    return ConnectionManager()
+def manager() -> UserTopicManager:
+    return UserTopicManager()
 
 
 @pytest.fixture
