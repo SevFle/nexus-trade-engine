@@ -69,6 +69,9 @@ React app under `frontend/`.
 | [`engine/config.py`](../../engine/config.py)      | Pydantic settings — every env var the engine reads lives here. |
 | [`engine/api/`](../../engine/api/)                | HTTP/WebSocket surface: routers, auth, rate limiting, error mapping. |
 | [`engine/core/`](../../engine/core/)              | Domain logic: backtest runner, strategy evaluator, execution primitives. |
+| [`engine/core/brokers/`](../../engine/core/brokers/)  | Broker adapters: `BrokerAdapter`/`BrokerClient` Protocols, Alpaca + Paper implementations, registry. See [brokers-and-live-trading.md](brokers-and-live-trading.md). |
+| [`engine/core/oms/`](../../engine/core/oms/)          | Order state machine: statuses, events, the `Order` aggregate, pre-flight risk gate. See [brokers-and-live-trading.md](brokers-and-live-trading.md). |
+| [`engine/core/live/`](../../engine/core/live/)        | `LiveLoop` driver + global kill-switch. Not yet bound to a run route. See [brokers-and-live-trading.md](brokers-and-live-trading.md). |
 | [`engine/data/`](../../engine/data/)              | Market data providers and the registry that picks one at runtime. |
 | [`engine/db/`](../../engine/db/)                  | SQLAlchemy models, async session factory, Alembic migrations. |
 | [`engine/events/`](../../engine/events/)          | Event bus + outbound webhook dispatcher (gh#80). |
@@ -174,6 +177,7 @@ without reading the source.
 | A new background job                  | `engine/tasks/`                                  |
 | A new strategy / data provider / executor | A strategy package under [`strategies/<name>/`](../../strategies/) (manifest + `strategy.py`); a data provider via `engine/data/providers/` + the YAML registry. See [plugins.md](plugins.md). |
 | A new outbound integration (webhook template) | Extend [`engine/events/webhook_dispatcher.py:render_template`](../../engine/events/webhook_dispatcher.py) and the `_VALID_TEMPLATES` set in `routes/webhooks.py`. |
+| A new broker integration              | A `BrokerClient` + `BrokerAdapter` under `engine/core/brokers/<name>/`, registered via `register_broker`. See [brokers-and-live-trading.md](brokers-and-live-trading.md). |
 | A new database table / column         | An Alembic revision in `engine/db/migrations/versions/`. See [database.md](database.md). |
 | A new metric                          | Use `get_metrics()` from `engine/observability/metrics.py`. Add it to [`docs/operations/slos.md`](../operations/slos.md) **only** if it backs an SLO. |
 | A new SLO                             | [`docs/operations/slos.md`](../operations/slos.md) and [`observability/prometheus/slo-rules.yaml`](../../observability/prometheus/slo-rules.yaml) in the same PR. |

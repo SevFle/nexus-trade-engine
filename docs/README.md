@@ -34,6 +34,7 @@ we explain *why*, not *what*.
 | If you want to… | Read this |
 |------------------|-----------|
 | Get a 10-minute mental model of the system | [`architecture/overview.md`](architecture/overview.md) |
+| Understand the live-trading stack (brokers / OMS / loop) | [`architecture/brokers-and-live-trading.md`](architecture/brokers-and-live-trading.md) |
 | Understand every table and its constraints | [`data-model.md`](data-model.md) |
 | Call the REST / WebSocket API | [`api-reference.md`](api-reference.md) |
 | Drive the engine from an LLM agent (MCP) | [`mcp-server.md`](mcp-server.md) |
@@ -52,6 +53,7 @@ docs/
 ├── README.md                       ← you are here (index + doc-stack rationale)
 ├── architecture/                   ← component-by-component "current state"
 │   ├── overview.md
+│   ├── brokers-and-live-trading.md  ← broker adapters, OMS, live loop, kill-switch
 │   ├── database.md                 ← migration policy, table inventory
 │   └── plugins.md                  ← plugin SDK + registry
 ├── adr/                            ← architecture decision records (why we chose X)

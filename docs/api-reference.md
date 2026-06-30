@@ -414,16 +414,63 @@ published on **any** replica reach local WebSocket connections on
 **every** replica. The `ConnectionManager` (the live socket objects) is
 still per-process, but event distribution is cross-replica.
 
+### Backpressure, heartbeats & metrics
+
+The [`ConnectionManager`](../engine/api/ws/connection_manager.py)
+(SEV-275 / gh#1026) does **not** write to the socket inline. Each
+registered connection owns a dedicated asyncio sender task draining a
+bounded `send_queue` (default 256, `NEXUS_WS_SEND_QUEUE_SIZE`). `broadcast`
+fan-out is a `gather` over per-connection `send`s, so one slow client
+cannot block the room. If a client's queue is full the manager raises
+`QueueFullError` (close code `1008`), increments
+`sev_ws_messages_dropped_total{reason=queue_full}`, and the connection
+is torn down — a slow consumer is disconnected rather than letting the
+server's memory grow unbounded. A global heartbeat task pings every
+`NEXUS_WS_HEARTBEAT_INTERVAL_SECONDS` (30 s) and force-unregisters any
+connection whose `last_seen` is older than `2 × heartbeat` (clients
+`touch` their connection on every inbound message, and the server
+answers `ping` with `pong`). Hard caps: `NEXUS_WS_MAX_CONNECTIONS`
+(5000) and `NEXUS_WS_MAX_SUBSCRIPTIONS_PER_CONNECTION` (50).
+
+All WS telemetry flows through [`ws/metrics.py`](../engine/api/ws/metrics.py)
+into the pluggable `MetricsBackend`: `sev_ws_connections_total`,
+`sev_ws_active_connections` (gauge), `sev_ws_subscriptions_active`,
+`sev_ws_messages_sent_total` / `_received_total{type}`, and
+`sev_ws_messages_dropped_total{reason}`. The manager also exposes a
+`stats()` snapshot (active connections, rooms, queue-depth p50/p95/p99)
+for future operator introspection; there is no HTTP route surfacing it
+yet.
+
 ## Errors
 
 - **Auth**: `401` for missing/invalid/expired credentials, `403` for
   insufficient role/scope or missing legal acceptance.
 - **Validation**: `422` from FastAPI; `400` for hand-rolled checks
   (e.g. invalid scope in API keys, unknown tax jurisdiction).
-- **Rate limit**: `429` with `Retry-After` from
-  [`RateLimitMiddleware`](../engine/api/rate_limit.py). Default 600
-  req/min/IP, burst 60. `/health` and `/metrics` are exempt;
-  `/api/v1/client/errors` is capped at 30/min to prevent log DoS.
+- **Rate limit**: `429` with `Retry-After` + `X-RateLimit-*`
+  headers from
+  [`RateLimitMiddleware`](../engine/api/rate_limit.py). The bucket
+  key is selected by an `AuthExtractor` that runs *before* FastAPI
+  dependency injection: a decodable Bearer JWT → `user:<sub>`; an
+  `nxs_*` API key → `apikey:<12-char-prefix>`; otherwise the client
+  IP (with a configurable `trusted_proxy_depth` for X-Forwarded-For).
+  Defaults are 600 req/min, burst 60, but **per-role tiers** take
+  effect for JWT-authenticated requests when
+  `NEXUS_RATE_LIMIT_ROLE_TIERS` is set (JSON `{role:[per_min,burst]}`;
+  unknown roles fall back to the default). API-key requests always use
+  the default tier (keys are hashed server-side and can't be resolved
+  without a DB hit). Route-level `overrides` always win over role
+  tiers — e.g. `/api/v1/client/errors` is pinned at 30/min to prevent
+  log DoS regardless of caller. `/health` and `/metrics` are exempt;
+  `OPTIONS`/`HEAD` never consume a token.
+
+  **Backend**: `InMemoryBucketBackend` by default (per-pod; effective
+  global limit is `per_minute × pod_count`). Set
+  `NEXUS_RATE_LIMIT_VALKEY_ENABLED=true` to switch to
+  `ValkeyBucketBackend`, which makes refill-and-consume atomic across
+  every pod sharing the same Valkey via a single Lua `EVAL`/`EVALSHA`
+  (idle keys are reaped after `NEXUS_RATE_LIMIT_VALKEY_KEY_TTL_SEC`).
+  Use the distributed backend for any multi-replica deploy.
 - **Body size**: hard 1 MiB cap on every request
   ([`BodySizeLimitMiddleware`](../engine/api/body_size_limit.py)).
 - **Provider errors**: see Market data section above.
@@ -435,7 +482,9 @@ last-added wraps everything:
 
 1. `SecurityHeadersMiddleware` — CSP, HSTS, X-Content-Type-Options, …
 2. `CORSMiddleware` — `NEXUS_CORS_ORIGINS` (defaults to `http://localhost:3000`).
-3. `RateLimitMiddleware`
+3. `RateLimitMiddleware` — token bucket; `InMemoryBucketBackend` or
+   `ValkeyBucketBackend` per `NEXUS_RATE_LIMIT_VALKEY_ENABLED`. Details
+   in the “Rate limit” bullet above.
 4. `BodySizeLimitMiddleware` (1 MiB)
 5. `CorrelationIdMiddleware` — stamps `X-Request-ID`.
 6. `HttpMetricsMiddleware` — Prometheus histogram + counter for every

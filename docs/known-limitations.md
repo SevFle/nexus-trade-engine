@@ -40,21 +40,32 @@ The `BackgroundTasks` call should become a TaskIQ enqueue.
 
 ## P1 — Three Execution Modes (Roadmap: partial)
 
-Live and paper execution land in `engine/core/execution/`, but the
-public surface only exposes backtest. Specifically:
+The execution *primitives* have landed and are tested, but the public
+surface only exposes backtest. Specifically:
 
 - `engine/core/execution/paper.py` and `live.py` exist but are wired
   to nothing on the API surface.
-- `engine/core/live/loop.py` and `kill_switch.py` are scaffolded; the
-  live loop has no route entry, no worker task, and no LB / health
-  integration.
-- The README lists "Live broker integration (Alpaca, IBKR)" as a
-  roadmap item; only `AlpacaDataProvider` (read-only market data) is
-  shipped.
+- The **broker / OMS / live-loop stack** under
+  [`engine/core/brokers/`](../engine/core/brokers/),
+  [`engine/core/oms/`](../engine/core/oms/), and
+  [`engine/core/live/`](../engine/core/live/) is implemented and
+  unit-tested (gh#136/#1010/#111/#109) — `BrokerAdapter` +
+  `BrokerClient` Protocols, `AlpacaTradingClient`, `PaperBroker`, the
+  order state machine, `RiskGate`, `LiveLoop`, and the kill-switch.
+  See [brokers-and-live-trading.md](architecture/brokers-and-live-trading.md).
+  None of it is bound to a run route, a worker task, or LB / health
+  integration yet.
+- The kill-switch is **in-memory only** — a restart silently
+  disengages it (documented non-goal in the module). There is no
+  startup reconciliation against the broker.
+- The README roadmap still lists “Live broker integration”; today the
+  only *reachable* Alpaca surface is the read-only `AlpacaDataProvider`
+  on the market-data route.
 
 **Workaround today**: the engine is a **backtest engine** for
 production purposes. Treat the live execution code as an internal
-preview.
+preview — real and tested, but with no public entry point and an
+in-memory kill-switch.
 
 ---
 
@@ -104,15 +115,21 @@ already cross-replica**, however: the
 pub/sub, so events emitted on replica A reach local connections on every
 replica.
 
-The remaining gap is that there is no shared connection registry or sticky
-sessioning, so a client whose replica dies must reconnect. There is also no
-back-pressure signal back to the `EventBus` if a room has no local
-subscribers — the bridge fans out unconditionally.
+The per-connection path is now hardened (SEV-275 / gh#1026): each
+connection owns an asyncio sender task draining a bounded send queue
+(`NEXUS_WS_SEND_QUEUE_SIZE`, default 256), a global heartbeat evicts
+stale connections, and `broadcast` fans out without blocking on any one
+slow socket (overflow → `QueueFullError` → that connection is closed and
+counted as `sev_ws_messages_dropped_total`). What is **still** missing:
+no shared connection registry or sticky sessioning (a replica restart
+drops its in-flight WS sessions), and there is no back-pressure signal
+*back to the `EventBus`* — the bridge fans out unconditionally whether
+or not a room has local subscribers.
 
 **Workaround today**: deploy behind a load balancer that supports
-connection draining, or accept that a replica restart drops its in-flight WS
-sessions. Event correctness (via the bridge) does not depend on a single
-replica.
+connection draining, or accept that a replica restart drops its in-flight
+WS sessions. Event correctness (via the bridge) does not depend on a
+single replica.
 
 ---
 

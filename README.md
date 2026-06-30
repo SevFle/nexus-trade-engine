@@ -136,6 +136,9 @@ key entry points:
 
 - [Architecture overview](docs/architecture/overview.md) — system
   components, request lifecycle, configuration.
+- [Live-trading stack](docs/architecture/brokers-and-live-trading.md) —
+  broker adapters, OMS state machine, live loop, kill-switch
+  (internal preview; no run route yet).
 - [API reference](docs/api-reference.md) — every HTTP and WebSocket
   route, auth model, error semantics.
 - [MCP server](docs/mcp-server.md) — the Model Context Protocol surface
@@ -179,8 +182,11 @@ on the public API surface or not production-validated.
       `IStrategy`/`Signal`/types/testing, marketplace install is a stub)*
 - [~] Paper trading execution *(partial — `engine/core/execution/paper.py`
       backend landed; not yet wired to a public run route)*
-- [~] Live broker integration *(partial — read-only `AlpacaDataProvider`;
-      `engine/core/execution/live.py` + live loop scaffolded, no run route)*
+- [~] Live broker integration *(partial — read-only `AlpacaDataProvider`
+      on the market-data route; the broker/OMS/live-loop stack
+      ([`engine/core/brokers/`](docs/architecture/brokers-and-live-trading.md),
+      `oms/`, `live/`) is implemented and tested but bound to no run
+      route; kill-switch is in-memory only)*
 - [ ] Strategy marketplace *(stub routes only — returns `not_implemented`)*
 - [~] Multi-asset support *(partial — equity/ETF/crypto/forex/options
       primitives exist; asset-class inference on market-data route works)*

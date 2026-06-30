@@ -90,7 +90,16 @@ Naming convention: field `foo_bar` → env `NEXUS_FOO_BAR`.
 | `NEXUS_SECRET_KEY_PREVIOUS` | `""` | Enables dual-key rotation window for JWT verification. |
 | `NEXUS_AUTH_PROVIDERS` | `local` | CSV subset of `local,google,github,oidc,ldap`. Each adds its own `*_CLIENT_ID`/`*_CLIENT_SECRET`/etc. |
 | `NEXUS_CORS_ORIGINS` | `["http://localhost:3000"]` | JSON array literal in env: `["https://app.example.com"]`. |
-| `NEXUS_RATE_LIMIT_PER_MINUTE` / `_BURST` | 600 / 60 | Per-IP. Tune for known frontends. |
+| `NEXUS_RATE_LIMIT_PER_MINUTE` / `_BURST` | 600 / 60 | Default tier. JWT callers can be overridden per role (see below); unauthenticated requests are keyed by IP. Tune for known frontends. |
+| `NEXUS_RATE_LIMIT_VALKEY_ENABLED` | `false` | Set `true` in **every multi-replica deploy** so the token bucket is atomic across pods (single Lua `EVAL`/`EVALSHA` on the shared Valkey). `false` = per-pod in-memory; effective global limit becomes `per_minute × pod_count`. |
+| `NEXUS_RATE_LIMIT_VALKEY_KEY_TTL_SEC` | `3600` | Reap idle bucket keys on the distributed backend, bounding Valkey memory under an adversarial key-space. |
+| `NEXUS_RATE_LIMIT_ROLE_TIERS` | `""` | JSON `{role:[per_min,burst]}`, e.g. `'{"viewer":[120,30],"admin":[6000,200]}'`. Applies to Bearer-JWT requests only; API keys fall back to the default. Malformed entries are skipped, not fatal. |
+| `NEXUS_WS_MAX_CONNECTIONS` | `5000` | Hard cap on concurrent WS sockets per process; over-cap accepts fail with close code `1011`. |
+| `NEXUS_WS_SEND_QUEUE_SIZE` | `256` | Per-connection bounded send queue. Overflow → `QueueFullError` (close `1008`) + `sev_ws_messages_dropped_total`. Size for your slowest legitimate consumer. |
+| `NEXUS_WS_HEARTBEAT_INTERVAL_SECONDS` | `30` | Global heartbeat cadence; connections idle past `2 ×` this are force-unregistered. |
+| `NEXUS_WS_MAX_SUBSCRIPTIONS_PER_CONNECTION` | `50` | Rooms one connection may join (`429`-equivalent close `1008` over the cap). |
+| `NEXUS_WS_EVENT_BRIDGE_CONCURRENCY` | `32` | Fan-out parallelism inside the `EventBusBridge` per replica. |
+| `NEXUS_WS_AUTH_RATE_LIMIT_PER_MINUTE` | `10` | Per-IP cap on WS auth attempts (token-bucket). |
 | `NEXUS_DATA_PROVIDERS_CONFIG` | `""` | Path to a YAML provider registration (see `config/data_providers.example.yaml`). |
 | `NEXUS_LOG_FORMAT` | `console` | Switch to `json` for production log pipelines. |
 | `NEXUS_LOG_LEVEL` | `INFO` | |
