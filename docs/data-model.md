@@ -19,6 +19,9 @@ erDiagram
     users ||--o{ api_keys : owns
     users ||--o{ dsr_requests : files
     users ||--o{ legal_acceptances : records
+    users ||--o{ consent_records : consents
+    users ||--o{ deletion_schedules : scheduled_for
+    dsr_requests ||--o{ deletion_schedules : triggers
 
     portfolios ||--o{ positions : contains
     portfolios ||--o{ orders : places
@@ -33,7 +36,7 @@ erDiagram
 
 ## Identity & auth
 
-### `users` (migration 001, 009)
+### `users` (migration 001, 009, 013)
 
 Primary identity. UUID PK. Key columns:
 
@@ -44,6 +47,7 @@ Primary identity. UUID PK. Key columns:
 | `role` | `varchar(20)` default `'user'` | Free-form but enforced via `ROLE_HIERARCHY` (see [api-reference.md](api-reference.md)). |
 | `auth_provider` | `varchar(20)` | `local`, `google`, `github`, `oidc`, `ldap`. |
 | `external_id` | `varchar(255)` nullable | Provider-specific subject; unique *paired* with `auth_provider`. |
+| `processing_restricted` | bool default false | GDPR Art. 18 flag (013). When true, all processing except retention-critical jobs halts (e.g. live trading auto-stops); the user can still authenticate to manage privacy settings — this is *not* deactivation. |
 | `mfa_enabled` | bool default false | Set true only after `/mfa/enroll/confirm`. |
 | `mfa_secret_encrypted` | text nullable | Fernet-encrypted TOTP secret. Keyed by `NEXUS_MFA_ENCRYPTION_KEY`. |
 | `mfa_backup_codes` | JSONB nullable | Array of bcrypt hashes; consumed codes are removed in place. |
@@ -213,6 +217,36 @@ export / delete / rectify / restrict / object request.
 Index `ix_dsr_requests_user_kind_status` backs the operator-side
 queue view.
 
+### `consent_records` *(model only — no migration yet, schema drift)*
+
+GDPR/CCPA consent ledger, append-only per `(user_id, purpose)`. The
+newest row per purpose is the current state: a `granted=True` row with
+`granted_at` records consent; withdrawing writes a fresh
+`granted=False` row with `withdrawn_at`. `purpose ∈ {core_ops,
+analytics, marketing}`; `version` is rev-able so operators can re-prompt
+after changing the purpose vocabulary.
+
+> ⚠ No migration creates this table. See
+> [`architecture/database.md`](architecture/database.md) and the P0 in
+> [`known-limitations.md`](known-limitations.md). Index
+> `ix_consent_user_purpose_time(user_id, purpose, created_at)` backs
+> the "current state" scan. `ondelete=CASCADE` from `users`.
+
+### `deletion_schedules` *(model only — no migration yet, schema drift)*
+
+Post-grace anonymization schedule, one row per deletion request.
+Created by [`schedule_deletion`](../engine/privacy/deletion.py) with
+`status='scheduled'` and `scheduled_for = dsr_request.sla_due_at`;
+flipped to `purged` once [`anonymize_user`](../engine/privacy/deletion.py)
+runs. `retention_exceptions` (JSONB) lists records kept past deletion for
+legal hold (e.g. trade records for 7 years) so the periodic review job
+(gh#90) has a source of truth. `anonymized_label` stores the stable
+`tombstone:<hash>` marker written back onto the user row.
+
+> ⚠ No migration creates this table — the same P0 as above.
+> Index `ix_deletion_schedule_status_due(status, scheduled_for)` backs
+> the due-scan; `ondelete=CASCADE` from `users` and `dsr_requests`.
+
 ## Conventions (recap)
 
 - **PKs**: UUIDs everywhere. Legacy tables pre-002 had bigserial; all
@@ -232,7 +266,7 @@ queue view.
 
 ## Adding a new table
 
-1. Pick the next migration number (`013_…` today).
+1. Pick the next migration number (`014_…` today).
 2. Add the model in `engine/db/models.py` in the same PR.
 3. Write the migration with both `upgrade()` and `downgrade()`.
 4. Add a test in `tests/` that round-trips a representative row and

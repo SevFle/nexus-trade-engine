@@ -250,6 +250,50 @@ rotated refresh token.
 
 ---
 
+## Symptom: `POST /api/v1/privacy/delete` returns `500` / logs `relation "deletion_schedules" does not exist`
+
+### First 60 seconds
+
+```bash
+# 1. Confirm the table is missing against the live (migrated) DB.
+docker compose exec db psql -U nexus nexus -c "\dt deletion_schedules"
+docker compose exec db psql -U nexus nexus -c "\dt consent_records"
+```
+
+If both return “Did not find any relation”, you’ve hit the documented
+schema drift (P0 in [`known-limitations.md`](../../known-limitations.md)):
+the `ConsentRecord` / `DeletionSchedule` models in
+[`engine/db/models.py`](../../../engine/db/models.py) have no Alembic
+migration, so `alembic upgrade head` never created the tables. This does
+**not** reproduce in tests because the suite builds the schema with
+`Base.metadata.create_all`.
+
+### Triage
+
+- The failing call is `request_deletion → schedule_deletion` in
+  [`engine/privacy/deletion.py`](../../../engine/privacy/deletion.py),
+  which inserts a `DeletionSchedule` row.
+- The later purge step (`anonymize_user`) would fail the same way on
+  `consent_records`.
+- The statutory 30-day deletion clock therefore never starts. Treat any
+  user-facing deletion request during this window as a compliance
+  incident, not just a bug.
+
+### Likely fix
+
+- **Out-of-band (compliance holding pattern):** honour the request
+  manually — tombstone the `users` row and hard-delete PII — but note
+  that this skips the `dsr_requests` / `deletion_schedules` audit trail
+  regulators expect. Record the action in your incident log.
+- **Permanent:** add a `014_*` migration that `create_table`s both
+  `consent_records` and `deletion_schedules` exactly as defined in
+  `models.py` (column types, the `ix_consent_user_purpose_time` and
+  `ix_deletion_schedule_status_due` indexes, `ondelete=CASCADE` FKs),
+  then `alembic upgrade head`. Re-run the original `POST
+  /api/v1/privacy/delete` to confirm it returns `202`.
+
+---
+
 ## Escalation
 
 For anything not covered here:

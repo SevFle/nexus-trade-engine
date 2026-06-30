@@ -38,6 +38,48 @@ The `BackgroundTasks` call should become a TaskIQ enqueue.
 
 ---
 
+<a id="missing-migrations"></a>
+## P0 — Two privacy tables have no migration (schema drift)
+
+**Where**:
+[`engine/db/models.py`](../engine/db/models.py) declares
+`ConsentRecord` (`consent_records`) and `DeletionSchedule`
+(`deletion_schedules`); both are written by
+[`engine/privacy/deletion.py`](../engine/privacy/deletion.py) and read
+by [`tests/test_deletion_purge.py`](../tests/test_deletion_purge.py).
+No revision in [`engine/db/migrations/versions/`](../engine/db/migrations/versions/)
+creates either table (the chain runs `001 → 013`).
+
+**Impact**: against a production DB built with `alembic upgrade head`,
+the GDPR deletion flow is broken end to end. `POST /api/v1/privacy/delete`
+calls `request_deletion → schedule_deletion`, which inserts a
+`DeletionSchedule` row → `UndefinedTableError: relation
+"deletion_schedules" does not exist`. The later purge step
+(`anonymize_user`) would fail the same way on `consent_records`. The
+statutory deletion clock therefore never starts, and the post-grace
+anonymization job (gh#90) has no rows to process.
+
+**Why tests don't catch it**: [`tests/conftest.py`](../tests/conftest.py#L150)
+builds the schema with `Base.metadata.create_all` (from the models), not
+by running Alembic, so every model table exists in the test DB regardless
+of whether a migration created it. This is exactly the "No Alembic check
+in CI" gap lower down this file, but with a concrete live victim.
+
+**Workaround today**: none — the deletion flow is unusable against a
+migrated DB. Operators who must honour a deletion request today can run
+the anonymization SQL by hand (tombstone the `users` row, hard-delete
+`consent_records`), but this skips the `dsr_requests`/`deletion_schedules`
+audit trail that regulators expect.
+
+**Fix path**: one `014_consent_and_deletion_tables.py` migration that
+`create_table`s both, mirroring the model definitions exactly (column
+types, the `ix_consent_user_purpose_time` and
+`ix_deletion_schedule_status_due` indexes, and the `ondelete=CASCADE`
+FKs). Then add the CI Alembic-vs-models check described under "No Alembic
+check in CI" below so this class of drift can't recur silently.
+
+---
+
 ## P1 — Three Execution Modes (Roadmap: partial)
 
 Live and paper execution land in `engine/core/execution/`, but the
@@ -49,8 +91,13 @@ public surface only exposes backtest. Specifically:
   live loop has no route entry, no worker task, and no LB / health
   integration.
 - The README lists "Live broker integration (Alpaca, IBKR)" as a
-  roadmap item; only `AlpacaDataProvider` (read-only market data) is
-  shipped.
+  roadmap item. A write-capable `AlpacaTradingClient` trading adapter
+  (`engine/core/brokers/alpaca/`, gh#136) now exists and is covered by
+  unit tests, plus a thread-safe `BrokerAdapter` registry
+  (`engine/core/brokers/registry.py`) — but neither is registered at
+  startup nor reachable from any route or worker task. `AlpacaDataProvider`
+  (read-only market data) remains the only broker surface actually
+  wired in. IBKR is still entirely absent.
 
 **Workaround today**: the engine is a **backtest engine** for
 production purposes. Treat the live execution code as an internal
@@ -224,11 +271,16 @@ is replaced.
 
 There is no automated check that `alembic upgrade head` against an
 empty DB matches the SQLAlchemy models. Drift is caught only when a
-human reads `models.py` and the migration side-by-side.
+human reads `models.py` and the migration side-by-side. **This is no
+longer theoretical**: the two un-migrated privacy tables above
+(`consent_records`, `deletion_schedules`) are a live instance of the
+failure mode this check would have blocked at PR time.
 
 **Fix path**: add a CI job that boots an empty Postgres service,
-runs `alembic upgrade head`, then asserts each model table exists.
-~30 lines of bash.
+runs `alembic upgrade head`, then asserts each model table exists
+(a one-liner per table, or autogenerate-and-diff against head).
+~30 lines of bash. Pair it with the `014_*` migration that fixes the
+current drift.
 
 ---
 

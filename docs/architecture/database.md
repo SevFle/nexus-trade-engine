@@ -37,9 +37,33 @@ The schema is owned by the Alembic migration chain in
 | 010   | `webhook_configs` + `webhook_deliveries` (gh#80).              |
 | 011   | `api_keys` — long-lived scoped credentials for SDK / headless access (gh#94). |
 | 012   | `dsr_requests` — GDPR / CCPA data-subject-request audit log (gh#157). |
+| 013   | `users.processing_restricted` — GDPR Art. 18 restriction flag (gh#157). |
 
 Run `alembic history` for the source of truth. The next free revision
-number is `013`.
+number is `014`.
+
+### ⚠ Schema drift: two models have no migration
+
+[`engine/db/models.py`](../../engine/db/models.py) declares two tables
+the migration chain never created:
+
+- `consent_records` (`ConsentRecord`) — GDPR/CCPA consent ledger per
+  purpose.
+- `deletion_schedules` (`DeletionSchedule`) — post-grace
+  anonymization schedule, written by
+  [`engine/privacy/deletion.py:schedule_deletion`](../../engine/privacy/deletion.py).
+
+`alembic upgrade head` does **not** create them, so against a migrated
+production DB the privacy/delete flow (`POST /api/v1/privacy/delete` →
+`request_deletion` → `schedule_deletion`) fails with
+`asyncpg.exceptions.UndefinedTableError` on `deletion_schedules`, and
+the purge job (`anonymize_user`) fails on `consent_records`. Tests do
+not catch this because [`tests/conftest.py`](../../tests/conftest.py#L150)
+builds the schema with `Base.metadata.create_all` rather than running
+Alembic. This is tracked as a P0 in
+[`known-limitations.md`](../known-limitations.md). The fix is a single
+`014_*` migration that `create_table`s both, mirroring the model
+definitions exactly.
 
 ## Critical tables
 
