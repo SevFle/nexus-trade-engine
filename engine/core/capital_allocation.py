@@ -55,7 +55,15 @@ def _to_decimal(value: float, *, name: str) -> Decimal:
     ``str(float)`` round-trips to the shortest decimal that reproduces
     the float, so we avoid binary artefacts (e.g. ``0.1 + 0.2``) while
     still rejecting non-finite values up front.
+
+    ``bool`` is a subclass of ``int`` in Python, so it would otherwise
+    sneak through the numeric check and be silently treated as ``1`` /
+    ``0``. We reject it explicitly up front.
     """
+    if isinstance(value, bool):
+        raise CapitalAllocationError(
+            f"{name} must be a real number (int or float), got bool {value!r}"
+        )
     if not isinstance(value, (int, float)):
         raise CapitalAllocationError(
             f"{name} must be a real number, got {type(value).__name__}"
@@ -140,14 +148,12 @@ def allocate_capital(
     # Work in integer cents to keep the remainder arithmetic exact.
     total_cents = int((capital_dec * 100).quantize(_WHOLE, rounding=ROUND_DOWN))
 
-    raw: dict[str, Decimal] = {}
     floors: dict[str, int] = {}
     fracs: dict[str, Decimal] = {}
     assigned = 0
     for sid, w_dec in weights_dec.items():
         raw_cents = Decimal(total_cents) * w_dec / weight_sum
         floor_cents = int(raw_cents.quantize(_WHOLE, rounding=ROUND_DOWN))
-        raw[sid] = raw_cents
         floors[sid] = floor_cents
         fracs[sid] = raw_cents - Decimal(floor_cents)
         assigned += floor_cents
