@@ -1,4 +1,5 @@
 """Scratch experiment: probe real orchestrator dispatch for each edge case."""
+
 from __future__ import annotations
 
 import asyncio

@@ -115,9 +115,7 @@ class TestBroadcast:
         await manager.attach(user_id, b)
         await manager.subscribe(user_id, a, ["portfolio"])
         await manager.subscribe(user_id, b, ["alert"])
-        n = await manager.broadcast(
-            user_id=user_id, topic="portfolio", payload={"v": 1}
-        )
+        n = await manager.broadcast(user_id=user_id, topic="portfolio", payload={"v": 1})
         assert n == 1
         assert a.sent == [{"topic": "portfolio", "data": {"v": 1}}]
         assert b.sent == []
@@ -126,9 +124,7 @@ class TestBroadcast:
         a = _FakeWS()
         await manager.attach(user_id, a)
         await manager.subscribe(user_id, a, ["portfolio"])
-        n = await manager.broadcast(
-            user_id=user_id, topic="wizard", payload={"v": 1}
-        )
+        n = await manager.broadcast(user_id=user_id, topic="wizard", payload={"v": 1})
         assert n == 0
         assert a.sent == []
 
@@ -136,9 +132,7 @@ class TestBroadcast:
         a = _FakeWS()
         await manager.attach(user_id, a)
         # No subscriptions at all.
-        n = await manager.broadcast(
-            user_id=user_id, topic="portfolio", payload={"v": 1}
-        )
+        n = await manager.broadcast(user_id=user_id, topic="portfolio", payload={"v": 1})
         assert n == 0
         assert a.sent == []
 
@@ -149,9 +143,7 @@ class TestBroadcast:
         await manager.attach(user_id, bad)
         await manager.subscribe(user_id, good, ["portfolio"])
         await manager.subscribe(user_id, bad, ["portfolio"])
-        n = await manager.broadcast(
-            user_id=user_id, topic="portfolio", payload={"v": 7}
-        )
+        n = await manager.broadcast(user_id=user_id, topic="portfolio", payload={"v": 7})
         # Both were recipients — broadcast counts them; only the working
         # one received.
         assert n == 2
@@ -159,9 +151,7 @@ class TestBroadcast:
         assert bad.sent == []  # failed silently
 
     async def test_broadcast_to_unknown_user_returns_zero(self, manager):
-        n = await manager.broadcast(
-            user_id=uuid.uuid4(), topic="portfolio", payload={"v": 1}
-        )
+        n = await manager.broadcast(user_id=uuid.uuid4(), topic="portfolio", payload={"v": 1})
         assert n == 0
 
 

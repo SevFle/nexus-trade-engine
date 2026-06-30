@@ -1,4 +1,5 @@
 """Deeper probe: detection semantics + forced async-callable-object path."""
+
 from __future__ import annotations
 
 import asyncio
@@ -25,6 +26,7 @@ class AsyncCallableEvaluator:
 
 class AsyncCallStrategy:
     id = "async-call"
+
     def __init__(self):
         self.evaluate = AsyncCallableEvaluator()
 
@@ -32,6 +34,7 @@ class AsyncCallStrategy:
 # Bare async-callable object (no evaluate)
 class AsyncCallableObject:
     id = "aco"
+
     async def __call__(self, market_data, cost_model):
         return [_sig("AAPL", Side.BUY, "aco")]
 
@@ -69,6 +72,8 @@ asyncio.run(forced_register())
 
 
 print("== legacy generator-based coroutine detection ==")
+
+
 @types.coroutine
 def gen_coro(md, cm):
     yield

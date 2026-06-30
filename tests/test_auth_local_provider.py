@@ -158,23 +158,17 @@ class TestLocalAuthProviderCreateUser:
 
     async def test_create_user_missing_db(self, provider):
         user_info = UserInfo(email="newuser@example.com")
-        result = await provider.create_user(
-            user_info=user_info, password="strongpassword123"
-        )
+        result = await provider.create_user(user_info=user_info, password="strongpassword123")
         assert not result.success
 
     async def test_create_user_missing_password(self, provider, db_session):
         user_info = UserInfo(email="newuser@example.com")
-        result = await provider.create_user(
-            user_info=user_info, db=db_session
-        )
+        result = await provider.create_user(user_info=user_info, db=db_session)
         assert not result.success
 
     async def test_create_user_short_password(self, provider, db_session):
         user_info = UserInfo(email="short@example.com", display_name="Short")
-        result = await provider.create_user(
-            user_info=user_info, password="short", db=db_session
-        )
+        result = await provider.create_user(user_info=user_info, password="short", db=db_session)
         assert not result.success
         assert "8" in result.error
 

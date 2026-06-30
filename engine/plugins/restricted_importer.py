@@ -146,8 +146,7 @@ class RestrictedImporter(MetaPathFinder):
     ) -> ModuleSpec | None:
         if not self._is_allowed(fullname):
             raise ImportError(
-                f"Module '{fullname}' is blocked in strategy sandbox "
-                f"(not in allowlist)"
+                f"Module '{fullname}' is blocked in strategy sandbox (not in allowlist)"
             )
         return None
 
@@ -162,10 +161,7 @@ class RestrictedImporter(MetaPathFinder):
         level: int = 0,
     ) -> object:
         if level == 0 and not self._is_allowed(name):
-            raise ImportError(
-                f"Module '{name}' is blocked in strategy sandbox "
-                f"(not in allowlist)"
-            )
+            raise ImportError(f"Module '{name}' is blocked in strategy sandbox (not in allowlist)")
         return self._original_import(name, globals_, locals_, fromlist, level)
 
     # ── Lifecycle ──────────────────────────────────────────────────────

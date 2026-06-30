@@ -331,9 +331,7 @@ _CURATED_BUILTIN_NAMES: tuple[str, ...] = (
 )
 
 CURATED_BUILTINS: dict[str, object] = {
-    name: getattr(_builtins, name)
-    for name in _CURATED_BUILTIN_NAMES
-    if hasattr(_builtins, name)
+    name: getattr(_builtins, name) for name in _CURATED_BUILTIN_NAMES if hasattr(_builtins, name)
 }
 
 

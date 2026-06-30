@@ -92,8 +92,8 @@ VALID_TRANSITIONS: dict[OrderStatus, frozenset[OrderStatus]] = {
         {
             OrderStatus.CANCELLED,
             OrderStatus.PARTIALLY_FILLED,  # broker filled before cancel landed
-            OrderStatus.FILLED,            # broker fully filled before cancel landed
-            OrderStatus.REJECTED,          # cancel itself rejected; back in flight
+            OrderStatus.FILLED,  # broker fully filled before cancel landed
+            OrderStatus.REJECTED,  # cancel itself rejected; back in flight
         }
     ),
     OrderStatus.FILLED: frozenset(),

@@ -72,9 +72,7 @@ def compute_cleanup_window(
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     delete_before = (
-        now - timedelta(days=policy.retain_days)
-        if policy.retain_days is not None
-        else None
+        now - timedelta(days=policy.retain_days) if policy.retain_days is not None else None
     )
     compress_before = (
         now - timedelta(days=policy.compress_after_days)
@@ -122,9 +120,7 @@ def partition_boundaries(
     return out
 
 
-def batch_iter(
-    items: list[str], *, batch_size: int = DEFAULT_BATCH_SIZE
-) -> Iterator[list[str]]:
+def batch_iter(items: list[str], *, batch_size: int = DEFAULT_BATCH_SIZE) -> Iterator[list[str]]:
     """Yield successive ``batch_size`` slices of ``items``.
 
     Used by the cron worker to chunk record-id lists for bulk DELETE

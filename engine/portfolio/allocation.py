@@ -143,15 +143,12 @@ class CapitalAllocation(BaseModel):
     def _check_count_sum_and_freeze(self) -> CapitalAllocation:
         n = len(self.strategy_weights)
         if n > self.max_strategies:
-            raise ValueError(
-                f"too many strategies: {n} > max_strategies ({self.max_strategies})"
-            )
+            raise ValueError(f"too many strategies: {n} > max_strategies ({self.max_strategies})")
         if n > 0:
             total = math.fsum(self.strategy_weights.values())
             if abs(total - 1.0) > _WEIGHT_SUM_EPSILON:
                 raise ValueError(
-                    "strategy_weights must sum to 1.0 (± "
-                    f"{_WEIGHT_SUM_EPSILON}); got {total!r}"
+                    f"strategy_weights must sum to 1.0 (± {_WEIGHT_SUM_EPSILON}); got {total!r}"
                 )
         # Block in-place mutation of the weights dict. `frozen` above only
         # guards field reassignment; this wrap makes item-level mutation

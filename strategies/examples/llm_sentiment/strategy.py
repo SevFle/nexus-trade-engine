@@ -94,7 +94,9 @@ class LLMSentimentStrategy(IStrategy):
         self._watchlist = params.get("watchlist", ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"])
 
         if not self._api_key:
-            logger.warning("llm_sentiment.no_api_key", note="Set 'llm_api_key' in strategy secrets")
+            logger.warning(
+                "llm_sentiment.no_api_key", note="Set 'llm_api_key' in strategy secrets"
+            )
 
         self._http_client = httpx.AsyncClient(timeout=30.0)
         logger.info("llm_sentiment.initialized", provider=self._provider, model=self._model)
@@ -143,23 +145,29 @@ class LLMSentimentStrategy(IStrategy):
                 cost_pct = costs.estimate_pct(symbol, price, "buy")
                 weight = min(self._max_allocation, confidence * self._max_allocation)
 
-                signals.append(Signal.buy(
-                    symbol=symbol,
-                    strategy_id=self.id,
-                    weight=weight,
-                    strength=SignalStrength.STRONG if confidence > 0.8 else SignalStrength.MODERATE,
-                    reason=f"LLM sentiment={score:.2f}, confidence={confidence:.2f}: {sentiment.get('reasoning', '')}",
-                    metadata={"sentiment": sentiment, "cost_pct": cost_pct},
-                ))
+                signals.append(
+                    Signal.buy(
+                        symbol=symbol,
+                        strategy_id=self.id,
+                        weight=weight,
+                        strength=SignalStrength.STRONG
+                        if confidence > 0.8
+                        else SignalStrength.MODERATE,
+                        reason=f"LLM sentiment={score:.2f}, confidence={confidence:.2f}: {sentiment.get('reasoning', '')}",
+                        metadata={"sentiment": sentiment, "cost_pct": cost_pct},
+                    )
+                )
 
             # SELL: strong negative sentiment on existing position
             elif score < -self._sentiment_threshold and has_position:
-                signals.append(Signal.sell(
-                    symbol=symbol,
-                    strategy_id=self.id,
-                    reason=f"Negative sentiment={score:.2f}: {sentiment.get('reasoning', '')}",
-                    metadata={"sentiment": sentiment},
-                ))
+                signals.append(
+                    Signal.sell(
+                        symbol=symbol,
+                        strategy_id=self.id,
+                        reason=f"Negative sentiment={score:.2f}: {sentiment.get('reasoning', '')}",
+                        metadata={"sentiment": sentiment},
+                    )
+                )
 
         return signals
 
@@ -217,7 +225,11 @@ class LLMSentimentStrategy(IStrategy):
         return {
             "type": "object",
             "properties": {
-                "llm_provider": {"type": "string", "enum": ["anthropic", "openai"], "default": "anthropic"},
+                "llm_provider": {
+                    "type": "string",
+                    "enum": ["anthropic", "openai"],
+                    "default": "anthropic",
+                },
                 "model_name": {"type": "string", "default": "claude-sonnet-4-20250514"},
                 "sentiment_threshold": {"type": "number", "default": 0.6},
                 "max_allocation_pct": {"type": "number", "default": 0.15},

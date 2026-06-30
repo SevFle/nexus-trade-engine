@@ -70,9 +70,7 @@ class _FakeWebSocket:
         headers: dict[str, str] | None = None,
     ) -> None:
         self.query_params = query_params or {}
-        self.client = (
-            _FakeHost(client_host) if client_host is not None else None
-        )
+        self.client = _FakeHost(client_host) if client_host is not None else None
         self.headers = headers or {}
         self._receive_json = AsyncMock()
         self.sent: list[dict] = []
@@ -133,21 +131,25 @@ class TestParseInbound:
         assert msg.token == "jwt123"
 
     def test_parses_subscribe_message(self):
-        msg, err = parse_inbound({
-            "type": "subscribe",
-            "channel": "portfolio",
-            "params": {"account_id": "A1"},
-        })
+        msg, err = parse_inbound(
+            {
+                "type": "subscribe",
+                "channel": "portfolio",
+                "params": {"account_id": "A1"},
+            }
+        )
         assert err is None
         assert isinstance(msg, SubscribeMessage)
         assert msg.channel == "portfolio"
         assert msg.params["account_id"] == "A1"
 
     def test_parses_unsubscribe_message(self):
-        msg, err = parse_inbound({
-            "type": "unsubscribe",
-            "channel": "orders",
-        })
+        msg, err = parse_inbound(
+            {
+                "type": "unsubscribe",
+                "channel": "orders",
+            }
+        )
         assert err is None
         assert isinstance(msg, UnsubscribeMessage)
 
@@ -267,16 +269,12 @@ class TestCheckChannelAccess:
         assert err == "404"
 
     def test_all_scope_grants_access(self):
-        ok, err = check_channel_access(
-            "portfolio", ["read:portfolio:all"], {}
-        )
+        ok, err = check_channel_access("portfolio", ["read:portfolio:all"], {})
         assert ok is True
         assert err is None
 
     def test_base_scope_grants_access(self):
-        ok, err = check_channel_access(
-            "portfolio", ["read:portfolio"], {}
-        )
+        ok, err = check_channel_access("portfolio", ["read:portfolio"], {})
         assert ok is True
         assert err is None
 
@@ -319,9 +317,7 @@ class TestCheckChannelAccess:
         assert ok is True
 
     def test_no_owner_field_in_params_grants(self):
-        ok, _err = check_channel_access(
-            "portfolio", ["read:portfolio"], {}, user_id="u1"
-        )
+        ok, _err = check_channel_access("portfolio", ["read:portfolio"], {}, user_id="u1")
         assert ok is True
 
     def test_no_user_id_skips_owner_check(self):
@@ -338,9 +334,7 @@ class TestCheckChannelAccess:
         assert ok is True
 
     def test_strategies_channel(self):
-        ok, _err = check_channel_access(
-            "strategies", ["read:strategies"], {}
-        )
+        ok, _err = check_channel_access("strategies", ["read:strategies"], {})
         assert ok is True
 
     def test_orders_owner_mismatch(self):
@@ -763,9 +757,7 @@ class TestConnectionManager:
 
     async def test_max_connections_raises(self, manager):
         for i in range(10):
-            await manager.register(
-                _FakeWebSocket(), f"u{i}", ["read:portfolio"]
-            )
+            await manager.register(_FakeWebSocket(), f"u{i}", ["read:portfolio"])
         with pytest.raises(ConnectionLimitError):
             await manager.register(_FakeWebSocket(), "overflow", [])
 
@@ -994,9 +986,7 @@ class TestHeartbeatSelfCancellation:
         await m.register(ws2, "u2", [])
         assert m._global_heartbeat_task is not None
         assert m._global_heartbeat_task is not old_task
-        await m.unregister(
-            next(iter(m._connections.keys())) if m._connections else ""
-        )
+        await m.unregister(next(iter(m._connections.keys())) if m._connections else "")
 
     async def test_heartbeat_survives_unregister_exception(self):
         m = ConnectionManager(heartbeat_interval=0.01)
@@ -1080,7 +1070,9 @@ class TestChannelResolver:
             max_subscriptions_per_connection=50,
         )
         ws = _FakeWebSocket()
-        cid = await manager.register(ws, "user1", ["read:portfolio", "read:orders", "read:strategies"])
+        cid = await manager.register(
+            ws, "user1", ["read:portfolio", "read:orders", "read:strategies"]
+        )
         resolver = ChannelResolver(manager, max_subscriptions_per_connection=50)
         return manager, resolver, cid
 
@@ -1174,6 +1166,7 @@ class TestEventBusBridge:
     @pytest.fixture
     def setup(self):
         from engine.events.bus import EventType
+
         bus = _FakeBus()
         manager = ConnectionManager()
         bridge = EventBusBridge(bus=bus, manager=manager)
@@ -1289,9 +1282,7 @@ class TestEventBusBridge:
         ws = _FakeWebSocket()
         cid = await manager.register(ws, "u1", [])
         await manager.join_room(cid, "portfolio")
-        with patch(
-            "engine.api.ws.event_bridge.resolve_room_name", return_value=None
-        ):
+        with patch("engine.api.ws.event_bridge.resolve_room_name", return_value=None):
             await bus.deliver(
                 EventType.PORTFOLIO_UPDATED,
                 {"type": "portfolio_updated", "data": {}},
@@ -1306,9 +1297,7 @@ class TestEventBusBridge:
         ws = _FakeWebSocket()
         cid = await manager.register(ws, "u1", [])
         await manager.join_room(cid, "orders")
-        with patch(
-            "engine.api.ws.event_bridge.resolve_room_name", return_value=""
-        ):
+        with patch("engine.api.ws.event_bridge.resolve_room_name", return_value=""):
             await bus.deliver(
                 EventType.ORDER_CREATED,
                 {"type": "order_created", "data": {}},

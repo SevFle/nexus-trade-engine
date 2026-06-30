@@ -110,9 +110,7 @@ async def ws_endpoint(ws: WebSocket) -> None:
 
 async def _authenticate(ws: WebSocket) -> User | None:
     try:
-        msg = await asyncio.wait_for(
-            ws.receive_json(), timeout=AUTH_TIMEOUT_SECONDS
-        )
+        msg = await asyncio.wait_for(ws.receive_json(), timeout=AUTH_TIMEOUT_SECONDS)
     except TimeoutError:
         await _close(ws, code=4401, reason="auth_timeout")
         return None

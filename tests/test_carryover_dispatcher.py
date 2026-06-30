@@ -58,9 +58,7 @@ class TestUsRouting:
         assert result.next_year_carryover == CapitalLossCarryover.zero()
 
     def test_us_prior_loss_compounds_within_cap(self):
-        prior = CapitalLossCarryover(
-            short_term=Decimal("2000"), long_term=Decimal("0")
-        )
+        prior = CapitalLossCarryover(short_term=Decimal("2000"), long_term=Decimal("0"))
         result = carryover_for_jurisdiction("US", [], prior)
 
         assert isinstance(result, CapitalLossApplication)
@@ -96,16 +94,12 @@ class TestGbRouting:
 
     def test_gb_wrong_prior_type_rejected(self):
         with pytest.raises(TypeError):
-            carryover_for_jurisdiction(
-                "GB", [], CapitalLossCarryover.zero()
-            )
+            carryover_for_jurisdiction("GB", [], CapitalLossCarryover.zero())
 
 
 class TestDeRouting:
     def test_de_returns_kest_application(self):
-        result = carryover_for_jurisdiction(
-            "DE", [_disp(proceeds="6000", cost="1000")]
-        )
+        result = carryover_for_jurisdiction("DE", [_disp(proceeds="6000", cost="1000")])
 
         assert isinstance(result, KestApplication)
         # +5,000 → 4,000 taxable post-allowance.
@@ -113,9 +107,7 @@ class TestDeRouting:
         assert result.summary.kest == Decimal("1000.00")
 
     def test_de_prior_equity_carryover_applied(self):
-        prior = KestCarryover(
-            equity=Decimal("4000"), other=Decimal("0")
-        )
+        prior = KestCarryover(equity=Decimal("4000"), other=Decimal("0"))
         result = carryover_for_jurisdiction(
             "DE",
             [_disp(proceeds="6000", cost="1000")],
@@ -163,9 +155,7 @@ class TestFrRouting:
 
     def test_fr_wrong_prior_type_rejected(self):
         with pytest.raises(TypeError):
-            carryover_for_jurisdiction(
-                "FR", [], KestCarryover.zero(), current_year=2024
-            )
+            carryover_for_jurisdiction("FR", [], KestCarryover.zero(), current_year=2024)
 
 
 # ---------------------------------------------------------------------------
@@ -175,9 +165,7 @@ class TestFrRouting:
 
 class TestCasing:
     def test_lowercase_code_accepted(self):
-        result = carryover_for_jurisdiction(
-            "us", [_disp(proceeds="100", cost="200")]
-        )
+        result = carryover_for_jurisdiction("us", [_disp(proceeds="100", cost="200")])
         assert isinstance(result, CapitalLossApplication)
 
 
@@ -205,9 +193,7 @@ class TestKwargForwarding:
                 cost=Decimal("5000"),
             )
         ]
-        result = carryover_for_jurisdiction(
-            "US", disposals, deductible_cap=Decimal("1500")
-        )
+        result = carryover_for_jurisdiction("US", disposals, deductible_cap=Decimal("1500"))
         assert result.current_year_deduction == Decimal("1500.00")
         assert result.next_year_carryover.short_term == Decimal("3500.00")
 

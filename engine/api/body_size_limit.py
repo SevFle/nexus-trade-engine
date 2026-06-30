@@ -39,9 +39,7 @@ class BodySizeLimitMiddleware:
 
     def __init__(self, app: Any, *, max_bytes: int) -> None:
         if max_bytes <= 0:
-            raise ValueError(
-                f"BodySizeLimitMiddleware.max_bytes must be > 0, got {max_bytes}"
-            )
+            raise ValueError(f"BodySizeLimitMiddleware.max_bytes must be > 0, got {max_bytes}")
         self.app = app
         self.max_bytes = max_bytes
 

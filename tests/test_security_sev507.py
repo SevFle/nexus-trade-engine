@@ -291,9 +291,10 @@ class TestL1SyncRaceCondition:
         md.write_text(
             "---\ntitle: Test Doc\nversion: 1.0.0\neffective_date: 2026-01-01\n---\n\nBody.\n"
         )
-        with patch("engine.legal.sync.settings") as mock_settings, patch.object(
-            db_session, "execute", return_value=None
-        ) as mock_execute:
+        with (
+            patch("engine.legal.sync.settings") as mock_settings,
+            patch.object(db_session, "execute", return_value=None) as mock_execute,
+        ):
             mock_settings.legal_documents_dir = str(tmp_path)
             first = await sync_legal_documents(db_session)
             second = await sync_legal_documents(db_session)

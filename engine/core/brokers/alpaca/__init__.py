@@ -141,13 +141,9 @@ class AlpacaTradingClient:
     # BrokerClient contract
     # ------------------------------------------------------------------
 
-    async def submit_order(
-        self, request: BrokerOrderRequest
-    ) -> BrokerOrderStatus:
+    async def submit_order(self, request: BrokerOrderRequest) -> BrokerOrderStatus:
         """POST ``/v2/orders``. Returns the broker's order status snapshot."""
-        resp = await self._request(
-            "POST", "/v2/orders", json=request.to_payload()
-        )
+        resp = await self._request("POST", "/v2/orders", json=request.to_payload())
         return BrokerOrderStatus.from_response(resp.json())
 
     async def get_order(self, broker_order_id: str) -> BrokerOrderStatus:
@@ -226,9 +222,7 @@ class AlpacaTradingClient:
                 continue
 
             if resp.status_code in AUTH_STATUS:
-                raise BrokerAuthError(
-                    f"alpaca authentication rejected (HTTP {resp.status_code})"
-                )
+                raise BrokerAuthError(f"alpaca authentication rejected (HTTP {resp.status_code})")
 
             if resp.status_code in RETRY_STATUS:
                 last_exc = BrokerConnectionError(
@@ -263,9 +257,7 @@ class AlpacaTradingClient:
         await asyncio.sleep(delay)
 
     @staticmethod
-    def _rejection_for(
-        resp: httpx.Response, *, path: str
-    ) -> BrokerRejectError:
+    def _rejection_for(resp: httpx.Response, *, path: str) -> BrokerRejectError:
         """Translate a 4xx order/position rejection into BrokerRejectError.
 
         Alpaca error bodies look like

@@ -70,9 +70,7 @@ def _configure_data_providers() -> None:
         try:
             configure_from_file(settings.data_providers_config, registry)
         except Exception:
-            logger.exception(
-                "data_provider.bootstrap.failed", path=settings.data_providers_config
-            )
+            logger.exception("data_provider.bootstrap.failed", path=settings.data_providers_config)
         else:
             logger.info(
                 "data_provider.bootstrap.from_file",

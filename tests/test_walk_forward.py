@@ -114,21 +114,13 @@ class TestExpandingWindow:
 
 class TestIndexing:
     def test_indices_are_arrays(self):
-        splits = list(
-            walk_forward_splits(
-                n_obs=50, train_size=20, test_size=5, step=5
-            )
-        )
+        splits = list(walk_forward_splits(n_obs=50, train_size=20, test_size=5, step=5))
         for s in splits:
             assert isinstance(s.train_indices, np.ndarray)
             assert isinstance(s.test_indices, np.ndarray)
 
     def test_test_window_immediately_follows_train(self):
-        splits = list(
-            walk_forward_splits(
-                n_obs=50, train_size=20, test_size=5, step=5
-            )
-        )
+        splits = list(walk_forward_splits(n_obs=50, train_size=20, test_size=5, step=5))
         for s in splits:
             assert s.test_indices[0] == s.train_indices[-1] + 1
 
@@ -136,43 +128,23 @@ class TestIndexing:
 class TestValidation:
     def test_train_size_must_be_positive(self):
         with pytest.raises(WalkForwardError):
-            list(
-                walk_forward_splits(
-                    n_obs=100, train_size=0, test_size=10, step=10
-                )
-            )
+            list(walk_forward_splits(n_obs=100, train_size=0, test_size=10, step=10))
 
     def test_test_size_must_be_positive(self):
         with pytest.raises(WalkForwardError):
-            list(
-                walk_forward_splits(
-                    n_obs=100, train_size=10, test_size=0, step=10
-                )
-            )
+            list(walk_forward_splits(n_obs=100, train_size=10, test_size=0, step=10))
 
     def test_step_must_be_positive(self):
         with pytest.raises(WalkForwardError):
-            list(
-                walk_forward_splits(
-                    n_obs=100, train_size=10, test_size=10, step=0
-                )
-            )
+            list(walk_forward_splits(n_obs=100, train_size=10, test_size=10, step=0))
 
     def test_train_plus_test_larger_than_n_returns_empty(self):
-        splits = list(
-            walk_forward_splits(
-                n_obs=20, train_size=15, test_size=10, step=5
-            )
-        )
+        splits = list(walk_forward_splits(n_obs=20, train_size=15, test_size=10, step=5))
         assert splits == []
 
     def test_n_obs_zero_raises(self):
         with pytest.raises(WalkForwardError):
-            list(
-                walk_forward_splits(
-                    n_obs=0, train_size=10, test_size=10, step=5
-                )
-            )
+            list(walk_forward_splits(n_obs=0, train_size=10, test_size=10, step=5))
 
 
 class TestDataclass:

@@ -92,9 +92,7 @@ class TestRollingCorrelationMatrix:
         assert out["a"]["a"][2] == 1.0
 
     def test_two_series_off_diagonal_symmetric(self):
-        out = rolling_correlation_matrix(
-            {"a": [1.0, 2.0, 3.0, 4.0], "b": [4.0, 3.0, 2.0, 1.0]}, 3
-        )
+        out = rolling_correlation_matrix({"a": [1.0, 2.0, 3.0, 4.0], "b": [4.0, 3.0, 2.0, 1.0]}, 3)
         for idx in range(2, 4):
             ab = out["a"]["b"][idx]
             ba = out["b"]["a"][idx]
@@ -103,25 +101,19 @@ class TestRollingCorrelationMatrix:
             assert math.isclose(ab, ba)
 
     def test_diagonal_is_one_for_varying_series(self):
-        out = rolling_correlation_matrix(
-            {"a": [1.0, 2.0, 3.0, 4.0]}, 3
-        )
+        out = rolling_correlation_matrix({"a": [1.0, 2.0, 3.0, 4.0]}, 3)
         for v in out["a"]["a"][2:]:
             assert v == 1.0
 
     def test_diagonal_is_zero_for_constant_window(self):
         # Constant series — variation == 0 → diagonal returns 0.0.
-        out = rolling_correlation_matrix(
-            {"a": [1.0, 1.0, 1.0, 1.0]}, 3
-        )
+        out = rolling_correlation_matrix({"a": [1.0, 1.0, 1.0, 1.0]}, 3)
         for v in out["a"]["a"][2:]:
             assert v == 0.0
 
     def test_unequal_lengths_rejected(self):
         with pytest.raises(ValueError, match="equal length"):
-            rolling_correlation_matrix(
-                {"a": [1.0, 2.0], "b": [1.0, 2.0, 3.0]}, 2
-            )
+            rolling_correlation_matrix({"a": [1.0, 2.0], "b": [1.0, 2.0, 3.0]}, 2)
 
     def test_window_validation(self):
         with pytest.raises(ValueError, match="window must be"):
@@ -142,9 +134,7 @@ class TestMeanPairwiseCorrelation:
         assert mean_pairwise_correlation({"a": [1.0, 2.0, 3.0]}, 3) == []
 
     def test_first_indices_none(self):
-        out = mean_pairwise_correlation(
-            {"a": [1.0, 2.0, 3.0, 4.0], "b": [1.0, 2.0, 3.0, 4.0]}, 3
-        )
+        out = mean_pairwise_correlation({"a": [1.0, 2.0, 3.0, 4.0], "b": [1.0, 2.0, 3.0, 4.0]}, 3)
         assert out[:2] == [None, None]
         assert out[2] is not None
 
@@ -176,18 +166,12 @@ class TestMeanPairwiseCorrelation:
 
     def test_unequal_lengths_rejected(self):
         with pytest.raises(ValueError, match="equal length"):
-            mean_pairwise_correlation(
-                {"a": [1.0, 2.0], "b": [1.0, 2.0, 3.0]}, 2
-            )
+            mean_pairwise_correlation({"a": [1.0, 2.0], "b": [1.0, 2.0, 3.0]}, 2)
 
     def test_output_length_matches_series(self):
-        out = mean_pairwise_correlation(
-            {"a": [1.0] * 10, "b": [2.0] * 10}, 3
-        )
+        out = mean_pairwise_correlation({"a": [1.0] * 10, "b": [2.0] * 10}, 3)
         assert len(out) == 10
 
     def test_window_too_large_all_none(self):
-        out = mean_pairwise_correlation(
-            {"a": [1.0, 2.0], "b": [1.0, 2.0]}, 5
-        )
+        out = mean_pairwise_correlation({"a": [1.0, 2.0], "b": [1.0, 2.0]}, 5)
         assert out == [None, None]

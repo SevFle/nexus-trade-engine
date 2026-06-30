@@ -79,9 +79,7 @@ async def request_deletion(
     """
     existing = await _find_active_deletion(session, user_id)
     if existing is not None:
-        raise DeletionError(
-            f"user already has an active deletion request ({existing.id})"
-        )
+        raise DeletionError(f"user already has an active deletion request ({existing.id})")
     request = await record_request(
         session,
         user_id=user_id,
@@ -93,9 +91,7 @@ async def request_deletion(
     # Disable the account for the duration of the grace window so no
     # further processing occurs, but keep the data so the deletion is
     # reversible until the purge runs.
-    user = (
-        await session.execute(select(User).where(User.id == user_id))
-    ).scalar_one_or_none()
+    user = (await session.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if user is not None:
         user.is_active = False
     await session.flush()
@@ -114,9 +110,7 @@ async def cancel_deletion(session: AsyncSession, *, user_id: uuid.UUID) -> DSReq
         raise DeletionError("no active deletion request to cancel")
     request = await transition(session, existing, status="cancelled")
     # Reactivate the account and tear down the pending schedule.
-    user = (
-        await session.execute(select(User).where(User.id == user_id))
-    ).scalar_one_or_none()
+    user = (await session.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if user is not None:
         user.is_active = True
     schedule = await _find_schedule(session, existing.id)
@@ -139,9 +133,7 @@ async def is_pending_deletion(
     return True, row.sla_due_at
 
 
-async def is_due_for_purge(
-    session: AsyncSession, user_id: uuid.UUID
-) -> bool:
+async def is_due_for_purge(session: AsyncSession, user_id: uuid.UUID) -> bool:
     """Return True iff a pending deletion's grace window has elapsed.
 
     The actual purge job is not in this module; this is the predicate
@@ -153,9 +145,7 @@ async def is_due_for_purge(
     return row.sla_due_at <= datetime.now(tz=UTC)
 
 
-async def _find_active_deletion(
-    session: AsyncSession, user_id: uuid.UUID
-) -> DSRequest | None:
+async def _find_active_deletion(session: AsyncSession, user_id: uuid.UUID) -> DSRequest | None:
     result = await session.execute(
         select(DSRequest)
         .where(
@@ -238,9 +228,7 @@ async def anonymize_user(
 
     Raises ``LookupError`` if the user does not exist.
     """
-    user = (
-        await session.execute(select(User).where(User.id == user_id))
-    ).scalar_one_or_none()
+    user = (await session.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if user is None:
         raise LookupError(f"user not found: {user_id}")
 
@@ -262,9 +250,7 @@ async def anonymize_user(
         await session.execute(
             delete(BacktestResult).where(BacktestResult.portfolio_id.in_(portfolio_ids))
         )
-        result = await session.execute(
-            delete(Portfolio).where(Portfolio.user_id == user_id)
-        )
+        result = await session.execute(delete(Portfolio).where(Portfolio.user_id == user_id))
         purged["portfolios"] = result.rowcount or 0
 
     result = await session.execute(delete(WebhookConfig).where(WebhookConfig.user_id == user_id))
@@ -341,9 +327,7 @@ async def process_due_deletions(
     This is the body of the operator purge job. The caller commits.
     """
     return [
-        await anonymize_user(
-            session, schedule.user_id, dsr_request_id=schedule.dsr_request_id
-        )
+        await anonymize_user(session, schedule.user_id, dsr_request_id=schedule.dsr_request_id)
         for schedule in await list_due_schedules(session, now=now)
     ]
 

@@ -318,9 +318,7 @@ class TestSpecificLotTax:
         tax = cost_model.estimate_tax(
             "AAPL", 150.0, 50, lots, TaxMethod.SPECIFIC_LOT, sell_date=now
         )
-        fifo_tax = cost_model.estimate_tax(
-            "AAPL", 150.0, 50, lots, TaxMethod.FIFO, sell_date=now
-        )
+        fifo_tax = cost_model.estimate_tax("AAPL", 150.0, 50, lots, TaxMethod.FIFO, sell_date=now)
 
         specific_expected = (150.0 - 140.0) * 50 * 0.37
         fifo_expected = (150.0 - 80.0) * 50 * 0.20

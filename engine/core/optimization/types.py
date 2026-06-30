@@ -31,13 +31,9 @@ class ParamSpec:
             assert self.low is not None
             assert self.high is not None
             if self.low > self.high:
-                raise ValueError(
-                    f"ParamSpec({self.name!r}): low must be <= high"
-                )
+                raise ValueError(f"ParamSpec({self.name!r}): low must be <= high")
             if self.log and (self.low <= 0 or self.high <= 0):
-                raise ValueError(
-                    f"ParamSpec({self.name!r}): log range requires positive bounds"
-                )
+                raise ValueError(f"ParamSpec({self.name!r}): log range requires positive bounds")
 
     @property
     def is_discrete(self) -> bool:

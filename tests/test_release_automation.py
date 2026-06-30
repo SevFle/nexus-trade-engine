@@ -41,7 +41,18 @@ class TestReleasePleaseConfig:
         cfg = _read_json(ROOT / "release-please-config.json")
         sections = cfg["changelog-sections"]
         types = {s["type"] for s in sections}
-        expected = {"feat", "fix", "perf", "refactor", "docs", "test", "build", "ci", "chore", "revert"}
+        expected = {
+            "feat",
+            "fix",
+            "perf",
+            "refactor",
+            "docs",
+            "test",
+            "build",
+            "ci",
+            "chore",
+            "revert",
+        }
         assert types == expected
 
     def test_config_extra_files_includes_frontend_package_json(self):
@@ -132,7 +143,9 @@ class TestReleaseWorkflow:
         # carrying token/config/manifest inputs.
         steps = self._steps()
         assert len(steps) >= 1
-        rp = next(s for s in steps if s.get("uses", "").startswith("googleapis/release-please-action"))
+        rp = next(
+            s for s in steps if s.get("uses", "").startswith("googleapis/release-please-action")
+        )
         assert rp["with"]["config-file"] == "release-please-config.json"
         assert rp["with"]["manifest-file"] == ".release-please-manifest.json"
         assert "RELEASE_PLEASE_TOKEN" in rp["with"]["token"]

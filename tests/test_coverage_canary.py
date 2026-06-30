@@ -1,4 +1,5 @@
 """Canary test — verifies pytest-cov actually measures nexus_sdk coverage."""
+
 from __future__ import annotations
 
 import coverage
@@ -20,6 +21,4 @@ def test_canary_coverage_measurement_active():
     data = cov.get_data()
     measured_files = data.measured_files()
     sdk_files = [f for f in measured_files if "nexus_sdk" in f]
-    assert len(sdk_files) > 0, (
-        "nexus_sdk not in measured files — check [tool.coverage.run] source"
-    )
+    assert len(sdk_files) > 0, "nexus_sdk not in measured files — check [tool.coverage.run] source"

@@ -141,9 +141,7 @@ def test_normalise_ohlcv_drops_nan_and_sorts():
             "Close": [None, 2.05, 3.05],
             "Volume": [100, 200, 300],
         },
-        index=pd.to_datetime(
-            ["2026-01-03", "2026-01-01", "2026-01-02"], utc=True
-        ),
+        index=pd.to_datetime(["2026-01-03", "2026-01-01", "2026-01-02"], utc=True),
     )
     out = normalise_ohlcv(raw)
     assert list(out.columns) == list(OHLCV_COLUMNS)
@@ -194,9 +192,7 @@ async def test_call_with_retry_recovers_after_transient():
             raise TransientProviderError("boom")
         return "ok"
 
-    result = await call_with_retry(
-        flaky, provider="t", base_delay_s=0.0, max_delay_s=0.0
-    )
+    result = await call_with_retry(flaky, provider="t", base_delay_s=0.0, max_delay_s=0.0)
     assert result == "ok"
     assert attempts["n"] == 3
 
@@ -223,9 +219,7 @@ async def test_call_with_retry_gives_up_after_max_attempts():
         raise TransientProviderError("nope")
 
     with pytest.raises(TransientProviderError):
-        await call_with_retry(
-            always, provider="t", max_attempts=3, base_delay_s=0.0
-        )
+        await call_with_retry(always, provider="t", max_attempts=3, base_delay_s=0.0)
     assert attempts["n"] == 3
 
 
@@ -414,7 +408,9 @@ async def test_yahoo_adapter_caches_response():
 @pytest.mark.asyncio
 async def test_yahoo_adapter_invalid_period_raises_fatal():
     cache = _make_cache()
-    provider = YahooDataProvider(client=_mock_transport(lambda r: httpx.Response(200, json={})), cache=cache)
+    provider = YahooDataProvider(
+        client=_mock_transport(lambda r: httpx.Response(200, json={})), cache=cache
+    )
     with pytest.raises(FatalProviderError):
         await provider.get_ohlcv("AAPL", period="weird", interval="1d")
     await provider.aclose()
@@ -532,8 +528,34 @@ async def test_alpaca_requires_credentials():
 @pytest.mark.asyncio
 async def test_binance_adapter_parses_klines():
     payload = [
-        [1735689600000, "10.0", "11.0", "9.0", "10.5", "1000", 1735776000000, "10500", 5, "500", "5250", "0"],
-        [1735776000000, "10.5", "12.0", "10.0", "11.5", "2000", 1735862400000, "23000", 5, "500", "5250", "0"],
+        [
+            1735689600000,
+            "10.0",
+            "11.0",
+            "9.0",
+            "10.5",
+            "1000",
+            1735776000000,
+            "10500",
+            5,
+            "500",
+            "5250",
+            "0",
+        ],
+        [
+            1735776000000,
+            "10.5",
+            "12.0",
+            "10.0",
+            "11.5",
+            "2000",
+            1735862400000,
+            "23000",
+            5,
+            "500",
+            "5250",
+            "0",
+        ],
     ]
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -903,7 +925,9 @@ async def test_coingecko_logs_unknown_symbol(caplog):
 @pytest.mark.asyncio
 async def test_yahoo_unsupported_features_raise():
     cache = _make_cache()
-    provider = YahooDataProvider(client=_mock_transport(lambda r: httpx.Response(200, json={})), cache=cache)
+    provider = YahooDataProvider(
+        client=_mock_transport(lambda r: httpx.Response(200, json={})), cache=cache
+    )
     with pytest.raises(FatalProviderError):
         await provider.get_orderbook("AAPL")
     with pytest.raises(FatalProviderError):
@@ -994,9 +1018,7 @@ async def test_get_latest_price_via_adapters_with_mocks():
     """Smoke test the latest-price path on every adapter."""
     cache = _make_cache()
 
-    async with _mock_transport(
-        lambda r: httpx.Response(200, json=_yahoo_payload())
-    ) as client:
+    async with _mock_transport(lambda r: httpx.Response(200, json=_yahoo_payload())) as client:
         yahoo = YahooDataProvider(client=client, cache=cache)
         price = await yahoo.get_latest_price("AAPL")
         assert price is not None
@@ -1013,9 +1035,7 @@ async def test_get_latest_price_via_adapters_with_mocks():
         alpaca = AlpacaDataProvider(api_key="k", api_secret="s", client=client, cache=cache)
         assert await alpaca.get_latest_price("AAPL") == 42.5
 
-    async with _mock_transport(
-        lambda r: httpx.Response(200, json={"price": "100.0"})
-    ) as client:
+    async with _mock_transport(lambda r: httpx.Response(200, json={"price": "100.0"})) as client:
         binance = BinanceDataProvider(client=client, cache=cache)
         assert await binance.get_latest_price("BTCUSDT") == 100.0
 
@@ -1031,9 +1051,7 @@ async def test_provider_health_check_path_succeeds():
     """`HTTPProviderBase.health_check` reports UP on success."""
     cache = _make_cache()
 
-    async with _mock_transport(
-        lambda r: httpx.Response(200, json={"ok": True})
-    ) as client:
+    async with _mock_transport(lambda r: httpx.Response(200, json={"ok": True})) as client:
         provider = BinanceDataProvider(client=client, cache=cache)
         result = await provider.health_check()
     assert result.status == HealthStatus.UP
@@ -1043,9 +1061,7 @@ async def test_provider_health_check_path_succeeds():
 async def test_provider_health_check_reports_down_on_fatal():
     cache = _make_cache()
 
-    async with _mock_transport(
-        lambda r: httpx.Response(401, text="bad")
-    ) as client:
+    async with _mock_transport(lambda r: httpx.Response(401, text="bad")) as client:
         provider = PolygonDataProvider(api_key="x", client=client, cache=cache)
         result = await provider.health_check()
     assert result.status == HealthStatus.DOWN
@@ -1153,9 +1169,7 @@ async def test_registry_health_runs_probes_concurrently():
     registry = DataProviderRegistry()
     delay = 0.1
     for i in range(5):
-        registry.register(
-            ProviderRegistration(provider=_SlowFake(f"slow{i}", delay), priority=i)
-        )
+        registry.register(ProviderRegistration(provider=_SlowFake(f"slow{i}", delay), priority=i))
     started = asyncio.get_event_loop().time()
     out = await registry.health()
     elapsed = asyncio.get_event_loop().time() - started
@@ -1179,9 +1193,7 @@ async def test_request_json_aborts_response_above_byte_cap(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=hostile_body())
 
-    cap = DataProviderCapability(
-        name="hostile", asset_classes=frozenset({AssetClass.EQUITY})
-    )
+    cap = DataProviderCapability(name="hostile", asset_classes=frozenset({AssetClass.EQUITY}))
     async with _mock_transport(handler) as client:
         provider_base = http_mod.HTTPProviderBase(
             cap, base_url="http://mock", client=client, cache=_make_cache()

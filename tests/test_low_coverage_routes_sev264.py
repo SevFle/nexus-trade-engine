@@ -9,6 +9,7 @@ Covers:
 - engine/api/routes/portfolio.py (CRUD)
 - engine/api/routes/strategies.py (list, get, activate, deactivate, health)
 """
+
 from __future__ import annotations
 
 import uuid
@@ -105,10 +106,14 @@ class TestHealthProviderEndpoint:
         saved = list(registry._registrations.items())
         registry._registrations.clear()
 
-        registry.health = AsyncMock(return_value=[
-            HealthCheckResult(name="a", status=HealthStatus.UP, latency_ms=5, detail=""),
-            HealthCheckResult(name="b", status=HealthStatus.DOWN, latency_ms=None, detail="fail"),
-        ])
+        registry.health = AsyncMock(
+            return_value=[
+                HealthCheckResult(name="a", status=HealthStatus.UP, latency_ms=5, detail=""),
+                HealthCheckResult(
+                    name="b", status=HealthStatus.DOWN, latency_ms=None, detail="fail"
+                ),
+            ]
+        )
 
         app, _ = _make_db_client(db_session)
         transport = ASGITransport(app=app)
@@ -129,10 +134,16 @@ class TestHealthProviderEndpoint:
         saved = list(registry._registrations.items())
         registry._registrations.clear()
 
-        registry.health = AsyncMock(return_value=[
-            HealthCheckResult(name="a", status=HealthStatus.DOWN, latency_ms=None, detail="err"),
-            HealthCheckResult(name="b", status=HealthStatus.DOWN, latency_ms=None, detail="err"),
-        ])
+        registry.health = AsyncMock(
+            return_value=[
+                HealthCheckResult(
+                    name="a", status=HealthStatus.DOWN, latency_ms=None, detail="err"
+                ),
+                HealthCheckResult(
+                    name="b", status=HealthStatus.DOWN, latency_ms=None, detail="err"
+                ),
+            ]
+        )
 
         app, _ = _make_db_client(db_session)
         transport = ASGITransport(app=app)

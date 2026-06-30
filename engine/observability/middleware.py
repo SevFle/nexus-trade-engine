@@ -71,9 +71,7 @@ class CorrelationIdMiddleware:
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
-                headers.append(
-                    (self._header_name_bytes, cid.encode("latin-1"))
-                )
+                headers.append((self._header_name_bytes, cid.encode("latin-1")))
                 message = {**message, "headers": headers}
             await send(message)
 

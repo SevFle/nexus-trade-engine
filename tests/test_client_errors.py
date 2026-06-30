@@ -73,9 +73,7 @@ class TestRateLimit:
         # single test client should hit the limit at least once.
         seen_429 = False
         for _ in range(40):
-            r = client.post(
-                "/api/v1/client/errors", json={"message": "boom"}
-            )
+            r = client.post("/api/v1/client/errors", json={"message": "boom"})
             if r.status_code == 429:
                 seen_429 = True
                 break
@@ -84,9 +82,7 @@ class TestRateLimit:
 
     def test_429_response_has_retry_after_header(self, client: TestClient):
         for _ in range(60):
-            r = client.post(
-                "/api/v1/client/errors", json={"message": "boom"}
-            )
+            r = client.post("/api/v1/client/errors", json={"message": "boom"})
             if r.status_code == 429:
                 assert "retry-after" in {k.lower() for k in r.headers}
                 return
@@ -156,7 +152,6 @@ class TestSanitization:
         from engine.api.routes.client_errors import _strip_query
 
         assert (
-            _strip_query("https://app.example/dash?token=secret#x")
-            == "https://app.example/dash"
+            _strip_query("https://app.example/dash?token=secret#x") == "https://app.example/dash"
         )
         assert _strip_query(None) is None

@@ -97,12 +97,8 @@ class TestPriorEquityCarry:
     def test_prior_equity_loss_offsets_current_equity_gain(self):
         # Prior 4,000 EUR equity loss + +5,000 EUR current equity gain
         # → 1,000 net equity. Below allowance → no tax, no carry.
-        prior = KestCarryover(
-            equity=Decimal("4000"), other=Decimal("0")
-        )
-        result = apply_kest_carryover(
-            [_disp(proceeds="6000", cost="1000")], prior
-        )
+        prior = KestCarryover(equity=Decimal("4000"), other=Decimal("0"))
+        result = apply_kest_carryover([_disp(proceeds="6000", cost="1000")], prior)
 
         assert result.summary.equity_net == Decimal("1000.00")
         assert result.summary.taxable_income == Decimal("0.00")
@@ -111,12 +107,8 @@ class TestPriorEquityCarry:
 
     def test_prior_equity_loss_above_current_gain_carries_remainder(self):
         # Prior 8,000 + current +5,000 = -3,000 still on equity bucket.
-        prior = KestCarryover(
-            equity=Decimal("8000"), other=Decimal("0")
-        )
-        result = apply_kest_carryover(
-            [_disp(proceeds="6000", cost="1000")], prior
-        )
+        prior = KestCarryover(equity=Decimal("8000"), other=Decimal("0"))
+        result = apply_kest_carryover([_disp(proceeds="6000", cost="1000")], prior)
 
         assert result.summary.equity_net == Decimal("-3000.00")
         assert result.summary.total_tax == Decimal("0.00")
@@ -125,9 +117,7 @@ class TestPriorEquityCarry:
     def test_prior_equity_loss_does_not_offset_other_gain(self):
         # Prior 10,000 equity carry + only "other" gain this year.
         # Equity ring-fence: prior equity does not reduce other base.
-        prior = KestCarryover(
-            equity=Decimal("10000"), other=Decimal("0")
-        )
+        prior = KestCarryover(equity=Decimal("10000"), other=Decimal("0"))
         result = apply_kest_carryover(
             [
                 _disp(
@@ -150,9 +140,7 @@ class TestPriorEquityCarry:
 
 class TestPriorOtherCarry:
     def test_prior_other_loss_offsets_current_other_gain(self):
-        prior = KestCarryover(
-            equity=Decimal("0"), other=Decimal("3000")
-        )
+        prior = KestCarryover(equity=Decimal("0"), other=Decimal("3000"))
         result = apply_kest_carryover(
             [
                 _disp(
@@ -171,9 +159,7 @@ class TestPriorOtherCarry:
         assert result.next_year_carryover == KestCarryover.zero()
 
     def test_prior_other_loss_above_current_other_gain_carries_remainder(self):
-        prior = KestCarryover(
-            equity=Decimal("0"), other=Decimal("5000")
-        )
+        prior = KestCarryover(equity=Decimal("0"), other=Decimal("5000"))
         result = apply_kest_carryover(
             [
                 _disp(
@@ -197,9 +183,7 @@ class TestPriorOtherCarry:
 
 class TestCompoundLosses:
     def test_prior_loss_plus_current_loss_compounds_carryover(self):
-        prior = KestCarryover(
-            equity=Decimal("2000"), other=Decimal("1000")
-        )
+        prior = KestCarryover(equity=Decimal("2000"), other=Decimal("1000"))
         result = apply_kest_carryover(
             [
                 _disp(proceeds="500", cost="1500"),  # -1,000 equity
@@ -246,16 +230,12 @@ class TestValidation:
         with pytest.raises(ValueError):
             apply_kest_carryover(
                 [],
-                KestCarryover(
-                    equity=Decimal("-1"), other=Decimal("0")
-                ),
+                KestCarryover(equity=Decimal("-1"), other=Decimal("0")),
             )
 
     def test_negative_prior_other_rejected(self):
         with pytest.raises(ValueError):
             apply_kest_carryover(
                 [],
-                KestCarryover(
-                    equity=Decimal("0"), other=Decimal("-1")
-                ),
+                KestCarryover(equity=Decimal("0"), other=Decimal("-1")),
             )
