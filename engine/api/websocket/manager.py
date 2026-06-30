@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -38,6 +39,7 @@ from fastapi import WebSocketDisconnect
 
 if TYPE_CHECKING:
     import uuid
+    from collections.abc import Callable
 
     from fastapi import WebSocket
 
@@ -80,19 +82,62 @@ class ConnectionManager:
     is treated as a dead connection: it is detached and pruned from every
     channel it belonged to. Empty channels are removed to keep the
     registry tidy.
+
+    Channel-name hardening (SEV: ws namespace isolation):
+
+    - :attr:`DENY_PREFIXES` — sensitive namespace prefixes that clients
+      may never subscribe to by name (``admin``, ``internal``, …).
+      Checked **before** the ``user:`` ownership rule so a crafted
+      ``admin:`` / ``system:`` name can never piggy-back on a user's own
+      namespace. A caller may pass an explicit ``validator`` to opt a
+      specific channel back in (e.g. an internal admin event bus).
+    - :attr:`_CHANNEL_NAME_RE` — channel names must be alphanumeric plus
+      colon / dash / underscore only, and non-empty. This blocks path
+      traversal, whitespace, and other injection tricks up front.
+    - ``connect()`` rejects an empty / whitespace ``user_id`` so a client
+      can never register an anonymous identity and then subscribe to
+      someone else's ``user:`` channel.
+    - ``user:<id>`` channels are owner-scoped: a connection may only
+      subscribe to ``user:<its own user_id>``.
     """
+
+    #: Sensitive namespace prefixes that must never be client-subscribable.
+    DENY_PREFIXES: tuple[str, ...] = (
+        "admin",
+        "internal",
+        "system",
+        "private",
+        "staff",
+        "dm",
+    )
+
+    #: Allowed channel-name characters: ``[A-Za-z0-9:_-]`` (non-empty).
+    _CHANNEL_NAME_RE = re.compile(r"^[A-Za-z0-9:_-]+$")
 
     def __init__(self) -> None:
         self.connections: dict[str, WebSocket] = {}
         self.channel_subscriptions: dict[str, set[str]] = {}
+        #: ``connection_id -> user_id`` used to enforce ``user:`` isolation.
+        self._user_ids: dict[str, str] = {}
         self._lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
-    async def connect(self, connection_id: str, ws: WebSocket) -> None:
+    async def connect(
+        self,
+        connection_id: str,
+        ws: WebSocket,
+        user_id: str = "",
+    ) -> None:
         """Register an open WebSocket under ``connection_id``.
+
+        ``user_id`` is required and must be non-empty / non-whitespace —
+        it is what scopes a client's ``user:<id>`` channel, so an empty
+        identity would let an anonymous client masquerade as anyone. An
+        invalid ``user_id`` is rejected with :class:`ValueError` before
+        the socket is recorded.
 
         Reconnecting with an id that already exists replaces the socket
         (the new socket inherits no prior channel membership — call
@@ -100,8 +145,12 @@ class ConnectionManager:
         subscriptions left over from a previous socket with the same id
         are cleared so messages are never routed to a replaced handle.
         """
+        if not isinstance(user_id, str) or not user_id.strip():
+            raise ValueError("user_id must be a non-empty, non-whitespace string")
+        normalized_user_id = user_id.strip()
         async with self._lock:
             self.connections[connection_id] = ws
+            self._user_ids[connection_id] = normalized_user_id
             # Defensive: drop any orphan memberships left over from a
             # prior connection that reused this id without disconnecting.
             for members in self.channel_subscriptions.values():
@@ -110,6 +159,7 @@ class ConnectionManager:
         logger.info(
             "ws.connected",
             connection_id=connection_id,
+            user_id=normalized_user_id,
             total_connections=len(self.connections),
         )
 
@@ -120,6 +170,7 @@ class ConnectionManager:
         """
         async with self._lock:
             removed = self.connections.pop(connection_id, None)
+            self._user_ids.pop(connection_id, None)
             for members in self.channel_subscriptions.values():
                 members.discard(connection_id)
             self._prune_empty_channels_locked()
@@ -134,19 +185,99 @@ class ConnectionManager:
     # Channel membership
     # ------------------------------------------------------------------
 
-    async def subscribe(self, connection_id: str, channel: str) -> bool:
+    async def subscribe(
+        self,
+        connection_id: str,
+        channel: str,
+        *,
+        validator: Callable[[str], bool] | None = None,
+    ) -> bool:
         """Add ``connection_id`` to ``channel``.
 
-        Returns ``True`` if the connection exists and was subscribed
-        (or was already a member), ``False`` if the connection is not
-        registered — subscribing an unknown id is a no-op so we never
-        accumulate orphan memberships that broadcasts would chase.
+        Returns ``True`` if the connection exists and was subscribed (or
+        was already a member), ``False`` otherwise. A subscription is
+        rejected (returns ``False``, no membership recorded) when:
+
+        - the connection is not registered (no orphan memberships),
+        - ``channel`` fails the name-format check,
+        - ``channel`` lives under a :attr:`DENY_PREFIXES` namespace and
+          ``validator`` does not explicitly allow it, or
+        - ``channel`` is a ``user:<id>`` room that does not belong to
+          this connection's ``user_id``.
+
+        ``validator`` is an optional predicate that may explicitly
+        permit an otherwise-denied namespace channel (e.g. an admin
+        event bus). It is only consulted for deny-listed prefixes, never
+        to bypass the ``user:`` ownership check.
         """
         async with self._lock:
             if connection_id not in self.connections:
                 return False
+            user_id = self._user_ids.get(connection_id)
+            if not self._channel_allowed_locked(
+                channel, user_id=user_id, validator=validator
+            ):
+                return False
             self.channel_subscriptions.setdefault(channel, set()).add(connection_id)
             return True
+
+    # ------------------------------------------------------------------
+    # Channel-name policy
+    # ------------------------------------------------------------------
+
+    def _channel_allowed_locked(
+        self,
+        channel: str,
+        *,
+        user_id: str | None = None,
+        validator: Callable[[str], bool] | None = None,
+    ) -> bool:
+        """Decide whether ``channel`` may be subscribed to. Caller holds the lock.
+
+        Order is deliberate and security-sensitive:
+
+        1. **Format** — alphanumeric plus ``: - _``, non-empty.
+        2. **Deny-list** — sensitive namespace prefixes are blocked
+           *before* the ``user:`` rule so a crafted ``admin:``/
+           ``system:`` name can't piggy-back on user ownership. A
+           non-``None`` ``validator`` returning ``True`` may override.
+        3. **Ownership** — a ``user:<id>`` channel may only be joined by
+           the connection that owns that ``user_id``.
+        """
+        # 1. Format validation.
+        if (
+            not isinstance(channel, str)
+            or not channel
+            or self._CHANNEL_NAME_RE.match(channel) is None
+        ):
+            return False
+        lowered = channel.lower()
+        # 2. Deny-list takes precedence over the user: prefix rule.
+        if self._is_denied_namespace(lowered):
+            return bool(validator is not None and validator(channel))
+        # 3. user:<id> rooms are owner-scoped.
+        if lowered.startswith("user:"):
+            scope = channel[len("user:"):]
+            if not isinstance(user_id, str) or not scope or scope != user_id:
+                return False
+        return True
+
+    @classmethod
+    def _is_denied_namespace(cls, lowered: str) -> bool:
+        """True if a lowercased channel sits under a :attr:`DENY_PREFIXES` namespace.
+
+        Matches a prefix as a namespace boundary — the prefix itself or a
+        segment introduced by ``:``/``-``/``_`` — so a legitimate channel
+        like ``administrators-announcements`` is *not* swept up while
+        ``admin``, ``admin:secret``, ``admin-secret`` and ``admin_secret``
+        all are.
+        """
+        for prefix in cls.DENY_PREFIXES:
+            if lowered == prefix:
+                return True
+            if lowered.startswith((prefix + ":", prefix + "-", prefix + "_")):
+                return True
+        return False
 
     async def unsubscribe(self, connection_id: str, channel: str) -> bool:
         """Remove ``connection_id`` from ``channel``.
@@ -318,6 +449,18 @@ class ConnectionManager:
             if connection_id in members
         )
 
+    def get_user_id(self, connection_id: str) -> str | None:
+        """Return the ``user_id`` a connection registered with, or ``None``."""
+        return self._user_ids.get(connection_id)
+
+
+# ---------------------------------------------------------------------------
+# Module-level mirror of :attr:`ConnectionManager.DENY_PREFIXES` so callers
+# can ``from engine.api.websocket.manager import DENY_PREFIXES`` without
+# touching the class.
+# ---------------------------------------------------------------------------
+DENY_PREFIXES: tuple[str, ...] = ConnectionManager.DENY_PREFIXES
+
 
 # ---------------------------------------------------------------------------
 # Per-user, topic-scoped manager (gh#7 — legacy)
@@ -458,6 +601,7 @@ def get_manager() -> UserTopicManager:
 
 
 __all__ = [
+    "DENY_PREFIXES",
     "VALID_TOPICS",
     "ConnectionManager",
     "Topic",
