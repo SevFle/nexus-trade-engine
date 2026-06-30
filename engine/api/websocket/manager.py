@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -38,6 +39,7 @@ from fastapi import WebSocketDisconnect
 
 if TYPE_CHECKING:
     import uuid
+    from collections.abc import Callable
 
     from fastapi import WebSocket
 
@@ -55,6 +57,37 @@ class Topic(StrEnum):
 
 
 VALID_TOPICS: frozenset[str] = frozenset(t.value for t in Topic)
+
+
+# ---------------------------------------------------------------------------
+# Channel-name grammar + default-deny ACL (SEV-298 hardening)
+# ---------------------------------------------------------------------------
+#
+# A channel name must be lowercase ASCII, start with an alphanumeric
+# character, and use only ``:``, ``_`` and ``-`` as separators. This
+# keeps room names predictable, URL-safe and free of the path-traversal
+# / control-character tricks that an allow-by-default model would silently
+# accept. ``subscribe()`` rejects anything that fails this check.
+CHANNEL_NAME_RE: re.Pattern[str] = re.compile(r"^[a-z0-9][a-z0-9:_-]{0,63}$")
+
+#: Channels any *authenticated* connection may join without an ownership
+#: check. ``broadcast`` is the system-wide fire-hose; the ``public:*``
+#: prefix is reserved for explicitly public rooms. Everything else is
+#: private and requires the subscribing user to own the channel (the
+#: user_id appears as a ``:``-separated segment) or a custom validator
+#: to return ``True``.
+PUBLIC_CHANNELS: frozenset[str] = frozenset({"broadcast"})
+_PUBLIC_CHANNEL_PREFIX = "public:"
+
+
+def is_valid_channel_name(channel: object) -> bool:
+    """Return ``True`` iff ``channel`` matches the strict channel-name grammar."""
+    return isinstance(channel, str) and CHANNEL_NAME_RE.match(channel) is not None
+
+
+def is_public_channel(channel: str) -> bool:
+    """Return ``True`` for channels any authenticated user may join."""
+    return channel in PUBLIC_CHANNELS or channel.startswith(_PUBLIC_CHANNEL_PREFIX)
 
 
 # ---------------------------------------------------------------------------
@@ -82,17 +115,36 @@ class ConnectionManager:
     registry tidy.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        channel_validator: Callable[[str, str], bool] | None = None,
+    ) -> None:
         self.connections: dict[str, WebSocket] = {}
         self.channel_subscriptions: dict[str, set[str]] = {}
+        #: ``{connection_id: user_id}`` captured at ``connect()`` time so the
+        #: deny-by-default ACL in ``subscribe()`` can resolve ownership.
+        self._connection_users: dict[str, str] = {}
+        self._channel_validator = channel_validator
         self._lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
-    async def connect(self, connection_id: str, ws: WebSocket) -> None:
-        """Register an open WebSocket under ``connection_id``.
+    async def connect(
+        self,
+        connection_id: str,
+        ws: WebSocket,
+        *,
+        user_id: str,
+    ) -> None:
+        """Register an open WebSocket under ``connection_id`` for ``user_id``.
+
+        ``user_id`` is the identity used by the deny-by-default ACL in
+        :meth:`subscribe` to decide channel ownership. Empty or
+        whitespace-only ids are rejected with :class:`ValueError` — an
+        unauthenticated connection has no business subscribing to anything.
 
         Reconnecting with an id that already exists replaces the socket
         (the new socket inherits no prior channel membership — call
@@ -100,8 +152,14 @@ class ConnectionManager:
         subscriptions left over from a previous socket with the same id
         are cleared so messages are never routed to a replaced handle.
         """
+        if not isinstance(user_id, str) or not user_id.strip():
+            raise ValueError(
+                "connect() requires a non-empty, non-whitespace user_id"
+            )
+        normalized = user_id.strip()
         async with self._lock:
             self.connections[connection_id] = ws
+            self._connection_users[connection_id] = normalized
             # Defensive: drop any orphan memberships left over from a
             # prior connection that reused this id without disconnecting.
             for members in self.channel_subscriptions.values():
@@ -110,6 +168,7 @@ class ConnectionManager:
         logger.info(
             "ws.connected",
             connection_id=connection_id,
+            user_id=normalized,
             total_connections=len(self.connections),
         )
 
@@ -120,6 +179,7 @@ class ConnectionManager:
         """
         async with self._lock:
             removed = self.connections.pop(connection_id, None)
+            self._connection_users.pop(connection_id, None)
             for members in self.channel_subscriptions.values():
                 members.discard(connection_id)
             self._prune_empty_channels_locked()
@@ -137,16 +197,59 @@ class ConnectionManager:
     async def subscribe(self, connection_id: str, channel: str) -> bool:
         """Add ``connection_id`` to ``channel``.
 
+        Channel names are validated against :data:`CHANNEL_NAME_RE` and
+        rejected with :class:`ValueError` at this boundary — malformed
+        names never enter the registry. Access is **deny-by-default**:
+        :data:`PUBLIC_CHANNELS` (``broadcast`` + ``public:*``) pass, every
+        other channel requires the connection's ``user_id`` to own it (the
+        user_id appears as a ``:``-separated segment of the channel) or the
+        optional ``channel_validator`` to return ``True``.
+
         Returns ``True`` if the connection exists and was subscribed
-        (or was already a member), ``False`` if the connection is not
-        registered — subscribing an unknown id is a no-op so we never
-        accumulate orphan memberships that broadcasts would chase.
+        (or was already a member), ``False`` if the connection is unknown
+        or the ACL denied the channel. Subscribing an unknown id is a
+        no-op so we never accumulate orphan memberships that broadcasts
+        would chase.
         """
+        if not is_valid_channel_name(channel):
+            raise ValueError(
+                f"invalid channel name {channel!r}: must match "
+                f"{CHANNEL_NAME_RE.pattern}"
+            )
         async with self._lock:
             if connection_id not in self.connections:
                 return False
+            user_id = self._connection_users.get(connection_id, "")
+            if not self._channel_authorized(channel, user_id):
+                logger.warning(
+                    "ws.subscribe_denied",
+                    connection_id=connection_id,
+                    channel=channel,
+                )
+                return False
             self.channel_subscriptions.setdefault(channel, set()).add(connection_id)
             return True
+
+    def _channel_authorized(self, channel: str, user_id: str) -> bool:
+        """Default-deny ACL. See :meth:`subscribe` for the policy."""
+        if is_public_channel(channel):
+            return True
+        # The user owns any channel whose ``:``-segments include their id
+        # (e.g. ``user:abc``, ``portfolio:abc``, or a bare ``abc``).
+        if user_id and user_id in channel.split(":"):
+            return True
+        if self._channel_validator is not None:
+            try:
+                return bool(self._channel_validator(channel, user_id))
+            except Exception as exc:
+                logger.warning(
+                    "ws.channel_validator_error",
+                    channel=channel,
+                    error_type=type(exc).__name__,
+                    error_message=str(exc)[:200],
+                )
+                return False
+        return False
 
     async def unsubscribe(self, connection_id: str, channel: str) -> bool:
         """Remove ``connection_id`` from ``channel``.
@@ -280,6 +383,7 @@ class ConnectionManager:
         async with self._lock:
             for cid in connection_ids:
                 self.connections.pop(cid, None)
+                self._connection_users.pop(cid, None)
                 for members in self.channel_subscriptions.values():
                     members.discard(cid)
             self._prune_empty_channels_locked()
@@ -317,6 +421,10 @@ class ConnectionManager:
             for ch, members in self.channel_subscriptions.items()
             if connection_id in members
         )
+
+    def get_user_id(self, connection_id: str) -> str | None:
+        """Return the ``user_id`` captured at :meth:`connect` time, or ``None``."""
+        return self._connection_users.get(connection_id)
 
 
 # ---------------------------------------------------------------------------
@@ -458,9 +566,13 @@ def get_manager() -> UserTopicManager:
 
 
 __all__ = [
+    "CHANNEL_NAME_RE",
+    "PUBLIC_CHANNELS",
     "VALID_TOPICS",
     "ConnectionManager",
     "Topic",
     "UserTopicManager",
     "get_manager",
+    "is_public_channel",
+    "is_valid_channel_name",
 ]
