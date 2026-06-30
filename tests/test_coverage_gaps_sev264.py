@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import logging
 import sys
-from unittest.mock import AsyncMock, MagicMock, patch
+import uuid
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -647,46 +648,123 @@ class TestLoggingCoverage:
 
 
 class TestLegalDependencies:
-    @pytest.mark.asyncio
-    async def test_require_legal_acceptance_no_user_passes(self):
+    """Tests for ``require_legal_acceptance`` driven through FastAPI DI.
+
+    The dependency resolves its principal via ``get_current_user`` and its
+    session via ``get_db``. Both are controlled exclusively through
+    ``app.dependency_overrides`` — no module globals are patched (the
+    ``_placeholder_user_id`` shim is gone). The collaborator service is the
+    only thing patched, to control the pending-acceptance result.
+    """
+
+    _USER_ID = uuid.UUID("12345678-1234-5678-1234-567812345678")
+
+    def _user(self):
+        from engine.db.models import User
+
+        return User(
+            id=self._USER_ID,
+            email="legal-dep@example.com",
+            display_name="Legal Dep",
+            is_active=True,
+        )
+
+    def _build_app(self, principal):
+        """Minimal app exposing one consent-protected route.
+
+        ``principal`` (a ``User`` or ``None``) is injected by overriding
+        ``get_current_user``. The autouse conftest fixture noops
+        ``require_legal_acceptance`` on every new app, so we pop that override
+        here to let the real dependency — and its ``None``-principal guard —
+        actually run.
+        """
+        from fastapi import Depends, FastAPI
+
+        from engine.api.auth.dependency import get_current_user
+        from engine.deps import get_db
         from engine.legal.dependencies import require_legal_acceptance
 
-        result = await require_legal_acceptance(db=MagicMock())
-        assert result is None
+        app = FastAPI()
+
+        @app.get("/protected")
+        async def protected(_: None = Depends(require_legal_acceptance)):
+            return {"status": "ok"}
+
+        async def override_db():
+            yield MagicMock()
+
+        app.dependency_overrides[get_db] = override_db
+        app.dependency_overrides[get_current_user] = lambda: principal
+        app.dependency_overrides.pop(require_legal_acceptance, None)
+        return app
 
     @pytest.mark.asyncio
-    async def test_require_legal_acceptance_with_pending(self, monkeypatch):
-        from engine.legal import dependencies
+    async def test_no_principal_raises_401_directly(self):
+        """Calling the dependency with ``principal=None`` raises HTTP 401.
 
-        monkeypatch.setattr(dependencies, "_placeholder_user_id", "12345678-1234-5678-1234-567812345678")
+        A unit-level pin on the guard, independent of the HTTP layer and of
+        any module-global state.
+        """
+        from fastapi import HTTPException
 
+        from engine.legal.dependencies import require_legal_acceptance
+
+        with pytest.raises(HTTPException) as exc_info:
+            await require_legal_acceptance(db=MagicMock(), principal=None)
+        assert exc_info.value.status_code == 401
+        assert exc_info.value.detail == "Authentication required"
+
+    @pytest.mark.asyncio
+    async def test_no_principal_returns_401_via_dependency_overrides(self):
+        """End-to-end through FastAPI: an unresolved principal yields 401."""
+        app = self._build_app(principal=None)
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/protected")
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == "Authentication required"
+
+    @pytest.mark.asyncio
+    async def test_pending_acceptance_returns_451_via_dependency_overrides(self):
+        """An authenticated user with a pending required document gets 451."""
+        app = self._build_app(principal=self._user())
         mock_doc = MagicMock()
         mock_doc.slug = "terms-of-service"
 
         with patch("engine.legal.dependencies.legal_service") as mock_svc:
             mock_svc.get_pending_acceptances = AsyncMock(return_value=[mock_doc])
 
-            with pytest.raises(Exception) as exc_info:
-                await dependencies.require_legal_acceptance(db=MagicMock())
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.get("/protected")
 
-            assert exc_info.value.status_code == 451
-            assert "legal_re_acceptance_required" in str(exc_info.value.detail)
-
-        monkeypatch.setattr(dependencies, "_placeholder_user_id", None)
+        assert resp.status_code == 451
+        detail = resp.json()["detail"]
+        assert detail["code"] == "legal_re_acceptance_required"
+        assert "terms-of-service" in detail["documents"]
+        # The principal resolved via dependency_overrides is what the service
+        # receives — never a module global.
+        mock_svc.get_pending_acceptances.assert_awaited_once_with(ANY, self._USER_ID)
 
     @pytest.mark.asyncio
-    async def test_require_legal_acceptance_no_pending(self, monkeypatch):
-        from engine.legal import dependencies
-
-        monkeypatch.setattr(dependencies, "_placeholder_user_id", "12345678-1234-5678-1234-567812345678")
+    async def test_no_pending_returns_200_via_dependency_overrides(self):
+        """An authenticated user with nothing pending is allowed through."""
+        app = self._build_app(principal=self._user())
 
         with patch("engine.legal.dependencies.legal_service") as mock_svc:
             mock_svc.get_pending_acceptances = AsyncMock(return_value=[])
 
-            result = await dependencies.require_legal_acceptance(db=MagicMock())
-            assert result is None
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.get("/protected")
 
-        monkeypatch.setattr(dependencies, "_placeholder_user_id", None)
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
+        mock_svc.get_pending_acceptances.assert_awaited_once_with(ANY, self._USER_ID)
 
 
 # ---------- engine/db/session.py ----------

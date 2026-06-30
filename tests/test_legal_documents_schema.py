@@ -294,9 +294,10 @@ class TestRequireLegalAcceptanceWithoutOverride:
 
     The historical loop added conftest dependency overrides precisely to
     avoid exercising this path. These tests pin the opposite contract: the
-    dependency must run cleanly when the table exists, must return ``None``
-    when no user is configured, and must raise 451 when there's a pending
-    re-acceptance.
+    dependency must run cleanly against a real ``legal_documents`` table,
+    must raise 401 when no principal is supplied, and must raise 451 when
+    there's a pending re-acceptance. The principal is passed directly rather
+    than via a module global — there is no longer any placeholder to patch.
     """
 
     @pytest.fixture
