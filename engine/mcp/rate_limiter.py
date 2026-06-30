@@ -29,7 +29,9 @@ class RateLimiter:
         per_minute: int | None = None,
         burst: int | None = None,
     ) -> None:
-        self._per_minute = per_minute if per_minute is not None else mcp_settings.rate_limit_per_minute
+        self._per_minute = (
+            per_minute if per_minute is not None else mcp_settings.rate_limit_per_minute
+        )
         self._burst = burst if burst is not None else mcp_settings.rate_limit_burst
         self._buckets: dict[str, _Bucket] = {}
         self._lock = threading.Lock()

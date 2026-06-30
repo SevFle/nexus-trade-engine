@@ -92,9 +92,7 @@ class _SyntheticProvider(MarketDataProvider):
         return {symbols[0]: float(self._df["close"].iloc[-1])}
 
 
-def _make_df(
-    n_days: int = 60, base_price: float = 100.0, seed: int = 42
-) -> pd.DataFrame:
+def _make_df(n_days: int = 60, base_price: float = 100.0, seed: int = 42) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     start = datetime(2024, 1, 1, tzinfo=UTC)
     dates = [start + timedelta(days=i) for i in range(n_days)]
@@ -295,9 +293,7 @@ class TestPyJWTMigration:
         settings = Settings()
         monkeypatch.setattr("engine.api.auth.jwt.settings", settings)
 
-        token = create_access_token(
-            sub="u1", email="a@b.com", role="user", provider="google"
-        )
+        token = create_access_token(sub="u1", email="a@b.com", role="user", provider="google")
         payload = decode_token(token)
         assert payload is not None
         assert payload["provider"] == "google"
@@ -435,9 +431,7 @@ class TestBacktestRunnerSellPnL:
             initial_capital=100_000.0,
             random_seed=42,
         )
-        runner = BacktestRunner(
-            config=config, strategy=_BuySellStrategy(), provider=provider
-        )
+        runner = BacktestRunner(config=config, strategy=_BuySellStrategy(), provider=provider)
         result = await runner.run()
         sell_trades = [t for t in result.trades if t.get("side") == "sell"]
         assert len(sell_trades) >= 1
@@ -455,9 +449,7 @@ class TestBacktestRunnerSellPnL:
             initial_capital=100_000.0,
             random_seed=42,
         )
-        runner = BacktestRunner(
-            config=config, strategy=_BuySellStrategy(), provider=provider
-        )
+        runner = BacktestRunner(config=config, strategy=_BuySellStrategy(), provider=provider)
         result = await runner.run()
         buy_trades = [t for t in result.trades if t.get("side") == "buy"]
         assert len(buy_trades) >= 1
@@ -477,9 +469,7 @@ class TestBacktestRunnerZeroCapital:
             initial_capital=0.0,
             random_seed=42,
         )
-        runner = BacktestRunner(
-            config=config, strategy=_HoldStrategy(), provider=provider
-        )
+        runner = BacktestRunner(config=config, strategy=_HoldStrategy(), provider=provider)
         result = await runner.run()
         assert result.total_return_pct == 0.0
 
@@ -497,9 +487,7 @@ class TestBacktestRunnerWarmup:
             min_bars=200,
             random_seed=42,
         )
-        runner = BacktestRunner(
-            config=config, strategy=_HoldStrategy(), provider=provider
-        )
+        runner = BacktestRunner(config=config, strategy=_HoldStrategy(), provider=provider)
         result = await runner.run()
         assert result.equity_curve == []
         assert result.final_capital == pytest.approx(100_000.0, abs=0.01)

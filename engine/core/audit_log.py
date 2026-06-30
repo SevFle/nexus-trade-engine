@@ -53,9 +53,7 @@ class AuditEvent:
 
 class AuditLog(Protocol):
     async def append(self, event: AuditEvent) -> None: ...
-    async def list(
-        self, *, actor_id: str | None = None
-    ) -> list[AuditEvent]: ...
+    async def list(self, *, actor_id: str | None = None) -> list[AuditEvent]: ...
     async def get_by_sequence(self, sequence: int) -> AuditEvent | None: ...
     async def last(self) -> AuditEvent | None: ...
     async def all(self) -> list[AuditEvent]: ...
@@ -70,9 +68,7 @@ class InMemoryAuditLog:
     async def append(self, event: AuditEvent) -> None:
         self._events.append(event)
 
-    async def list(
-        self, *, actor_id: str | None = None
-    ) -> list[AuditEvent]:
+    async def list(self, *, actor_id: str | None = None) -> list[AuditEvent]:
         if actor_id is None:
             return list(self._events)
         return [e for e in self._events if e.actor_id == actor_id]
@@ -107,9 +103,7 @@ def _canonical_bytes(
         "prev_hash": prev_hash,
         "created_at_epoch": created_at_epoch,
     }
-    return json.dumps(
-        body, sort_keys=True, separators=(",", ":"), default=str
-    ).encode("utf-8")
+    return json.dumps(body, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
 
 
 def _hash_event(
@@ -155,9 +149,7 @@ class AuditService:
         if not actor_id.strip():
             msg = "actor_id must be non-empty"
             raise AuditLogError(msg)
-        redacted: dict[str, Any] = dict(
-            redact_processor(None, "audit", dict(payload))
-        )
+        redacted: dict[str, Any] = dict(redact_processor(None, "audit", dict(payload)))
         last = await self._log.last()
         sequence = (last.sequence + 1) if last is not None else 1
         prev_hash = last.hash if last is not None else _GENESIS_PREV_HASH
@@ -206,9 +198,7 @@ class AuditService:
             expected_seq += 1
         return True
 
-    async def list_events(
-        self, *, actor_id: str | None = None
-    ) -> list[AuditEvent]:
+    async def list_events(self, *, actor_id: str | None = None) -> list[AuditEvent]:
         return await self._log.list(actor_id=actor_id)
 
     async def get_by_sequence(self, sequence: int) -> AuditEvent | None:

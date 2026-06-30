@@ -84,16 +84,12 @@ class TestMaxOrderNotional:
 
     def test_zero_price_approves(self):
         check = MaxOrderNotional(limit=Decimal("1000"))
-        assert isinstance(
-            check(_order("10"), reference_price=Decimal("0")), Approve
-        )
+        assert isinstance(check(_order("10"), reference_price=Decimal("0")), Approve)
 
     def test_below_limit_approves(self):
         check = MaxOrderNotional(limit=Decimal("1000"))
         # 10 * 50 = 500 < 1000.
-        assert isinstance(
-            check(_order("10"), reference_price=Decimal("50")), Approve
-        )
+        assert isinstance(check(_order("10"), reference_price=Decimal("50")), Approve)
 
     def test_above_limit_rejects(self):
         check = MaxOrderNotional(limit=Decimal("1000"))

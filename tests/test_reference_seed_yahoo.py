@@ -188,25 +188,19 @@ class TestSerializeYahoo:
         assert result["display"] == "FOO"
 
     def test_equity_score_higher_than_non_equity(self):
-        equity = _serialize_yahoo(
-            {"symbol": "A", "quoteType": "EQUITY", "exchange": "XNAS"}
-        )
+        equity = _serialize_yahoo({"symbol": "A", "quoteType": "EQUITY", "exchange": "XNAS"})
         crypto = _serialize_yahoo(
             {"symbol": "B", "quoteType": "CRYPTOCURRENCY", "exchange": "XCRY"}
         )
         assert equity["score"] > crypto["score"]
 
     def test_equity_score_is_80(self):
-        result = _serialize_yahoo(
-            {"symbol": "AAPL", "quoteType": "EQUITY", "exchange": "XNAS"}
-        )
+        result = _serialize_yahoo({"symbol": "AAPL", "quoteType": "EQUITY", "exchange": "XNAS"})
         assert result["score"] == 80
 
     def test_non_equity_score_is_60(self):
         for qt in ("ETF", "CRYPTOCURRENCY", "CURRENCY", "INDEX"):
-            result = _serialize_yahoo(
-                {"symbol": "X", "quoteType": qt, "exchange": "XNYS"}
-            )
+            result = _serialize_yahoo({"symbol": "X", "quoteType": qt, "exchange": "XNYS"})
             assert result["score"] == 60
 
     def test_completion_uses_name_or_symbol(self):
@@ -215,15 +209,11 @@ class TestSerializeYahoo:
         )
         assert with_name["completion"] == "Alpha"
 
-        no_name = _serialize_yahoo(
-            {"symbol": "B", "quoteType": "EQUITY", "exchange": "XNAS"}
-        )
+        no_name = _serialize_yahoo({"symbol": "B", "quoteType": "EQUITY", "exchange": "XNAS"})
         assert no_name["completion"] == "B"
 
     def test_record_id_is_empty_string(self):
-        result = _serialize_yahoo(
-            {"symbol": "X", "quoteType": "EQUITY", "exchange": "XNAS"}
-        )
+        result = _serialize_yahoo({"symbol": "X", "quoteType": "EQUITY", "exchange": "XNAS"})
         assert result["record"]["id"] == ""
 
 
@@ -329,8 +319,7 @@ class TestYahooSearch:
 
     async def test_respects_limit(self):
         quotes = [
-            {"symbol": f"T{i}", "quoteType": "EQUITY", "exchange": "XNAS"}
-            for i in range(20)
+            {"symbol": f"T{i}", "quoteType": "EQUITY", "exchange": "XNAS"} for i in range(20)
         ]
         mock_response = httpx.Response(200, json={"quotes": quotes})
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=mock_response):
@@ -484,17 +473,13 @@ class TestSuggestYahooFallback:
             new_callable=AsyncMock,
             return_value=yahoo_results,
         ):
-            r = await fallback_client.get(
-                "/api/v1/reference/suggest", params={"q": "ZZZZ"}
-            )
+            r = await fallback_client.get("/api/v1/reference/suggest", params={"q": "ZZZZ"})
             assert r.status_code == HTTPStatus.OK
             body = r.json()
             assert len(body["suggestions"]) == 1
             assert body["suggestions"][0]["symbol"] == "ZZZZ"
 
-    async def test_yahoo_results_filtered_by_asset_class(
-        self, fallback_client: AsyncClient
-    ):
+    async def test_yahoo_results_filtered_by_asset_class(self, fallback_client: AsyncClient):
         yahoo_results = [
             {
                 "symbol": "AAPL",
@@ -541,9 +526,7 @@ class TestSuggestYahooFallback:
             for s in body["suggestions"]:
                 assert s["record"]["asset_class"] == "crypto"
 
-    async def test_both_local_and_yahoo_empty_returns_empty(
-        self, fallback_client: AsyncClient
-    ):
+    async def test_both_local_and_yahoo_empty_returns_empty(self, fallback_client: AsyncClient):
         with patch(
             "engine.api.routes.reference._yahoo_search",
             new_callable=AsyncMock,
@@ -572,36 +555,33 @@ class TestSuggestYahooFallback:
             new_callable=AsyncMock,
             side_effect=AssertionError("Yahoo should not be called"),
         ):
-            r = await fallback_client.get(
-                "/api/v1/reference/suggest", params={"q": "AAPL"}
-            )
+            r = await fallback_client.get("/api/v1/reference/suggest", params={"q": "AAPL"})
             assert r.status_code == HTTPStatus.OK
             assert len(r.json()["suggestions"]) >= 1
 
     async def test_whitespace_only_query_returns_400(self, fallback_client: AsyncClient):
-        r = await fallback_client.get(
-            "/api/v1/reference/suggest", params={"q": "   "}
-        )
+        r = await fallback_client.get("/api/v1/reference/suggest", params={"q": "   "})
         assert r.status_code == HTTPStatus.BAD_REQUEST
 
 
 class TestSerializeYahooEdgeCases:
     def test_display_format_with_name(self):
         result = _serialize_yahoo(
-            {"symbol": "AAPL", "shortname": "Apple Inc.", "quoteType": "EQUITY", "exchange": "XNAS"}
+            {
+                "symbol": "AAPL",
+                "shortname": "Apple Inc.",
+                "quoteType": "EQUITY",
+                "exchange": "XNAS",
+            }
         )
         assert result["display"] == "AAPL — Apple Inc."
 
     def test_display_format_without_name(self):
-        result = _serialize_yahoo(
-            {"symbol": "FOO", "quoteType": "EQUITY", "exchange": "XNAS"}
-        )
+        result = _serialize_yahoo({"symbol": "FOO", "quoteType": "EQUITY", "exchange": "XNAS"})
         assert result["display"] == "FOO"
 
     def test_default_currency_is_usd(self):
-        result = _serialize_yahoo(
-            {"symbol": "X", "quoteType": "EQUITY", "exchange": "XNAS"}
-        )
+        result = _serialize_yahoo({"symbol": "X", "quoteType": "EQUITY", "exchange": "XNAS"})
         assert result["record"]["currency"] == "USD"
 
     def test_custom_currency_preserved(self):

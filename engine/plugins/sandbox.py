@@ -349,9 +349,7 @@ class StrategySandbox:
             # ``getattr(obj, name, default)`` form.  The flag lets
             # ``_evaluate_inner`` skip its own increment for the propagating
             # exception, avoiding a double count.
-            violation_msg = (
-                f"Attribute '{name}' is not accessible in strategy sandbox"
-            )
+            violation_msg = f"Attribute '{name}' is not accessible in strategy sandbox"
             self.metrics.errors += 1
             self.metrics.last_error = violation_msg
             self._getattr_violation_counted = True

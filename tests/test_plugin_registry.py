@@ -168,10 +168,13 @@ class TestLoadStrategyClassNullSpec:
     def test_raises_import_error_for_null_spec(self):
         from unittest.mock import patch
 
-        with patch(
-            "engine.plugins.registry.importlib.util.spec_from_file_location",
-            return_value=None,
-        ), pytest.raises(ImportError, match="Cannot load strategy"):
+        with (
+            patch(
+                "engine.plugins.registry.importlib.util.spec_from_file_location",
+                return_value=None,
+            ),
+            pytest.raises(ImportError, match="Cannot load strategy"),
+        ):
             load_strategy_class("/fake/path.py")
 
 

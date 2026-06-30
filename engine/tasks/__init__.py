@@ -11,8 +11,7 @@ import warnings
 from engine.tasks.worker import broker, run_backtest_task, scheduler
 
 warnings.warn(
-    "Importing from 'engine.tasks' is deprecated; "
-    "import from 'engine.tasks.worker' instead.",
+    "Importing from 'engine.tasks' is deprecated; import from 'engine.tasks.worker' instead.",
     DeprecationWarning,
     stacklevel=2,
 )

@@ -111,9 +111,7 @@ class TestCorrelationMatrix:
 
     def test_uncorrelated(self):
         # Symmetric series — Pearson should be 0.
-        out = correlation_matrix(
-            {"a": [1.0, -1.0, 1.0, -1.0], "b": [1.0, 1.0, -1.0, -1.0]}
-        )
+        out = correlation_matrix({"a": [1.0, -1.0, 1.0, -1.0], "b": [1.0, 1.0, -1.0, -1.0]})
         assert out["a"]["b"] == pytest.approx(0.0, abs=1e-9)
 
     def test_constant_series_zero_correlation(self):

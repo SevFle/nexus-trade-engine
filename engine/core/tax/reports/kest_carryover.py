@@ -102,9 +102,7 @@ def apply_kest_carryover(
     """
     prior = prior or KestCarryover.zero()
     if prior.equity < 0 or prior.other < 0:
-        raise ValueError(
-            "prior carryover legs must be non-negative loss amounts"
-        )
+        raise ValueError("prior carryover legs must be non-negative loss amounts")
 
     # Sum current-year per-bucket gain/loss without going through the
     # full summariser yet — we need the per-bucket numbers to apply
@@ -130,12 +128,8 @@ def apply_kest_carryover(
     )
 
     next_carry = KestCarryover(
-        equity=(-eq_after_prior).quantize(_TWOPLACES)
-        if eq_after_prior < 0
-        else _ZERO,
-        other=(-other_after_prior).quantize(_TWOPLACES)
-        if other_after_prior < 0
-        else _ZERO,
+        equity=(-eq_after_prior).quantize(_TWOPLACES) if eq_after_prior < 0 else _ZERO,
+        other=(-other_after_prior).quantize(_TWOPLACES) if other_after_prior < 0 else _ZERO,
     )
 
     return KestApplication(
@@ -149,9 +143,7 @@ def apply_kest_carryover(
 # ---------------------------------------------------------------------------
 
 
-def _synthesize(
-    equity_net: Decimal, other_net: Decimal
-) -> list[KestDisposal]:
+def _synthesize(equity_net: Decimal, other_net: Decimal) -> list[KestDisposal]:
     """Build the smallest set of synthetic disposals that reproduce the
     given per-bucket nets. Used so :func:`summarize_kest` can still own
     the allowance + tax computations."""

@@ -139,9 +139,7 @@ class TestRetire:
             await service.retire(version_id=v.id)
 
     @pytest.mark.asyncio
-    async def test_retire_active_version_with_explicit_flag_clears_pointer(
-        self, service
-    ):
+    async def test_retire_active_version_with_explicit_flag_clears_pointer(self, service):
         sid = _strategy()
         v = await service.deploy(sid, CODE_A, {})
         await service.activate(version_id=v.id)
@@ -181,9 +179,7 @@ class TestListing:
         a = await service.deploy(sid, CODE_A, {})
         await service.deploy(sid, CODE_B, {})
         await service.activate(version_id=a.id)
-        active_only = await service.list_for_strategy(
-            strategy_id=sid, status=VersionStatus.ACTIVE
-        )
+        active_only = await service.list_for_strategy(strategy_id=sid, status=VersionStatus.ACTIVE)
         assert len(active_only) == 1
         assert active_only[0].id == a.id
 
@@ -246,9 +242,7 @@ class TestConfigValidation:
 
 class TestRollbackTarget:
     @pytest.mark.asyncio
-    async def test_rollback_picks_previously_active_not_highest_retired(
-        self, service
-    ):
+    async def test_rollback_picks_previously_active_not_highest_retired(self, service):
         # Sequence: deploy v1, v2, v3; activate v1, then v3 (skipping
         # v2). Rollback should restore v1 (the only previously-live
         # version), not v2 (deployed but never activated).

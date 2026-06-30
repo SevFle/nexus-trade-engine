@@ -16,9 +16,21 @@ sys.path.insert(0, "../engine")
 from db.session import engine as db_engine
 
 DEFAULT_SYMBOLS = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "META",
-    "NVDA", "TSLA", "JPM", "V", "JNJ",
-    "SPY", "QQQ", "IWM", "TLT", "GLD",
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "META",
+    "NVDA",
+    "TSLA",
+    "JPM",
+    "V",
+    "JNJ",
+    "SPY",
+    "QQQ",
+    "IWM",
+    "TLT",
+    "GLD",
 ]
 
 DEFAULT_PERIOD = "5y"
@@ -60,7 +72,6 @@ async def seed_ohlcv(symbols: list[str] | None = None, period: str = DEFAULT_PER
 
         except Exception:
             pass
-
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ Covers:
 - engine/legal/dependencies.py (require_legal_acceptance enforcement)
 - engine/db/session.py (init_db migration runner)
 """
+
 from __future__ import annotations
 
 import logging
@@ -41,7 +42,7 @@ class TestRunBacktestTask:
         mock_broker_inst = MagicMock()
         mock_broker_inst.with_result_backend.return_value = mock_broker_inst
         mock_broker_inst.with_middlewares.return_value = mock_broker_inst
-        mock_broker_inst.task = lambda: (lambda f: f)
+        mock_broker_inst.task = lambda: lambda f: f
 
         mods_to_remove = [k for k in sys.modules if k.startswith("engine.tasks")]
         saved = {m: sys.modules.pop(m) for m in mods_to_remove}
@@ -365,7 +366,9 @@ class TestOandaCoverageGaps:
 
         cache = _make_cache()
         async with _mock_transport(lambda r: httpx.Response(200, json={})) as client:
-            provider = OandaDataProvider(api_key="k", environment="live", client=client, cache=cache)
+            provider = OandaDataProvider(
+                api_key="k", environment="live", client=client, cache=cache
+            )
             assert "fxtrade" in provider._base_url
 
 
@@ -735,9 +738,7 @@ class TestLegalDependencies:
             mock_svc.get_pending_acceptances = AsyncMock(return_value=[mock_doc])
 
             transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(
-                transport=transport, base_url="http://test"
-            ) as client:
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.get("/protected")
 
         assert resp.status_code == 451
@@ -757,9 +758,7 @@ class TestLegalDependencies:
             mock_svc.get_pending_acceptances = AsyncMock(return_value=[])
 
             transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(
-                transport=transport, base_url="http://test"
-            ) as client:
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.get("/protected")
 
         assert resp.status_code == 200

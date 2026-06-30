@@ -110,9 +110,7 @@ class EventBusBridge:
             )
             logger.exception("ws_bridge.handle_error", channel=channel)
 
-    async def _dispatch(
-        self, room: str, channel: str, payload: dict[str, Any]
-    ) -> None:
+    async def _dispatch(self, room: str, channel: str, payload: dict[str, Any]) -> None:
         async with self._semaphore:
             t0 = time.monotonic()
             try:
@@ -130,14 +128,10 @@ class EventBusBridge:
                 await self._manager.broadcast(room, msg)
                 lag = time.monotonic() - t0
                 if lag > 1.0:
-                    ws_metrics.metrics.histogram(
-                        "sev_ws_event_bus_lag_seconds", lag * 1000
-                    )
+                    ws_metrics.metrics.histogram("sev_ws_event_bus_lag_seconds", lag * 1000)
             except Exception:
                 ws_metrics.metrics.counter(
                     "sev_ws_messages_dropped_total",
                     tags={"reason": "serialize_error"},
                 )
-                logger.exception(
-                    "ws_bridge.dispatch_error", room=room, channel=channel
-                )
+                logger.exception("ws_bridge.dispatch_error", room=room, channel=channel)

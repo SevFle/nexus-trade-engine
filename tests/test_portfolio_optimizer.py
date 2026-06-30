@@ -187,9 +187,7 @@ class TestInputValidation:
     def test_mvo_rejects_inf_in_returns(self):
         cov = np.eye(2) * 0.04
         with pytest.raises(OptimizerError, match="non-finite"):
-            mean_variance_optimization(
-                cov=cov, expected_returns=np.array([np.inf, 0.05])
-            )
+            mean_variance_optimization(cov=cov, expected_returns=np.array([np.inf, 0.05]))
 
     def test_risk_parity_raises_on_non_convergence(self):
         # max_iter=1 with the multi-asset convergent default cov should

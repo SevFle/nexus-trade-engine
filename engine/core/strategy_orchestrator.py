@@ -157,8 +157,7 @@ def _validate_weight(weight: float, strategy_id: str) -> float:
         value = float(weight)
     except (TypeError, ValueError) as exc:
         raise StrategyOrchestratorError(
-            f"weight for strategy {strategy_id!r} must be a number, "
-            f"got {weight!r}"
+            f"weight for strategy {strategy_id!r} must be a number, got {weight!r}"
         ) from exc
     if not math.isfinite(value):
         raise StrategyOrchestratorError(
@@ -166,8 +165,7 @@ def _validate_weight(weight: float, strategy_id: str) -> float:
         )
     if value < 0:
         raise StrategyOrchestratorError(
-            f"weight for strategy {strategy_id!r} must be non-negative, "
-            f"got {value!r}"
+            f"weight for strategy {strategy_id!r} must be non-negative, got {value!r}"
         )
     return value
 
@@ -178,8 +176,7 @@ def _resolve_mode(aggregation: object) -> AggregationMode:
     except ValueError as exc:
         valid = ", ".join(sorted(m.value for m in AggregationMode))
         raise StrategyOrchestratorError(
-            f"unknown aggregation mode {aggregation!r}; "
-            f"expected one of {valid}"
+            f"unknown aggregation mode {aggregation!r}; expected one of {valid}"
         ) from exc
 
 
@@ -257,9 +254,7 @@ class StrategyOrchestrator:
             )
         self._strategies[sid] = strategy
         self._weights[sid] = value
-        logger.info(
-            "orchestrator.registered", strategy_id=sid, weight=value
-        )
+        logger.info("orchestrator.registered", strategy_id=sid, weight=value)
 
     def unregister(self, strategy_id: str) -> bool:
         """Remove ``strategy_id``. Returns True if it was present."""
@@ -345,9 +340,7 @@ class StrategyOrchestrator:
                 # path is bounded by the per-strategy timeout - a sync
                 # call has already completed by the time we get here.
                 if inspect.isawaitable(raw):
-                    raw = await asyncio.wait_for(
-                        raw, timeout=self._eval_timeout
-                    )
+                    raw = await asyncio.wait_for(raw, timeout=self._eval_timeout)
             except TimeoutError as exc:
                 # Catch TimeoutError before the generic handler below:
                 # it is a subclass of OSError/Exception and must be
@@ -358,22 +351,17 @@ class StrategyOrchestrator:
                     timeout=self._eval_timeout,
                 )
                 errors[sid] = (
-                    f"{type(exc).__name__}: evaluate exceeded "
-                    f"{self._eval_timeout}s timeout"
+                    f"{type(exc).__name__}: evaluate exceeded {self._eval_timeout}s timeout"
                 )
                 continue
             except Exception as exc:
-                logger.exception(
-                    "orchestrator.strategy_failed", strategy_id=sid
-                )
+                logger.exception("orchestrator.strategy_failed", strategy_id=sid)
                 errors[sid] = f"{type(exc).__name__}: {exc}"
                 continue
             signals = list(raw) if raw else []
             batches.append(SignalBatch(strategy_id=sid, signals=signals))
 
-        aggregator = SignalAggregator(
-            _MODE_TO_METHOD[mode], self._weights
-        )
+        aggregator = SignalAggregator(_MODE_TO_METHOD[mode], self._weights)
         aggregated = aggregator.aggregate(batches)
         return OrchestrationResult(
             signals=aggregated,

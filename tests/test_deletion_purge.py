@@ -10,6 +10,7 @@ The purge must be audit-chain preserving: the user row is tombstoned
 (PII scrubbed) rather than hard-deleted so referentially-protected
 legal/audit rows survive, while owned domain data is deleted.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -102,9 +103,7 @@ async def _seed_owned_data(session: AsyncSession, user: User) -> dict[str, list]
         token_hash=uuid.uuid4().hex,
         expires_at=datetime.now(tz=UTC) + timedelta(days=1),
     )
-    consent = ConsentRecord(
-        user_id=user.id, purpose="analytics", granted=True, source="settings"
-    )
+    consent = ConsentRecord(user_id=user.id, purpose="analytics", granted=True, source="settings")
     session.add_all([backtest, webhook, api_key, token, consent])
     await session.flush()
     return {
@@ -175,26 +174,24 @@ class TestScheduleDeletion:
         # provided" and applies DEFAULT_RETENTION_EXCEPTIONS. This pins
         # the ``dict(retention_exceptions or DEFAULTS)`` contract.
         request = await _make_delete_request(db_session, user_with_data)
-        empty = await schedule_deletion(
-            db_session, request=request, retention_exceptions={}
-        )
+        empty = await schedule_deletion(db_session, request=request, retention_exceptions={})
         assert empty.retention_exceptions == DEFAULT_RETENTION_EXCEPTIONS
 
-    async def test_is_idempotent(
-        self, db_session: AsyncSession, user_with_data: User
-    ):
+    async def test_is_idempotent(self, db_session: AsyncSession, user_with_data: User):
         request = await _make_delete_request(db_session, user_with_data)
         first = await schedule_deletion(db_session, request=request)
         second = await schedule_deletion(db_session, request=request)
         assert second.id == first.id
         # No duplicate schedule rows were created.
         rows = (
-            await db_session.execute(
-                select(DeletionSchedule).where(
-                    DeletionSchedule.dsr_request_id == request.id
+            (
+                await db_session.execute(
+                    select(DeletionSchedule).where(DeletionSchedule.dsr_request_id == request.id)
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(rows) == 1
 
 
@@ -215,9 +212,7 @@ class TestRequestCancelSideEffects:
 
         schedule = (
             await db_session.execute(
-                select(DeletionSchedule).where(
-                    DeletionSchedule.dsr_request_id == request.id
-                )
+                select(DeletionSchedule).where(DeletionSchedule.dsr_request_id == request.id)
             )
         ).scalar_one()
         assert schedule.status == "scheduled"
@@ -251,9 +246,7 @@ class TestRequestCancelSideEffects:
 
         schedule = (
             await db_session.execute(
-                select(DeletionSchedule).where(
-                    DeletionSchedule.dsr_request_id == request.id
-                )
+                select(DeletionSchedule).where(DeletionSchedule.dsr_request_id == request.id)
             )
         ).scalar_one()
         assert schedule.status == "cancelled"
@@ -293,9 +286,7 @@ class TestAnonymizeUser:
         await anonymize_user(db_session, original_id)
 
         # Row still exists (kept for referential integrity).
-        user = (
-            await db_session.execute(select(User).where(User.id == original_id))
-        ).scalar_one()
+        user = (await db_session.execute(select(User).where(User.id == original_id))).scalar_one()
         expected_label = f"anonymized:{hashlib.sha256(str(original_id).encode()).hexdigest()[:16]}"
         assert user.email == f"{expected_label}@anonymized.local"
         assert user.hashed_password is None
@@ -313,16 +304,24 @@ class TestAnonymizeUser:
         uid = user_with_data.id
         await anonymize_user(db_session, uid)
 
-        assert (await db_session.execute(select(Portfolio).where(Portfolio.user_id == uid))).scalars().first() is None
-        assert (await db_session.execute(select(WebhookConfig).where(WebhookConfig.user_id == uid))).scalars().first() is None
-        assert (await db_session.execute(select(ApiKey).where(ApiKey.user_id == uid))).scalars().first() is None
-        assert (await db_session.execute(select(RefreshToken).where(RefreshToken.user_id == uid))).scalars().first() is None
-        assert (await db_session.execute(select(ConsentRecord).where(ConsentRecord.user_id == uid))).scalars().first() is None
+        assert (
+            await db_session.execute(select(Portfolio).where(Portfolio.user_id == uid))
+        ).scalars().first() is None
+        assert (
+            await db_session.execute(select(WebhookConfig).where(WebhookConfig.user_id == uid))
+        ).scalars().first() is None
+        assert (
+            await db_session.execute(select(ApiKey).where(ApiKey.user_id == uid))
+        ).scalars().first() is None
+        assert (
+            await db_session.execute(select(RefreshToken).where(RefreshToken.user_id == uid))
+        ).scalars().first() is None
+        assert (
+            await db_session.execute(select(ConsentRecord).where(ConsentRecord.user_id == uid))
+        ).scalars().first() is None
         assert (await db_session.execute(select(BacktestResult))).scalars().first() is None
 
-    async def test_purge_counts_recorded(
-        self, db_session: AsyncSession, user_with_data: User
-    ):
+    async def test_purge_counts_recorded(self, db_session: AsyncSession, user_with_data: User):
         result = await anonymize_user(db_session, user_with_data.id)
         # One portfolio, one webhook, one api key, one token, one consent.
         assert result.purged["portfolios"] == 1
@@ -331,9 +330,7 @@ class TestAnonymizeUser:
         assert result.purged["refresh_tokens"] == 1
         assert result.purged["consents"] == 1
 
-    async def test_no_portfolios_yields_no_portfolios_key(
-        self, db_session: AsyncSession
-    ):
+    async def test_no_portfolios_yields_no_portfolios_key(self, db_session: AsyncSession):
         user = _make_user()
         db_session.add(user)
         await db_session.flush()
@@ -357,9 +354,7 @@ class TestAnonymizeUser:
     ):
         request = await request_deletion(db_session, user_id=user_with_data.id)
         # Account is disabled by request_deletion; anonymize then purges.
-        result = await anonymize_user(
-            db_session, user_with_data.id, dsr_request_id=request.id
-        )
+        result = await anonymize_user(db_session, user_with_data.id, dsr_request_id=request.id)
 
         assert result.dsr_request_id == request.id
         assert result.schedule_id is not None
@@ -386,9 +381,7 @@ class TestAnonymizeUser:
         await schedule_deletion(db_session, request=request)
 
         bogus = uuid.uuid4()
-        result = await anonymize_user(
-            db_session, user_with_data.id, dsr_request_id=bogus
-        )
+        result = await anonymize_user(db_session, user_with_data.id, dsr_request_id=bogus)
         # No request/schedule matched -> no schedule_id, no crash, user purged.
         assert result.dsr_request_id == bogus
         assert result.schedule_id is None
@@ -423,9 +416,7 @@ class TestListDueSchedules:
         await session.flush()
         return schedule
 
-    async def test_returns_only_past_due_scheduled(
-        self, db_session: AsyncSession
-    ):
+    async def test_returns_only_past_due_scheduled(self, db_session: AsyncSession):
         now = datetime.now(tz=UTC)
         u_past = _make_user(email="past@example.com")
         u_future = _make_user(email="future@example.com")

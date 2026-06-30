@@ -691,12 +691,8 @@ class TestReturnSpikeRule:
         config = ValidationConfig(return_spike_zscore=2.0)
         report_tight = DataQualityReport()
         ReturnSpikeRule(config).apply(df, "AAPL", report_tight)
-        default_spikes = [
-            c for c in report_default.corrections if c.reason == "return_spike"
-        ]
-        tight_spikes = [
-            c for c in report_tight.corrections if c.reason == "return_spike"
-        ]
+        default_spikes = [c for c in report_default.corrections if c.reason == "return_spike"]
+        tight_spikes = [c for c in report_tight.corrections if c.reason == "return_spike"]
         assert len(tight_spikes) > len(default_spikes)
 
 
@@ -738,9 +734,7 @@ class TestExtendedDataValidator:
         df = _make_ohlcv_df(40, seed=11)
         # Inject one of each anomaly type.
         df.iloc[5, df.columns.get_loc("high")] = float(df.iloc[5]["open"]) - 1.0
-        df.iloc[10, df.columns.get_loc("close")] = (
-            float(df.iloc[10]["close"]) * 5.0
-        )
+        df.iloc[10, df.columns.get_loc("close")] = float(df.iloc[10]["close"]) * 5.0
         dup_row = df.iloc[[20]]
         df = pd.concat([df, dup_row]).sort_index()
         validator = DataValidator()
@@ -777,9 +771,9 @@ class TestOHLCNanHandling:
         # against NaN are unreliable.
         assert "ohlc_nan_field" in reasons
         nan_row_low_flags = [
-            c for c in report.corrections
-            if c.reason == "ohlc_low_above_body"
-            and c.original_value is not None
+            c
+            for c in report.corrections
+            if c.reason == "ohlc_low_above_body" and c.original_value is not None
         ]
         assert len(nan_row_low_flags) == 0
 

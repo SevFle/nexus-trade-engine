@@ -65,13 +65,9 @@ def _to_decimal(value: float, *, name: str) -> Decimal:
             f"{name} must be a real number (int or float), got bool {value!r}"
         )
     if not isinstance(value, (int, float)):
-        raise CapitalAllocationError(
-            f"{name} must be a real number, got {type(value).__name__}"
-        )
+        raise CapitalAllocationError(f"{name} must be a real number, got {type(value).__name__}")
     if not math.isfinite(value):
-        raise CapitalAllocationError(
-            f"{name} must be finite, got {value!r}"
-        )
+        raise CapitalAllocationError(f"{name} must be finite, got {value!r}")
     return Decimal(str(value))
 
 
@@ -108,9 +104,7 @@ def allocate_capital(
     # --- validate capital -------------------------------------------------
     capital_dec = _to_decimal(total_capital, name="total_capital")
     if capital_dec < 0:
-        raise CapitalAllocationError(
-            f"total_capital must be non-negative, got {total_capital!r}"
-        )
+        raise CapitalAllocationError(f"total_capital must be non-negative, got {total_capital!r}")
 
     # --- validate weights -------------------------------------------------
     if strategy_weights is None:  # pragma: no cover - defensive
@@ -163,8 +157,7 @@ def allocate_capital(
     # non-negative remainder smaller than the number of strategies.
     if remainder < 0 or remainder > len(weights_dec):  # pragma: no cover
         raise CapitalAllocationError(
-            "internal apportionment remainder out of range "
-            f"({remainder}); this is a bug"
+            f"internal apportionment remainder out of range ({remainder}); this is a bug"
         )
 
     # Distribute the leftover cents to the largest fractional parts.

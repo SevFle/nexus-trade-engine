@@ -30,9 +30,7 @@ def _build_app(config: SecurityHeadersConfig | None = None) -> FastAPI:
 @pytest.fixture
 async def client():
     app = _build_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 
@@ -53,9 +51,7 @@ class TestStaticHeaders:
         assert r.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
 
     @pytest.mark.asyncio
-    async def test_permissions_policy_locks_dangerous_apis(
-        self, client: AsyncClient
-    ):
+    async def test_permissions_policy_locks_dangerous_apis(self, client: AsyncClient):
         r = await client.get("/x")
         pp = r.headers.get("Permissions-Policy", "")
         for token in ("camera=()", "microphone=()", "geolocation=()"):
@@ -68,9 +64,7 @@ class TestHSTS:
         # Browsers ignore HSTS over HTTP; emit only when scheme is https
         # (or X-Forwarded-Proto: https when behind a TLS-terminating proxy).
         app = _build_app(SecurityHeadersConfig(hsts_enabled=True))
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="https://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="https://test") as ac:
             r = await ac.get("/x")
         v = r.headers.get("Strict-Transport-Security", "")
         assert "max-age=" in v
@@ -81,27 +75,21 @@ class TestHSTS:
         # TLS-terminating proxy forwards plain HTTP to the app but flags
         # the original scheme via X-Forwarded-Proto. HSTS must still emit.
         app = _build_app(SecurityHeadersConfig(hsts_enabled=True))
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             r = await ac.get("/x", headers={"X-Forwarded-Proto": "https"})
         assert "Strict-Transport-Security" in r.headers
 
     @pytest.mark.asyncio
     async def test_hsts_omitted_on_plain_http(self):
         app = _build_app(SecurityHeadersConfig(hsts_enabled=True))
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             r = await ac.get("/x")
         assert "Strict-Transport-Security" not in r.headers
 
     @pytest.mark.asyncio
     async def test_hsts_omitted_when_disabled(self):
         app = _build_app(SecurityHeadersConfig(hsts_enabled=False))
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="https://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="https://test") as ac:
             r = await ac.get("/x")
         assert "Strict-Transport-Security" not in r.headers
 
@@ -128,9 +116,7 @@ class TestCSP:
     @pytest.mark.asyncio
     async def test_csp_can_be_disabled(self):
         app = _build_app(SecurityHeadersConfig(csp_enabled=False))
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             r = await ac.get("/x")
         assert "Content-Security-Policy" not in r.headers
 
@@ -194,9 +180,7 @@ class TestServerHeaderSuppression:
             r.headers["Server"] = "uvicorn/0.99"
             return r
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             resp = await ac.get("/leaky")
         # Either absent or empty — never carrying the runtime fingerprint.
         assert resp.headers.get("Server", "") == ""
@@ -208,9 +192,7 @@ class TestExistingHeadersNotOverwritten:
         from fastapi import Response
 
         app = FastAPI()
-        app.add_middleware(
-            SecurityHeadersMiddleware, config=SecurityHeadersConfig()
-        )
+        app.add_middleware(SecurityHeadersMiddleware, config=SecurityHeadersConfig())
 
         @app.get("/y")
         async def y() -> Response:
@@ -218,9 +200,7 @@ class TestExistingHeadersNotOverwritten:
             r.headers["Content-Security-Policy"] = "custom"
             return r
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             r = await ac.get("/y")
         assert r.headers.get("Content-Security-Policy") == "custom"
 
@@ -229,9 +209,7 @@ class TestNoLeakOnNon200:
     @pytest.mark.asyncio
     async def test_404_still_carries_security_headers(self):
         app = _build_app()
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             r = await ac.get("/missing")
         assert r.status_code == 404
         assert r.headers.get("X-Content-Type-Options") == "nosniff"

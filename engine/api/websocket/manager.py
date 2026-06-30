@@ -214,9 +214,7 @@ class ConnectionManager:
             if connection_id not in self.connections:
                 return False
             user_id = self._user_ids.get(connection_id)
-            if not self._channel_allowed_locked(
-                channel, user_id=user_id, validator=validator
-            ):
+            if not self._channel_allowed_locked(channel, user_id=user_id, validator=validator):
                 return False
             self.channel_subscriptions.setdefault(channel, set()).add(connection_id)
             return True
@@ -257,7 +255,7 @@ class ConnectionManager:
             return bool(validator is not None and validator(channel))
         # 3. user:<id> rooms are owner-scoped.
         if lowered.startswith("user:"):
-            scope = channel[len("user:"):]
+            scope = channel[len("user:") :]
             if not isinstance(user_id, str) or not scope or scope != user_id:
                 return False
         return True
@@ -391,9 +389,7 @@ class ConnectionManager:
         try:
             await ws.send_json(message)
         except WebSocketDisconnect:
-            logger.info(
-                "ws.send_disconnected", connection_id=connection_id
-            )
+            logger.info("ws.send_disconnected", connection_id=connection_id)
             return False
         except Exception as exc:
             logger.warning(
@@ -444,9 +440,7 @@ class ConnectionManager:
 
     def get_subscriptions(self, connection_id: str) -> frozenset[str]:
         return frozenset(
-            ch
-            for ch, members in self.channel_subscriptions.items()
-            if connection_id in members
+            ch for ch, members in self.channel_subscriptions.items() if connection_id in members
         )
 
     def get_user_id(self, connection_id: str) -> str | None:
@@ -511,9 +505,7 @@ class UserTopicManager:
     # Subscriptions
     # ------------------------------------------------------------------
 
-    async def subscribe(
-        self, user_id: uuid.UUID, ws: WebSocket, topics: list[str]
-    ) -> set[str]:
+    async def subscribe(self, user_id: uuid.UUID, ws: WebSocket, topics: list[str]) -> set[str]:
         """Add ``topics`` to this connection's subscription set.
 
         Unknown topics are silently dropped — the route handler is
@@ -528,9 +520,7 @@ class UserTopicManager:
             user_conns[ws] |= valid
             return set(user_conns[ws])
 
-    async def unsubscribe(
-        self, user_id: uuid.UUID, ws: WebSocket, topics: list[str]
-    ) -> set[str]:
+    async def unsubscribe(self, user_id: uuid.UUID, ws: WebSocket, topics: list[str]) -> set[str]:
         async with self._lock:
             user_conns = self._conns.get(user_id)
             if user_conns is None or ws not in user_conns:

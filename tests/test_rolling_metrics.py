@@ -164,9 +164,7 @@ class TestRollingSortino:
         assert out[-1] == 0.0
 
     def test_mixed_returns_finite_sortino(self):
-        out = rolling_sortino(
-            [0.02, -0.01, 0.03, -0.02, 0.04, 0.01, -0.01], 5
-        )
+        out = rolling_sortino([0.02, -0.01, 0.03, -0.02, 0.04, 0.01, -0.01], 5)
         assert out[-1] is not None
         assert math.isfinite(out[-1])
 

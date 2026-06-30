@@ -50,9 +50,7 @@ def _counter_total(backend: RecordingBackend, name: str) -> float:
     return sum(v for (n, _t), v in backend.counters.items() if n == name)
 
 
-def _counter_with(
-    backend: RecordingBackend, name: str, tags: dict[str, str]
-) -> float:
+def _counter_with(backend: RecordingBackend, name: str, tags: dict[str, str]) -> float:
     expected = tuple(sorted(tags.items()))
     return sum(
         v
@@ -61,9 +59,7 @@ def _counter_with(
     )
 
 
-def _gauge_with(
-    backend: RecordingBackend, name: str, tags: dict[str, str]
-) -> float | None:
+def _gauge_with(backend: RecordingBackend, name: str, tags: dict[str, str]) -> float | None:
     expected = tuple(sorted(tags.items()))
     matches = [
         v
@@ -80,9 +76,7 @@ def metrics() -> RecordingBackend:
 
 class TestSubmitMarket:
     async def test_market_fill_emits_filled_outcome(self, metrics):
-        broker = PaperBroker(
-            price_for=lambda _: Decimal("100"), metrics=metrics
-        )
+        broker = PaperBroker(price_for=lambda _: Decimal("100"), metrics=metrics)
         await broker.submit(_market_buy())
 
         assert (
@@ -111,9 +105,7 @@ class TestSubmitMarket:
 
 class TestSubmitLimit:
     async def test_limit_emits_resting_outcome_and_pending_gauge(self, metrics):
-        broker = PaperBroker(
-            price_for=lambda _: Decimal("100"), metrics=metrics
-        )
+        broker = PaperBroker(price_for=lambda _: Decimal("100"), metrics=metrics)
         await broker.submit(_limit_buy())
 
         assert (
@@ -127,9 +119,7 @@ class TestSubmitLimit:
         assert _gauge_with(metrics, "paper_broker.pending", {"broker": "paper"}) == 1.0
 
     async def test_two_resting_orders_bring_pending_to_two(self, metrics):
-        broker = PaperBroker(
-            price_for=lambda _: Decimal("100"), metrics=metrics
-        )
+        broker = PaperBroker(price_for=lambda _: Decimal("100"), metrics=metrics)
         await broker.submit(_limit_buy())
         await broker.submit(_limit_buy(symbol="MSFT"))
 
@@ -138,14 +128,10 @@ class TestSubmitLimit:
 
 class TestCancel:
     async def test_cancel_known_emits_cancelled_and_drops_pending_gauge(self, metrics):
-        broker = PaperBroker(
-            price_for=lambda _: Decimal("100"), metrics=metrics
-        )
+        broker = PaperBroker(price_for=lambda _: Decimal("100"), metrics=metrics)
         result = await broker.submit(_limit_buy())
 
-        await broker.cancel(
-            order_id=result.order_id, broker_order_id=result.broker_order_id
-        )
+        await broker.cancel(order_id=result.order_id, broker_order_id=result.broker_order_id)
 
         assert (
             _counter_with(
@@ -158,14 +144,10 @@ class TestCancel:
         assert _gauge_with(metrics, "paper_broker.pending", {"broker": "paper"}) == 0.0
 
     async def test_cancel_unknown_emits_unknown_outcome(self, metrics):
-        broker = PaperBroker(
-            price_for=lambda _: Decimal("100"), metrics=metrics
-        )
+        broker = PaperBroker(price_for=lambda _: Decimal("100"), metrics=metrics)
 
         with pytest.raises(BrokerRejectError):
-            await broker.cancel(
-                order_id=uuid.uuid4(), broker_order_id="DOES-NOT-EXIST"
-            )
+            await broker.cancel(order_id=uuid.uuid4(), broker_order_id="DOES-NOT-EXIST")
 
         assert (
             _counter_with(
@@ -179,9 +161,7 @@ class TestCancel:
 
 class TestSimulateFill:
     async def test_simulate_fill_known_emits_filled_outcome(self, metrics):
-        broker = PaperBroker(
-            price_for=lambda _: Decimal("100"), metrics=metrics
-        )
+        broker = PaperBroker(price_for=lambda _: Decimal("100"), metrics=metrics)
         result = await broker.submit(_limit_buy())
 
         await broker.simulate_fill(broker_order_id=result.broker_order_id)
@@ -197,9 +177,7 @@ class TestSimulateFill:
         assert _gauge_with(metrics, "paper_broker.pending", {"broker": "paper"}) == 0.0
 
     async def test_simulate_fill_unknown_emits_unknown_outcome(self, metrics):
-        broker = PaperBroker(
-            price_for=lambda _: Decimal("100"), metrics=metrics
-        )
+        broker = PaperBroker(price_for=lambda _: Decimal("100"), metrics=metrics)
 
         with pytest.raises(BrokerError):
             await broker.simulate_fill(broker_order_id="DOES-NOT-EXIST")

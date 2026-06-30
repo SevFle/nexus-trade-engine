@@ -82,10 +82,7 @@ class HttpMetricsMiddleware:
         status_holder: dict[str, int] = {}
 
         async def send_wrapper(message: Message) -> None:
-            if (
-                message["type"] == "http.response.start"
-                and "status" not in status_holder
-            ):
+            if message["type"] == "http.response.start" and "status" not in status_holder:
                 status_holder["status"] = int(message.get("status", 0))
             await send(message)
 

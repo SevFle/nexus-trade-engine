@@ -78,10 +78,7 @@ class TestNsccFee:
 
     def test_per_side_override(self):
         # Operator pin to a different rate.
-        assert (
-            nscc_clearing_fee(100_000, per_side=Decimal("0.0005"))
-            == Decimal("50.00")
-        )
+        assert nscc_clearing_fee(100_000, per_side=Decimal("0.0005")) == Decimal("50.00")
 
 
 # ---------------------------------------------------------------------------
@@ -96,10 +93,7 @@ class TestTakerFee:
 
     def test_custom_rate(self):
         # Some venues charge $0.0029.
-        assert (
-            exchange_taker_fee(1000, rate_per_share=Decimal("0.0029"))
-            == Decimal("2.90")
-        )
+        assert exchange_taker_fee(1000, rate_per_share=Decimal("0.0029")) == Decimal("2.90")
 
     def test_zero_quantity_zero_fee(self):
         assert exchange_taker_fee(0) == Decimal("0.00")
@@ -120,10 +114,7 @@ class TestMakerRebate:
         assert exchange_maker_rebate(1000) == Decimal("2.00")
 
     def test_custom_rate(self):
-        assert (
-            exchange_maker_rebate(1000, rate_per_share=Decimal("0.0030"))
-            == Decimal("3.00")
-        )
+        assert exchange_maker_rebate(1000, rate_per_share=Decimal("0.0030")) == Decimal("3.00")
 
     def test_zero_quantity_zero_rebate(self):
         assert exchange_maker_rebate(0) == Decimal("0.00")
