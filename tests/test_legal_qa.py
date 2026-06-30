@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from engine.db.models import User
+
 
 class TestAcceptanceRecordImmutability:
     async def _seed(self, db_session: AsyncSession):
@@ -127,33 +129,56 @@ class TestAcceptanceRecordImmutability:
 
 
 class TestConsentEnforcementIntegration:
-    @pytest.fixture
-    async def consent_client(self, db_session: AsyncSession):
+    """End-to-end consent enforcement driven through FastAPI DI.
+
+    The protected routes declare ``Depends(require_legal_acceptance)`` and the
+    authenticated principal is supplied exclusively via an
+    ``app.dependency_overrides`` entry on ``get_current_user`` — never via
+    module-global state. The real dependency runs (the autouse conftest noop
+    override is popped) against the shared test session so the full
+    401 / 200 / 451 contract is exercised.
+    """
+
+    @staticmethod
+    def _build_consent_app(db_session: AsyncSession, principal: User | None) -> FastAPI:
+        from engine.api.auth.dependency import get_current_user
+
         app = FastAPI()
 
         async def override_get_db():
             yield db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = lambda: principal
+        # The autouse conftest fixture noop's require_legal_acceptance on every
+        # new app; pop it so the real dependency (and its 401/451 paths) runs.
+        app.dependency_overrides.pop(require_legal_acceptance, None)
 
-        @app.get("/protected/backtest")
-        async def protected_backtest(db: AsyncSession = Depends(get_db)):
-            await require_legal_acceptance(db)
+        @app.get(
+            "/protected/backtest",
+            dependencies=[Depends(require_legal_acceptance)],
+        )
+        async def protected_backtest() -> dict[str, str]:
             return {"status": "ok"}
 
-        @app.get("/protected/live-trade")
-        async def protected_live_trade(db: AsyncSession = Depends(get_db)):
-            await require_legal_acceptance(db)
+        @app.get(
+            "/protected/live-trade",
+            dependencies=[Depends(require_legal_acceptance)],
+        )
+        async def protected_live_trade() -> dict[str, str]:
             return {"order_id": "123"}
 
+        return app
+
+    async def test_no_principal_returns_401(self, db_session: AsyncSession):
+        """An unresolved principal fails closed with HTTP 401 — no bypass."""
+        app = self._build_consent_app(db_session, principal=None)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            yield client
+            resp = await client.get("/protected/backtest")
+        assert resp.status_code == HTTPStatus.UNAUTHORIZED
+        assert resp.json()["detail"] == "Authentication required"
 
-    @pytest.mark.skip(
-        reason="require_legal_acceptance is a no-op until the auth dependency "
-        "is wired (tracked separately as consent-enforcement follow-up)."
-    )
     async def test_require_legal_acceptance_raises_451_when_pending(
         self, db_session: AsyncSession
     ):
@@ -168,15 +193,22 @@ class TestConsentEnforcementIntegration:
             file_path="legal/terms-of-service.md",
         )
         db_session.add(doc)
+
+        user = make_user(email=f"consent-{uuid.uuid4()}@example.com")
+        db_session.add(user)
         await db_session.flush()
 
-        with pytest.raises(HTTPException) as exc_info:
-            await require_legal_acceptance(db_session)
-        assert exc_info.value.status_code == 451
-        detail = exc_info.value.detail
+        app = self._build_consent_app(db_session, principal=user)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/protected/backtest")
+
+        assert resp.status_code == HTTPStatus.UNAVAILABLE_FOR_LEGAL_REASONS
+        detail = resp.json()["detail"]
         assert detail["code"] == "legal_re_acceptance_required"
         assert "documents" in detail
         assert isinstance(detail["documents"], list)
+        assert doc.slug in detail["documents"]
 
     async def test_no_451_when_all_accepted(self, db_session: AsyncSession):
         doc = LegalDocument(
@@ -207,11 +239,17 @@ class TestConsentEnforcementIntegration:
         db_session.add(acceptance)
         await db_session.flush()
 
-    @pytest.mark.skip(
-        reason="require_legal_acceptance is a no-op until the auth dependency "
-        "is wired (tracked separately as consent-enforcement follow-up)."
-    )
-    async def test_451_response_contains_pending_document_slugs(self, db_session: AsyncSession):
+        app = self._build_consent_app(db_session, principal=user)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/protected/backtest")
+
+        assert resp.status_code == HTTPStatus.OK
+        assert resp.json() == {"status": "ok"}
+
+    async def test_451_response_contains_pending_document_slugs(
+        self, db_session: AsyncSession
+    ):
         slugs = [f"pending-{uuid.uuid4().hex[:8]}" for _ in range(3)]
         for i, slug in enumerate(slugs):
             doc = LegalDocument(
@@ -225,12 +263,18 @@ class TestConsentEnforcementIntegration:
                 file_path="legal/terms-of-service.md",
             )
             db_session.add(doc)
+
+        user = make_user(email=f"pending-{uuid.uuid4()}@example.com")
+        db_session.add(user)
         await db_session.flush()
 
-        with pytest.raises(HTTPException) as exc_info:
-            await require_legal_acceptance(db_session)
-        assert exc_info.value.status_code == 451
-        pending_slugs = exc_info.value.detail["documents"]
+        app = self._build_consent_app(db_session, principal=user)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/protected/backtest")
+
+        assert resp.status_code == HTTPStatus.UNAVAILABLE_FOR_LEGAL_REASONS
+        pending_slugs = resp.json()["detail"]["documents"]
         for slug in slugs:
             assert slug in pending_slugs
 

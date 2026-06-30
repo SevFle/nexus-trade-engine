@@ -310,28 +310,36 @@ class TestRequireLegalAcceptanceWithoutOverride:
             yield s
         await engine.dispose()
 
-    async def test_dependency_noop_when_placeholder_unset(
-        self, session: AsyncSession, monkeypatch
+    async def test_dependency_raises_401_without_principal(
+        self, session: AsyncSession
     ) -> None:
-        """The current contract: when no user is wired up, the dependency
-        returns immediately without touching the DB. This is what allows
-        the public read-only routes to work pre-auth."""
-        from engine.legal import dependencies
+        """The dependency fails closed: when no principal is resolved it
+        raises HTTP 401 unconditionally rather than silently letting the
+        request through. There is no module-global placeholder to patch."""
+        from fastapi import HTTPException
 
-        monkeypatch.setattr(dependencies, "_placeholder_user_id", None)
-        # Must not raise — and must not require legal_documents to be populated.
-        result = await require_legal_acceptance(db=session)  # type: ignore[call-arg]
-        assert result is None
+        with pytest.raises(HTTPException) as exc:
+            await require_legal_acceptance(db=session, principal=None)
+        assert exc.value.status_code == 401
+        assert exc.value.detail == "Authentication required"
 
     async def test_dependency_raises_451_when_pending(
-        self, session: AsyncSession, monkeypatch
+        self, session: AsyncSession
     ) -> None:
-        """End-to-end: with a placeholder user and an unaccepted required
-        document, the dependency raises HTTP 451."""
-        from engine.legal import dependencies
+        """End-to-end: with an authenticated user and an unaccepted required
+        document, the dependency raises HTTP 451. The principal is passed
+        directly — no module global is involved."""
+        from fastapi import HTTPException
+
+        from engine.db.models import User
 
         user_id = uuid.uuid4()
-        monkeypatch.setattr(dependencies, "_placeholder_user_id", user_id)
+        principal = User(
+            id=user_id,
+            email="dep-pending@example.com",
+            display_name="Dep Pending",
+            is_active=True,
+        )
 
         session.add(
             LegalDocument(
@@ -347,26 +355,28 @@ class TestRequireLegalAcceptanceWithoutOverride:
         )
         await session.flush()
 
-        from fastapi import HTTPException
-
         with pytest.raises(HTTPException) as exc:
-            await require_legal_acceptance(db=session)  # type: ignore[call-arg]
+            await require_legal_acceptance(db=session, principal=principal)
         assert exc.value.status_code == 451
         assert exc.value.detail["code"] == "legal_re_acceptance_required"
         assert "must-accept-dep" in exc.value.detail["documents"]
 
     async def test_dependency_passes_when_all_accepted(
-        self, session: AsyncSession, monkeypatch
+        self, session: AsyncSession
     ) -> None:
         """Once a user accepts every required doc at the current version,
         the dependency must return ``None`` — proving the table round-trip
-        (insert acceptance + query pending) works on SQLite."""
-        from engine.legal import dependencies
+        (insert acceptance + query pending) works on SQLite. The principal
+        is passed directly, no module global involved."""
+        from engine.db.models import User
 
         user_id = uuid.uuid4()
-        monkeypatch.setattr(dependencies, "_placeholder_user_id", user_id)
-
-        from engine.db.models import User
+        principal = User(
+            id=user_id,
+            email="dep-test@example.com",
+            display_name="Dep Test",
+            is_active=True,
+        )
 
         session.add(
             User(
@@ -403,7 +413,7 @@ class TestRequireLegalAcceptanceWithoutOverride:
         )
         await session.flush()
 
-        result = await require_legal_acceptance(db=session)  # type: ignore[call-arg]
+        result = await require_legal_acceptance(db=session, principal=principal)
         assert result is None
 
 
