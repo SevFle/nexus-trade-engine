@@ -1,4 +1,7 @@
 """Deeper probe: detection semantics + forced async-callable-object path."""
+# ruff: noqa: T201, SLF001, ARG001, ARG002
+# Experimental scratch probe: intentional console diagnostics, deliberate
+# probing of private orchestrator state, and interface-conforming args.
 from __future__ import annotations
 
 import asyncio

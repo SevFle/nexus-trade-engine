@@ -20,6 +20,8 @@ flowchart LR
     end
     API <--> CORE
     CORE -->|publish| EV
+    CORE2["core/strategy_orchestrator.py<br/>+ signal_aggregator<br/>(multi-strategy merge)"] -.-> CORE
+    CA["portfolio/ + core/capital_allocation<br/>(exact-sum split)"] -.-> CORE
     EV -->|pub/sub<br/>(cross-replica)| WSB["ws/event_bridge"]
     EV -->|fan-out| WH["webhook dispatcher<br/>(HMAC)"]
     WSB --> WS["WS clients"]
@@ -68,7 +70,7 @@ React app under `frontend/`.
 | [`engine/main.py`](../../engine/main.py)          | Legacy minimal app module kept for `python -m engine.main`. It mounts only portfolio/strategies/backtest/marketplace and is **not** what `create_app()` produces — do not extend it; add routers to [`engine/api/router.py`](../../engine/api/router.py) instead. |
 | [`engine/config.py`](../../engine/config.py)      | Pydantic settings — every env var the engine reads lives here. |
 | [`engine/api/`](../../engine/api/)                | HTTP/WebSocket surface: routers, auth, rate limiting, error mapping. |
-| [`engine/core/`](../../engine/core/)              | Domain logic: backtest runner, strategy evaluator, execution primitives. |
+| [`engine/core/`](../../engine/core/)              | Domain logic: backtest runner, strategy evaluator, execution primitives, and the [multi-strategy orchestrator](strategy-orchestration.md) + capital allocation. |
 | [`engine/data/`](../../engine/data/)              | Market data providers and the registry that picks one at runtime. |
 | [`engine/db/`](../../engine/db/)                  | SQLAlchemy models, async session factory, Alembic migrations. |
 | [`engine/events/`](../../engine/events/)          | Event bus + outbound webhook dispatcher (gh#80). |
@@ -175,6 +177,7 @@ without reading the source.
 | A new strategy / data provider / executor | A strategy package under [`strategies/<name>/`](../../strategies/) (manifest + `strategy.py`); a data provider via `engine/data/providers/` + the YAML registry. See [plugins.md](plugins.md). |
 | A new outbound integration (webhook template) | Extend [`engine/events/webhook_dispatcher.py:render_template`](../../engine/events/webhook_dispatcher.py) and the `_VALID_TEMPLATES` set in `routes/webhooks.py`. |
 | A new database table / column         | An Alembic revision in `engine/db/migrations/versions/`. See [database.md](database.md). |
+| A multi-strategy run / capital split | [`engine/core/strategy_orchestrator.py`](../../engine/core/strategy_orchestrator.py) + [`engine/portfolio/allocation.py`](../../engine/portfolio/allocation.py); see [strategy-orchestration.md](strategy-orchestration.md). (Not yet wired to a route.) |
 | A new metric                          | Use `get_metrics()` from `engine/observability/metrics.py`. Add it to [`docs/operations/slos.md`](../operations/slos.md) **only** if it backs an SLO. |
 | A new SLO                             | [`docs/operations/slos.md`](../operations/slos.md) and [`observability/prometheus/slo-rules.yaml`](../../observability/prometheus/slo-rules.yaml) in the same PR. |
 

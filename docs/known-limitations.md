@@ -198,6 +198,70 @@ to `.env.example` in the same PR. The PLR0911 ignore already in
 
 ---
 
+## P2 — Dead duplicate WebSocket package (`engine/api/websocket/`)
+
+**Where**: [`engine/api/websocket/`](../engine/api/websocket/)
+(`manager.py`, `bridge.py`) + [`engine/api/routes/websocket.py`](../engine/api/routes/websocket.py).
+
+The **live** `/api/v1/ws` route is [`engine/api/ws/router.py`](../engine/api/ws/router.py)
+(SEV-275: channel-based pub/sub, JWT auth, scope/owner permissions, see
+[`api-reference.md`](api-reference.md#websocket)). It is what
+[`engine/api/router.py`](../engine/api/router.py) includes.
+
+A second, older implementation still ships in `engine/api/websocket/`
+(`UserTopicManager`, topic-based: `portfolio`/`backtest`/`order`/`alert`).
+Its only consumer is `engine/api/routes/websocket.py`, and that route
+file is **not imported by `router.py`** — so the whole package backs an
+endpoint that is never mounted. (The known-limitations entry above on
+WS not accepting API keys already notes this route is "no longer
+mounted"; the package itself is the remaining debt.)
+
+This is actively misleading because commit `6011b56` ("security(websocket):
+Deny-list sensitive namespaces") hardened `engine/api/websocket/manager.py`
+against a HIGH-severity ACL bypass — i.e. **a security fix landed on
+dead code**. The live `engine/api/ws/` path is safe by construction
+(`VALID_CHANNELS` is an allow-list of `portfolio`/`orders`/`strategies`
+plus the permission matrix in `ws/permissions.py`), so there is no
+live vulnerability, but a reader who greps for the SEV fix lands on the
+dead module.
+
+**Workaround today**: none needed for correctness. When extending WS
+behaviour, work in `engine/api/ws/` only.
+
+**Fix path**: delete `engine/api/routes/websocket.py`, then
+`engine/api/websocket/` and its references in
+`engine/data/streaming/__init__.py`'s docstring. The
+`data/streaming/` primitives (`BoundedBuffer`, `ReplayLog`) are
+unaffected — they import nothing from the dead package at runtime.
+
+---
+
+## P2 — Stale `engine/orchestration/` package (source removed)
+
+**Where**: [`engine/orchestration/`](../engine/orchestration/).
+
+The multi-strategy orchestrator source lives at
+[`engine/core/strategy_orchestrator.py`](../engine/core/strategy_orchestrator.py)
+(see [`architecture/strategy-orchestration.md`](architecture/strategy-orchestration.md)).
+An older `engine/orchestration/` package was removed, but its
+`__pycache__/orchestrator.cpython-311.pyc` and `__init__.cpython-311.pyc`
+remain on disk. There is no `.py` source under `engine/orchestration/`
+anymore — only compiled bytecode.
+
+**Impact**: none at runtime (nothing imports the package — the live
+class is `engine.core.strategy_orchestrator.StrategyOrchestrator`). The
+risk is purely navigational confusion: a contributor searching for
+"orchestrator" finds a stale package dir and may edit the wrong place,
+or assume the compiled bytecode is loadable.
+
+**Workaround today**: ignore `engine/orchestration/`; the real code is
+in `engine/core/strategy_orchestrator.py`.
+
+**Fix path**: `rm -rf engine/orchestration/` and add the directory to
+`.gitignore`-adjacent cleanup. No code references it.
+
+---
+
 ## P2 — Per-route ignore list in `pyproject.toml` is large
 
 **Where**: [`pyproject.toml`](../pyproject.toml) lines 73–130.

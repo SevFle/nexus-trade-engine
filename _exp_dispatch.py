@@ -1,4 +1,7 @@
 """Scratch experiment: probe real orchestrator dispatch for each edge case."""
+# ruff: noqa: T201, ARG001, ARG002
+# Experimental scratch probe: intentional console diagnostics and
+# interface-conforming (unused) arguments required by the dispatch contract.
 from __future__ import annotations
 
 import asyncio

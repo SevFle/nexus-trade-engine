@@ -16,10 +16,14 @@ For *why* we made specific structural choices, see
    data ownership.
 3. **[plugins.md](plugins.md)** — plugin SDK and the registry that
    loads strategies / data providers / execution backends at runtime.
-4. **[`docs/operations/`](../operations/)** — how the running system is
+4. **[strategy-orchestration.md](strategy-orchestration.md)** — running
+   many strategies against one snapshot, merging their signals, and
+   splitting capital across them. The substrate for the (still
+   library-only) Multi-Strategy orchestrator roadmap item.
+5. **[`docs/operations/`](../operations/)** — how the running system is
    monitored, backed up, and recovered. Lives next to the runbooks
    that on-call uses.
-5. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
+6. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
    Read these before proposing a change that contradicts them.
 
 ## Existing diagrams

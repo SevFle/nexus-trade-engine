@@ -136,6 +136,9 @@ key entry points:
 
 - [Architecture overview](docs/architecture/overview.md) — system
   components, request lifecycle, configuration.
+- [Strategy orchestration](docs/architecture/strategy-orchestration.md) —
+  running many strategies against one snapshot, merging signals, and
+  splitting capital (the Multi-Strategy orchestrator substrate).
 - [API reference](docs/api-reference.md) — every HTTP and WebSocket
   route, auth model, error semantics.
 - [MCP server](docs/mcp-server.md) — the Model Context Protocol surface
