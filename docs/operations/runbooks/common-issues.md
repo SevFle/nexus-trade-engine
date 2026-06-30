@@ -22,9 +22,13 @@ curl -H "Authorization: Bearer $TOKEN" \
 If `acceptances` is empty or missing one of the
 `requires_acceptance=true` docs, that's the cause — most non-GET
 routes (`/backtest/*`, `/portfolio/*`, `/market-data/*`,
-`/scoring/*`, `/strategies/*`, `/marketplace/*`, `/reference/*`)
+`/scoring/*`, `/strategies/*`, `/marketplace/*`)
 gate on `require_legal_acceptance` (see
-[`engine/legal/dependencies.py`](../../../engine/legal/dependencies.py)).
+[`engine/legal/dependencies.py`](../../../engine/legal/dependencies.py)
+and the [API reference](../../api-reference.md#legal-acceptance-gate)
+for the full gated-vs-ungated split — notably `/reference/*`,
+`/tax/*`, `/webhooks/*`, `/privacy/*`, and `/auth/*` are deliberately
+**not** gated so they stay reachable before any acceptance exists).
 
 ### Triage
 

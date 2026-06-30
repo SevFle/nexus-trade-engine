@@ -33,7 +33,7 @@ erDiagram
 
 ## Identity & auth
 
-### `users` (migration 001, 009)
+### `users` (migration 001, 009, 013)
 
 Primary identity. UUID PK. Key columns:
 
@@ -47,6 +47,7 @@ Primary identity. UUID PK. Key columns:
 | `mfa_enabled` | bool default false | Set true only after `/mfa/enroll/confirm`. |
 | `mfa_secret_encrypted` | text nullable | Fernet-encrypted TOTP secret. Keyed by `NEXUS_MFA_ENCRYPTION_KEY`. |
 | `mfa_backup_codes` | JSONB nullable | Array of bcrypt hashes; consumed codes are removed in place. |
+| `processing_restricted` | bool default false | GDPR Art. 18 flag (gh#157). When true, all processing except retention-critical background work halts (e.g. live trading auto-stops). The user can still authenticate to manage their privacy settings — *not* account deactivation. Added by migration 013. |
 
 Invariant: `(auth_provider, external_id)` is unique (index
 `uq_user_provider_external`). A single email may be claimed by at most
@@ -232,7 +233,7 @@ queue view.
 
 ## Adding a new table
 
-1. Pick the next migration number (`013_…` today).
+1. Pick the next migration number (`014_…` today).
 2. Add the model in `engine/db/models.py` in the same PR.
 3. Write the migration with both `upgrade()` and `downgrade()`.
 4. Add a test in `tests/` that round-trips a representative row and

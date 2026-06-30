@@ -227,10 +227,12 @@ under the `NEXUS_MCP_` prefix and/or `.env`.
 | `NEXUS_MCP_BACKTEST_MAX_BARS` | `50000` | |
 | `NEXUS_MCP_BACKTEST_DEFAULT_PROVIDER` | `yahoo` | Provider name passed to `get_data_provider`. |
 
-> These are **not** yet in `.env.example`. The wiring path is: any
-> operator running the MCP server sets them in their own env / `.env`.
-> Adding them to `.env.example` is tracked alongside the `server.py`
-> gap (see [known-limitations.md](known-limitations.md#mcp)).
+> These are now enumerated in `.env.example` under the
+> `── MCP server (engine/mcp) ──` block (with a header comment noting
+> the `server.py` gap), so operators have the full knob inventory
+> without reading [`config.py`](../engine/mcp/config.py). The wiring
+> path is: any operator running the MCP server sets them in their own
+> env / `.env`.
 
 ## Engine services (`EngineServices`)
 

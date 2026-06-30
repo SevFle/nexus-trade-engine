@@ -37,9 +37,10 @@ The schema is owned by the Alembic migration chain in
 | 010   | `webhook_configs` + `webhook_deliveries` (gh#80).              |
 | 011   | `api_keys` — long-lived scoped credentials for SDK / headless access (gh#94). |
 | 012   | `dsr_requests` — GDPR / CCPA data-subject-request audit log (gh#157). |
+| 013   | `users.processing_restricted` — GDPR Art. 18 restriction flag (gh#157). |
 
 Run `alembic history` for the source of truth. The next free revision
-number is `013`.
+number is `014`.
 
 ## Critical tables
 
