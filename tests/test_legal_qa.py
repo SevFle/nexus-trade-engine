@@ -6,7 +6,7 @@ from http import HTTPStatus
 from typing import TYPE_CHECKING
 
 import pytest
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 
@@ -127,33 +127,15 @@ class TestAcceptanceRecordImmutability:
 
 
 class TestConsentEnforcementIntegration:
-    @pytest.fixture
-    async def consent_client(self, db_session: AsyncSession):
-        app = FastAPI()
+    async def test_require_legal_acceptance_raises_401_when_no_principal(
+        self, db_session: AsyncSession
+    ):
+        """Fail closed: a request with no resolved principal must be rejected
+        with 401, never silently allowed through."""
+        with pytest.raises(HTTPException) as exc_info:
+            await require_legal_acceptance(principal=None, db=db_session)
+        assert exc_info.value.status_code == 401
 
-        async def override_get_db():
-            yield db_session
-
-        app.dependency_overrides[get_db] = override_get_db
-
-        @app.get("/protected/backtest")
-        async def protected_backtest(db: AsyncSession = Depends(get_db)):
-            await require_legal_acceptance(db)
-            return {"status": "ok"}
-
-        @app.get("/protected/live-trade")
-        async def protected_live_trade(db: AsyncSession = Depends(get_db)):
-            await require_legal_acceptance(db)
-            return {"order_id": "123"}
-
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            yield client
-
-    @pytest.mark.skip(
-        reason="require_legal_acceptance is a no-op until the auth dependency "
-        "is wired (tracked separately as consent-enforcement follow-up)."
-    )
     async def test_require_legal_acceptance_raises_451_when_pending(
         self, db_session: AsyncSession
     ):
@@ -168,15 +150,19 @@ class TestConsentEnforcementIntegration:
             file_path="legal/terms-of-service.md",
         )
         db_session.add(doc)
+
+        user = make_user(email=f"consent-{uuid.uuid4()}@example.com")
+        db_session.add(user)
         await db_session.flush()
 
         with pytest.raises(HTTPException) as exc_info:
-            await require_legal_acceptance(db_session)
+            await require_legal_acceptance(principal=user, db=db_session)
         assert exc_info.value.status_code == 451
         detail = exc_info.value.detail
         assert detail["code"] == "legal_re_acceptance_required"
         assert "documents" in detail
         assert isinstance(detail["documents"], list)
+        assert doc.slug in detail["documents"]
 
     async def test_no_451_when_all_accepted(self, db_session: AsyncSession):
         doc = LegalDocument(
@@ -207,11 +193,12 @@ class TestConsentEnforcementIntegration:
         db_session.add(acceptance)
         await db_session.flush()
 
-    @pytest.mark.skip(
-        reason="require_legal_acceptance is a no-op until the auth dependency "
-        "is wired (tracked separately as consent-enforcement follow-up)."
-    )
-    async def test_451_response_contains_pending_document_slugs(self, db_session: AsyncSession):
+        result = await require_legal_acceptance(principal=user, db=db_session)
+        assert result is None
+
+    async def test_451_response_contains_pending_document_slugs(
+        self, db_session: AsyncSession
+    ):
         slugs = [f"pending-{uuid.uuid4().hex[:8]}" for _ in range(3)]
         for i, slug in enumerate(slugs):
             doc = LegalDocument(
@@ -225,10 +212,13 @@ class TestConsentEnforcementIntegration:
                 file_path="legal/terms-of-service.md",
             )
             db_session.add(doc)
+
+        user = make_user(email=f"pending-{uuid.uuid4()}@example.com")
+        db_session.add(user)
         await db_session.flush()
 
         with pytest.raises(HTTPException) as exc_info:
-            await require_legal_acceptance(db_session)
+            await require_legal_acceptance(principal=user, db=db_session)
         assert exc_info.value.status_code == 451
         pending_slugs = exc_info.value.detail["documents"]
         for slug in slugs:

@@ -13,6 +13,7 @@ edit this file by hand — it is regenerated as part of every release PR.
 ## [Unreleased]
 
 ### Fixed
+- (fix) Fix critical fail-open auth bypass in `engine/legal/dependencies.py`: `require_legal_acceptance` now raises `HTTPException(401)` when `principal` is `None` instead of silently returning `None`. Update affected tests in `tests/test_legal_qa.py` to assert the 401 behavior.
 - (fix) Fix check ordering in `engine/core/execution/live.py` `execute()` and the two failing tests in `tests/test_execution_backends.py`
 
 ### Internal

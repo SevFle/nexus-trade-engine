@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import logging
 import types
 import warnings
 
 from engine.core.signal import Side, Signal
 from engine.core.strategy_orchestrator import StrategyOrchestrator
+
+_logger = logging.getLogger(__name__)
 
 
 def _sig(symbol, side, sid):
@@ -22,7 +25,7 @@ C = {"f": 1.0}
 # Pattern 1: callable class instance with async __call__ used AS evaluate
 # ----------------------------------------------------------------- #
 class _AsyncCallableEvaluator:
-    async def __call__(self, market_data, cost_model):
+    async def __call__(self, _market_data, _cost_model):
         return [_sig("AAPL", Side.BUY, "async-call")]
 
 
@@ -37,14 +40,14 @@ class AsyncCallStrategy:
 class AsyncCallableObject:
     id = "async-call-obj"
 
-    async def __call__(self, market_data, cost_model):
+    async def __call__(self, _market_data, _cost_model):
         return [_sig("AAPL", Side.BUY, "async-call-obj")]
 
 
 # ----------------------------------------------------------------- #
 # Pattern 2: functools.partial-wrapped coroutine
 # ----------------------------------------------------------------- #
-async def _async_fn(market_data, cost_model, factor):
+async def _async_fn(_market_data, _cost_model, _factor):
     return [_sig("AAPL", Side.BUY, "partial")]
 
 
@@ -58,7 +61,7 @@ class PartialStrategy:
 # ----------------------------------------------------------------- #
 # Pattern 3: sync method that returns a coroutine object
 # ----------------------------------------------------------------- #
-async def _make_coro(market_data, cost_model):
+async def _make_coro(_market_data, _cost_model):
     return [_sig("AAPL", Side.BUY, "sync-ret-coro")]
 
 
@@ -75,7 +78,7 @@ class SyncReturningCoroutineStrategy:
 # documented way to build a generator-based coroutine)
 # ----------------------------------------------------------------- #
 @types.coroutine
-def _legacy_coro(market_data, cost_model):
+def _legacy_coro(_market_data, _cost_model):
     yield
     return [_sig("AAPL", Side.BUY, "legacy")]
 
@@ -94,7 +97,7 @@ async def run_case(name, strategy_factory):
     try:
         orch.register(strat)
     except Exception as exc:
-        print(f"[{name}] REGISTER raised: {type(exc).__name__}: {exc}")
+        _logger.warning("[%s] REGISTER raised: %s: %s", name, type(exc).__name__, exc)
         return
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -108,9 +111,13 @@ async def run_case(name, strategy_factory):
                 if "coroutine" in str(w.message).lower()
                 or "never awaited" in str(w.message).lower()
             ]
-            print(f"[{name}] signals={sides} errors={errs} coro_warns={warns}")
+            _logger.info(
+                "[%s] signals=%s errors=%s coro_warns=%s", name, sides, errs, warns
+            )
         except Exception as exc:
-            print(f"[{name}] evaluate_all raised: {type(exc).__name__}: {exc}")
+            _logger.warning(
+                "[%s] evaluate_all raised: %s: %s", name, type(exc).__name__, exc
+            )
 
 
 async def main():
@@ -121,4 +128,5 @@ async def main():
     await run_case("legacy generator coroutine", LegacyStrategy)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
