@@ -715,6 +715,26 @@ class TestLegalDependencies:
         assert exc_info.value.detail == "Authentication required"
 
     @pytest.mark.asyncio
+    async def test_depends_marker_principal_raises_401_not_500(self):
+        """Regression: invoking the dependency outside FastAPI's DI leaves
+        ``principal`` as the unresolved ``Depends`` marker. That must raise
+        HTTP 401, not leak into ``get_pending_acceptances`` and 500 on an
+        attribute access against the marker.
+
+        Simulates a hand-rolled call (``require_legal_acceptance(db=...)``)
+        where the ``principal`` parameter keeps its signature default — the
+        bound ``Depends(get_current_user)`` marker that DI never resolved.
+        """
+        from fastapi import Depends, HTTPException
+
+        from engine.legal.dependencies import require_legal_acceptance
+
+        with pytest.raises(HTTPException) as exc_info:
+            await require_legal_acceptance(db=MagicMock(), principal=Depends())
+        assert exc_info.value.status_code == 401
+        assert exc_info.value.detail == "Authentication required"
+
+    @pytest.mark.asyncio
     async def test_no_principal_returns_401_via_dependency_overrides(self):
         """End-to-end through FastAPI: an unresolved principal yields 401."""
         app = self._build_app(principal=None)

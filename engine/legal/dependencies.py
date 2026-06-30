@@ -9,21 +9,9 @@ from engine.deps import get_db
 from engine.legal import service as legal_service
 
 if TYPE_CHECKING:
-    from uuid import UUID
-
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from engine.db.models import User
-
-# Stand-in for the authenticated principal used by consent enforcement until
-# ``get_current_user`` is wired through every route. Routes that have not yet
-# been integrated with the auth dependency call ``require_legal_acceptance``
-# directly, so the ``principal`` parameter arrives as an *unresolved* FastAPI
-# ``Depends`` marker. In that situation we fall back to this module-level id.
-# When it is ``None`` the dependency is a deliberate no-op — this is what lets
-# the public read-only routes work pre-auth. Tests exercise the 451/200 paths
-# with ``monkeypatch.setattr(dependencies, "_placeholder_user_id", value)``.
-_placeholder_user_id: UUID | None = None
 
 
 async def require_legal_acceptance(
@@ -37,40 +25,44 @@ async def require_legal_acceptance(
 
     * **Through FastAPI dependency injection** the ``principal`` is resolved by
       :func:`get_current_user`, which raises HTTP 401 itself when no credential
-      is present. We keep a defensive guard so the function is safe to invoke
-      even outside DI: an explicitly-resolved ``None`` principal surfaces a
-      deterministic 401.
+      is present.
     * **Invoked directly** (bypassing DI) ``principal`` is left as the
-      unresolved ``Depends`` marker. In that case we fall back to
-      :data:`_placeholder_user_id`. When even that is unset the dependency is a
-      deliberate no-op so public/read-only routes keep working pre-auth; once
-      it is set, a pending re-acceptance surfaces as HTTP 451.
+      unresolved ``Depends`` marker. Both this and an explicitly-resolved
+      ``None`` principal mean there is no authenticated user, so the
+      dependency surfaces a deterministic HTTP 401 rather than silently
+      bypassing consent enforcement.
 
-    A pending re-acceptance raises HTTP 451 with a structured detail body
-    listing the offending document slugs. When everything is in order the
-    function returns ``None``.
+    The ``principal`` guard below is **authoritative**, not a redundant
+    belt-and-braces check. It is what makes the dependency safe to call
+    outside FastAPI's DI machinery (e.g. by routes that invoke it by hand or
+    in unit tests): without it an unresolved ``Depends`` marker would leak
+    into :func:`legal_service.get_pending_acceptances` and explode with a 500
+    on an attribute access against the marker, while a ``None`` principal
+    would silently skip consent enforcement. Treat any change to this guard
+    with care.
+
+    A pending re-acceptance raises HTTP 451
+    (:attr:`status.HTTP_451_UNAVAILABLE_FOR_LEGAL_REASONS`) with a structured
+    detail body listing the offending document slugs. When everything is in
+    order the function returns ``None``.
     """
-    if isinstance(principal, params.Depends):
-        # Called outside FastAPI's DI machinery — the principal is still the
-        # unresolved ``Depends`` marker. Use the module-level placeholder.
-        user_id = _placeholder_user_id
-        if user_id is None:
-            return
-    else:
-        if principal is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required",
-            )
-        user_id = principal.id
+    # Authoritative authentication guard: an explicitly-resolved ``None``
+    # principal *or* an unresolved ``Depends`` marker (a hand-rolled call that
+    # bypassed DI) both mean "no authenticated user". Reject with 401 in either
+    # case instead of letting a marker reach the pending-acceptance lookup and
+    # 500 on ``principal.id``.
+    if principal is None or isinstance(principal, params.Depends):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
 
-    pending = await legal_service.get_pending_acceptances(db, user_id)
+    pending = await legal_service.get_pending_acceptances(db, principal.id)
     if pending:
         raise HTTPException(
-            status_code=451,
+            status_code=status.HTTP_451_UNAVAILABLE_FOR_LEGAL_REASONS,
             detail={
                 "code": "legal_re_acceptance_required",
                 "documents": [p.slug for p in pending],
             },
         )
-    return
