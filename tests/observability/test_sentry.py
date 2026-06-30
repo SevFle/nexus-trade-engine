@@ -6,6 +6,7 @@ import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 from engine.observability.redact import REDACTED
 from engine.observability.sentry import _before_send, close_sentry, setup_sentry
@@ -35,13 +36,22 @@ class TestSetupSentry:
             mock_settings.app_env = "production"
             setup_sentry()
 
-        mock_init.assert_called_once_with(
-            dsn="https://example@sentry.io/1",
-            release="1.2.3",
-            environment="production",
-            traces_sample_rate=0.5,
-            send_default_pii=False,
-            before_send=_before_send,
+        # Assert per-kwarg rather than with ``assert_called_once_with``:
+        # the ``integrations`` list holds ``FastApiIntegration`` instances
+        # which compare by identity, so an exact-equality match would be
+        # brittle across construction sites.
+        mock_init.assert_called_once()
+        kwargs = mock_init.call_args.kwargs
+        assert kwargs["dsn"] == "https://example@sentry.io/1"
+        assert kwargs["release"] == "1.2.3"
+        assert kwargs["environment"] == "production"
+        assert kwargs["traces_sample_rate"] == 0.5
+        assert kwargs["send_default_pii"] is False
+        assert kwargs["before_send"] is _before_send
+        assert isinstance(kwargs["integrations"], list)
+        assert any(
+            isinstance(integration, FastApiIntegration)
+            for integration in kwargs["integrations"]
         )
 
     def test_send_default_pii_disabled(self):

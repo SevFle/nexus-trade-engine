@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 from engine.config import settings
 from engine.observability.redact import _scrub_dict, _scrub_value
@@ -38,7 +39,9 @@ def setup_sentry() -> None:
     """Initialise the Sentry SDK when a DSN is configured.
 
     When ``NEXUS_SENTRY_DSN`` is empty (the default in dev/test) this is a
-    no-op, allowing the process to start without a Sentry backend.
+    no-op, allowing the process to start without a Sentry backend. When set,
+    the FastAPI integration is attached so request/scoping data is captured
+    automatically for unhandled exceptions raised inside the ASGI app.
     """
     if not settings.sentry_dsn:
         return
@@ -50,7 +53,26 @@ def setup_sentry() -> None:
         traces_sample_rate=settings.sentry_traces_sample_rate,
         send_default_pii=False,
         before_send=_before_send,
+        integrations=[FastApiIntegration()],
     )
+
+
+def init_sentry(app: Any) -> None:
+    """App-aware entry point that initialises Sentry for a FastAPI app.
+
+    Thin convenience wrapper around :func:`setup_sentry` so embedders (and
+    the engine's own lifespan) can wire Sentry with the ``init_sentry(app)``
+    signature used by the other observability backends (tracing, metrics).
+
+    The DSN is read from :data:`engine.config.settings`, which pydantic
+    populates from the ``NEXUS_SENTRY_DSN`` environment variable. The
+    ``app`` argument is accepted for API stability: future versions may read
+    an override from ``app.state`` without changing any call site.
+    """
+    # ``app`` is intentionally unused today; it is part of the public
+    # signature so the entry point mirrors setup_tracing/set_metrics style.
+    _ = app
+    setup_sentry()
 
 
 def close_sentry() -> None:
@@ -76,4 +98,4 @@ def close_sentry() -> None:
     client.close()
 
 
-__all__ = ["_before_send", "close_sentry", "setup_sentry"]
+__all__ = ["_before_send", "close_sentry", "init_sentry", "setup_sentry"]
