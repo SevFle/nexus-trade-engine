@@ -98,6 +98,34 @@ _ESSENTIAL_CPYTHON_MODULES: frozenset[str] = frozenset(
     }
 )
 
+# Modules that are **always** permitted to import, irrespective of the
+# allowlist/denylist.  These are interpreter- and test-harness infrastructure
+# packages that the *host* process (not sandboxed strategy code) pulls in at
+# runtime.  If the hook ever remains active while the host is running — most
+# notably during pytest collection/teardown — intercepting these would crash
+# the interpreter or the test runner itself (e.g. CPython's fault dumper, or
+# pytest re-importing ``_pytest.warnings`` while recording a warning).  They
+# are not useful strategy escape vectors and are exempted defensively.
+_INTERNAL_BYPASS_MODULES: frozenset[str] = frozenset(
+    {
+        # CPython runtime debug/host infra.
+        "faulthandler",
+        # pytest core and its import-time dependency graph.
+        "pytest",
+        "_pytest",
+        "pluggy",
+        "iniconfig",
+        "packaging",
+        "exceptiongroup",
+        # Property-based test harness used by this repository, plus its
+        # pure-Python ``sortedcontainers`` dependency, which hypothesis imports
+        # lazily while emitting its terminal / observability summary — so an
+        # accidentally-leaked hook must not crash the pytest teardown.
+        "hypothesis",
+        "sortedcontainers",
+    }
+)
+
 
 class RestrictedImporter(MetaPathFinder):
     """
@@ -125,13 +153,39 @@ class RestrictedImporter(MetaPathFinder):
         self.allowed: frozenset[str] = allowed if allowed is not None else ALLOWED_MODULES
         self.blocked: set[str] = blocked if blocked is not None else set()
         self._installed = False
-        self._original_import: Callable[..., Any] = builtins.__import__
+        # Stable identity for the hook.  ``self._restricted_import`` creates a
+        # *new* bound-method object on every attribute access (a Python
+        # quirk), so storing it once here lets ``install()`` and
+        # ``uninstall()`` compare against the very same object via ``is``.
+        # Without this, ``uninstall()``'s ownership check
+        # (``builtins.__import__ is <hook>``) would *always* be False and the
+        # original ``__import__`` would never be restored.
+        self._import_hook: Callable[..., Any] = self._restricted_import
+        # Capture the real ``__import__`` lazily at ``install()`` time rather
+        # than at construction, so construction is side-effect free with
+        # respect to the import system.  If ``_restricted_import`` is invoked
+        # before ``install()`` (i.e. this is ``None``) it raises a clear
+        # ``ImportError`` (see the guard below) instead of an opaque
+        # ``TypeError`` from calling ``None``.  The value is intentionally NOT
+        # cleared in ``uninstall()``: in out-of-order teardown another
+        # importer may still hold a reference to our hook, so keeping a valid
+        # delegation target keeps the import system usable rather than turning
+        # every import into an error.
+        self._original_import: Callable[..., Any] | None = None
 
     # ── Core decision logic ────────────────────────────────────────────
 
     def _is_allowed(self, fullname: str) -> bool:
-        """Return ``True`` iff *fullname*'s root is permitted by the allowlist."""
+        """Return ``True`` iff *fullname*'s root is permitted by the policy.
+
+        Interpreter/test-harness infrastructure (see
+        :data:`_INTERNAL_BYPASS_MODULES`) is always permitted so the hook
+        cannot crash the host when it happens to be active during test
+        collection or teardown.
+        """
         root = fullname.split(".", maxsplit=1)[0]
+        if root in _INTERNAL_BYPASS_MODULES:
+            return True
         if root in self.blocked:
             return False
         return root in self.allowed
@@ -162,20 +216,52 @@ class RestrictedImporter(MetaPathFinder):
     ) -> object:
         if level == 0 and not self._is_allowed(name):
             raise ImportError(f"Module '{name}' is blocked in strategy sandbox (not in allowlist)")
-        return self._original_import(name, globals_, locals_, fromlist, level)
+        # Delegate to the captured real ``__import__``.  Before ``install()``
+        # has run there is nothing to delegate to (``_original_import`` is
+        # None), so the guard below raises instead of recursing or calling
+        # ``None``.
+        original = self._original_import
+        if original is None:
+            # The importer has never been installed, so there is no captured
+            # real ``__import__`` to delegate to.  Fail loudly with a clear
+            # ``ImportError`` rather than an opaque ``TypeError`` from calling
+            # ``None``.  ``_original_import`` is ``None`` only before
+            # ``install()`` runs, and ``install()`` replaces the builtin only
+            # *after* capturing it — so once this hook could ever be reached
+            # via ``builtins.__import__`` this branch is unreachable, which
+            # means raising here cannot cause recursion.
+            raise ImportError(
+                "RestrictedImporter has no original __import__ to delegate to "
+                "(install() was never called)"
+            )
+        return original(name, globals_, locals_, fromlist, level)
 
     # ── Lifecycle ──────────────────────────────────────────────────────
 
     def install(self) -> None:
         if not self._installed:
+            # Capture the real importer BEFORE replacing it.  If we replaced
+            # first, ``_original_import`` would end up pointing at our own hook
+            # and every delegated import would recurse infinitely.
             self._original_import = builtins.__import__
-            builtins.__import__ = self._restricted_import  # type: ignore[assignment]
+            builtins.__import__ = self._import_hook  # type: ignore[assignment]
             sys.meta_path.insert(0, self)
             self._installed = True
 
     def uninstall(self) -> None:
         if self._installed:
-            builtins.__import__ = self._original_import  # type: ignore[assignment]
+            # Only restore ``builtins.__import__`` when it still points at
+            # *our* hook.  Blindly overwriting would clobber any importer that
+            # was installed on top of us (or any test scaffolding that reset
+            # the builtin), corrupting the import system during out-of-order /
+            # overlapping teardown.  Note we deliberately leave
+            # ``_original_import`` intact: another importer may still hold a
+            # reference to ``_restricted_import`` and need it to keep working.
+            if (
+                builtins.__import__ is self._import_hook
+                and self._original_import is not None
+            ):
+                builtins.__import__ = self._original_import  # type: ignore[assignment]
             if self in sys.meta_path:
                 sys.meta_path.remove(self)
             self._installed = False
