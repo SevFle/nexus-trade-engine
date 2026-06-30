@@ -32,6 +32,12 @@ logger = structlog.get_logger()
 
 NUM_DOCS_ON_DISK = 6
 
+#: Slug of the canonical Terms-of-Service document. The consent recording
+#: helpers below treat this as the "current terms version" — storing the
+#: accepted version together with an ``accepted_at`` timestamp per user via
+#: the existing ``legal_acceptances`` table (no schema migration required).
+TERMS_DOCUMENT_SLUG = "terms-of-service"
+
 
 def _version_gte(accepted: str, current: str) -> bool:
     return Version(accepted) >= Version(current)
@@ -322,3 +328,70 @@ async def _get_exact_acceptance(
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
+
+
+# ---------------------------------------------------------------------------
+# Terms-of-Service consent recording mechanism
+# ---------------------------------------------------------------------------
+#
+# A thin, explicit layer over ``record_acceptances`` / ``get_pending_acceptances``
+# that captures the "store terms_version + timestamp per user" contract.
+# It reuses the existing ``legal_acceptances`` table, so no migration is needed.
+
+
+async def get_terms_document(db: AsyncSession) -> LegalDocument | None:
+    """Return the current Terms-of-Service document, or ``None`` if unseeded."""
+    result = await db.execute(
+        select(LegalDocument).where(LegalDocument.slug == TERMS_DOCUMENT_SLUG)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_current_terms_version(db: AsyncSession) -> str | None:
+    """Return the *current* version string of the Terms-of-Service document."""
+    doc = await get_terms_document(db)
+    return doc.current_version if doc is not None else None
+
+
+async def record_terms_acceptance(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    terms_version: str | None = None,
+    ip_address: str,
+    user_agent: str,
+    context: str | None = None,
+) -> AcceptedItem | None:
+    """Record that *user_id* accepted the Terms-of-Service.
+
+    Stores the accepted ``terms_version`` (defaulting to the document's
+    current version) alongside an ``accepted_at`` timestamp by reusing the
+    existing ``legal_acceptances`` table. Returns the recorded item, or
+    ``None`` when the terms document has not been seeded yet.
+    """
+    doc = await get_terms_document(db)
+    if doc is None:
+        logger.warning("legal.terms_not_seeded", slug=TERMS_DOCUMENT_SLUG)
+        return None
+    version = terms_version or doc.current_version
+    accepted = await record_acceptances(
+        db,
+        user_id,
+        [AcceptanceItem(document_slug=TERMS_DOCUMENT_SLUG, document_version=version)],
+        ip_address=ip_address,
+        user_agent=user_agent,
+        context=context,
+    )
+    return accepted[0] if accepted else None
+
+
+async def has_accepted_current_terms(db: AsyncSession, user_id: uuid.UUID) -> bool:
+    """True iff *user_id* has an unrevoked acceptance whose stored version is
+    greater-than-or-equal to the current Terms-of-Service version."""
+    latest = await _get_latest_acceptance(db, user_id, TERMS_DOCUMENT_SLUG)
+    if latest is None:
+        return False
+    current = await get_current_terms_version(db)
+    if current is None:
+        return True
+    return _version_gte(latest.document_version, current)
