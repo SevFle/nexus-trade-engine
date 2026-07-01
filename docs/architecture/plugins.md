@@ -50,12 +50,13 @@ examples and the SDK use) is parsed against.
 The HTTP surface in
 [`routes/strategies.py`](../../engine/api/routes/strategies.py) talks
 to `app.state.plugin_registry` (a richer registry exposing
-`list_all()`, `get()`, `activate`/`reload`/`unload`). Note that today
-this is only attached by the legacy
-[`engine/main.py`](../../engine/main.py) entrypoint, not the canonical
-`create_app()` in [`engine/app.py`](../../engine/app.py) — so live
-strategy activation from the public API is part of the still-partial
-strategy story (see [known-limitations.md](../known-limitations.md)).
+`list_all()`, `get()`, `activate`/`reload`/`unload`). Note that this is only attached by the
+legacy [`engine/main.py`](../../engine/main.py) entrypoint, not the
+canonical `create_app()` in [`engine/app.py`](../../engine/app.py) — so
+every `/api/v1/strategies/*` handler raises `AttributeError` and
+returns `500` under `create_app()`. Only `python -m engine.main`
+attaches the registry today (see the P1 entry in
+[known-limitations.md](../known-limitations.md#strategies-no-registry)).
 This split is intentional: it lets the operator swap strategies in
 config without re-deploying once the wiring is complete.
 

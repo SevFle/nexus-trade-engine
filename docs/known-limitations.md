@@ -126,6 +126,53 @@ The marketplace routes exist purely to lock the public API shape.
 
 ---
 
+<a id="strategies-no-registry"></a>
+## P1 — `/api/v1/strategies/*` 500s under the canonical entrypoint
+
+**Where**:
+[`engine/app.py:create_app`](../engine/app.py) never attaches
+`app.state.plugin_registry`; every handler in
+[`engine/api/routes/strategies.py`](../engine/api/routes/strategies.py)
+reads `request.app.state.plugin_registry` directly (no `getattr`
+default, no `try/except`).
+
+`app.state.plugin_registry` is set in **exactly one** place —
+[`engine/main.py`](../engine/main.py) — which neither the
+[`Dockerfile`](../Dockerfile) `ENTRYPOINT`
+(`uvicorn engine.app:create_app --factory`) nor `make dev` invokes.
+`create_app()` neither imports `main` nor constructs a registry, so
+under the deployment entrypoint documented in
+[`deployment.md`](deployment.md), `GET /api/v1/strategies/`,
+`/{id}`, `/{id}/activate`, `/{id}/deactivate`, `/{id}/reload`, and
+`/{id}/health` all raise
+`AttributeError: ... has no attribute 'plugin_registry'` and return
+`500 Internal Server Error`.
+
+**Why it ships green**: route tests either build the app through
+`engine.main` or set `app.state.plugin_registry` themselves before
+hitting the handlers, so the *contract* is exercised while the
+missing wiring under the real entrypoint is not.
+
+**Impact**: the strategy-management REST surface is unreachable in any
+deployment started the way `deployment.md` and the `Dockerfile`
+prescribe. Discovery + activation still work via the legacy
+`python -m engine.main` app (see
+[`architecture/overview.md`](architecture/overview.md)), but that
+module is explicitly not the canonical app to extend.
+
+**Workaround today**: none at runtime via `create_app()`. To exercise
+the routes, start the legacy app (`python -m engine.main`) or attach a
+`PluginRegistry` on `app.state` in your own startup hook.
+
+**Fix path**: in `create_app()`, construct `PluginRegistry()`, run
+`await registry.discover_and_load()` inside the lifespan (after the
+DB / Valkey steps, each already independently guarded), and assign it
+to `app.state.plugin_registry`. Move the registry wiring out of
+`engine/main.py` once the canonical app owns it, then drop the
+caveat in [`architecture/plugins.md`](architecture/plugins.md).
+
+---
+
 ## P1 — Data provider registry has no first-class credentials store
 
 **Where**: [`engine/data/providers/config.py`](../engine/data/providers/config.py),
@@ -231,9 +278,10 @@ it.
 
 **Impact**: the MCP surface cannot be started today. The tool/resource/
 auth contract is implemented and unit-tested, but no client (Claude
-Desktop, a custom agent, …) can connect to it. `.env.example` also does
-not list the `NEXUS_MCP_*` vars, so operators have no inventory of the
-knobs without reading [`config.py`](../engine/mcp/config.py).
+Desktop, a custom agent, …) can connect to it. The `NEXUS_MCP_*` knobs
+*are* inventoried in [`.env.example`](../.env.example) (the
+`# ── MCP server (engine/mcp) ──` block), so operators can see the
+surface — they just cannot start it.
 
 **Workaround today**: none at runtime. To exercise the components,
 instantiate `EngineServices` (online or `for_testing`) and call
@@ -244,9 +292,9 @@ must bind.
 
 **Fix path**: write `engine/mcp/server.py` that binds the transport to
 the existing `dispatch_tool` / `read_resource` / `extract_principal` /
-`RateLimiter`, add a `[project.scripts]` entry (e.g.
-`nexus-mcp = engine.mcp.server:main`), and add the `NEXUS_MCP_*` block
-to `.env.example` in the same PR. The PLR0911 ignore already in
+`RateLimiter`, and add a `[project.scripts]` entry (e.g.
+`nexus-mcp = engine.mcp.server:main`). The `NEXUS_MCP_*` block is
+already present in `.env.example`; the PLR0911 ignore already in
 `pyproject.toml` anticipates the multi-branch transport dispatcher.
 
 ---

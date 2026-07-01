@@ -200,6 +200,14 @@ All routes require legal acceptance.
 
 `/api/v1/strategies/*`. Source: [`routes/strategies.py`](../engine/api/routes/strategies.py).
 
+> **Heads-up — these routes 500 under the canonical entrypoint.**
+> Handlers read `request.app.state.plugin_registry`, which is attached
+> only by [`engine/main.py`](../engine/main.py), **not** by
+> [`create_app()`](../engine/app.py) (the `Dockerfile` / `make dev`
+> entrypoint). A request via the production app raises `AttributeError`
+> → `500`. Use `python -m engine.main` to exercise them, or see the
+> P1 entry in [`known-limitations.md`](known-limitations.md#strategies-no-registry).
+
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/v1/strategies/` | Lists installed strategies via `app.state.plugin_registry.list_all()`. |
