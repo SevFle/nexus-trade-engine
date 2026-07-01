@@ -1,6 +1,9 @@
 services:
   db:
-    image: timescale/timescaledb:latest-pg16
+    # Pinned to TimescaleDB 2.17.2 on PostgreSQL 16 (content-addressed by
+    # registry digest) so deploys are reproducible and immune to upstream
+    # tag re-pointing. Bump deliberately via PR when upgrading.
+    image: timescale/timescaledb:2.17.2-pg16@sha256:4e459e217f00cbb09920c34d245501e63427e6767a495de57ce76823ff280f12
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?must be set in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?must be set in .env}
@@ -16,9 +19,14 @@ services:
       retries: 5
 
   valkey:
-    image: valkey/valkey:8-alpine
+    # Pinned to Valkey 8.0.2 (alpine) by registry digest for reproducible
+    # deploys. Data is persisted to the named `valkeydata` volume below so
+    # it survives container recreation.
+    image: valkey/valkey:8.0.2-alpine@sha256:752ba000a58bc8925d11ee863a39b5225617cd2cb3dbc9ec8ac65268b65ebb6d
     ports:
       - "127.0.0.1:6379:6379"
+    volumes:
+      - valkeydata:/data
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
@@ -40,6 +48,10 @@ services:
       NEXUS_VALKEY_URL: valkey://valkey:6379/0
 
   worker:
+    # taskiq worker consuming the broker defined at
+    # ``engine.tasks.worker:broker``. Its dependency gates mirror the API
+    # service (``app`` / nexus-api) so it never starts before the database
+    # and Valkey are both reporting healthy.
     build: .
     entrypoint: ["python", "-m", "taskiq", "worker", "engine.tasks.worker:broker"]
     env_file: .env
@@ -54,3 +66,4 @@ services:
 
 volumes:
   pgdata:
+  valkeydata:
