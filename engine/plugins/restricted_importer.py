@@ -29,6 +29,7 @@ import socket
 import sys
 from importlib.abc import MetaPathFinder
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 from engine.plugins.allowlist import DENYLIST_MODULES, FROZEN_ALLOWED_MODULES
 
@@ -39,6 +40,80 @@ if TYPE_CHECKING:
 # Re-exported for backward compatibility with existing tests and callers.
 # This is a *known-dangerous-modules* registry, not the enforcement mechanism.
 BLOCKED_MODULES: frozenset[str] = DENYLIST_MODULES
+
+
+# Sentinel used by :func:`_extract_hostnames` to represent an *invalid*
+# (non-numeric) port.  ``parsed.port`` raises ``ValueError`` for such an entry,
+# so we cannot represent it with ``None`` (which means "no port present");
+# instead we normalise the exception to this sentinel and reject the entry.
+_INVALID_PORT: int = -1
+
+
+def _extract_hostnames(endpoints: list[str] | None) -> list[str]:
+    """Normalise and validate a manifest ``allowed_endpoints`` list.
+
+    Each entry may be a bare hostname (``api.example.com``) or a full URL
+    (``https://api.example.com``).  Entries that carry a path
+    (``api.example.com/v1``) or port (``api.example.com:8080``) component
+    are rejected with a clear :class:`ValueError` because the network
+    allowlist is **host-granular**: a path/port would be silently ignored by
+    the matching logic and give a false sense of restriction.
+
+    Returns the list of **lower-cased** hostnames (preserving order) which are
+    safe to compare against ``request.url.host`` (httpx normalises request
+    hosts to lower case) and against DNS hostnames.
+    """
+    hostnames: list[str] = []
+    for entry in endpoints or []:
+        if not isinstance(entry, str):
+            raise TypeError(
+                f"allowed_endpoints entry {entry!r} must be a string hostname or URL, "
+                f"not {type(entry).__name__}"
+            )
+        raw = entry.strip()
+        if not raw:
+            raise ValueError("allowed_endpoints contains an empty entry")
+
+        # Prepend ``//`` to scheme-less entries so that a bare hostname
+        # (``api.example.com``) is parsed into the *netloc* by ``urlparse``.
+        # Without this, ``urlparse("api.example.com").netloc == ""`` and
+        # ``.path == "api.example.com"`` — yielding an empty hostname and a
+        # spurious "path component" rejection.
+        candidate = raw
+        if "://" not in raw and not raw.startswith("//"):
+            candidate = "//" + raw
+
+        parsed = urlparse(candidate)
+        hostname = parsed.hostname
+        if not hostname:
+            raise ValueError(
+                f"allowed_endpoints entry {entry!r} does not contain a parseable hostname"
+            )
+
+        # Reject entries that include a path component — the allowlist is
+        # host-granular and a path would be ignored by the matcher.
+        if parsed.path:
+            raise ValueError(
+                f"allowed_endpoints entry {entry!r} must not include a path component "
+                f"(found {parsed.path!r}); declare only the hostname "
+                "(e.g. 'api.example.com')"
+            )
+
+        # Reject entries that include a port component.  Accessing ``.port``
+        # raises ``ValueError`` for a non-numeric port (e.g. ``host:abc``),
+        # which we also treat as a rejection.
+        try:
+            port = parsed.port
+        except ValueError:
+            port = _INVALID_PORT
+        if port is not None:
+            raise ValueError(
+                f"allowed_endpoints entry {entry!r} must not include a port component; "
+                "declare only the hostname (e.g. 'api.example.com')"
+            )
+
+        hostnames.append(hostname.lower())
+    return hostnames
 
 # The authoritative allowlist (also re-exported for convenience).
 ALLOWED_MODULES: frozenset[str] = FROZEN_ALLOWED_MODULES
@@ -159,7 +234,12 @@ class RestrictedImporter(MetaPathFinder):
         # ``network.allowed_endpoints``.  Mirrors the endpoint-matching logic
         # used by ``SandboxedHttpClient`` and the httpx ``send`` hook: a host
         # is permitted if it exactly matches an entry or is a subdomain of one.
-        self.allowed_hosts: list[str] = list(allowed_hosts) if allowed_hosts else []
+        # Normalise and validate the hostname allowlist up-front: bare
+        # hostnames are extracted (scheme URLs stripped to the host), all
+        # hostnames are lower-cased, and entries carrying a path or port are
+        # rejected with a clear ``ValueError``.  This guarantees that the
+        # matching logic below only ever compares bare lower-cased hostnames.
+        self.allowed_hosts: list[str] = _extract_hostnames(allowed_hosts)
         self._installed = False
         # Stable identity for the hook.  ``self._restricted_import`` creates a
         # *new* bound-method object on every attribute access (a Python
@@ -378,4 +458,5 @@ __all__ = [
     "ALLOWED_MODULES",
     "BLOCKED_MODULES",
     "RestrictedImporter",
+    "_extract_hostnames",
 ]
