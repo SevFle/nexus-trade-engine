@@ -34,7 +34,9 @@ we explain *why*, not *what*.
 | If you want to… | Read this |
 |------------------|-----------|
 | Get a 10-minute mental model of the system | [`architecture/overview.md`](architecture/overview.md) |
+| Understand the domain layer (orchestration, analytics, scoring, optimization) | [`architecture/core-domains.md`](architecture/core-domains.md) |
 | Understand every table and its constraints | [`data-model.md`](data-model.md) |
+| Understand the 86-KPI analytics + scoring + optimization internals | [`architecture/core-domains.md`](architecture/core-domains.md) |
 | Call the REST / WebSocket API | [`api-reference.md`](api-reference.md) |
 | Drive the engine from an LLM agent (MCP) | [`mcp-server.md`](mcp-server.md) |
 | Run the engine locally | [`development.md`](development.md) |
@@ -51,7 +53,8 @@ we explain *why*, not *what*.
 docs/
 ├── README.md                       ← you are here (index + doc-stack rationale)
 ├── architecture/                   ← component-by-component "current state"
-│   ├── overview.md
+│   ├── overview.md                 ← service view (app, lifecycle, deploy)
+│   ├── core-domains.md             ← domain view (orchestration, analytics, scoring)
 │   ├── database.md                 ← migration policy, table inventory
 │   └── plugins.md                  ← plugin SDK + registry
 ├── adr/                            ← architecture decision records (why we chose X)

@@ -68,7 +68,9 @@ React app under `frontend/`.
 | [`engine/main.py`](../../engine/main.py)          | Legacy minimal app module kept for `python -m engine.main`. It mounts only portfolio/strategies/backtest/marketplace and is **not** what `create_app()` produces — do not extend it; add routers to [`engine/api/router.py`](../../engine/api/router.py) instead. |
 | [`engine/config.py`](../../engine/config.py)      | Pydantic settings — every env var the engine reads lives here. |
 | [`engine/api/`](../../engine/api/)                | HTTP/WebSocket surface: routers, auth, rate limiting, error mapping. |
-| [`engine/core/`](../../engine/core/)              | Domain logic: backtest runner, strategy evaluator, execution primitives. |
+| [`engine/core/`](../../engine/core/)              | Domain logic: backtest runner, OMS, cost/risk models, analytics. The *capability* map of this tree is [`core-domains.md`](core-domains.md). |
+| [`engine/orchestration/`](../../engine/orchestration/) | Multi-strategy `StrategyOrchestrator` (priority / net-position conflict resolution). See [`core-domains.md`](core-domains.md). |
+| [`engine/portfolio/`](../../engine/portfolio/)    | Cross-strategy capital allocation (immutable `CapitalAllocation` value object). |
 | [`engine/data/`](../../engine/data/)              | Market data providers and the registry that picks one at runtime. |
 | [`engine/db/`](../../engine/db/)                  | SQLAlchemy models, async session factory, Alembic migrations. |
 | [`engine/events/`](../../engine/events/)          | Event bus + outbound webhook dispatcher (gh#80). |
@@ -77,6 +79,7 @@ React app under `frontend/`.
 | [`engine/plugins/`](../../engine/plugins/)        | Plugin SDK and runtime registry. See [plugins.md](plugins.md). |
 | [`engine/tasks/`](../../engine/tasks/)            | TaskIQ worker definitions for async work (backtests, scheduled jobs). |
 | [`engine/legal/`](../../engine/legal/)            | Legal-document acceptance (Terms / Privacy / etc.). |
+| [`engine/privacy/`](../../engine/privacy/)        | GDPR/CCPA surface: `deletion.py` (30-day grace + anonymize), `dsr.py` (request ledger), `export.py`. |
 | [`engine/reference/`](../../engine/reference/)    | Static reference data (instruments, exchanges). |
 | [`frontend/`](../../frontend/)                    | React dashboard (Vite, React 18, Tailwind, react-query). |
 

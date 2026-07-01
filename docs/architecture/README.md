@@ -12,14 +12,20 @@ For *why* we made specific structural choices, see
 1. **[overview.md](overview.md)** — high-level component map, request
    lifecycle, key dependencies. Start here if you've never opened the
    repo before.
-2. **[database.md](database.md)** — table inventory, migration policy,
+2. **[core-domains.md](core-domains.md)** — the domain layer under
+   `engine/core/` + `engine/orchestration/`: multi-strategy orchestration,
+   the 86-KPI analytics taxonomy, strategy scoring & governance,
+   optimization, and post-trade cost analysis. The companion to
+   `overview.md` (which is the *service* view; this is the *capability*
+   view).
+3. **[database.md](database.md)** — table inventory, migration policy,
    data ownership.
-3. **[plugins.md](plugins.md)** — plugin SDK and the registry that
+4. **[plugins.md](plugins.md)** — plugin SDK and the registry that
    loads strategies / data providers / execution backends at runtime.
-4. **[`docs/operations/`](../operations/)** — how the running system is
+5. **[`docs/operations/`](../operations/)** — how the running system is
    monitored, backed up, and recovered. Lives next to the runbooks
    that on-call uses.
-5. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
+6. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
    Read these before proposing a change that contradicts them.
 
 ## Existing diagrams
@@ -32,9 +38,9 @@ components in our docs site:
 - `plugin-sdk-architecture.jsx` — plugin lifecycle, sandboxing, and
   the registry.
 
-The flat-markdown architecture docs (`overview.md`, `database.md`,
-`plugins.md`) are the source of truth; the diagrams are a presentation
-layer on top.
+The flat-markdown architecture docs (`overview.md`, `core-domains.md`,
+`database.md`, `plugins.md`) are the source of truth; the diagrams are a
+presentation layer on top.
 
 ## Conventions
 
