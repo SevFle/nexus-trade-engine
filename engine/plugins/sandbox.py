@@ -44,7 +44,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from engine.core.signal import Signal
-from engine.plugins.restricted_importer import RestrictedImporter
+from engine.plugins.restricted_importer import RestrictedImporter, _extract_hostnames
 from engine.plugins.sandboxed_http import SandboxedHttpClient
 
 if TYPE_CHECKING:
@@ -380,7 +380,7 @@ class StrategySandbox:
         return self._original_getattr(obj, name, *default)  # type: ignore[misc]
 
     def _make_restricted_send(self) -> Any:
-        allowed = self.manifest.network.allowed_endpoints
+        allowed = _extract_hostnames(self.manifest.network.allowed_endpoints)
         original_send = self._original_httpx_send
 
         async def restricted_send(
