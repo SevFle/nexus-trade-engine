@@ -37,10 +37,10 @@ from engine.data.providers import (
 )
 from engine.db.session import dispose_engine, get_session_factory
 from engine.legal.sync import sync_legal_documents
+from engine.middleware.correlation import CorrelationIdMiddleware
 from engine.observability.http_metrics import HttpMetricsMiddleware
 from engine.observability.logging import setup_logging
 from engine.observability.metrics import set_metrics
-from engine.observability.middleware import CorrelationIdMiddleware
 from engine.observability.prometheus import PrometheusBackend
 from engine.observability.sentry import close_sentry, setup_sentry
 from engine.observability.tracing import setup_tracing
