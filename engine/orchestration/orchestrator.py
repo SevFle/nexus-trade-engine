@@ -24,6 +24,8 @@ per-strategy timeout isolation); NET_POSITION aggregation is unique here.
 
 from __future__ import annotations
 
+import asyncio
+import copy
 import inspect
 import math
 from collections import defaultdict
@@ -149,21 +151,49 @@ class StrategyOrchestrator:
         self._priorities.pop(strategy_id, None)
         return self._strategies.pop(strategy_id, None) is not None
 
-    async def run_all(self, market_data: Any) -> list[Signal]:
+    async def run_all(
+        self,
+        market_data: Any,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> list[Signal]:
         """Invoke every registered strategy's ``evaluate`` with the shared
         ``market_data`` and the orchestrator's cost model.
 
         Returns flattened raw signals (conflicts still present). Sync and
-        async ``evaluate`` are both supported. A raising strategy is
-        isolated — logged and skipped — so one bad plugin can't abort the
-        whole cycle; its signals are simply absent.
+        async ``evaluate`` are both supported. A raising or timed-out
+        strategy is isolated — logged and skipped — so one bad plugin can't
+        abort the whole cycle; its signals are simply absent.
+
+        Parameters
+        ----------
+        timeout_seconds:
+            Per-strategy wall-clock cap applied to the *awaitable* result of
+            ``evaluate``. ``None`` (default) applies no timeout. A strategy
+            whose async result exceeds the cap is cancelled and skipped
+            (logged as ``orchestrator.strategy_timeout``). The synchronous
+            call frame itself is never bounded — it has already returned by
+            the time the cap could apply.
         """
         collected: list[Signal] = []
         for sid, strategy in list(self._strategies.items()):
             try:
                 raw = strategy.evaluate(market_data, self._cost_model)
                 if inspect.isawaitable(raw):
-                    raw = await raw
+                    if timeout_seconds is not None:
+                        raw = await asyncio.wait_for(raw, timeout=timeout_seconds)
+                    else:
+                        raw = await raw
+            except TimeoutError:
+                # Catch TimeoutError before the generic handler: it is a
+                # subclass of OSError/Exception and must be reported as a
+                # timeout, not a crash.
+                logger.warning(
+                    "orchestrator.strategy_timeout",
+                    strategy_id=sid,
+                    timeout=timeout_seconds,
+                )
+                continue
             except Exception:
                 logger.exception("orchestrator.strategy_failed", strategy_id=sid)
                 continue
@@ -189,41 +219,68 @@ class StrategyOrchestrator:
     def _priority(self, group: list[Signal]) -> Signal:
         active = [s for s in group if s.side != Side.HOLD]
         if not active:
-            return self._resolved(group[0], Side.HOLD)
+            return self._resolved(group[0], Side.HOLD, active)
         top = max(self._priorities.get(s.strategy_id, _DEFAULT_PRIORITY) for s in active)
         winners = [
             s for s in active if self._priorities.get(s.strategy_id, _DEFAULT_PRIORITY) == top
         ]
         if len({s.side for s in winners}) > 1:  # top-priority stalemate → HOLD
-            return self._resolved(winners[0], Side.HOLD)
+            return self._resolved(winners[0], Side.HOLD, active)
         winner = winners[0]
-        return self._resolved(winner, winner.side)
+        return self._resolved(winner, winner.side, active)
 
     def _net_position(self, group: list[Signal]) -> Signal:
         net = 0.0
+        active: list[Signal] = []
         for sig in group:
             if sig.side == Side.BUY:
+                # A non-finite weight (nan/inf) can't vote a magnitude:
+                # treat it as an abstention so it can't poison the sum.
+                if not math.isfinite(sig.weight):
+                    continue
                 net += sig.weight
+                active.append(sig)
             elif sig.side == Side.SELL:
+                if not math.isfinite(sig.weight):
+                    continue  # non-finite weight → abstention
                 net -= sig.weight
+                active.append(sig)
+            elif sig.side == Side.HOLD:
+                # HOLD abstains and never contributes to the net position.
+                continue
+            else:
+                raise StrategyOrchestratorError(
+                    f"unsupported side {sig.side!r} in net_position aggregation"
+                )
         if net > _NET_EPSILON:
-            return self._resolved(group[0], Side.BUY, weight=min(net, 1.0))
+            return self._resolved(group[0], Side.BUY, active, weight=min(net, 1.0))
         if net < -_NET_EPSILON:
-            return self._resolved(group[0], Side.SELL, weight=min(abs(net), 1.0))
-        return self._resolved(group[0], Side.HOLD, weight=0.0)
+            return self._resolved(group[0], Side.SELL, active, weight=min(abs(net), 1.0))
+        return self._resolved(group[0], Side.HOLD, active, weight=0.0)
 
     @staticmethod
-    def _resolved(template: Signal, side: Side, *, weight: float | None = None) -> Signal:
+    def _resolved(
+        template: Signal,
+        side: Side,
+        active: Iterable[Signal] = (),
+        *,
+        weight: float | None = None,
+    ) -> Signal:
         """Build a resolved Signal: ``side``/``weight`` reflect the decision,
         other fields mirror ``template``. ``strategy_id`` is overwritten so
-        the audit trail shows the orchestrator, and ``metadata`` is copied
-        so downstream mutation can't leak back to the source."""
+        the audit trail shows the orchestrator; ``metadata`` is deep-copied
+        so downstream mutation can't leak back to the source (nested dicts/
+        lists included); and ``orchestrator_sources`` records the contributing
+        strategy ids (the non-HOLD, finite-weight voters) so the decision
+        stays auditable."""
+        metadata = copy.deepcopy(template.metadata)
+        metadata["orchestrator_sources"] = [s.strategy_id for s in active]
         return template.model_copy(
             update={
                 "side": side,
                 "weight": template.weight if weight is None else weight,
                 "strategy_id": _AGGREGATED_STRATEGY_ID,
-                "metadata": dict(template.metadata),
+                "metadata": metadata,
             }
         )
 
