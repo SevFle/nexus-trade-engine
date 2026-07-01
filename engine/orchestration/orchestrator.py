@@ -24,6 +24,8 @@ per-strategy timeout isolation); NET_POSITION aggregation is unique here.
 
 from __future__ import annotations
 
+import asyncio
+import copy
 import inspect
 import math
 from collections import defaultdict
@@ -61,6 +63,14 @@ _AGGREGATED_STRATEGY_ID = "orchestrator"
 # (e.g. 1.0 - 0.5 - 0.5 == 1.1e-16) can't flip a HOLD into a phantom signal.
 _NET_EPSILON = 1e-9
 _DEFAULT_PRIORITY = 0.0
+# Per-strategy eval budget. Matches the sibling strategy_orchestrator's
+# default (30s) so a strategy that runs fine in either harness behaves
+# the same, and so the documented default is identical across modules.
+_DEFAULT_EVAL_TIMEOUT = 30.0
+# Valid Side values, used by _resolve's defensive check (model_copy /
+# model_construct skip validation, so a stray side must be caught here).
+# Built from the enum so it stays in sync if Side ever gains a member.
+_SIDE_VALUES = frozenset(member.value for member in Side)
 
 
 def _strategy_id(strategy: Any) -> str:
@@ -100,6 +110,7 @@ class StrategyOrchestrator:
         *,
         conflict_resolution: str | ConflictResolution = ConflictResolution.PRIORITY,
         priorities: dict[str, float] | None = None,
+        timeout: float = _DEFAULT_EVAL_TIMEOUT,
     ) -> None:
         try:
             self._mode = ConflictResolution(conflict_resolution)
@@ -108,6 +119,12 @@ class StrategyOrchestrator:
             raise StrategyOrchestratorError(
                 f"unknown conflict resolution {conflict_resolution!r}; expected one of {valid}"
             ) from exc
+        eval_timeout = _finite(timeout, "timeout")
+        if eval_timeout <= 0:
+            raise StrategyOrchestratorError(
+                f"timeout must be a positive number, got {timeout!r}"
+            )
+        self._eval_timeout = eval_timeout
         self._cost_model = cost_model
         self._strategies: dict[str, Any] = {}
         self._priorities: dict[str, float] = {}
@@ -156,14 +173,29 @@ class StrategyOrchestrator:
         Returns flattened raw signals (conflicts still present). Sync and
         async ``evaluate`` are both supported. A raising strategy is
         isolated — logged and skipped — so one bad plugin can't abort the
-        whole cycle; its signals are simply absent.
+        whole cycle; its signals are simply absent. An async strategy that
+        exceeds ``timeout`` is likewise isolated.
         """
         collected: list[Signal] = []
         for sid, strategy in list(self._strategies.items()):
             try:
                 raw = strategy.evaluate(market_data, self._cost_model)
                 if inspect.isawaitable(raw):
-                    raw = await raw
+                    # Bound the async path so one hanging strategy can't
+                    # stall the whole cycle. Scoped narrowly around the
+                    # await: a sync call has already completed by here, and
+                    # ``asyncio.wait_for`` raises ``asyncio.TimeoutError``
+                    # (NOT the builtin OSError-alias TimeoutError), so we
+                    # catch it explicitly and report it distinctly.
+                    try:
+                        raw = await asyncio.wait_for(raw, timeout=self._eval_timeout)
+                    except TimeoutError:
+                        logger.warning(
+                            "orchestrator.strategy_timeout",
+                            strategy_id=sid,
+                            timeout=self._eval_timeout,
+                        )
+                        continue
             except Exception:
                 logger.exception("orchestrator.strategy_failed", strategy_id=sid)
                 continue
@@ -182,6 +214,17 @@ class StrategyOrchestrator:
         return [self._resolve(group) for group in per_symbol.values()]
 
     def _resolve(self, group: list[Signal]) -> Signal:
+        for sig in group:
+            # Defensive: pydantic constrains Side at construction, but
+            # ``model_copy`` / ``model_construct`` skip validation. An
+            # unexpected side would otherwise be silently mis-counted
+            # (NET_POSITION treats it as an abstain; PRIORITY could even
+            # elect it), so fail loudly with the orchestrator's own error.
+            side_value = getattr(sig.side, "value", sig.side)
+            if side_value not in _SIDE_VALUES:
+                raise StrategyOrchestratorError(
+                    f"unknown side {sig.side!r} for symbol {sig.symbol!r}"
+                )
         if self._mode is ConflictResolution.NET_POSITION:
             return self._net_position(group)
         return self._priority(group)
@@ -223,7 +266,11 @@ class StrategyOrchestrator:
                 "side": side,
                 "weight": template.weight if weight is None else weight,
                 "strategy_id": _AGGREGATED_STRATEGY_ID,
-                "metadata": dict(template.metadata),
+                # Deep-copy so nested mutable values can't leak back to
+                # the source signal on downstream mutation, and coalesce
+                # ``None`` (a caller can null metadata via model_copy) to
+                # ``{}`` so dict() never receives None.
+                "metadata": dict(copy.deepcopy(template.metadata) or {}),
             }
         )
 
