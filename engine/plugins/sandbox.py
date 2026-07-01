@@ -198,7 +198,9 @@ class StrategySandbox:
         self.metrics = SandboxMetrics()
         self._max_eval_seconds = manifest.resources.max_cpu_seconds
 
-        self._importer = RestrictedImporter()
+        self._importer = RestrictedImporter(
+            allowed_hosts=self.manifest.network.allowed_endpoints,
+        )
         self._http_client: SandboxedHttpClient | None = None
         self._work_dir: str | None = None
         self._original_open: Any = None

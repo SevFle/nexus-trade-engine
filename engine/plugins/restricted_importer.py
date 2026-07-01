@@ -25,6 +25,7 @@ regardless of whether it appears in ``BLOCKED_MODULES``.
 from __future__ import annotations
 
 import builtins
+import socket
 import sys
 from importlib.abc import MetaPathFinder
 from typing import TYPE_CHECKING, Any
@@ -146,12 +147,19 @@ class RestrictedImporter(MetaPathFinder):
         blocked: set[str] | None = None,
         *,
         allowed: frozenset[str] | None = None,
+        allowed_hosts: list[str] | None = None,
     ) -> None:
         # The authoritative allowlist.  ``blocked`` is retained for explicit
         # denylist defence-in-depth and backward compatibility with callers
         # that pass a custom blocked set.
         self.allowed: frozenset[str] = allowed if allowed is not None else ALLOWED_MODULES
         self.blocked: set[str] = blocked if blocked is not None else set()
+        # Hostname allowlist for the DNS-resolution guard installed by
+        # ``install()``.  Sourced from the strategy manifest's
+        # ``network.allowed_endpoints``.  Mirrors the endpoint-matching logic
+        # used by ``SandboxedHttpClient`` and the httpx ``send`` hook: a host
+        # is permitted if it exactly matches an entry or is a subdomain of one.
+        self.allowed_hosts: list[str] = list(allowed_hosts) if allowed_hosts else []
         self._installed = False
         # Stable identity for the hook.  ``self._restricted_import`` creates a
         # *new* bound-method object on every attribute access (a Python
@@ -172,6 +180,15 @@ class RestrictedImporter(MetaPathFinder):
         # delegation target keeps the import system usable rather than turning
         # every import into an error.
         self._original_import: Callable[..., Any] | None = None
+        # DNS-resolution guard.  ``install()`` wraps ``socket.getaddrinfo`` so
+        # that hostnames are checked against ``allowed_hosts`` *before* any
+        # resolution occurs (defence-in-depth beneath the httpx ``send`` hook:
+        # ``socket`` itself is blocked by the allowlist, but allowlisted
+        # networking libraries resolve hostnames through this function).  As
+        # with ``_import_hook``, the bound method is captured once so
+        # ``install()``/``uninstall()`` can compare identity via ``is``.
+        self._getaddrinfo_hook: Callable[..., Any] = self._restricted_getaddrinfo
+        self._original_getaddrinfo: Callable[..., Any] | None = None
 
     # ── Core decision logic ────────────────────────────────────────────
 
@@ -236,10 +253,69 @@ class RestrictedImporter(MetaPathFinder):
             )
         return original(name, globals_, locals_, fromlist, level)
 
+    # ── socket.getaddrinfo override (hostname allowlist guard) ─────────
+
+    def _is_host_allowed(self, host: Any) -> bool:
+        """Return ``True`` iff *host* is permitted by the hostname allowlist.
+
+        Uses the same endpoint-matching logic as
+        :class:`~engine.plugins.sandboxed_http.SandboxedHttpClient` and the
+        httpx ``send`` hook: a host is allowed if it exactly matches an entry
+        in :attr:`allowed_hosts` or is a subdomain of one
+        (``api.foo.com`` for a ``foo.com`` entry).  With an empty allowlist
+        (no network declared) every host is rejected — matching the
+        ``SandboxedHttpClient`` semantics where an empty whitelist blocks all
+        network access.
+        """
+        if not self.allowed_hosts:
+            return False
+        if host is None:
+            return False
+        name = str(host)
+        if not name:
+            return False
+        return any(name == ep or name.endswith(f".{ep}") for ep in self.allowed_hosts)
+
+    def _restricted_getaddrinfo(self, host: Any, *args: Any, **kwargs: Any) -> Any:
+        """Hostname-allowlist guard wrapped around ``socket.getaddrinfo``.
+
+        Extracts the *host* argument and checks it against
+        :meth:`_is_host_allowed` **before** any DNS resolution occurs.
+        Non-allowlisted hosts raise ``ConnectionError``; allowlisted hosts are
+        delegated to the original ``getaddrinfo`` captured at ``install()``
+        time.
+        """
+        if not self._is_host_allowed(host):
+            raise ConnectionError(
+                f"DNS resolution for {host!r} is not allowed in strategy sandbox "
+                "(host not in network allowlist)"
+            )
+        original = self._original_getaddrinfo
+        if original is None:
+            # Unreachable in normal operation: the hook is only installed by
+            # ``install()``, which captures ``_original_getaddrinfo`` first.
+            # Guard defensively rather than calling ``None``.
+            raise ConnectionError(
+                "RestrictedImporter has no original getaddrinfo to delegate to "
+                "(install() was never called)"
+            )
+        return original(host, *args, **kwargs)
+
     # ── Lifecycle ──────────────────────────────────────────────────────
 
     def install(self) -> None:
         if not self._installed:
+            # Wrap ``socket.getaddrinfo`` so hostnames are checked against the
+            # network allowlist *before* any DNS resolution occurs.  ``socket``
+            # is itself blocked by the import allowlist, but allowlisted
+            # networking libraries (httpx) resolve hostnames through this
+            # function, so we gate it here as defence-in-depth.  ``socket`` is
+            # imported at module top level — i.e. before this hook is ever
+            # installed — so the allowlist (which denies ``socket``) does not
+            # reject the import.
+            self._original_getaddrinfo = socket.getaddrinfo
+            socket.getaddrinfo = self._getaddrinfo_hook
+
             # Capture the real importer BEFORE replacing it.  If we replaced
             # first, ``_original_import`` would end up pointing at our own hook
             # and every delegated import would recurse infinitely.
@@ -264,6 +340,14 @@ class RestrictedImporter(MetaPathFinder):
                 builtins.__import__ = self._original_import  # type: ignore[assignment]
             if self in sys.meta_path:
                 sys.meta_path.remove(self)
+            # Restore ``socket.getaddrinfo`` using the same ownership guard.
+            # ``socket`` is imported at module top level, so this needs no
+            # local import; the allowlist only denies ``socket`` to sandboxed
+            # code anyway, and the host has already imported it.
+            if self._original_getaddrinfo is not None:
+                if socket.getaddrinfo is self._getaddrinfo_hook:
+                    socket.getaddrinfo = self._original_getaddrinfo
+                self._original_getaddrinfo = None
             self._installed = False
 
     # ── sys.modules hardening ──────────────────────────────────────────
