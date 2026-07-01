@@ -307,6 +307,13 @@ def create_app() -> FastAPI:
     # is generous for every existing route and still well under the
     # log-bombing limits the per-route Pydantic models impose.
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=1_048_576)
+    # Raw ASGI correlation middleware — the default for both HTTP and
+    # WebSocket protocols. Unlike the BaseHTTPMiddleware variant (kept in
+    # engine.middleware.correlation for deployments that prefer it), this
+    # one reads the inbound id from WS handshake headers too, binds it into
+    # structlog contextvars + the legacy observability context, and keeps
+    # the binding live for the full request lifecycle including background
+    # tasks (its __call__ only returns after they finish).
     app.add_middleware(CorrelationIdMiddleware)
     # Stack order matters — HttpMetricsMiddleware is added last so it
     # wraps everything else and times the full request lifecycle. The
