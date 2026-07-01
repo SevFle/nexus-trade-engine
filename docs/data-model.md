@@ -289,7 +289,8 @@ scheduled_for <= now()`).
 
 ## Adding a new table
 
-1. Pick the next migration number (`013_…` today).
+1. Pick the next migration number (`014_…` today — `013` is the latest
+   revision; run `alembic history` to confirm before adding one).
 2. Add the model in `engine/db/models.py` in the same PR.
 3. Write the migration with both `upgrade()` and `downgrade()`.
 4. Add a test in `tests/` that round-trips a representative row and

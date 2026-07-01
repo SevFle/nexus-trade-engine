@@ -371,6 +371,80 @@ class TestRestrictedImporter:
         importer.uninstall()
 
 
+class TestGetaddrinfoGuard:
+    """DNS-resolution guard: ``install()`` wraps ``socket.getaddrinfo`` so a
+    non-allowlisted hostname is rejected with ``ConnectionError`` *before* any
+    resolution occurs, and ``uninstall()`` restores the original.
+
+    This is defence-in-depth beneath the httpx ``send`` hook: ``socket`` is
+    blocked by the import allowlist, but allowlisted networking libraries
+    resolve hostnames through ``socket.getaddrinfo``, so the guard closes that
+    path.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _restore_socket_and_import(self) -> Any:
+        """Snapshot/restore ``sys.meta_path``, ``builtins.__import__`` and
+        ``socket.getaddrinfo`` so a failing assertion cannot leak the guard
+        onto the process-global socket function for the rest of the session."""
+        import socket
+
+        meta_snapshot = list(sys.meta_path)
+        import_snapshot = builtins.__import__
+        gai_snapshot = socket.getaddrinfo
+        try:
+            yield
+        finally:
+            builtins.__import__ = import_snapshot
+            sys.meta_path[:] = meta_snapshot
+            socket.getaddrinfo = gai_snapshot
+
+    def test_non_allowlisted_host_blocked_at_resolution(self) -> None:
+        import socket
+
+        original_gai = socket.getaddrinfo
+        importer = RestrictedImporter(allowed_hosts=["api.anthropic.com"])
+        importer.install()
+
+        # The guard is in place.
+        assert socket.getaddrinfo is importer._getaddrinfo_hook
+        # A non-allowlisted host is rejected *before* any DNS lookup happens.
+        with pytest.raises(ConnectionError, match=r"evil\.example\.com"):
+            socket.getaddrinfo("evil.example.com", 80)
+
+        importer.uninstall()
+        # Original ``getaddrinfo`` restored after teardown.
+        assert socket.getaddrinfo is original_gai
+        assert importer._original_getaddrinfo is None
+
+    def test_allowlisted_host_delegates_to_original(self) -> None:
+        import socket
+
+        real_original = socket.getaddrinfo
+        delegated: list[Any] = []
+
+        def fake_getaddrinfo(host: Any, *args: Any, **kwargs: Any) -> Any:
+            delegated.append(host)
+            return [("resolved", host)]
+
+        importer = RestrictedImporter(allowed_hosts=["api.anthropic.com"])
+        importer.install()
+        # ``install()`` captured the real ``getaddrinfo``; swap in a stub so
+        # the test makes no real DNS/network call.  An allowlisted host must
+        # reach the original (here, the stub).
+        real_captured = importer._original_getaddrinfo
+        importer._original_getaddrinfo = fake_getaddrinfo
+
+        result = socket.getaddrinfo("api.anthropic.com", 443)
+        assert delegated == ["api.anthropic.com"]
+        assert result == [("resolved", "api.anthropic.com")]
+
+        # Restore the real original so ``uninstall()`` reinstates it cleanly.
+        importer._original_getaddrinfo = real_captured
+        importer.uninstall()
+        assert socket.getaddrinfo is real_original
+
+
 class TestPurgeNonAllowlisted:
     """Cover ``RestrictedImporter.purge_non_allowlisted`` (lines 201-208).
 

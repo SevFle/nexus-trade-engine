@@ -57,7 +57,15 @@ that lack the required scope get `403`.
 `strategies` routers are mounted with
 `Depends(require_legal_acceptance)`. Callers without an
 `acceptances` row for the *current version* of every
-`requires_acceptance` document get `403`. Acceptance is recorded via
+`requires_acceptance` document get **`451 Unavailable For Legal
+Reasons`** with body `{code:"legal_re_acceptance_required",
+documents:[<slug>, …]}` (not `403` — the dedicated code lets clients
+and the frontend distinguish a consent gate from an RBAC denial; see
+[`engine/legal/dependencies.py`](../engine/legal/dependencies.py)).
+An unauthenticated request hits `401` first: the dependency's
+principal guard treats both an unresolved `Depends` marker and an
+explicit `None` as "no user" so the gate can't be silently bypassed
+when it is invoked outside FastAPI DI. Acceptance is recorded via
 `POST /api/v1/legal/accept`. See [`data-model.md`](data-model.md) for
 the immutable acceptance table.
 
@@ -416,8 +424,9 @@ still per-process, but event distribution is cross-replica.
 
 ## Errors
 
-- **Auth**: `401` for missing/invalid/expired credentials, `403` for
-  insufficient role/scope or missing legal acceptance.
+- **Auth**: `401` for missing/invalid/expired credentials; `403` for
+  insufficient role/scope; **`451`** for missing legal acceptance
+  (body `{code:"legal_re_acceptance_required", documents:[…]}`).
 - **Validation**: `422` from FastAPI; `400` for hand-rolled checks
   (e.g. invalid scope in API keys, unknown tax jurisdiction).
 - **Rate limit**: `429` with `Retry-After` from

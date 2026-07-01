@@ -145,7 +145,7 @@ target and is tracked as a follow-up.
 
 | Layer | Kind | Status | Mechanism |
 |---|---|---|---|
-| 1. Import restrictions | best-effort in-process | **shipped** | `RestrictedImporter` blocks `subprocess`, `os.system`, `socket`, etc. unless the manifest declares them. |
+| 1. Import restrictions | best-effort in-process | **shipped** | Default-deny **allowlist** (`FROZEN_ALLOWED_MODULES` in [`allowlist.py`](../../engine/plugins/allowlist.py)): a strategy may import a module only if its root name is in the frozen set. Enforced by [`RestrictedImporter`](../../engine/plugins/restricted_importer.py) at both `sys.meta_path` and `builtins.__import__`. The old denylist (`DENYLIST_MODULES`) is retained as defence-in-depth and as the test-suite's escape-vector oracle, but enforcement is purely allowlist-based. Adding a module requires a security review (see [ADR-0007](../adr/0007-strategy-sandbox-allowlist-imports.md)). |
 | 2. Network whitelist | best-effort in-process | **shipped** | `SandboxedHttpClient` proxies every outbound call through an allowlist declared in the manifest (`requires_network: true` + URL prefixes). |
 | 3. Resource limits | best-effort in-process | **shipped** | `resource.setrlimit` for memory / file descriptors on Linux. |
 | 4. Filesystem isolation | best-effort in-process | **shipped** | Each evaluation runs in a fresh `tempfile.TemporaryDirectory`; the strategy only sees its own declared artifacts (read-only). |
