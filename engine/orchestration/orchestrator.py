@@ -181,19 +181,29 @@ class StrategyOrchestrator:
                 raw = strategy.evaluate(market_data, self._cost_model)
                 if inspect.isawaitable(raw):
                     if timeout_seconds is not None:
-                        raw = await asyncio.wait_for(raw, timeout=timeout_seconds)
+                        # Narrow the timeout guard to ONLY the
+                        # ``asyncio.wait_for`` cap. ``wait_for`` raises
+                        # ``asyncio.TimeoutError`` (an alias of the builtin
+                        # ``TimeoutError`` on 3.11+) when its wall-clock
+                        # deadline elapses; that is the one case we treat as
+                        # a genuine timeout. By keeping the handler tight
+                        # around ``wait_for`` alone, a strategy that raises
+                        # the builtin ``TimeoutError`` itself — from the
+                        # synchronous call frame above or from a bare
+                        # ``await raw`` below — falls through to the generic
+                        # handler and is reported as ``strategy_failed``
+                        # rather than masquerading as a timeout.
+                        try:
+                            raw = await asyncio.wait_for(raw, timeout=timeout_seconds)
+                        except TimeoutError:
+                            logger.warning(
+                                "orchestrator.strategy_timeout",
+                                strategy_id=sid,
+                                timeout=timeout_seconds,
+                            )
+                            continue
                     else:
                         raw = await raw
-            except TimeoutError:
-                # Catch TimeoutError before the generic handler: it is a
-                # subclass of OSError/Exception and must be reported as a
-                # timeout, not a crash.
-                logger.warning(
-                    "orchestrator.strategy_timeout",
-                    strategy_id=sid,
-                    timeout=timeout_seconds,
-                )
-                continue
             except Exception:
                 logger.exception("orchestrator.strategy_failed", strategy_id=sid)
                 continue
@@ -273,7 +283,7 @@ class StrategyOrchestrator:
         lists included); and ``orchestrator_sources`` records the contributing
         strategy ids (the non-HOLD, finite-weight voters) so the decision
         stays auditable."""
-        metadata = copy.deepcopy(template.metadata)
+        metadata = dict(copy.deepcopy(template.metadata) or {})
         metadata["orchestrator_sources"] = [s.strategy_id for s in active]
         return template.model_copy(
             update={
