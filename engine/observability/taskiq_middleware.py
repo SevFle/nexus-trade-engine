@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from taskiq import TaskiqMiddleware
 
 from engine.observability import context as ctx
-from engine.observability.middleware import _safe_correlation_id
+from engine.observability.middleware import safe_correlation_id
 
 if TYPE_CHECKING:
     from taskiq import TaskiqMessage
@@ -41,7 +41,7 @@ class CorrelationMiddleware(TaskiqMiddleware):
         # Labels arrive from Redis and may have been crafted by a malicious
         # producer; validate before binding into our log records.
         raw_cid = message.labels.get("correlation_id")
-        ctx.bind_correlation_id(_safe_correlation_id(raw_cid))
+        ctx.bind_correlation_id(safe_correlation_id(raw_cid))
         raw_rid = message.labels.get("request_id")
         if raw_rid and len(raw_rid) <= _MAX_REQUEST_ID_LEN:
             ctx.bind_request_id(raw_rid)
