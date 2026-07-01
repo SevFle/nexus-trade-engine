@@ -31,6 +31,7 @@ from importlib.abc import MetaPathFinder
 from typing import TYPE_CHECKING, Any
 
 from engine.plugins.allowlist import DENYLIST_MODULES, FROZEN_ALLOWED_MODULES
+from engine.plugins.manifest import host_matches_allowlist
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -258,23 +259,17 @@ class RestrictedImporter(MetaPathFinder):
     def _is_host_allowed(self, host: Any) -> bool:
         """Return ``True`` iff *host* is permitted by the hostname allowlist.
 
-        Uses the same endpoint-matching logic as
-        :class:`~engine.plugins.sandboxed_http.SandboxedHttpClient` and the
-        httpx ``send`` hook: a host is allowed if it exactly matches an entry
-        in :attr:`allowed_hosts` or is a subdomain of one
-        (``api.foo.com`` for a ``foo.com`` entry).  With an empty allowlist
-        (no network declared) every host is rejected — matching the
-        ``SandboxedHttpClient`` semantics where an empty whitelist blocks all
-        network access.
+        Delegates to :func:`engine.plugins.manifest.host_matches_allowlist`
+        so the endpoint-matching logic is identical across every enforcement
+        site (``RestrictedImporter``, ``SandboxedHttpClient`` and the httpx
+        ``send`` hook).  A host is allowed if it exactly matches an entry in
+        :attr:`allowed_hosts` or is a subdomain of one
+        (``api.foo.com`` for a ``foo.com`` entry), compared case-insensitively.
+        With an empty allowlist (no network declared) every host is rejected
+        — matching the ``SandboxedHttpClient`` semantics where an empty
+        whitelist blocks all network access.
         """
-        if not self.allowed_hosts:
-            return False
-        if host is None:
-            return False
-        name = str(host)
-        if not name:
-            return False
-        return any(name == ep or name.endswith(f".{ep}") for ep in self.allowed_hosts)
+        return host_matches_allowlist(host, self.allowed_hosts)
 
     def _restricted_getaddrinfo(self, host: Any, *args: Any, **kwargs: Any) -> Any:
         """Hostname-allowlist guard wrapped around ``socket.getaddrinfo``.

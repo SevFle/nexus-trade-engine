@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import httpx
 
+from engine.plugins.manifest import host_matches_allowlist
+
 
 class SandboxedHttpClient(httpx.AsyncClient):
     """HTTP client that only allows requests to whitelisted hosts."""
@@ -25,6 +27,6 @@ class SandboxedHttpClient(httpx.AsyncClient):
         **kwargs: object,
     ) -> httpx.Response:
         host = request.url.host
-        if not any(host == ep or host.endswith(f".{ep}") for ep in self.allowed_endpoints):
+        if not host_matches_allowlist(host, self.allowed_endpoints):
             raise PermissionError(f"Network access to {host} is not allowed")
         return await super().send(request, stream=stream, **kwargs)  # type: ignore[arg-type]

@@ -44,6 +44,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from engine.core.signal import Signal
+from engine.plugins.manifest import host_matches_allowlist
 from engine.plugins.restricted_importer import RestrictedImporter
 from engine.plugins.sandboxed_http import SandboxedHttpClient
 
@@ -393,7 +394,7 @@ class StrategySandbox:
             if not _in_sandbox_execution.get(False):
                 return await original_send(client, request, stream=stream, **kwargs)
             host = request.url.host
-            if not any(host == ep or host.endswith(f".{ep}") for ep in allowed):
+            if not host_matches_allowlist(host, allowed):
                 raise PermissionError(f"Network access to {host} is not allowed")
             return await original_send(client, request, stream=stream, **kwargs)
 

@@ -25,7 +25,10 @@ import httpx
 import pytest
 
 from engine.core.signal import Signal
-from engine.plugins.manifest import StrategyManifest
+from engine.plugins.manifest import (
+    NetworkConfig,
+    StrategyManifest,
+)
 from engine.plugins.restricted_importer import (
     _INTERNAL_BYPASS_MODULES,
     BLOCKED_MODULES,
@@ -444,6 +447,52 @@ class TestGetaddrinfoGuard:
         importer.uninstall()
         assert socket.getaddrinfo is real_original
 
+    def test_is_host_allowed_rejects_when_allowlist_empty(self) -> None:
+        """An empty allowlist rejects every host (covers the empty-list branch)."""
+        importer = RestrictedImporter()  # no allowed_hosts -> empty allowlist
+        assert importer.allowed_hosts == []
+        assert importer._is_host_allowed("api.anthropic.com") is False
+
+    def test_is_host_allowed_rejects_none_host(self) -> None:
+        """``None`` host is rejected before any string comparison (None branch)."""
+        importer = RestrictedImporter(allowed_hosts=["api.anthropic.com"])
+        assert importer._is_host_allowed(None) is False
+
+    def test_is_host_allowed_rejects_empty_host(self) -> None:
+        """An empty-string host is rejected (empty-name branch)."""
+        importer = RestrictedImporter(allowed_hosts=["api.anthropic.com"])
+        assert importer._is_host_allowed("") is False
+
+    def test_is_host_allowed_is_case_insensitive(self) -> None:
+        """Mixed-case request hosts match a canonical lowercase entry."""
+        importer = RestrictedImporter(allowed_hosts=["api.anthropic.com"])
+        # Exact match, differing only by case.
+        assert importer._is_host_allowed("API.ANTHROPIC.COM") is True
+        # Subdomain match, differing only by case.
+        assert importer._is_host_allowed("V2.Api.Anthropic.Com") is True
+        # A mixed-case *entry* still matches a lowercase host (defence for
+        # callers that bypass the manifest validator).
+        mixed = RestrictedImporter(allowed_hosts=["API.Anthropic.Com"])
+        assert mixed._is_host_allowed("api.anthropic.com") is True
+
+    def test_getaddrinfo_raises_when_original_not_captured(self) -> None:
+        """``_restricted_getaddrinfo`` raises if ``_original_getaddrinfo`` is None.
+
+        This branch is unreachable in normal operation (``install()`` captures
+        the original first) but is guarded defensively.  Exercise it directly
+        by clearing the captured original while still passing an allowlisted
+        host so the hostname check succeeds and the delegation guard runs.
+        """
+        importer = RestrictedImporter(allowed_hosts=["api.anthropic.com"])
+        # Force the delegation-guard branch: host is allowed, but there is no
+        # captured original to delegate to.
+        importer._original_getaddrinfo = None
+        with pytest.raises(
+            ConnectionError,
+            match=r"no original getaddrinfo to delegate to",
+        ):
+            importer._restricted_getaddrinfo("api.anthropic.com", 443)
+
 
 class TestPurgeNonAllowlisted:
     """Cover ``RestrictedImporter.purge_non_allowlisted`` (lines 201-208).
@@ -688,6 +737,32 @@ class TestSandboxedHttpClient:
             request = httpx.Request("GET", "https://api.anthropic.com/v1/models")
             with pytest.raises(PermissionError):
                 await client.send(request)
+
+    async def test_mixed_case_host_matches_at_runtime(self) -> None:
+        """A manifest-canonicalised (lowercase) entry matches an uppercase host.
+
+        ``NetworkConfig`` normalises entries to lowercase hostnames at load
+        time; the runtime matcher must therefore be case-insensitive so a
+        request whose URL host happens to be upper-case still matches.
+        """
+        seen: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(str(request.url))
+            return httpx.Response(200, json={"status": "ok"})
+
+        config = NetworkConfig(allowed_endpoints=["API.Anthropic.COM"])
+        client = SandboxedHttpClient(
+            allowed_endpoints=config.allowed_endpoints,
+            transport=httpx.MockTransport(handler),
+        )
+        async with client:
+            # Entry canonicalised to lowercase at load time.
+            assert config.allowed_endpoints == ["api.anthropic.com"]
+            # Upper-case host still matches at runtime.
+            response = await client.get("https://API.ANTHROPIC.COM/v1/models")
+            assert response.status_code == 200
+        assert seen, "request should have reached the handler"
 
     async def test_sandbox_creates_http_client_when_manifest_has_endpoints(
         self, networked_manifest: StrategyManifest
