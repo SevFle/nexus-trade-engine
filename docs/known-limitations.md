@@ -38,6 +38,59 @@ The `BackgroundTasks` call should become a TaskIQ enqueue.
 
 ---
 
+<a id="privacy-tables-no-migration"></a>
+## P0 — `consent_records` & `deletion_schedules` have models but no migration
+
+**Where**: [`engine/db/models.py`](../engine/db/models.py) defines
+`ConsentRecord` and `DeletionSchedule`; [`engine/privacy/deletion.py`](../engine/privacy/deletion.py)
+reads/writes both from the account-deletion path.
+
+Both tables are created by **no** revision in
+[`engine/db/migrations/versions/`](../engine/db/migrations/versions/).
+`alembic upgrade head` against an empty Postgres produces a schema that
+is missing both, so the first `POST /api/v1/delete` (and any consent
+write) fails at runtime with `asyncpg.exceptions.UndefinedTableError`.
+
+This is exactly the drift class that migration
+[`013_user_processing_restricted`](../engine/db/migrations/versions/013_user_processing_restricted.py)
+just closed for the `users.processing_restricted` column (gh#157 / #984)
+— its docstring explicitly calls out the `deletion.py` references.
+`consent_records` and `deletion_schedules` are the remaining half of
+that hole.
+
+**Why it ships green**: the test suite runs against SQLite and calls
+`Base.metadata.create_all`, which builds every model table directly and
+bypasses Alembic. The drift is invisible until a fresh Postgres is
+provisioned via migrations alone.
+
+**Impact**: the GDPR Art. 17 account-deletion flow — a regulated path
+— is broken on any database provisioned from `alembic upgrade head`.
+Existing dev/CI DBs created via `create_all` are unaffected, which is
+why it has gone unnoticed.
+
+**Workaround today**: after `alembic upgrade head`, materialize both
+tables from the ORM metadata once against the prod DSN (idempotent,
+adds only the missing tables):
+
+```python
+import asyncio
+from engine.db.models import Base
+from engine.db.session import engine
+
+async def main():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+asyncio.run(main())
+```
+
+**Fix path**: add `014_consent_and_deletion_tables.py` that
+`create_table`s both with their indexes
+(`ix_consent_user_purpose_time`, `ix_deletion_schedule_status_due`),
+then land the CI job from the P2 ["No Alembic check in CI"](#no-alembic-check)
+entry so a model-without-migration can't recur silently.
+
+---
+
 ## P1 — Three Execution Modes (Roadmap: partial)
 
 Live and paper execution land in `engine/core/execution/`, but the
@@ -220,15 +273,23 @@ is replaced.
 
 ---
 
+<a id="no-alembic-check"></a>
 ## P2 — No Alembic check in CI
 
 There is no automated check that `alembic upgrade head` against an
 empty DB matches the SQLAlchemy models. Drift is caught only when a
-human reads `models.py` and the migration side-by-side.
+human reads `models.py` and the migration side-by-side — or, worse,
+when a fresh-Postgres deploy throws `UndefinedTableError` in
+production (see the [`consent_records` / `deletion_schedules`
+P0](#privacy-tables-no-migration) above, and the now-fixed
+`users.processing_restricted` column that #984 backfilled).
 
 **Fix path**: add a CI job that boots an empty Postgres service,
-runs `alembic upgrade head`, then asserts each model table exists.
-~30 lines of bash.
+runs `alembic upgrade head`, then asserts each model table exists
+(reflect over `Base.metadata.sorted_tables` and query
+`information_schema.tables`). ~30 lines of bash. This single job
+would have caught both the `processing_restricted` regression and
+the two-table drift this cycle surfaced.
 
 ---
 

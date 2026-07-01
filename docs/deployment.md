@@ -91,6 +91,9 @@ Naming convention: field `foo_bar` → env `NEXUS_FOO_BAR`.
 | `NEXUS_AUTH_PROVIDERS` | `local` | CSV subset of `local,google,github,oidc,ldap`. Each adds its own `*_CLIENT_ID`/`*_CLIENT_SECRET`/etc. |
 | `NEXUS_CORS_ORIGINS` | `["http://localhost:3000"]` | JSON array literal in env: `["https://app.example.com"]`. |
 | `NEXUS_RATE_LIMIT_PER_MINUTE` / `_BURST` | 600 / 60 | Per-IP. Tune for known frontends. |
+| `NEXUS_RATE_LIMIT_VALKEY_ENABLED` | `false` | **Set `true` for multi-replica.** When on, limits are enforced globally via Valkey instead of per-pod (otherwise the effective limit becomes `per_minute × replica_count`). |
+| `NEXUS_RATE_LIMIT_ROLE_TIERS` | `""` | JSON `{role:[per_minute,burst]}` for per-role overrides when a Bearer JWT is present (e.g. `{"viewer":[120,30],"admin":[6000,200]}`). |
+| `NEXUS_DATABASE_POOL_SIZE` / `_MAX_OVERFLOW` | 5 / 10 | SQLAlchemy asyncpg pool sizing. Raise for high-concurrency replicas; each backtest/long query holds a connection. |
 | `NEXUS_DATA_PROVIDERS_CONFIG` | `""` | Path to a YAML provider registration (see `config/data_providers.example.yaml`). |
 | `NEXUS_LOG_FORMAT` | `console` | Switch to `json` for production log pipelines. |
 | `NEXUS_LOG_LEVEL` | `INFO` | |
@@ -99,6 +102,30 @@ Naming convention: field `foo_bar` → env `NEXUS_FOO_BAR`.
 | `NEXUS_OPERATOR_NAME/EMAIL/URL` | `"Nexus Trade Engine"` / `"legal@example.com"` / `"https://example.com"` | Substituted into legal docs at render time. |
 | `NEXUS_JURISDICTION` | `"United States"` | Same. |
 | `NEXUS_PLATFORM_FEE_PERCENT` | `30` | Same. |
+
+### WebSocket (`NEXUS_WS_*`)
+
+The active `WS /api/v1/ws` endpoint (SEV-275) is configurable end-to-end.
+The defaults are safe for a single replica; review them before scaling.
+Field names map to env as `NEXUS_WS_<UPPER>` (see
+[`config.py`](../engine/config.py) and [`.env.example`](../.env.example)).
+
+| Variable | Default | Notes |
+|---|---|---|
+| `NEXUS_WS_MAX_CONNECTIONS` | `5000` | Hard cap on concurrent connections per process. New connections past this are closed with code `1011`. |
+| `NEXUS_WS_SEND_QUEUE_SIZE` | `256` | Per-connection bounded send queue. A full queue drops the message and closes the connection (`1008`) — deliberate backpressure, never unbounded memory growth. |
+| `NEXUS_WS_MAX_SUBSCRIPTIONS_PER_CONNECTION` | `50` | Per-connection room cap (excludes the auto-joined `user:<id>` room). Exceeding it returns `429`. |
+| `NEXUS_WS_HEARTBEAT_INTERVAL_SECONDS` | `30.0` | Server heartbeat cadence. Connections silent for `2 × interval` are reaped as stale. |
+| `NEXUS_WS_IDLE_TIMEOUT_SECONDS` | `300.0` | Max time a connection may stay open without activity. |
+| `NEXUS_WS_AUTH_TIMEOUT_SECONDS` | `5.0` | Window after `accept()` for the client to send its `auth` message (or supply `?token=`). |
+| `NEXUS_WS_AUTH_RATE_LIMIT_PER_MINUTE` | `10` | Per-IP token bucket on auth attempts (defends the handshake against token-spray). |
+| `NEXUS_WS_EVENT_BRIDGE_CONCURRENCY` | `32` | Fan-out concurrency of the cross-replica `EventBusBridge`. |
+
+The live socket registry is per-process; event *delivery* is
+[already cross-replica](api-reference.md#event-delivery) via the
+`EventBusBridge` + Valkey pub/sub — see
+[`known-limitations.md`](known-limitations.md). Auth is JWT-only (no
+`nxs_*` API keys on WS).
 
 Never put secrets in a committed `.env`. Compose reads `.env` from
 the working directory; CI injects via the secrets manager.

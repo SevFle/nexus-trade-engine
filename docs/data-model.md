@@ -18,6 +18,9 @@ erDiagram
     users ||--o{ webhook_configs : owns
     users ||--o{ api_keys : owns
     users ||--o{ dsr_requests : files
+    users ||--o{ consent_records : consents
+    users ||--o{ deletion_schedules : schedules
+    dsr_requests ||--o{ deletion_schedules : schedules
     users ||--o{ legal_acceptances : records
 
     portfolios ||--o{ positions : contains
@@ -212,6 +215,60 @@ export / delete / rectify / restrict / object request.
 
 Index `ix_dsr_requests_user_kind_status` backs the operator-side
 queue view.
+
+### `consent_records`
+
+Versioned consent ledger (GDPR Art. 6/7). One row per user × purpose ×
+version; granting writes `granted=True` (with `granted_at`), withdrawing
+writes a fresh `granted=False` row (with `withdrawn_at`), so consent is
+an append-only timeline rather than a mutable flag. `purpose` is one of
+`core_ops | analytics | marketing`; `source` records where the choice was
+made (`settings | onboarding | admin`).
+
+| Column | Type | Notes |
+|---|---|---|
+| `user_id` | uuid FK `users` `ON DELETE CASCADE` | Purged with the user. |
+| `purpose` | `varchar(32)` | Indexed. |
+| `granted` | bool | Append-only history; do not UPDATE in place. |
+| `version` | `varchar(20)` default `'1.0.0'` | Bump when the purpose vocabulary changes. |
+| `granted_at` / `withdrawn_at` | timestamptz nullable | Mutually exclusive signals. |
+
+Composite index `ix_consent_user_purpose_time (user_id, purpose,
+created_at)` backs the "latest consent for this purpose" scan.
+
+> **Migration gap:** this table has a model and runtime callers
+> ([`engine/privacy/deletion.py`](../engine/privacy/deletion.py))
+> but **no Alembic revision**. `alembic upgrade head` will not create
+> it on a fresh DB. See the P0 entry in
+> [`known-limitations.md`](known-limitations.md).
+
+### `deletion_schedules`
+
+Post-grace anonymization schedule tied to a `dsr_requests` delete row
+(gh#157). `request_deletion` opens the 30-day grace window and inserts a
+row in `status='scheduled'`; the periodic review job (retention module,
+gh#90) flips it to `'purged'` once `anonymize_user` has run.
+`retention_exceptions` (JSONB) records records kept past deletion for
+legal reasons (e.g. trade records retained 7 years) so the retention
+sweep has a source of truth.
+
+| Column | Type | Notes |
+|---|---|---|
+| `user_id` | uuid FK `users` `ON DELETE CASCADE` | |
+| `dsr_request_id` | uuid FK `dsr_requests` `ON DELETE CASCADE` | |
+| `scheduled_for` | timestamptz | When anonymization becomes eligible. |
+| `status` | `varchar(32)` default `'scheduled'` | `scheduled \| purged \| cancelled`. |
+| `retention_exceptions` | JSONB dict | Per-table legal-hold overrides. |
+| `purged_at` | timestamptz nullable | Set by `anonymize_user`. |
+| `anonymized_label` | `varchar(128)` nullable | Stable label left in place of the PII. |
+
+Composite index `ix_deletion_schedule_status_due (status,
+scheduled_for)` backs the due-sweep query (`status='scheduled' AND
+scheduled_for <= now()`).
+
+> **Migration gap:** same as `consent_records` — model + callers but no
+> revision. Provisioning from `alembic upgrade head` alone will miss
+> this table and the deletion flow will throw at runtime.
 
 ## Conventions (recap)
 

@@ -37,9 +37,20 @@ The schema is owned by the Alembic migration chain in
 | 010   | `webhook_configs` + `webhook_deliveries` (gh#80).              |
 | 011   | `api_keys` — long-lived scoped credentials for SDK / headless access (gh#94). |
 | 012   | `dsr_requests` — GDPR / CCPA data-subject-request audit log (gh#157). |
+| 013   | `users.processing_restricted` — GDPR Art. 18 restriction flag (gh#157, #984). |
 
 Run `alembic history` for the source of truth. The next free revision
-number is `013`.
+number is `014`.
+
+> **Known drift:** the `ConsentRecord` and `DeletionSchedule` models in
+> [`models.py`](../../engine/db/models.py) are read/written by
+> [`engine/privacy/deletion.py`](../../engine/privacy/deletion.py) but
+> are created by **no** revision. `alembic upgrade head` on an empty DB
+> omits both tables. See the P0 entry in
+> [`known-limitations.md`](../known-limitations.md). This is the same
+> model-without-migration class of bug that `013` just fixed for
+> `users.processing_restricted`; SQLite tests mask it because fixtures
+> call `Base.metadata.create_all` instead of Alembic.
 
 ## Critical tables
 
