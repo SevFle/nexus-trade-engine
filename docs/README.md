@@ -40,6 +40,7 @@ we explain *why*, not *what*.
 | Run the engine locally | [`development.md`](development.md) |
 | Ship a release | [`deployment.md`](deployment.md) · [`RELEASING.md`](RELEASING.md) |
 | Write a strategy plugin | [`PLUGIN_DEV_GUIDE.md`](PLUGIN_DEV_GUIDE.md) · [`architecture/plugins.md`](architecture/plugins.md) |
+| Run several strategies together | [`architecture/orchestration.md`](architecture/orchestration.md) |
 | Understand non-obvious design choices | [`adr/`](adr/README.md) |
 | Operate the running system | [`operations/slos.md`](operations/slos.md) · [`operations/runbooks/`](operations/runbooks/README.md) |
 | Know what's broken or half-built | [`known-limitations.md`](known-limitations.md) |
@@ -53,7 +54,8 @@ docs/
 ├── architecture/                   ← component-by-component "current state"
 │   ├── overview.md
 │   ├── database.md                 ← migration policy, table inventory
-│   └── plugins.md                  ← plugin SDK + registry
+│   ├── plugins.md                  ← plugin SDK + registry
+│   └── orchestration.md            ← Signal contract + the two orchestrators
 ├── adr/                            ← architecture decision records (why we chose X)
 │   ├── 0001-scaffold-tech-choices.md
 │   ├── 0002-auth-rbac.md
@@ -63,7 +65,8 @@ docs/
 │   ├── 0006-bcrypt-fernet.md
 │   ├── 0007-strategy-sandbox-allowlist-imports.md
 │   ├── 0008-pluggable-metrics-backend.md
-│   └── 0009-cross-replica-eventbus-bridge.md
+│   ├── 0009-cross-replica-eventbus-bridge.md
+│   └── 0010-multi-strategy-orchestration.md
 ├── api-reference.md                ← every HTTP/WS route, auth, schemas
 ├── mcp-server.md                   ← MCP tools/resources/auth (LLM agent surface)
 ├── data-model.md                   ← entities, relationships, invariants
@@ -114,6 +117,7 @@ same PR (enforced in CODEOWNERS, not yet in CI):
 | New / changed DB model or migration | `data-model.md` + `architecture/database.md` |
 | New env var | `deployment.md` + `architecture/overview.md` "Configuration" |
 | New SLO or alert | `operations/slos.md` + matching runbook under `operations/runbooks/` |
+| New / changed strategy conflict resolution | `architecture/orchestration.md` (+ new ADR if a new `ConflictResolution` / `AggregationMethod`) |
 | Major architectural decision | new ADR under `adr/` from `adr/template.md` |
 
 Stale docs are a bug. If you find one, open an issue tagged `docs` or

@@ -111,6 +111,55 @@ preview.
 
 ---
 
+<a id="orchestration-landed-unwired"></a>
+## P1 — Multi-strategy orchestration is landed but not route-wired, and the light orchestrator is untested
+
+**Where**:
+[`engine/core/strategy_orchestrator.py`](../engine/core/strategy_orchestrator.py)
+(async),
+[`engine/orchestration/orchestrator.py`](../engine/orchestration/orchestrator.py)
+(light, `PRIORITY` / `NET_POSITION`, commit `dcd9483`), and the
+underlying
+[`engine/core/signal_aggregator.py`](../engine/core/signal_aggregator.py).
+See [`architecture/orchestration.md`](architecture/orchestration.md)
+for the full contract.
+
+**What works**: the `Signal` contract, `SignalAggregator`'s five voting
+modes, and the async `StrategyOrchestrator` (registry, per-strategy
+`asyncio.wait_for` timeout, `copy.deepcopy` input isolation, rich
+`OrchestrationResult`) are all implemented and covered by
+[`tests/test_signal.py`](../tests/test_signal.py),
+[`tests/test_signal_aggregator.py`](../tests/test_signal_aggregator.py),
+and
+[`tests/test_strategy_orchestrator.py`](../tests/test_strategy_orchestrator.py).
+
+**What's missing**:
+
+1. **No HTTP route** binds either orchestrator. There is no
+   `POST /api/v1/orchestrator/run` (or equivalent); every public
+   evaluation path runs exactly one strategy (`POST /backtest/run`,
+   `POST /strategies/{id}/activate`). The contract in
+   [`orchestration.md`](architecture/orchestration.md) is stable enough
+   to bind the route without reshaping the engine.
+2. **The light orchestrator has no tests.** `engine.orchestration`
+   (commit `dcd9483`) ships its `PRIORITY` stalemate logic, `NET_POSITION`
+   netting, the `_NET_EPSILON` dead-band, and registration validation
+   with **zero** direct coverage — there is no
+   `tests/test_orchestration.py`. Its behaviour is exercised only
+   indirectly, if at all.
+
+**Impact**: multi-strategy conflict resolution is not available on the
+public API, and the newest half of it is unverified. If a route binds
+the light orchestrator before tests land, its tie/`HOLD` semantics are
+trusted on faith.
+
+**Fix path**: (1) add `tests/test_orchestration.py` covering both
+`ConflictResolution` modes, registration errors, and the eps dead-band;
+(2) add the orchestration run route + a migration if results are
+persisted. Do (1) before (2).
+
+---
+
 ## P1 — Strategy Marketplace is a stub
 
 **Where**: [`engine/api/routes/marketplace.py`](../engine/api/routes/marketplace.py)
@@ -339,11 +388,12 @@ SLO because live isn't shipped.
 
 ## P2 — Some decisions still lack an ADR
 
-[`docs/adr/`](adr/README.md) now captures nine decisions: scaffold
+[`docs/adr/`](adr/README.md) now captures ten decisions: scaffold
 (0001), auth/RBAC (0002), mobile/PWA (0003), TaskIQ (0004), Valkey
 (0005), bcrypt+Fernet (0006), the strategy sandbox allowlist import
-model (0007), the pluggable `MetricsBackend` Protocol (0008), and the
-cross-replica `EventBus` WebSocket bridge (0009). A handful of smaller
+model (0007), the pluggable `MetricsBackend` Protocol (0008), the
+cross-replica `EventBus` WebSocket bridge (0009), and the multi-strategy
+orchestration design (0010). A handful of smaller
 decisions are still recorded only as PR descriptions or commit
 messages — e.g. the in-process backtest result store (this is tech
 debt to be fixed, P0 above, rather than an accepted architecture

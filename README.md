@@ -104,6 +104,7 @@ nexus-trade-engine/
 │   ├── plugins/            # Plugin SDK, registry, sandbox
 │   ├── data/               # Market data feeds & providers
 │   ├── events/             # Pub/sub event bus
+│   ├── orchestration/      # Light StrategyOrchestrator (PRIORITY/NET_POSITION)
 │   ├── api/                # REST & WebSocket routes
 │   └── db/                 # Models, migrations, session
 ├── sdk/                    # Installable SDK for strategy devs
@@ -182,6 +183,11 @@ on the public API surface or not production-validated.
 - [~] Live broker integration *(partial — read-only `AlpacaDataProvider`;
       `engine/core/execution/live.py` + live loop scaffolded, no run route)*
 - [ ] Strategy marketplace *(stub routes only — returns `not_implemented`)*
+- [~] Multi-strategy orchestration *(partial — async
+      [`StrategyOrchestrator`](docs/architecture/orchestration.md) +
+      `SignalAggregator` landed & tested; the light
+      `engine/orchestration` orchestrator (`PRIORITY`/`NET_POSITION`)
+      landed but **untested**; neither is route-wired yet)*
 - [~] Multi-asset support *(partial — equity/ETF/crypto/forex/options
       primitives exist; asset-class inference on market-data route works)*
 - [~] WebSocket real-time streams *(partial — see
