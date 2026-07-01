@@ -24,6 +24,7 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.49b0",
     "opentelemetry-instrumentation-sqlalchemy>=0.49b0",
     "sentry-sdk[fastapi]>=2.18.0",
+    "prometheus_client>=0.21.0",
     "httpx>=0.28.0",
     "pyyaml>=6.0.0",
     "orjson>=3.10.0",
