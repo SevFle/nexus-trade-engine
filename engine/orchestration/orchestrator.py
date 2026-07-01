@@ -177,22 +177,46 @@ class StrategyOrchestrator:
         """
         collected: list[Signal] = []
         for sid, strategy in list(self._strategies.items()):
+            # ``asyncio.timeout()`` (Python 3.11+) replaces
+            # ``asyncio.wait_for`` for bounding the awaitable. We keep a
+            # handle on the context manager so the ``TimeoutError`` handler
+            # can consult ``.expired()`` to tell the orchestrator's OWN
+            # deadline apart from a ``TimeoutError`` the strategy raised for
+            # unrelated reasons (e.g. an inner HTTP ``wait_for``). The old
+            # single ``except TimeoutError`` caught both and mislabelled a
+            # strategy crash as an orchestrator timeout.
+            timeout_cm: asyncio.Timeout | None = None
             try:
                 raw = strategy.evaluate(market_data, self._cost_model)
                 if inspect.isawaitable(raw):
                     if timeout_seconds is not None:
-                        raw = await asyncio.wait_for(raw, timeout=timeout_seconds)
+                        timeout_cm = asyncio.timeout(timeout_seconds)
+                        async with timeout_cm:
+                            # Sentinel set BEFORE awaiting the strategy: it
+                            # marks that we have entered the timed region. It
+                            # is True for both a deadline hit and a
+                            # strategy-raised TimeoutError, so the handler
+                            # below re-derives the authoritative value from
+                            # ``timeout_cm.expired()``.
+                            timed_out = True
+                            raw = await raw
                     else:
                         raw = await raw
             except TimeoutError:
-                # Catch TimeoutError before the generic handler: it is a
-                # subclass of OSError/Exception and must be reported as a
-                # timeout, not a crash.
-                logger.warning(
-                    "orchestrator.strategy_timeout",
-                    strategy_id=sid,
-                    timeout=timeout_seconds,
-                )
+                # ``.expired()`` is True ONLY when ``asyncio.timeout``'s own
+                # deadline elapsed. A ``TimeoutError`` raised by the
+                # synchronous ``evaluate()`` call above (timeout_cm is None)
+                # or by the strategy itself inside the ``await`` (timeout_cm
+                # not expired) is reported as an ordinary strategy failure.
+                timed_out = timeout_cm is not None and timeout_cm.expired()
+                if timed_out:
+                    logger.warning(
+                        "orchestrator.strategy_timeout",
+                        strategy_id=sid,
+                        timeout=timeout_seconds,
+                    )
+                else:
+                    logger.exception("orchestrator.strategy_failed", strategy_id=sid)
                 continue
             except Exception:
                 logger.exception("orchestrator.strategy_failed", strategy_id=sid)
@@ -273,7 +297,7 @@ class StrategyOrchestrator:
         lists included); and ``orchestrator_sources`` records the contributing
         strategy ids (the non-HOLD, finite-weight voters) so the decision
         stays auditable."""
-        metadata = copy.deepcopy(template.metadata)
+        metadata = copy.deepcopy(template.metadata) if template.metadata else {}
         metadata["orchestrator_sources"] = [s.strategy_id for s in active]
         return template.model_copy(
             update={
