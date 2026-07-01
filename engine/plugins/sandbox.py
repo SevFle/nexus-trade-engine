@@ -98,6 +98,37 @@ _eval_lock, _wait_for, _iscoroutine = _capture_asyncio_helpers()
 
 logger = structlog.get_logger()
 
+
+def _extract_hostnames(endpoints: list[str]) -> list[str]:
+    """Normalise manifest ``allowed_endpoints`` to bare hostnames.
+
+    A strategy manifest's ``network.allowed_endpoints`` may list endpoints as
+    full URLs (``https://api.anthropic.com/v1``) or as bare hostnames
+    (``api.anthropic.com``).  Every downstream enforcement point — the DNS
+    allowlist (:class:`RestrictedImporter`), the
+    :class:`SandboxedHttpClient`, and the httpx ``send`` hook — compares a
+    *hostname* against these entries, so a URL-formatted entry such as
+    ``https://api.anthropic.com/v1`` would never match a request host of
+    ``api.anthropic.com`` and the declared host would be wrongly blocked.
+
+    This helper extracts the hostname component of each entry using
+    :func:`urllib.parse.urlparse`.  Entries with no parseable netloc (bare
+    hostnames, or anything without a ``scheme://``) are returned verbatim so
+    the existing bare-hostname manifest convention keeps working.
+
+    ``urllib`` is imported lazily inside the helper (never at module level) so
+    no module-level reference to this blocked module is created; the helper is
+    only ever called during ``StrategySandbox.__init__`` when import
+    restrictions are *not* yet active.
+    """
+    from urllib.parse import urlparse
+
+    hostnames: list[str] = []
+    for endpoint in endpoints:
+        host = urlparse(endpoint).hostname
+        hostnames.append(host if host else endpoint)
+    return hostnames
+
 _BLOCKED_ATTRS: frozenset[str] = frozenset(
     {
         "__subclasses__",
@@ -198,8 +229,17 @@ class StrategySandbox:
         self.metrics = SandboxMetrics()
         self._max_eval_seconds = manifest.resources.max_cpu_seconds
 
+        # Normalise manifest endpoints (which may be full URLs such as
+        # ``https://api.anthropic.com/v1``) to bare hostnames so that every
+        # downstream enforcement point — the DNS allowlist, the
+        # :class:`SandboxedHttpClient`, and the httpx ``send`` hook — compares
+        # hostname-to-hostname instead of hostname-to-URL.
+        self._allowed_hosts: list[str] = _extract_hostnames(
+            self.manifest.network.allowed_endpoints,
+        )
+
         self._importer = RestrictedImporter(
-            allowed_hosts=self.manifest.network.allowed_endpoints,
+            allowed_hosts=self._allowed_hosts,
         )
         self._http_client: SandboxedHttpClient | None = None
         self._work_dir: str | None = None
@@ -257,7 +297,7 @@ class StrategySandbox:
     def _create_sandboxed_http_client(self) -> None:
         if self.manifest.requires_network():
             self._http_client = SandboxedHttpClient(
-                allowed_endpoints=self.manifest.network.allowed_endpoints,
+                allowed_endpoints=self._allowed_hosts,
             )
 
     @staticmethod
@@ -380,7 +420,7 @@ class StrategySandbox:
         return self._original_getattr(obj, name, *default)  # type: ignore[misc]
 
     def _make_restricted_send(self) -> Any:
-        allowed = self.manifest.network.allowed_endpoints
+        allowed = self._allowed_hosts
         original_send = self._original_httpx_send
 
         async def restricted_send(
