@@ -308,6 +308,22 @@ def create_app() -> FastAPI:
     # log-bombing limits the per-route Pydantic models impose.
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=1_048_576)
     app.add_middleware(CorrelationIdMiddleware)
+    # Class-identity guard: the app factory MUST register the raw-ASGI
+    # CorrelationIdMiddleware. The BaseHTTPMiddleware-based variant
+    # (``BaseHTTPCorrelationIdMiddleware``) resets its structlog /
+    # observability context bindings before streaming responses and
+    # BackgroundTasks finish, which would leak and unbind ids, so it must
+    # never be the default. Any future change that re-points the import at
+    # a BaseHTTPMiddleware subclass trips this assertion immediately.
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    from engine.middleware.correlation import BaseHTTPCorrelationIdMiddleware
+
+    assert CorrelationIdMiddleware is not BaseHTTPCorrelationIdMiddleware
+    assert not issubclass(CorrelationIdMiddleware, BaseHTTPMiddleware), (
+        "create_app() must register the raw-ASGI CorrelationIdMiddleware "
+        "(engine.observability.middleware), not a BaseHTTPMiddleware variant"
+    )
     # Stack order matters — HttpMetricsMiddleware is added last so it
     # wraps everything else and times the full request lifecycle. The
     # /metrics route itself is included so operators can monitor scrape
