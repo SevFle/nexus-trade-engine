@@ -55,6 +55,45 @@ _SCHEME_ALIASES: dict[str, str] = {
 }
 
 
+def _sanitize_url(url: str) -> str:
+    """Return a copy of ``url`` with any embedded userinfo removed.
+
+    Redis/Valkey connection URLs may carry credentials in the netloc —
+    e.g. ``redis://:secret@host:6379`` or ``valkey://user:p%40ss@host:6379``
+    — because a single ``valkey_url`` drives the cache, the rate limiter, the
+    event bus *and* the taskiq broker. Interpolating such a URL into a log
+    line or an exception message therefore leaks the shared secret in one
+    shot, which is how this helper earns its keep: it rebuilds the URL with
+    an empty ``user:password@`` prefix while preserving the scheme, host,
+    port and path so the value stays useful for diagnostics.
+
+    It is deliberately total — any non-string input or failure to parse
+    the URL returns the input unchanged so the helper is always safe to
+    call from an error path (the one place it is most needed) without
+    risking a *second* exception that would mask the original.
+
+    :param url: a potentially credentialed URL.
+    :returns: the URL with any userinfo stripped from the netloc. The
+        hostname/port are retained; if the input is not a string or the
+        URL cannot be parsed, the original value is returned verbatim.
+    """
+    # Non-string input (e.g. ``None`` on an error path) is returned as-is.
+    # ``urlparse`` accepts ``None`` and yields an empty ``ParseResultBytes``,
+    # which would otherwise round-trip to ``b""`` and silently lose the
+    # original value — the opposite of "safe to call from an error path".
+    if not isinstance(url, str):
+        return url
+    try:
+        parsed = urlparse(url)
+    except (TypeError, ValueError):
+        # Malformed input on an error path must not raise again.
+        return url
+    netloc = parsed.hostname or ""
+    if parsed.port is not None:
+        netloc = f"{netloc}:{parsed.port}"
+    return urlunparse(parsed._replace(netloc=netloc))
+
+
 def _normalize_broker_url(url: str) -> str:
     """Translate a Redis/Valkey URL into the scheme ``taskiq_redis`` expects.
 
@@ -62,14 +101,17 @@ def _normalize_broker_url(url: str) -> str:
         (``redis://``, ``rediss://``, ``valkey://`` or ``valkeys://``).
     :returns: the same URL with its scheme rewritten to ``redis://`` or
         ``rediss://`` as appropriate; the host/port/path are unchanged.
-    :raises ValueError: if the URL's scheme is not recognised.
+    :raises ValueError: if the URL's scheme is not recognised. The message
+        is routed through :func:`_sanitize_url` so any ``user:password@``
+        userinfo embedded in the netloc is never echoed back.
     """
     parsed = urlparse(url)
     scheme = parsed.scheme.lower()
     if scheme not in _SCHEME_ALIASES:
         raise ValueError(
             f"Unsupported broker URL scheme {scheme!r}; expected one of "
-            f"redis://, rediss://, valkey:// or valkeys:// (url={url!r})"
+            f"redis://, rediss://, valkey:// or valkeys:// "
+            f"(url={_sanitize_url(url)!r})"
         )
     return urlunparse(parsed._replace(scheme=_SCHEME_ALIASES[scheme]))
 
@@ -112,6 +154,14 @@ def build_broker(url: str | None = None) -> ListQueueBroker:
 # compatibility with anything importing ``broker_url`` directly (it is part
 # of ``__all__``). Derived purely from settings so it tracks the deployment
 # configuration without opening a connection.
+#
+# SECURITY: this value MAY carry ``user:password@`` userinfo because the
+# underlying ``settings.valkey_url`` is shared with caching, rate-limiting
+# and the event bus, and the credentials are required for the broker to
+# actually authenticate. It must therefore NEVER be logged, rendered into an
+# exception message or otherwise written to a plaintext surface. Treat it as
+# a secret. Use :func:`_sanitize_url` (or :func:`build_broker`'s explicit-URL
+# form) anywhere a human-readable representation is needed.
 broker_url: str = _normalize_broker_url(settings.valkey_url)
 
 
