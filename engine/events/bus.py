@@ -7,6 +7,7 @@ with an in-process fallback for single-instance deployments.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections.abc import Awaitable, Callable
@@ -63,6 +64,7 @@ class EventType(StrEnum):
     ENGINE_STOPPED = "engine.stopped"
     BACKTEST_STARTED = "backtest.started"
     BACKTEST_COMPLETED = "backtest.completed"
+    BACKTEST_FAILED = "backtest.failed"
 
 
 class Event:
@@ -200,3 +202,81 @@ class EventBus:
         if event_type:
             events = [e for e in events if e["type"] == event_type.value]
         return events[-limit:]
+
+
+# ---------------------------------------------------------------------------
+# Process-wide lazy singleton
+# ---------------------------------------------------------------------------
+#
+# ``get_event_bus`` provides a lazily-constructed, process-wide
+# :class:`EventBus`.  The first caller builds (and connects) the bus; the
+# construction is serialized with an :class:`asyncio.Lock` so that, even under
+# concurrent access, exactly one instance is created.  Subsequent callers get
+# the cached singleton without touching the lock.
+
+class _EventBusState:
+    """Mutable holder for the process-wide singleton and its init lock.
+
+    Mutating instance attributes avoids the ``global`` statement while still
+    sharing state across module-level helpers.
+    """
+
+    bus: EventBus | None
+    lock: asyncio.Lock | None
+
+
+_state = _EventBusState()
+_state.bus = None
+_state.lock = None
+
+
+def _get_event_bus_lock() -> asyncio.Lock:
+    """Return the singleton init lock, creating it lazily.
+
+    The lock is created on first use (inside an async context) rather than at
+    import time so module import never depends on a running event loop.
+    """
+    if _state.lock is None:
+        _state.lock = asyncio.Lock()
+    return _state.lock
+
+
+async def get_event_bus(redis_url: str | None = None) -> EventBus:
+    """Return the shared :class:`EventBus` singleton.
+
+    The bus is constructed and connected exactly once.  Concurrent callers are
+    serialized through an :class:`asyncio.Lock` (double-checked locking) so the
+    singleton is never built twice even when many tasks race on the first call.
+
+    ``redis_url`` is only consulted on the very first construction; later calls
+    return the cached instance regardless of the argument.
+    """
+    if _state.bus is not None:
+        return _state.bus
+    async with _get_event_bus_lock():
+        # Re-check inside the lock — another task may have built it while we
+        # were waiting.
+        if _state.bus is not None:
+            return _state.bus
+        from engine.config import settings
+
+        url = redis_url or settings.valkey_url
+        bus = EventBus(redis_url=url)
+        await bus.connect()
+        _state.bus = bus
+    return _state.bus
+
+
+def set_event_bus(bus: EventBus | None) -> None:
+    """Inject (or clear) the process-wide singleton.
+
+    Primarily for tests that want to observe emitted events without going
+    through the lazy connect path.
+    """
+    _state.bus = bus
+
+
+def reset_event_bus_for_tests() -> None:
+    """Reset the singleton (and its lock) to a pristine state for tests."""
+    _state.bus = None
+    _state.lock = None
