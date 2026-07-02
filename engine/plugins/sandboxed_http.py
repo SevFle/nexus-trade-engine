@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import httpx
 
-from engine.plugins.restricted_importer import _extract_hostnames
+from engine.plugins.restricted_importer import extract_hostnames
 
 
 class SandboxedHttpClient(httpx.AsyncClient):
@@ -22,7 +22,7 @@ class SandboxedHttpClient(httpx.AsyncClient):
         # with a clear ``ValueError``.  This keeps the matcher below a simple
         # host-only comparison against the (already lower-cased)
         # ``request.url.host``.
-        self.allowed_endpoints = _extract_hostnames(allowed_endpoints)
+        self.allowed_endpoints = extract_hostnames(allowed_endpoints)
 
     async def send(
         self,
@@ -32,6 +32,8 @@ class SandboxedHttpClient(httpx.AsyncClient):
         **kwargs: object,
     ) -> httpx.Response:
         host = request.url.host
+        if host is None:
+            raise PermissionError("Network access to a host-less request URL is not allowed")
         if not any(host == ep or host.endswith(f".{ep}") for ep in self.allowed_endpoints):
             raise PermissionError(f"Network access to {host} is not allowed")
         return await super().send(request, stream=stream, **kwargs)  # type: ignore[arg-type]

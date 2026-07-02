@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from engine.plugins.restricted_importer import extract_hostnames
 
 
 class ResourceLimits(BaseModel):
@@ -20,6 +22,28 @@ class ResourceLimits(BaseModel):
 
 class NetworkConfig(BaseModel):
     allowed_endpoints: list[str] = Field(default_factory=list)
+
+    @field_validator("allowed_endpoints")
+    @classmethod
+    def _validate_endpoint_format(cls, value: list[str]) -> list[str]:
+        """Reject malformed ``allowed_endpoints`` at deserialization time.
+
+        The network allowlist is **host-granular**: a port (``host:8080``) or
+        path (``host/v1``) component would be silently ignored by the matching
+        logic in :class:`~engine.plugins.sandboxed_http.SandboxedHttpClient`
+        and the httpx ``send`` hook, giving a false sense of restriction.  Such
+        entries are therefore rejected with :class:`ValueError` (surfaced by
+        pydantic as :class:`~pydantic.ValidationError`) the moment the manifest
+        is parsed — i.e. *before* the entry ever reaches the sandbox.
+
+        Bare hostnames (``api.example.com``) and full URLs
+        (``https://api.example.com``) are accepted unchanged; the original
+        list is preserved so the manifest remains a faithful declarative
+        record.  Downstream consumers normalise again via
+        :func:`extract_hostnames`.
+        """
+        extract_hostnames(value)  # raises ValueError on malformed entries
+        return value
 
 
 class StrategyManifest(BaseModel):
