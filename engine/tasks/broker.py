@@ -55,6 +55,34 @@ _SCHEME_ALIASES: dict[str, str] = {
 }
 
 
+def _sanitize_url(url: str) -> str:
+    """Strip embedded userinfo (``user:password@``) from a URL.
+
+    Broker/cache URLs are frequently configured with inline credentials
+    (e.g. ``redis://alice:s3cr3t@host:6379/0``). Interpolating the raw URL
+    into a raised exception or log line would leak that password into
+    tracebacks, structured logs and Sentry. This helper reduces the netloc
+    to just ``host[:port]`` so the sanitised form is safe to surface.
+
+    Uses :func:`urllib.parse.urlparse` to split the components and
+    :func:`urllib.parse.urlunparse` to reassemble them; only the userinfo
+    segment of the netloc is removed, so scheme, host, port, path, query
+    and fragment are preserved (host casing and IPv6 brackets included).
+
+    :param url: a possibly credential-bearing URL.
+    :returns: the URL with any ``user[:password]@`` prefix removed; if the
+        netloc carries no userinfo the input is returned unchanged.
+    """
+    parsed = urlparse(url)
+    if "@" not in (parsed.netloc or ""):
+        return url
+    # netloc is ``[user[:password]@]host[:port]``; drop everything up to and
+    # including the final ``@`` so neither the username nor password can
+    # reach logs or error messages.
+    hostinfo = parsed.netloc.rsplit("@", 1)[1]
+    return urlunparse(parsed._replace(netloc=hostinfo))
+
+
 def _normalize_broker_url(url: str) -> str:
     """Translate a Redis/Valkey URL into the scheme ``taskiq_redis`` expects.
 
@@ -62,14 +90,18 @@ def _normalize_broker_url(url: str) -> str:
         (``redis://``, ``rediss://``, ``valkey://`` or ``valkeys://``).
     :returns: the same URL with its scheme rewritten to ``redis://`` or
         ``rediss://`` as appropriate; the host/port/path are unchanged.
-    :raises ValueError: if the URL's scheme is not recognised.
+    :raises ValueError: if the URL's scheme is not recognised. The message
+        carries the URL with any embedded credentials stripped (see
+        :func:`_sanitize_url`) so a misconfigured URL never leaks a
+        password into a traceback or log line.
     """
     parsed = urlparse(url)
     scheme = parsed.scheme.lower()
     if scheme not in _SCHEME_ALIASES:
         raise ValueError(
             f"Unsupported broker URL scheme {scheme!r}; expected one of "
-            f"redis://, rediss://, valkey:// or valkeys:// (url={url!r})"
+            f"redis://, rediss://, valkey:// or valkeys:// "
+            f"(url={_sanitize_url(url)!r})"
         )
     return urlunparse(parsed._replace(scheme=_SCHEME_ALIASES[scheme]))
 

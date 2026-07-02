@@ -121,3 +121,146 @@ class TestBuildBrokerSchemeMapping:
         build_broker()
 
         assert captured["url"] == "rediss://settings-host:6420/3"
+
+
+class TestSanitizeUrl:
+    """``_sanitize_url`` must remove ``user:password@`` userinfo from a URL.
+
+    Credentials are routinely embedded in broker/cache URLs (e.g.
+    ``redis://alice:s3cr3t@host:6379/0``). Surfacing the raw URL in an
+    error message or log line would leak the password into tracebacks,
+    structured logs and Sentry, so the helper reduces the netloc to just
+    ``host[:port]`` while leaving every other component intact.
+    """
+
+    def test_strips_username_and_password(self):
+        assert (
+            broker_module._sanitize_url("redis://alice:s3cr3t@host:6379/0")
+            == "redis://host:6379/0"
+        )
+
+    def test_strips_username_only(self):
+        # A username with no password (no colon) is still userinfo and must
+        # be removed along with the trailing ``@``.
+        assert (
+            broker_module._sanitize_url("redis://alice@host:6379/0")
+            == "redis://host:6379/0"
+        )
+
+    def test_without_credentials_is_unchanged(self):
+        url = "redis://host:6379/0"
+        assert broker_module._sanitize_url(url) == url
+
+    def test_preserves_query_and_fragment(self):
+        assert (
+            broker_module._sanitize_url("rediss://u:p@host:6380/1?ssl=true#frag")
+            == "rediss://host:6380/1?ssl=true#frag"
+        )
+
+    def test_preserves_scheme_and_path(self):
+        assert (
+            broker_module._sanitize_url("valkeys://user:pass@cluster.internal:6420/3")
+            == "valkeys://cluster.internal:6420/3"
+        )
+
+    def test_preserves_ipv6_brackets(self):
+        assert (
+            broker_module._sanitize_url("redis://u:p@[::1]:6379/0")
+            == "redis://[::1]:6379/0"
+        )
+
+    def test_handles_password_containing_at_sign(self):
+        # ``rsplit("@", 1)`` keeps everything after the *last* ``@`` as the
+        # hostinfo, so an ``@`` inside the password is treated as userinfo.
+        assert (
+            broker_module._sanitize_url("redis://u:p@ss@host:6379/0")
+            == "redis://host:6379/0"
+        )
+
+    def test_malformed_or_plain_string_is_returned_unchanged(self):
+        # No netloc / no ``@`` => nothing to strip; the input round-trips.
+        assert broker_module._sanitize_url("not-a-url") == "not-a-url"
+        assert broker_module._sanitize_url("") == ""
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "redis://host:6379/0",
+            "valkeys://cluster.internal:6420/3",
+            "amqp://guest:guest@broker:5672//",
+            "rediss://u:p@[::1]:6380/2?ssl=true#f",
+        ],
+    )
+    def test_sanitize_never_contains_at_for_non_ipv6(self, url):
+        # A sanitised URL (ignoring IPv6 bracket content) must not carry an
+        # ``@``: any ``@`` would imply leftover userinfo.
+        sanitized = broker_module._sanitize_url(url)
+        if "[" not in sanitized:
+            assert "@" not in sanitized
+
+
+class TestCredentialsDoNotLeakIntoExceptions:
+    """Passwords embedded in a broker URL must never appear in a raised error.
+
+    The headline security contract: when ``_normalize_broker_url`` rejects a
+    URL that also carries inline credentials, neither the password nor the
+    username may surface in the ``ValueError`` message (which ends up in
+    tracebacks, structured logs and Sentry).
+    """
+
+    def test_password_absent_from_normalize_exception(self):
+        secret = "super-secret-password-DO-NOT-LEAK-12345"
+        username = "trader-user"
+        url = f"amqp://{username}:{secret}@broker.internal:5672//"
+
+        with pytest.raises(ValueError) as exc_info:
+            broker_module._normalize_broker_url(url)
+
+        message = str(exc_info.value)
+        assert secret not in message
+        assert username not in message
+        # The host survives sanitisation so the error stays actionable.
+        assert "broker.internal" in message
+        assert "amqp" in message  # the rejected scheme is still reported
+
+    def test_password_absent_from_build_broker_exception(self, captured_broker):
+        secret = "hunter2-hunter2-leak"
+        with pytest.raises(ValueError) as exc_info:
+            build_broker(f"postgres://dbuser:{secret}@db.internal:5432/0")
+
+        message = str(exc_info.value)
+        assert secret not in message
+        assert "dbuser" not in message
+        assert "db.internal" in message
+
+    def test_no_credentials_in_exception_repr(self):
+        # ``str(exc)`` and the raw exception object (e.g. when logged via
+        # ``repr``) must both be free of the secret.
+        secret = "repr-secret-value"
+        url = f"ftp://anon:{secret}@files.internal:21/"
+
+        with pytest.raises(ValueError) as exc_info:
+            broker_module._normalize_broker_url(url)
+
+        assert secret not in str(exc_info.value)
+        assert secret not in repr(exc_info.value)
+
+    def test_valid_scheme_with_credentials_is_not_logged(
+        self, captured_broker, caplog
+    ):
+        # On the happy path the broker *needs* the credentials to connect, so
+        # the URL handed to ``ListQueueBroker`` legitimately retains them —
+        # sanitisation applies to *error messages*, not to the live
+        # connection URL. The security contract here is narrower: nothing
+        # must be *logged* with the secret in it (caplog captures any
+        # structlog/stdlib record emitted during construction).
+        secret = "happy-path-secret"
+        captured, _ = captured_broker
+
+        with caplog.at_level("DEBUG"):
+            build_broker(f"valkey://app:{secret}@redis.internal:6379/1")
+
+        # Scheme normalisation still applies; credentials survive (by design).
+        assert captured["url"] == "redis://app:" + secret + "@redis.internal:6379/1"
+        for record in caplog.records:
+            assert secret not in record.getMessage()
