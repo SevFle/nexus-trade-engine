@@ -92,3 +92,30 @@ class PluginRegistry:
 
     def list_strategies(self) -> list[str]:
         return list(self._strategies.keys())
+
+    def strategy_metadata(self) -> list[dict[str, Any]]:
+        """Return manifest metadata for every discovered strategy.
+
+        Each entry is a plain-dict summary suitable for JSON serialization
+        (e.g. by the MCP ``list_strategies`` tool). Entries are returned in
+        discovery order; ``name`` is always the registry/directory key so
+        callers can correlate it with :meth:`list_strategies` and
+        :meth:`load_strategy`. Missing manifest fields degrade to safe
+        defaults rather than raising, so a partially-specified
+        ``manifest.yaml`` cannot break enumeration.
+        """
+        summaries: list[dict[str, Any]] = []
+        for name in self._strategies:
+            manifest = (self._strategies.get(name) or {}).get("manifest") or {}
+            summaries.append(
+                {
+                    "name": name,
+                    "version": manifest.get("version"),
+                    "description": manifest.get("description", ""),
+                    "author": manifest.get("author"),
+                    "symbols": manifest.get("symbols", []),
+                    "timeframe": manifest.get("timeframe"),
+                    "parameters": manifest.get("parameters", {}),
+                }
+            )
+        return summaries
