@@ -231,9 +231,11 @@ it.
 
 **Impact**: the MCP surface cannot be started today. The tool/resource/
 auth contract is implemented and unit-tested, but no client (Claude
-Desktop, a custom agent, …) can connect to it. `.env.example` also does
-not list the `NEXUS_MCP_*` vars, so operators have no inventory of the
-knobs without reading [`config.py`](../engine/mcp/config.py).
+Desktop, a custom agent, …) can connect to it. The `NEXUS_MCP_*`
+knobs *are* inventoried in [`.env.example`](../.env.example) (the
+`# ── MCP server (engine/mcp) ──` block, added since the surface
+landed), so operators no longer have to read
+[`config.py`](../engine/mcp/config.py) to discover them.
 
 **Workaround today**: none at runtime. To exercise the components,
 instantiate `EngineServices` (online or `for_testing`) and call
@@ -244,10 +246,12 @@ must bind.
 
 **Fix path**: write `engine/mcp/server.py` that binds the transport to
 the existing `dispatch_tool` / `read_resource` / `extract_principal` /
-`RateLimiter`, add a `[project.scripts]` entry (e.g.
-`nexus-mcp = engine.mcp.server:main`), and add the `NEXUS_MCP_*` block
-to `.env.example` in the same PR. The PLR0911 ignore already in
-`pyproject.toml` anticipates the multi-branch transport dispatcher.
+`RateLimiter` and add a `[project.scripts]` entry (e.g.
+`nexus-mcp = engine.mcp.server:main`). The `NEXUS_MCP_*` block in
+[`.env.example`](../.env.example) is already landed, so that half of the
+work is done; only the transport binding + console-script remain. The
+PLR0911 ignore already in `pyproject.toml` anticipates the multi-branch
+transport dispatcher.
 
 ---
 

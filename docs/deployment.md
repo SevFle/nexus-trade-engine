@@ -89,6 +89,7 @@ Naming convention: field `foo_bar` → env `NEXUS_FOO_BAR`.
 |---|---|---|
 | `NEXUS_SECRET_KEY_PREVIOUS` | `""` | Enables dual-key rotation window for JWT verification. |
 | `NEXUS_AUTH_PROVIDERS` | `local` | CSV subset of `local,google,github,oidc,ldap`. Each adds its own `*_CLIENT_ID`/`*_CLIENT_SECRET`/etc. |
+| `NEXUS_AUTH_LOCAL_ALLOW_REGISTRATION` | `true` | Whether unauthenticated callers may `POST /auth/register`. **Set `false` in production** unless you intend the deployment to be open-signup — enforced in [`engine/api/auth/local.py`](../engine/api/auth/local.py). Affects the `local` provider only; OAuth/OIDC/LDAP account creation is governed by their own provider flow. |
 | `NEXUS_CORS_ORIGINS` | `["http://localhost:3000"]` | JSON array literal in env: `["https://app.example.com"]`. |
 | `NEXUS_RATE_LIMIT_PER_MINUTE` / `_BURST` | 600 / 60 | Per-IP. Tune for known frontends. |
 | `NEXUS_RATE_LIMIT_VALKEY_ENABLED` | `false` | **Set `true` for multi-replica.** When on, limits are enforced globally via Valkey instead of per-pod (otherwise the effective limit becomes `per_minute × replica_count`). |
@@ -210,6 +211,9 @@ Before exposing to the internet:
 - [ ] `NEXUS_APP_DEBUG=false` (default).
 - [ ] `NEXUS_SECRET_KEY` set to ≥32 bytes of randomness.
 - [ ] `NEXUS_MFA_ENCRYPTION_KEY` set; MFA enroll tested.
+- [ ] `NEXUS_AUTH_LOCAL_ALLOW_REGISTRATION=false` unless you explicitly
+      want open self-signup (defaults to `true`, which is correct for a
+      solo dev box but wrong for a shared deployment).
 - [ ] `NEXUS_CORS_ORIGINS` restricted to your frontend origin.
 - [ ] Reverse proxy terminates TLS only; app behind it.
 - [ ] `compose.yml` ports bound to `127.0.0.1` if app + proxy share a
