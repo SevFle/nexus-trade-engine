@@ -1,11 +1,12 @@
 # Nexus Trade Engine — core Docker Compose stack.
 #
-# Three core services wired together over a dedicated bridge network with
+# Four core services wired together over a dedicated bridge network with
 # health-gated startup ordering:
 #
 #   postgres   PostgreSQL 16 + TimescaleDB, bootstrap SQL auto-run on first boot
 #   valkey     Redis-compatible cache / TaskIQ broker / rate-limit backend
 #   nexus-api  Nexus API built from ./Dockerfile (distroless uvicorn)
+#   worker     TaskIQ async worker (engine.tasks.worker:broker)
 #
 # Networking:
 #   - All services attach to the user-defined bridge network ``nexus-net``
@@ -37,19 +38,19 @@
 
 services:
   postgres:
-    image: timescale/timescaledb:latest-pg16
+    image: timescale/timescaledb:2.17.2-pg16
     restart: unless-stopped
     environment:
       # PGDATA is set explicitly so the named volume mount and the data
       # directory always agree on the non-HA Timescale image.
-      PGDATA: /var/lib/postgresql/data
+      PGDATA: /home/postgres/pgdata/data
       POSTGRES_USER: ${POSTGRES_USER:?must be set in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?must be set in .env}
       POSTGRES_DB: ${POSTGRES_DB:?must be set in .env}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/home/postgres/pgdata/data
       # TimescaleDB extension + seed hypertables, run once on first init
       # by the postgres entrypoint (only fires against an empty data dir).
       - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/10-init-db.sql:ro
@@ -112,6 +113,32 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # TaskIQ async worker — consumes the broker backed by valkey and runs
+  # background jobs (backtests, async DSR/deletion tasks, etc.). Shares the
+  # same image, env wiring, network and startup ordering as ``nexus-api``;
+  # it only differs in the entrypoint (worker loop instead of uvicorn) and
+  # exposes no host port.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nexus-api:latest
+    restart: unless-stopped
+    entrypoint: ["python", "-m", "taskiq", "worker", "engine.tasks.worker:broker"]
+    env_file: .env
+    environment:
+      # Same connection strings as nexus-api so the worker resolves the
+      # sibling compose services by DNS name.
+      NEXUS_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      NEXUS_VALKEY_URL: valkey://valkey:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks:
+      - nexus-net
 
 networks:
   nexus-net:
