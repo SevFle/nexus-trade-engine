@@ -121,3 +121,129 @@ class TestBuildBrokerSchemeMapping:
         build_broker()
 
         assert captured["url"] == "rediss://settings-host:6420/3"
+
+
+class TestSanitizeUrl:
+    """The userinfo-stripping helper must never leak credentials."""
+
+    def test_url_without_userinfo_is_returned_unchanged(self):
+        url = "redis://cluster.internal:6379/0?ssl=true"
+        assert broker_module._sanitize_url(url) == url
+
+    def test_user_and_password_are_stripped(self):
+        sanitized = broker_module._sanitize_url(
+            "redis://hunter2:s3cret@cluster.internal:6379/0"
+        )
+        assert sanitized == "redis://cluster.internal:6379/0"
+        assert "hunter2" not in sanitized
+        assert "s3cret" not in sanitized
+
+    def test_password_only_is_stripped(self):
+        # ``urlparse`` reports an empty-string username (not None) when only
+        # a password is present; the helper must still treat this as
+        # userinfo and drop it.
+        sanitized = broker_module._sanitize_url("rediss://:s3cret@host:6380/1")
+        assert sanitized == "rediss://host:6380/1"
+        assert "s3cret" not in sanitized
+
+    def test_username_only_is_stripped(self):
+        sanitized = broker_module._sanitize_url("valkey://svc@host/2")
+        assert sanitized == "valkey://host/2"
+        assert "svc" not in sanitized
+
+    def test_port_and_path_are_preserved(self):
+        sanitized = broker_module._sanitize_url("redis://u:p@db:6390/3")
+        assert sanitized == "redis://db:6390/3"
+
+    def test_ipv6_host_with_userinfo_is_handled(self):
+        sanitized = broker_module._sanitize_url("rediss://u:p@[::1]:6391/0")
+        assert sanitized == "rediss://[::1]:6391/0"
+        assert "u" not in sanitized.replace("[::1]", "")
+        assert "p" not in sanitized.replace("[::1]", "")
+
+    def test_query_and_fragment_survive(self):
+        sanitized = broker_module._sanitize_url(
+            "redis://u:p@host:6379/0?ssl=true#frag"
+        )
+        assert sanitized == "redis://host:6379/0?ssl=true#frag"
+
+
+class TestNormalizeUrlErrorSanitization:
+    """The ``ValueError`` message must not leak embedded credentials."""
+
+    def test_invalid_scheme_error_strips_userinfo(self):
+        url = "amqp://hunter2:s3cret@broker.internal:5672/0"
+        with pytest.raises(ValueError, match="Unsupported broker URL scheme") as exc_info:
+            broker_module._normalize_broker_url(url)
+
+        message = str(exc_info.value)
+        # Host is preserved for operator triage ...
+        assert "broker.internal" in message
+        assert "amqp" in message
+        # ... but the credentials are not.
+        assert "hunter2" not in message
+        assert "s3cret" not in message
+
+
+class TestModuleBrokerFatalLog:
+    """A misconfigured URL must surface as a clear fatal log, not a bare
+    import-time traceback, and must never leak credentials."""
+
+    def test_invalid_scheme_logs_fatal_with_sanitised_url_then_reraises(
+        self, monkeypatch
+    ):
+        # Drive the helper with an invalid scheme that *also* carries
+        # userinfo, so we can assert on both the fatal event and the
+        # credential stripping in one shot.
+        monkeypatch.setattr(
+            broker_module,
+            "settings",
+            SimpleNamespace(valkey_url="amqp://hunter2:s3cret@broker.internal:5672/0"),
+        )
+        mock_logger = MagicMock()
+        monkeypatch.setattr(broker_module, "logger", mock_logger)
+
+        with pytest.raises(ValueError, match="Unsupported broker URL scheme"):
+            broker_module._build_module_broker()
+
+        # Exactly one fatal event, carrying the structured context an
+        # operator needs to fix the misconfiguration.
+        mock_logger.fatal.assert_called_once_with(
+            "tasks.broker.config_invalid",
+            error=mock_logger.fatal.call_args.kwargs["error"],
+            error_type="ValueError",
+            scheme="amqp",
+            url="amqp://broker.internal:5672/0",
+        )
+        call = mock_logger.fatal.call_args
+        assert call.args == ("tasks.broker.config_invalid",)
+        assert call.kwargs["scheme"] == "amqp"
+        assert call.kwargs["url"] == "amqp://broker.internal:5672/0"
+        assert "s3cret" not in call.kwargs["url"]
+        assert "hunter2" not in call.kwargs["url"]
+        assert "Unsupported broker URL scheme" in call.kwargs["error"]
+
+    def test_valid_scheme_builds_broker_without_fatal_log(self, monkeypatch):
+        # A correctly configured URL must build cleanly and emit no fatal
+        # event — guards against the fatal branch firing spuriously.
+        monkeypatch.setattr(
+            broker_module,
+            "settings",
+            SimpleNamespace(valkey_url="valkeys://broker.internal:6420/3"),
+        )
+        mock_logger = MagicMock()
+        monkeypatch.setattr(broker_module, "logger", mock_logger)
+
+        instance = MagicMock(name="broker")
+        instance.with_result_backend.return_value = instance
+        instance.with_middlewares.return_value = instance
+        with (
+            patch("engine.tasks.broker.ListQueueBroker", return_value=instance),
+            patch("engine.tasks.broker.RedisAsyncResultBackend"),
+            patch("engine.tasks.broker.CorrelationMiddleware"),
+        ):
+            url, broker = broker_module._build_module_broker()
+
+        assert url == "rediss://broker.internal:6420/3"
+        assert broker is instance
+        mock_logger.fatal.assert_not_called()
