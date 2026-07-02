@@ -1,29 +1,59 @@
+<!--
+Doc-stack choice: MkDocs + Material
+===================================
+This is a Python project (FastAPI + SQLAlchemy + TaskIQ + Polars), so the
+documentation is built with **MkDocs** and the **Material for MkDocs**
+theme. We picked it over the alternatives for concrete reasons:
+
+* VitePress / Nextra are JS/TS toolchains. Wiring a Node build pipeline
+  into a Python-only repo would cross-contaminate concerns and bloat CI.
+* Plain Markdown in /docs (the previous approach) renders on GitHub but
+  gives no full-text search, no collapsible/versioned navigation, and no
+  reliable Mermaid rendering. For a codebase this size (18 DB tables,
+  9 ADRs, a 452-line API reference, 7 runbooks) those matter.
+* MkDocs Material consumes the existing Markdown verbatim, so the files
+  stay first-class on GitHub AND get a navigable, searchable, themed
+  site. Config lives in /mkdocs.yml; deps in the `docs` extra of
+  pyproject.toml. No content was forked.
+
+Trade-off we accepted: the docs link to source files with repo-root-
+relative paths (../engine/app.py). Those resolve on GitHub (the primary
+reading surface) but point *outside* docs_dir for MkDocs, so
+mkdocs.yml sets validation.links.not_found = warn — the build stays green
+and the GitHub links keep working. See the "Building & previewing"
+section below for why `--strict` is not yet used in CI.
+
+ADRs live in adr/, runbooks in operations/runbooks/, everything else is
+flat under docs/. Keep each file under 500 lines; split rather than grow.
+-->
+
 # Nexus Trade Engine — Documentation
 
-<!--
-Doc-stack choice
-================
-This repo ships documentation as plain Markdown under /docs. We deliberately
-did **not** adopt MkDocs Material (the conventional pick for Python projects)
-for three reasons:
+## Building & previewing the docs locally
 
-1. Every existing doc (`architecture/`, `adr/`, `operations/`, the runbooks)
-   is already Markdown that renders well on GitHub directly. Introducing a
-   build step now would invalidate dozens of in-repo links and force a
-   `mkdocs serve` workflow on contributors who currently read docs on
-   github.com.
-2. The audience is senior engineers working on the codebase, not external
-   users browsing a marketing site. GitHub's Markdown rendering plus
-   inline Mermaid covers every diagram we need.
-3. The repo already pulls in zero documentation-related toolchain —
-   `pyproject.toml` is for the engine and SDK only. Adding MkDocs would
-   cross-contaminate concerns and bloat CI.
+Docs are built with MkDocs Material (see the rationale in the comment at
+the top of this file and in [`mkdocs.yml`](../mkdocs.yml)).
 
-We will revisit MkDocs Material when there is a published product site with
-non-engineer readers. Until then, "plain Markdown in /docs" is the
-intentional choice. ADR-style entries live in `adr/`; runbooks live in
-`operations/runbooks/`; everything else is flat under `docs/`.
--->
+```bash
+uv sync --extra docs                       # install mkdocs + material only
+uv run mkdocs serve                        # http://127.0.0.1:8000 — live reload
+uv run mkdocs build                        # static site into ./site/
+```
+
+`mkdocs serve` rebuilds on every save. Mermaid diagrams render
+automatically (Material 9.x bundles the renderer); no extra plugin is
+loaded.
+
+> Do **not** run `mkdocs build --strict` in CI yet. The intentional
+> source-relative links (`../engine/...`) emit `not_found` warnings by
+design (see the comment above). The default `warn` level keeps the build
+green; `--strict` would upgrade those to errors. A future cleanup that
+moves source links behind a generated API section can flip `--strict` on.
+
+When you add a page, register it in the `nav:` block of
+[`mkdocs.yml`](../mkdocs.yml) in the same PR so it shows up in the sidebar
+(unregistered pages still build and are searchable, but emit an
+`omitted_files` warning).
 
 This directory is the engineering source-of-truth for Nexus Trade Engine.
 It is written for engineers who will read the source alongside the prose —
@@ -50,6 +80,8 @@ we explain *why*, not *what*.
 ## Layout
 
 ```
+repo root
+├── mkdocs.yml                    ← MkDocs Material config (theme, nav, extensions)
 docs/
 ├── README.md                       ← you are here (index + doc-stack rationale)
 ├── architecture/                   ← component-by-component "current state"
@@ -100,8 +132,8 @@ docs/
 - **Linking**: relative paths only (`../architecture/overview.md`), so
   links work both on GitHub and in any local Markdown viewer.
 - **Per-file length cap**: 500 lines. Split a file rather than letting
-  it accrete. The only exception today is `api-reference.md`, which is
-  split by domain.
+  it accrete. (`api-reference.md` is the largest at ~450 lines and is
+  split by domain; everything else is well under.)
 - **No marketing copy.** The README at the repo root is the public
   face; everything under `docs/` is engineering-grade.
 
@@ -118,6 +150,7 @@ same PR (enforced in CODEOWNERS, not yet in CI):
 | New env var | `deployment.md` + `architecture/overview.md` "Configuration" |
 | New SLO or alert | `operations/slos.md` + matching runbook under `operations/runbooks/` |
 | Major architectural decision | new ADR under `adr/` from `adr/template.md` |
+| New doc page | add the file **and** a `nav:` entry in `mkdocs.yml` |
 
 Stale docs are a bug. If you find one, open an issue tagged `docs` or
 fix it inline — both are accepted.

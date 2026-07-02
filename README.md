@@ -131,8 +131,9 @@ See the [Plugin Developer Guide](docs/PLUGIN_DEV_GUIDE.md) for full documentatio
 
 Engineering documentation lives in [`docs/`](docs/README.md) and is
 written for engineers who will read the source alongside the prose.
-Start with the [docs index](docs/README.md) for a reading-order map;
-key entry points:
+It is built with MkDocs Material (`uv sync --extra docs && uv run mkdocs
+serve` for a live preview). Start with the [docs index](docs/README.md)
+for a reading-order map; key entry points:
 
 - [Architecture overview](docs/architecture/overview.md) — system
   components, request lifecycle, configuration.
@@ -151,6 +152,7 @@ key entry points:
 - [Runbooks](docs/operations/runbooks/README.md) — on-call debug
   guides, per-SLO and common-issue.
 - [ADRs](docs/adr/README.md) — architecture decision records.
+- [Runbooks](docs/operations/runbooks/README.md) — on-call debug guides.
 
 ## Tech Stack
 

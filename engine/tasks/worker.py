@@ -1,27 +1,49 @@
 from __future__ import annotations
 
 import traceback
-from urllib.parse import urlparse, urlunparse
 
 import structlog
-from taskiq import TaskiqScheduler
-from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
 
-from engine.config import settings
-from engine.observability.taskiq_middleware import CorrelationMiddleware
+# The broker (and its scheduler) are constructed in :mod:`engine.tasks.broker`
+# (the canonical single source of truth) so the FastAPI app factory can wire
+# their ``startup()`` / ``shutdown()`` lifecycle into the app lifespan while
+# the worker process registers tasks on the very same broker object. Both
+# are re-exported here for backwards compatibility with callers that import
+# from ``engine.tasks.worker`` — notably the deprecated ``engine.tasks``
+# package facade, which re-exports ``broker`` and ``scheduler`` from here.
+#
+# The broker-construction primitives (``ListQueueBroker``,
+# ``RedisAsyncResultBackend``, ``CorrelationMiddleware`` and
+# ``TaskiqScheduler``) are likewise re-exported: tests that want to drive
+# ``run_backtest_task`` without opening a real Redis connection patch these
+# names *on this module* (``engine.tasks.worker.ListQueueBroker``), so they
+# must resolve as attributes here. Keeping them in scope also means the
+# deprecated facade keeps the historical ``engine.tasks.worker`` surface
+# intact even though the real construction now lives in ``broker.py``.
+from engine.tasks.broker import (
+    CorrelationMiddleware,
+    ListQueueBroker,
+    RedisAsyncResultBackend,
+    TaskiqScheduler,
+    broker,
+    broker_url,
+    build_broker,
+    scheduler,
+)
 
 logger = structlog.get_logger()
 
-_parsed = urlparse(settings.valkey_url)
-_broker_url = urlunparse(_parsed._replace(scheme="redis"))
-
-broker = (
-    ListQueueBroker(url=_broker_url)
-    .with_result_backend(RedisAsyncResultBackend(redis_url=_broker_url))
-    .with_middlewares(CorrelationMiddleware())
-)
-
-scheduler = TaskiqScheduler(broker=broker, sources=[])
+__all__ = [
+    "CorrelationMiddleware",
+    "ListQueueBroker",
+    "RedisAsyncResultBackend",
+    "TaskiqScheduler",
+    "broker",
+    "broker_url",
+    "build_broker",
+    "run_backtest_task",
+    "scheduler",
+]
 
 
 @broker.task

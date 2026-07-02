@@ -56,6 +56,13 @@ dev = [
 ldap = [
     "python-ldap>=3.4.0",
 ]
+docs = [
+    # MkDocs + Material is the documentation build stack for this Python
+    # project (see mkdocs.yml + docs/README.md). Material 9.x bundles
+    # Mermaid.js rendering via pymdownx.superfences; no separate plugin.
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.5.18",
+]
 
 [build-system]
 requires = ["hatchling"]
