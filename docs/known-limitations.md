@@ -93,21 +93,52 @@ entry so a model-without-migration can't recur silently.
 
 ## P1 — Three Execution Modes (Roadmap: partial)
 
-Live and paper execution land in `engine/core/execution/`, but the
-public surface only exposes backtest. Specifically:
+Backtest is the only mode reachable from the public API. Paper and
+live execution exist as implemented code, but **nothing on the route
+surface can start them**. The current state, by piece:
 
-- `engine/core/execution/paper.py` and `live.py` exist but are wired
-  to nothing on the API surface.
-- `engine/core/live/loop.py` and `kill_switch.py` are scaffolded; the
-  live loop has no route entry, no worker task, and no LB / health
-  integration.
+- **`engine/core/execution/paper.py`** — a real `PaperExecutionBackend`
+  (configurable slippage/partial-fill/latency models), and it is the
+  backend the `live` factory name… does *not* point at. There is no
+  paper `run` route.
+- **`engine/execution/live_backend.py:LiveExecutionBackend`**
+  (gh#1117) — a **concrete, write-capable**, Alpaca-compatible REST
+  adapter: validates credentials via `GET /v2/account`, submits /
+  cancels / polls orders, retries transient failures, maps every HTTP
+  failure into the `BrokerAuthError` / `BrokerConnectionError` /
+  `BrokerRejectError` hierarchy, is paper-by-default, and sends a
+  broker-de-dup `client_order_id` on every order (gh#1121). It is
+  exported from [`engine/execution/__init__.py`](../engine/execution/__init__.py),
+  unit-tested with a `MockTransport` client
+  ([`tests/test_live_backend.py`](../tests/test_live_backend.py)), and
+  the design is captured in [ADR-0010](adr/0010-live-execution-alpaca.md).
+  It is **not**, however, registered in
+  [`engine/core/execution/factory.py`](../engine/core/execution/factory.py) —
+  `create_backend("live")` still returns the *scaffold*
+  [`engine/core/execution/live.py:LiveBackend`](../engine/core/execution/live.py),
+  which has no broker wiring and validates no credentials.
+- **`engine/core/live/loop.py:LiveLoop`** + **`kill_switch.py`** — a
+  **complete** (not scaffolded) submit-and-consume driver: it runs the
+  `RiskGate`, submits via a `BrokerAdapter`, applies broker events
+  through the OMS state machine, and engages the kill-switch on a
+  `BrokerAuthError`. It has **no route entry, no worker task, and no
+  LB / health integration** — nothing invokes it.
 - The README lists "Live broker integration (Alpaca, IBKR)" as a
-  roadmap item; only `AlpacaDataProvider` (read-only market data) is
-  shipped.
+  roadmap item; what is shipped today is `AlpacaDataProvider` (read-
+  only market data) + the `LiveExecutionBackend` write adapter above.
+  IBKR is not implemented.
+
+**Net**: every live-trading building block exists and is tested in
+isolation, but the connective tissue — a factory repoint, a run route,
+and a worker task driving `LiveLoop` — is missing.
 
 **Workaround today**: the engine is a **backtest engine** for
-production purposes. Treat the live execution code as an internal
-preview.
+production purposes. Treat the live/paper code as an internal preview
+that can be exercised directly in scripts/tests but not through the
+REST API. The fix path is: (1) register `LiveExecutionBackend` in the
+factory (repointing the `live` name, retiring the scaffold), (2) add
+a `POST /api/v1/…/run` route that enqueues a `LiveLoop` on a TaskIQ
+worker, and (3) wire `/ready` + a kill-switch health probe.
 
 ---
 

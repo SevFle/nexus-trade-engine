@@ -258,6 +258,8 @@ an "optimal" parameter set isn't an overfit artifact.
 | `MetricsReport`, `strategy_evaluator`, `monte_carlo`, `param_optimizer` | Yes — consumed by the backtest runner / scoring routes. |
 | `tca.py`, `market_impact.py` | Library-only today — no public route, and neither is consumed by `DefaultCostModel` yet (the square-root model is available for strategies / evaluators to call directly). |
 | `PerformanceReport` (86-KPI) | **No** — schema landed, no analyzer/route yet. |
+| [`LiveExecutionBackend`](../../engine/execution/live_backend.py) | **No** — concrete, unit-tested Alpaca-compatible write adapter ([ADR-0010](../adr/0010-live-execution-alpaca.md)), but not registered in the execution `factory` and not reachable from any route. |
+| [`LiveLoop`](../../engine/core/live/loop.py) (`engine/core/live/`) | **No** — complete submit + broker-event driver wired to the kill-switch, but no route entry, worker task, or LB/health integration. |
 | `strategy_lifecycle` / `strategy_versioning` | Library-only; the public promotion/version API is part of the still-partial live-trading story (see [`known-limitations.md`](../known-limitations.md)). |
 
 ## See also

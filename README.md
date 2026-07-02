@@ -179,8 +179,12 @@ on the public API surface or not production-validated.
       `IStrategy`/`Signal`/types/testing, marketplace install is a stub)*
 - [~] Paper trading execution *(partial — `engine/core/execution/paper.py`
       backend landed; not yet wired to a public run route)*
-- [~] Live broker integration *(partial — read-only `AlpacaDataProvider`;
-      `engine/core/execution/live.py` + live loop scaffolded, no run route)*
+- [~] Live broker integration *(partial — `AlpacaDataProvider` read-only
+      data + concrete `LiveExecutionBackend` write adapter
+      ([ADR-0010](docs/adr/0010-live-execution-alpaca.md)) and a complete
+      `LiveLoop` driver are landed and tested but **not** wired to a run
+      route, the execution factory, or a worker task — see
+      [known-limitations](docs/known-limitations.md))*
 - [ ] Strategy marketplace *(stub routes only — returns `not_implemented`)*
 - [~] Multi-asset support *(partial — equity/ETF/crypto/forex/options
       primitives exist; asset-class inference on market-data route works)*
