@@ -174,6 +174,15 @@ class LiveExecutionBackend(ExecutionBackend):
                 )
             except (httpx.TransportError, httpx.RequestError) as exc:
                 last_exc = exc
+                # Order submission (POST /v2/orders) is non-idempotent: a
+                # transport failure leaves us unable to tell whether the
+                # broker received the order, so retrying risks creating a
+                # duplicate order. Raise immediately instead of retrying.
+                if method.upper() == "POST" and "/v2/orders" in path:
+                    raise BrokerConnectionError(
+                        f"transport error on non-idempotent {method} {path} "
+                        f"— not retried to avoid duplicate orders ({exc!s})"
+                    ) from exc
                 logger.warning(
                     "live_backend.transport_error",
                     method=method,

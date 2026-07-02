@@ -436,3 +436,57 @@ async def test_transient_503_exhausts_retries_then_raises_connection_error():
     # First attempt + one retry == 2 total.
     assert calls["n"] == 2
     await client.aclose()
+
+
+# ---------------------------------------------------------------------------
+# No-retry guard for non-idempotent order submission (POST /v2/orders)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_submit_order_does_not_retry_on_transport_error():
+    """A transport error on POST /v2/orders must NOT be retried.
+
+    Order submission is non-idempotent: when the transport fails we cannot
+    tell whether the broker received the order, so retrying risks creating a
+    duplicate order. The backend must raise BrokerConnectionError on the
+    *first* attempt instead of retrying.
+    """
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        # httpx.ConnectError is both a TransportError and a RequestError,
+        # so it is caught by the same except branch a real blip would be.
+        raise httpx.ConnectError("simulated connection reset")
+
+    client = _mock_client(handler)
+    backend = LiveExecutionBackend("k", "s", client=client, max_retries=3, retry_backoff_s=0)
+    with pytest.raises(BrokerConnectionError, match="non-idempotent"):
+        await backend.submit_order("AAPL", 100, "buy", "market")
+    # Crucially: no retry happened — exactly one request was issued.
+    assert calls["n"] == 1
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_transport_error_still_retried_for_read_endpoint():
+    """The no-retry guard is scoped to order submission.
+
+    A GET (e.g. get_order_status) hitting the same transport error must still
+    be retried up to ``max_retries`` times, proving the guard does not
+    accidentally suppress retries for idempotent reads.
+    """
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        raise httpx.ConnectError("simulated connection reset")
+
+    client = _mock_client(handler)
+    backend = LiveExecutionBackend("k", "s", client=client, max_retries=2, retry_backoff_s=0)
+    with pytest.raises(BrokerConnectionError):
+        await backend.get_order_status("ord-1")
+    # Retried as before: first attempt + one retry == 2 total.
+    assert calls["n"] == 2
+    await client.aclose()
