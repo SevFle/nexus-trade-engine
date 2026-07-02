@@ -191,6 +191,41 @@ async def test_submit_order_normalises_side_and_symbol():
 
 
 @pytest.mark.asyncio
+async def test_submit_order_auto_generates_client_order_id_when_omitted():
+    """When the caller omits client_order_id, submit_order still sends one.
+
+    The broker uses client_order_id as an idempotency key, so every order
+    submission must carry one — even if the caller did not provide it. The
+    generated value must be a UUID-shaped string present in the POST body.
+    """
+    import uuid as uuid_module
+
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json=_new_submitted_order())
+
+    client = _mock_client(handler)
+    backend = LiveExecutionBackend("k", "s", client=client)
+
+    await backend.submit_order("AAPL", 100, "buy", "market")
+
+    assert len(captured) == 1
+    body = captured[0].read().decode()
+    # Extract the client_order_id value from the JSON body.
+    import json
+
+    sent = json.loads(body)
+    assert "client_order_id" in sent
+    generated = sent["client_order_id"]
+    # Must be a valid UUID (round-trips through uuid.UUID).
+    parsed = uuid_module.UUID(generated)
+    assert str(parsed) == generated
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_submit_order_rejection_raises_broker_reject_error():
     """A 422 (insufficient buying power) maps to BrokerRejectError with code."""
 

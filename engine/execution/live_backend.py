@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
@@ -278,17 +279,22 @@ class LiveExecutionBackend(ExecutionBackend):
         BrokerConnectionError
             Transient/network failure after retries are exhausted.
         """
+        # Always send a client_order_id so the broker can de-duplicate a
+        # retried/resubmitted order instead of double-placing it. A caller
+        # may supply its own; otherwise generate a fresh idempotency key
+        # before the HTTP call.
+        if client_order_id is None:
+            client_order_id = str(uuid.uuid4())
         payload: dict[str, str] = {
             "symbol": str(symbol).upper(),
             "side": _side_value(side),
             "type": str(order_type).lower(),
             "qty": _format_qty(qty),
             "time_in_force": time_in_force,
+            "client_order_id": client_order_id,
         }
         if limit_price is not None:
             payload["limit_price"] = _format_price(limit_price)
-        if client_order_id is not None:
-            payload["client_order_id"] = client_order_id
 
         resp = await self._request("POST", "/v2/orders", json=payload)
         order = resp.json()
