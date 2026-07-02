@@ -26,7 +26,7 @@ from engine.api.ws.exceptions import (
     SubscriptionLimitError,
 )
 from engine.api.ws.metrics import ws_metrics
-from engine.api.ws.protocol import CloseMessage
+from engine.api.ws.protocol import AckMessage, CloseMessage
 
 logger = structlog.get_logger()
 
@@ -144,6 +144,85 @@ class ConnectionManager:
             duration_ms=duration_ms,
             rooms_count=len(info.rooms),
         )
+
+    # ------------------------------------------------------------------
+    # Simple client-id-keyed facade (SEV-275 helper API)
+    # ------------------------------------------------------------------
+    # These methods wrap the room-based core to expose the conventional
+    # connect / disconnect / send_personal / broadcast_all surface that
+    # callers (and tests) can use without reasoning about rooms. They are
+    # purely additive and share the same connection table, heartbeat task
+    # and bounded send-queue backpressure as register/unregister/send.
+
+    async def connect(
+        self,
+        ws: WebSocket,
+        client_id: str | None = None,
+        *,
+        scopes: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        """Register a WebSocket and acknowledge the connection.
+
+        Enqueues an :class:`AckMessage` so the client is notified it was
+        accepted. Returns the opaque connection id, which also serves as
+        the ``client_id`` for :meth:`send_personal` / :meth:`disconnect`.
+        Raises :class:`ConnectionLimitError` when the server is full or
+        shutting down (propagated from :meth:`register`).
+        """
+        connection_id = await self.register(
+            ws,
+            user_id=client_id or "",
+            scopes=scopes or [],
+            metadata=metadata,
+        )
+        await self.send(connection_id, AckMessage(status="ok"))
+        return connection_id
+
+    async def disconnect(self, client_id: str, reason: str = "client_disconnect") -> None:
+        """Remove a client and clean up its rooms, sender task and metrics.
+
+        Safe to call multiple times or with an unknown id (no-op).
+        """
+        await self.unregister(client_id, reason=reason)
+
+    async def send_personal(self, client_id: str, message: OutboundMessage) -> bool:
+        """Send a message to a single, specific client.
+
+        Returns ``True`` when the client exists and the message was
+        enqueued, ``False`` when the client is unknown (so callers can
+        drop dead ids gracefully). May raise :class:`QueueFullError` when
+        the per-connection send queue is saturated.
+        """
+        if client_id not in self._connections:
+            return False
+        await self.send(client_id, message)
+        return True
+
+    async def broadcast_all(self, message: OutboundMessage) -> int:
+        """Fan a message out to *every* active connection.
+
+        Returns the number of clients the message was delivered to
+        (``0`` when there are no connections). Per-connection send errors
+        (queue full / closed socket) are counted as dropped and do not
+        abort the remaining fan-out.
+        """
+        snapshot = list(self._connections.keys())
+        if not snapshot:
+            return 0
+        results = await asyncio.gather(
+            *(self._send_one(cid, message) for cid in snapshot),
+            return_exceptions=True,
+        )
+        delivered = 0
+        for cid, result in zip(snapshot, results, strict=True):
+            if isinstance(result, Exception):
+                continue
+            # _send_one swallows send failures; treat a still-present
+            # connection whose send did not raise as delivered.
+            if cid in self._connections:
+                delivered += 1
+        return delivered
 
     async def send(self, connection_id: str, message: OutboundMessage) -> None:
         info = self._connections.get(connection_id)
@@ -295,6 +374,11 @@ class ConnectionManager:
                 ws_metrics.metrics.counter(
                     "sev_ws_messages_dropped_total", tags={"reason": "closed"}
                 )
+                # Auto-cleanup: the underlying socket is gone, so drop the
+                # connection so subsequent fan-out stops queueing to it and
+                # the heartbeat/sender bookkeeping stays consistent.
+                with contextlib.suppress(Exception):
+                    await self.unregister(connection_id, reason="socket_closed")
                 break
 
     async def close_all(self, code: int = 1000, reason: str = "server_shutdown") -> None:
