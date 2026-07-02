@@ -1,56 +1,121 @@
+# Nexus Trade Engine — core Docker Compose stack.
+#
+# Three core services wired together over a dedicated bridge network with
+# health-gated startup ordering:
+#
+#   postgres   PostgreSQL 16 + TimescaleDB, bootstrap SQL auto-run on first boot
+#   valkey     Redis-compatible cache / TaskIQ broker / rate-limit backend
+#   nexus-api  Nexus API built from ./Dockerfile (distroless uvicorn)
+#
+# Networking:
+#   - All services attach to the user-defined bridge network ``nexus-net``
+#     so they resolve each other by service name (e.g. ``postgres:5432``).
+#   - Host ports bind to 127.0.0.1 only; put a reverse proxy in front for
+#     real traffic (see docs/deployment.md).
+#
+# Health checks:
+#   - Every service defines a healthcheck.
+#   - nexus-api uses ``depends_on.<svc>.condition: service_healthy`` so it
+#     does not boot until postgres + valkey are accepting connections.
+#
+# Volumes:
+#   - ``pgdata`` persists the Postgres data dir across container recreation.
+#
+# Env wiring (engine/config.py — field ``foo_bar`` ↔ env ``NEXUS_FOO_BAR``):
+#   - NEXUS_DATABASE_URL → postgresql+asyncpg://<user>:<pw>@postgres:5432/<db>
+#   - NEXUS_VALKEY_URL   → valkey://valkey:6379/0
+#
+# Usage:
+#   cp .env.example .env          # then set POSTGRES_PASSWORD + NEXUS_SECRET_KEY
+#   docker compose up -d
+#   docker compose config         # validate the rendered config
+#
+# NOTE: the SQLAlchemy schema is applied via Alembic (``make migrate``), not
+# by this file. scripts/init_db.sql only enables the TimescaleDB extension
+# and seeds the time-series hypertables; run migrations once after the first
+# ``docker compose up``.
+
 services:
-  db:
+  postgres:
     image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
     environment:
+      # PGDATA is set explicitly so the named volume mount and the data
+      # directory always agree on the non-HA Timescale image.
+      PGDATA: /var/lib/postgresql/data
       POSTGRES_USER: ${POSTGRES_USER:?must be set in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?must be set in .env}
       POSTGRES_DB: ${POSTGRES_DB:?must be set in .env}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - pgdata:/home/postgres/pgdata/data
+      - pgdata:/var/lib/postgresql/data
+      # TimescaleDB extension + seed hypertables, run once on first init
+      # by the postgres entrypoint (only fires against an empty data dir).
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/10-init-db.sql:ro
+    networks:
+      - nexus-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   valkey:
     image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    command: ["valkey-server", "--save", "60", "1", "--loglevel", "warning"]
     ports:
       - "127.0.0.1:6379:6379"
+    networks:
+      - nexus-net
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
+      start_period: 5s
 
-  app:
-    build: .
+  nexus-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nexus-api:latest
+    restart: unless-stopped
     ports:
       - "127.0.0.1:8000:8000"
     env_file: .env
+    environment:
+      # Connection strings override whatever .env ships so the API talks
+      # to the sibling compose services by DNS name.
+      NEXUS_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      NEXUS_VALKEY_URL: valkey://valkey:6379/0
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
       valkey:
         condition: service_healthy
-    environment:
-      NEXUS_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      NEXUS_VALKEY_URL: valkey://valkey:6379/0
+    networks:
+      - nexus-net
+    # The runtime image is distroless (no shell, no curl), so the
+    # healthcheck uses the in-venv Python + urllib to hit the liveness
+    # route. /health is a cheap process check; /ready (db + valkey) is
+    # reserved for the load-balancer pool.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).close()"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
-  worker:
-    build: .
-    entrypoint: ["python", "-m", "taskiq", "worker", "engine.tasks.worker:broker"]
-    env_file: .env
-    depends_on:
-      db:
-        condition: service_healthy
-      valkey:
-        condition: service_healthy
-    environment:
-      NEXUS_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      NEXUS_VALKEY_URL: valkey://valkey:6379/0
+networks:
+  nexus-net:
+    driver: bridge
 
 volumes:
   pgdata:
