@@ -20,10 +20,10 @@ class TestTasksModule:
         saved = {m: sys.modules.pop(m) for m in mods_to_remove}
 
         with (
-            patch("engine.tasks.worker.ListQueueBroker", return_value=mock_broker_inst),
-            patch("engine.tasks.worker.RedisAsyncResultBackend"),
-            patch("engine.tasks.worker.CorrelationMiddleware"),
-            patch("engine.tasks.worker.TaskiqScheduler"),
+            patch("engine.tasks.broker.ListQueueBroker", return_value=mock_broker_inst),
+            patch("engine.tasks.broker.RedisAsyncResultBackend"),
+            patch("engine.tasks.broker.CorrelationMiddleware"),
+            patch("engine.tasks.broker.TaskiqScheduler"),
         ):
             yield
 
