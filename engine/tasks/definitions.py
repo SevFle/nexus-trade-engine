@@ -29,6 +29,7 @@ Design notes
 from __future__ import annotations
 
 import asyncio
+import os
 import random
 import traceback
 from collections.abc import Awaitable, Callable
@@ -51,6 +52,18 @@ logger = structlog.get_logger()
 # attribute rather than baked into ``with_retry`` so production timing is
 # still governed by the real event-loop sleeper.
 _retry_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
+
+# Wall-clock cap on a single backtest attempt. Read from the environment at
+# import time so operators can tune it per deployment (``.env`` sets
+# ``NEXUS_BACKTEST_TIMEOUT_SECONDS``); tests monkeypatch this attribute to
+# exercise the timeout path deterministically. ``_execute_backtest`` wraps
+# each attempt in ``asyncio.wait_for(..., timeout=BACKTEST_TIMEOUT)`` so a
+# wedged data-provider call cannot pin a worker slot indefinitely. A breach
+# surfaces as ``TimeoutError`` (== ``asyncio.TimeoutError`` on 3.11+), which
+# :func:`with_retry` treats as a transient, retryable failure.
+BACKTEST_TIMEOUT: float = float(
+    os.environ.get("NEXUS_BACKTEST_TIMEOUT_SECONDS", "300.0")
+)
 
 _F = TypeVar("_F", bound=Callable[..., Awaitable[Any]])
 
@@ -98,42 +111,50 @@ def with_retry(
     def decorator(func: _F) -> _F:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            # ``attempt`` counts how many tries have *completed*. It starts
+            # at 0 and is incremented *after* the call so it always reflects
+            # finished work. The loop therefore runs the initial try plus
+            # ``max_retries`` follow-ups == ``max_retries + 1`` attempts total
+            # (1 initial + ``max_retries`` retries).
             attempt = 0
-            # +1 for the initial try, +max_retries for the retries.
             last_exc: BaseException | None = None
             while attempt <= max_retries:
-                attempt += 1
                 try:
                     return await func(*args, **kwargs)
                 except retryable as exc:
                     last_exc = exc
-                    if attempt > max_retries:
+                    # No retries left once we have already completed
+                    # ``max_retries`` tries (the budget is the initial try
+                    # plus this many follow-ups). Log exhaustion and stop;
+                    # the post-loop raise wraps the final failure.
+                    if attempt >= max_retries:
                         logger.warning(
                             "task.retry_exhausted",
                             func=getattr(func, "__name__", "callable"),
-                            attempts=attempt,
+                            attempts=attempt + 1,
                             error=str(exc),
                             error_type=type(exc).__name__,
                             correlation_id=get_correlation_id(),
                         )
                         break
-                    ceiling = min(max_delay, base_delay * (2 ** (attempt - 1)))
+                    ceiling = min(max_delay, base_delay * (2 ** attempt))
                     delay = ceiling * random.random()  # noqa: S311 - full-jitter backoff delay, non-cryptographic
                     logger.info(
                         "task.retry_scheduled",
                         func=getattr(func, "__name__", "callable"),
-                        attempt=attempt,
-                        next_attempt=attempt + 1,
+                        attempt=attempt + 1,
+                        next_attempt=attempt + 2,
                         delay=round(delay, 3),
                         error=str(exc),
                         correlation_id=get_correlation_id(),
                     )
                     await _retry_sleep(delay)
-            # Unreachable in practice (loop returns or breaks), but keeps
-            # the type-checker happy and makes the intent explicit.
+                attempt += 1
+            # Reached either by breaking out after exhausting retries, or
+            # by ``max_retries < 0`` (defensive; treated as zero retries).
             raise TaskExecutionError(
                 f"{getattr(func, '__name__', 'callable')} failed after "
-                f"{attempt} attempts: {last_exc}"
+                f"{attempt + 1} attempts: {last_exc}"
             ) from last_exc
 
         return wrapper  # type: ignore[return-value]
@@ -196,9 +217,39 @@ async def _execute_backtest(
 ) -> Any:
     """Resolve the strategy, build the runner, and execute the backtest.
 
-    Wrapped with :func:`with_retry` so transient data-provider failures are
-    retried; an unknown strategy raises ``ValueError`` which is *not*
-    retryable and surfaces immediately.
+    The whole attempt is bounded by :data:`BACKTEST_TIMEOUT` via
+    :func:`asyncio.wait_for` so a wedged data-provider call cannot pin a
+    worker slot indefinitely; a timeout surfaces as :class:`TimeoutError`
+    (== ``asyncio.TimeoutError``), which :func:`with_retry` treats as a
+    transient, retryable failure. An unknown strategy raises
+    ``ValueError`` which is *not* retryable and surfaces immediately.
+    """
+    return await asyncio.wait_for(
+        _run_backtest_once(
+            strategy_name=strategy_name,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            initial_capital=initial_capital,
+        ),
+        timeout=BACKTEST_TIMEOUT,
+    )
+
+
+async def _run_backtest_once(
+    *,
+    strategy_name: str,
+    symbol: str,
+    start_date: str,
+    end_date: str,
+    initial_capital: float,
+) -> Any:
+    """Run a single backtest attempt (no retry, no timeout wrapper).
+
+    Kept separate from :func:`_execute_backtest` so the timeout wrapper and
+    the retry decorator compose cleanly, and so tests can target one attempt
+    in isolation. Heavy imports stay lazy inside the body to keep worker
+    startup cheap and avoid circular imports at module load time.
     """
     from engine.core.backtest_runner import BacktestConfig, BacktestRunner
     from engine.data.feeds import get_data_provider
