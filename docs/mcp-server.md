@@ -227,10 +227,11 @@ under the `NEXUS_MCP_` prefix and/or `.env`.
 | `NEXUS_MCP_BACKTEST_MAX_BARS` | `50000` | |
 | `NEXUS_MCP_BACKTEST_DEFAULT_PROVIDER` | `yahoo` | Provider name passed to `get_data_provider`. |
 
-> These are **not** yet in `.env.example`. The wiring path is: any
-> operator running the MCP server sets them in their own env / `.env`.
-> Adding them to `.env.example` is tracked alongside the `server.py`
-> gap (see [known-limitations.md](known-limitations.md#mcp)).
+> These **are** documented in [`.env.example`](../.env.example) (the
+> `MCP server (engine/mcp)` block), which carries a header note that the
+> runnable `server.py` transport entry point is still missing. The only
+> remaining MCP gap is therefore the `server.py` entry point itself
+> (see [known-limitations.md](known-limitations.md#mcp)).
 
 ## Engine services (`EngineServices`)
 
@@ -302,4 +303,4 @@ internal classes or SQL) never reach the model.
 - [`architecture/overview.md`](architecture/overview.md) — where the
   MCP server sits relative to the REST API and workers.
 - [`known-limitations.md`](known-limitations.md) — the `server.py`
-  gap and the `.env.example` follow-up.
+  gap (the only remaining MCP item; the env vars are already documented).
