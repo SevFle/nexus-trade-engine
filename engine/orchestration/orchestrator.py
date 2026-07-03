@@ -59,8 +59,21 @@ class ConflictResolution(StrEnum):
 # Stamped onto aggregated output so audit code can tell orchestrator
 # decisions apart from raw per-strategy signals.
 _AGGREGATED_STRATEGY_ID = "orchestrator"
-# Net-position dead band: |net| below this is a tie → HOLD, so float dust
-# (e.g. 1.0 - 0.5 - 0.5 == 1.1e-16) can't flip a HOLD into a phantom signal.
+# Two distinct tolerances for the two distinct "should these floats be
+# equal?" questions the orchestrator asks:
+#
+# * ``_PRIORITY_TOLERANCE`` — the absolute tolerance passed to
+#   ``math.isclose`` when detecting priority ties (stalemate resolution).
+#   Priorities are floats that may arrive via arithmetic (e.g.
+#   ``0.1 + 0.2`` vs ``0.3``); a bitwise ``==`` would miss a genuine tie,
+#   letting one side win a stalemate that must resolve to HOLD.
+# * ``_NET_EPSILON`` — the dead band for NET_POSITION aggregation:
+#   ``|net|`` below this is a tie → HOLD, so float dust (e.g.
+#   ``1.0 - 0.5 - 0.5 == 1.1e-16``) can't flip a HOLD into a phantom signal.
+#
+# They are kept as *separate* constants so each tolerance can be tuned
+# independently without coupling the two code paths.
+_PRIORITY_TOLERANCE = 1e-9
 _NET_EPSILON = 1e-9
 _DEFAULT_PRIORITY = 0.0
 
@@ -214,10 +227,34 @@ class StrategyOrchestrator:
 
     def aggregate_signals(self, signals: Iterable[Signal] | None = None) -> list[Signal]:
         """Collapse ``signals`` to one decision per symbol. Defaults to the
-        most recent :meth:`run_all` output."""
+        most recent :meth:`run_all` output.
+
+        Exact duplicates — two signals sharing the same
+        ``(strategy_id, symbol, side)`` — are collapsed so that the *last*
+        one wins (later overwrites earlier) and a warning is logged with
+        the identifying fields, so a strategy emitting repeats can't
+        double-count its own vote. Last-wins means a re-emitted signal
+        carrying an updated ``weight``/``metadata`` supersedes the stale
+        earlier emission."""
         source = list(signals) if signals is not None else list(self._last_signals)
-        per_symbol: dict[str, list[Signal]] = defaultdict(list)
+        # Dict keyed by (strategy_id, symbol, side): a later signal with
+        # the same key overwrites the earlier one (last-wins), while
+        # insertion order is preserved (a re-assigned key keeps its
+        # first-seen position), so the surviving list is deterministic.
+        deduped_map: dict[tuple[str, str, Side], Signal] = {}
         for sig in source:
+            key = (sig.strategy_id, sig.symbol, sig.side)
+            if key in deduped_map:
+                logger.warning(
+                    "orchestrator.duplicate_signal_dropped",
+                    strategy_id=sig.strategy_id,
+                    symbol=sig.symbol,
+                    side=sig.side,
+                )
+            deduped_map[key] = sig
+        deduped = list(deduped_map.values())
+        per_symbol: dict[str, list[Signal]] = defaultdict(list)
+        for sig in deduped:
             per_symbol[sig.symbol].append(sig)
         return [self._resolve(group) for group in per_symbol.values()]
 
@@ -231,8 +268,23 @@ class StrategyOrchestrator:
         if not active:
             return self._resolved(group[0], Side.HOLD, active)
         top = max(self._priorities.get(s.strategy_id, _DEFAULT_PRIORITY) for s in active)
+        # Tied-for-top detection uses ``math.isclose`` with an absolute
+        # tolerance (and a zero relative tolerance) instead of ``==``:
+        # priorities are floats that may arrive via arithmetic (e.g.
+        # 0.1 + 0.2 vs 0.3), and a bitwise ``==`` would miss a genuine
+        # tie, letting one side win a stalemate that must resolve to HOLD.
+        # ``rel_tol=0.0`` disables the relative component so the tie is
+        # decided purely by the absolute gap, mirroring the net-position
+        # dead-band semantics.
         winners = [
-            s for s in active if self._priorities.get(s.strategy_id, _DEFAULT_PRIORITY) == top
+            s
+            for s in active
+            if math.isclose(
+                self._priorities.get(s.strategy_id, _DEFAULT_PRIORITY),
+                top,
+                rel_tol=0.0,
+                abs_tol=_PRIORITY_TOLERANCE,
+            )
         ]
         if len({s.side for s in winners}) > 1:  # top-priority stalemate → HOLD
             return self._resolved(winners[0], Side.HOLD, active)

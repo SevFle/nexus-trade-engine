@@ -28,12 +28,15 @@ Covers the four required scenarios plus the full public surface of
 from __future__ import annotations
 
 import asyncio
+import math
 
 import pytest
 from structlog.testing import capture_logs
 
 from engine.core.signal import Side, Signal
 from engine.orchestration.orchestrator import (
+    _NET_EPSILON,
+    _PRIORITY_TOLERANCE,
     ConflictResolution,
     StrategyOrchestrator,
     StrategyOrchestratorError,
@@ -389,6 +392,24 @@ class TestNetPositionResolution:
         assert agg[0].side == Side.HOLD
         assert agg[0].weight == pytest.approx(0.0)
 
+    async def test_float_dust_net_resolves_hold_within_dead_band(self):
+        # The ``_NET_EPSILON`` dead band must absorb floating-point dust so
+        # a net that is *mathematically* zero but bitwise non-zero (here
+        # 0.1 + 0.2 - 0.3 == 5.5e-17) resolves to HOLD, not a phantom BUY.
+        # Under a bare ``net == 0`` (or ``net > 0``) check the dust would
+        # leak a minuscule BUY signal.
+        buy = _sig("AAPL", Side.BUY, "b1").model_copy(update={"weight": 0.1 + 0.2})
+        sell = _sig("AAPL", Side.SELL, "s1").model_copy(update={"weight": 0.3})
+        assert buy.weight - sell.weight > 0.0  # precondition: bitwise dust
+        assert buy.weight - sell.weight < _NET_EPSILON  # within dead band
+        orch = self._orch(
+            [_AsyncStrategy("b1", [buy]), _AsyncStrategy("s1", [sell])]
+        )
+        await orch.run_all({})
+        agg = orch.aggregate_signals()
+        assert agg[0].side == Side.HOLD
+        assert agg[0].weight == pytest.approx(0.0)
+
     async def test_non_finite_weight_abstains(self):
         # A nan/inf weighted vote cannot contribute a magnitude and is
         # treated as an abstention on BOTH the BUY and SELL branches; the
@@ -729,3 +750,144 @@ class TestMetadataDeepCopyIsolation:
         resolved = orch.aggregate_signals()[0]
         assert resolved.strategy_id == "orchestrator"
         assert resolved.metadata["orchestrator_sources"] == ["x"]
+
+
+# --------------------------------------------------------------------- #
+# Float-safe priority tie-detection (isclose) & duplicate-signal dedup
+# --------------------------------------------------------------------- #
+
+
+class TestFloatSafePriorityTie:
+    async def test_float_dust_priorities_treat_as_tie(self):
+        # Two strategies whose priorities differ only by floating-point
+        # dust (0.1 + 0.2 vs 0.3) must be treated as tied for top
+        # priority. A bare ``==`` would miss the tie and let one side win
+        # the conflict; ``math.isclose(..., rel_tol=0.0,
+        # abs_tol=_PRIORITY_TOLERANCE)`` resolves
+        # the stalemate to HOLD.
+        p1 = 0.1 + 0.2  # 0.30000000000000004
+        p2 = 0.3
+        assert p1 != p2  # precondition: not bitwise equal
+        assert math.isclose(p1, p2, rel_tol=0.0, abs_tol=_PRIORITY_TOLERANCE)
+        orch = StrategyOrchestrator(
+            [
+                _AsyncStrategy("s1", [_sig("AAPL", Side.BUY, "s1")]),
+                _AsyncStrategy("s2", [_sig("AAPL", Side.SELL, "s2")]),
+            ],
+            _FakeCostModel(),
+            priorities={"s1": p1, "s2": p2},
+        )
+        await orch.run_all({})
+        assert orch.aggregate_signals()[0].side == Side.HOLD
+
+    async def test_clearly_distinct_priorities_still_decide(self):
+        # Sanity: priorities that genuinely differ by more than the
+        # tolerance still let the higher one win — ``isclose`` must not
+        # collapse a real gap into a phantom tie.
+        orch = StrategyOrchestrator(
+            [
+                _AsyncStrategy("s1", [_sig("AAPL", Side.BUY, "s1")]),
+                _AsyncStrategy("s2", [_sig("AAPL", Side.SELL, "s2")]),
+            ],
+            _FakeCostModel(),
+            priorities={"s1": 1.0, "s2": 2.0},
+        )
+        await orch.run_all({})
+        # s2 is clearly higher priority → its SELL wins.
+        assert orch.aggregate_signals()[0].side == Side.SELL
+
+
+class TestDuplicateSignalDropped:
+    async def test_duplicate_signal_dropped_with_warning(self):
+        # A strategy emitting the same (strategy_id, symbol, side) twice is
+        # de-duplicated (the later one wins) and a warning is logged with
+        # the identifying fields — so it can't double-count its vote.
+        with capture_logs() as logs:
+            orch = StrategyOrchestrator([_AsyncStrategy("s1", [])], _FakeCostModel())
+            out = orch.aggregate_signals(
+                [
+                    _sig("AAPL", Side.BUY, "s1"),
+                    _sig("AAPL", Side.BUY, "s1"),  # exact duplicate
+                    _sig("MSFT", Side.SELL, "s1"),
+                ]
+            )
+        # The duplicate was removed: two distinct (symbol, side) survive.
+        assert {(s.symbol, s.side) for s in out} == {
+            ("AAPL", Side.BUY),
+            ("MSFT", Side.SELL),
+        }
+        assert any(
+            e["event"] == "orchestrator.duplicate_signal_dropped"
+            and e["strategy_id"] == "s1"
+            and e["symbol"] == "AAPL"
+            and e["side"] == Side.BUY
+            for e in logs
+        )
+
+    async def test_duplicate_last_signal_wins_with_different_weights(self):
+        # The dict-keyed dedup is last-wins: when two signals share the
+        # same (strategy_id, symbol, side) but differ in weight, the
+        # *second* one overwrites the first. A strategy re-emitting with
+        # an updated weight therefore has the fresh value win, not the
+        # stale earlier emission. (Under the old first-wins logic this
+        # would resolve to a BUY at weight 0.2 instead of 0.8.)
+        with capture_logs() as logs:
+            orch = StrategyOrchestrator(
+                [],
+                _FakeCostModel(),
+                conflict_resolution=ConflictResolution.NET_POSITION,
+            )
+            out = orch.aggregate_signals(
+                [
+                    _sig("AAPL", Side.BUY, "s1", weight=0.2),  # stale
+                    _sig("AAPL", Side.BUY, "s1", weight=0.8),  # re-emit wins
+                ]
+            )
+        # Exactly one AAPL/BUY survives; its weight is the *second*
+        # signal's 0.8 (net = 0.8 → BUY at 0.8).
+        assert len(out) == 1
+        assert out[0].side == Side.BUY
+        assert out[0].weight == pytest.approx(0.8)
+        assert out[0].metadata["orchestrator_sources"] == ["s1"]
+        assert any(
+            e["event"] == "orchestrator.duplicate_signal_dropped"
+            and e["strategy_id"] == "s1"
+            for e in logs
+        )
+
+    def test_duplicate_does_not_double_count_in_net_position(self):
+        # Same BUY emitted twice by one strategy must count once, not
+        # twice: net weight stays 1.0 (clamped), not 2.0→1.0-by-clamp.
+        with capture_logs() as logs:
+            orch = StrategyOrchestrator(
+                [],
+                _FakeCostModel(),
+                conflict_resolution=ConflictResolution.NET_POSITION,
+            )
+            out = orch.aggregate_signals(
+                [
+                    _sig("AAPL", Side.BUY, "s1", weight=0.4),
+                    _sig("AAPL", Side.BUY, "s1", weight=0.4),  # duplicate
+                    _sig("AAPL", Side.SELL, "s2", weight=0.4),
+                ]
+            )
+        assert any(e["event"] == "orchestrator.duplicate_signal_dropped" for e in logs)
+        # Net after dedup: 0.4 (BUY) - 0.4 (SELL) == 0 → HOLD.
+        assert out[0].side == Side.HOLD
+        assert out[0].weight == pytest.approx(0.0)
+
+    def test_opposing_sides_from_same_strategy_not_dropped(self):
+        # A strategy voting both BUY and SELL on the same symbol is NOT a
+        # duplicate (sides differ) — both signals survive to resolution.
+        with capture_logs() as logs:
+            orch = StrategyOrchestrator(
+                [],
+                _FakeCostModel(),
+                conflict_resolution=ConflictResolution.NET_POSITION,
+            )
+            out = orch.aggregate_signals(
+                [_sig("AAPL", Side.BUY, "s1"), _sig("AAPL", Side.SELL, "s1")]
+            )
+        assert not any(e["event"] == "orchestrator.duplicate_signal_dropped" for e in logs)
+        # Both survive → net zero → HOLD.
+        assert out[0].side == Side.HOLD
