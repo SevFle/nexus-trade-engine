@@ -94,20 +94,35 @@ entry so a model-without-migration can't recur silently.
 ## P1 — Three Execution Modes (Roadmap: partial)
 
 Live and paper execution land in `engine/core/execution/`, but the
-public surface only exposes backtest. Specifically:
+public surface only exposes backtest. The live stack has grown but is
+still not reachable from any route:
 
-- `engine/core/execution/paper.py` and `live.py` exist but are wired
-  to nothing on the API surface.
+- `engine/core/execution/paper.py` and `live.py` exist. `live.py` is a
+  deliberate **scaffold** (its `execute` raises an `_is_scaffold` guard
+  before touching credentials, so a bare instance fails closed).
+- [`engine/execution/live_backend.py`](../engine/execution/live_backend.py)
+  (`LiveExecutionBackend`, SEV-223) is the concrete Alpaca-compatible
+  adapter — it implements the `ExecutionBackend` ABC over an injectable
+  `httpx.AsyncClient`, always sends a `client_order_id` (so the broker
+  can de-duplicate replays), and maps broker HTTP failures onto the
+  `BrokerAuthError` / `BrokerConnectionError` / `BrokerRejectError`
+  hierarchy. It is **a library today**: nothing in `engine/api/` or
+  `engine/app.py` imports it.
+- [`engine/core/brokers/alpaca/`](../engine/core/brokers/alpaca/) is a
+  full `AlpacaTradingClient` (gh#136 / SEV-266) implementing the
+  `BrokerClient` Protocol directly over httpx — no `alpaca-py`
+  dependency. It carries the same error vocabulary.
 - `engine/core/live/loop.py` and `kill_switch.py` are scaffolded; the
   live loop has no route entry, no worker task, and no LB / health
-  integration.
+  integration. The kill switch has no trigger wired to it.
 - The README lists "Live broker integration (Alpaca, IBKR)" as a
-  roadmap item; only `AlpacaDataProvider` (read-only market data) is
-  shipped.
+  roadmap item; today the shipped, reachable surface is read-only
+  (`AlpacaDataProvider` for market data). The order-routing adapters
+  above are landed but unmounted.
 
 **Workaround today**: the engine is a **backtest engine** for
 production purposes. Treat the live execution code as an internal
-preview.
+preview that is converging on the public API shape but is not there yet.
 
 ---
 
@@ -231,23 +246,26 @@ it.
 
 **Impact**: the MCP surface cannot be started today. The tool/resource/
 auth contract is implemented and unit-tested, but no client (Claude
-Desktop, a custom agent, …) can connect to it. `.env.example` also does
-not list the `NEXUS_MCP_*` vars, so operators have no inventory of the
-knobs without reading [`config.py`](../engine/mcp/config.py).
+Desktop, a custom agent, …) can connect to it.
 
 **Workaround today**: none at runtime. To exercise the components,
 instantiate `EngineServices` (online or `for_testing`) and call
 `dispatch_tool(...)` / `read_resource(...)` directly from a script or
 test — exactly what [`tests/mcp/`](../tests/mcp/) does. See
 [`mcp-server.md`](mcp-server.md) for the contract a future `server.py`
-must bind.
+must bind. The `NEXUS_MCP_*` knobs (19 of them: transport, auth, rate
+limits, page-size caps, backtest guards) are inventoried in
+[`.env.example`](../.env.example) under the `NEXUS_MCP_` prefix, so
+operators do not need to read [`config.py`](../engine/mcp/config.py)
+to discover them.
 
 **Fix path**: write `engine/mcp/server.py` that binds the transport to
 the existing `dispatch_tool` / `read_resource` / `extract_principal` /
 `RateLimiter`, add a `[project.scripts]` entry (e.g.
-`nexus-mcp = engine.mcp.server:main`), and add the `NEXUS_MCP_*` block
-to `.env.example` in the same PR. The PLR0911 ignore already in
-`pyproject.toml` anticipates the multi-branch transport dispatcher.
+`nexus-mcp = engine.mcp.server:main`), and confirm the `NEXUS_MCP_*`
+block in `.env.example` stays in sync with `config.py`. The PLR0911
+ignore already in `pyproject.toml` anticipates the multi-branch
+transport dispatcher.
 
 ---
 

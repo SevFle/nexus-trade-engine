@@ -1,0 +1,166 @@
+# MkDocs Material configuration for Nexus Trade Engine.
+#
+# Why MkDocs Material (not VitePress/Nextra/plain Markdown): this is a
+# Python-only repo, so a JS-based docs build would cross-contaminate the
+# toolchain. MkDocs consumes the existing Markdown verbatim, so the files
+# stay first-class on GitHub AND get a searchable, themed, navigable site.
+# Deps live in the `docs` extra of pyproject.toml. See docs/README.md for
+# the full rationale and the "do not run --strict yet" note.
+#
+# When you add a page, register it in `nav:` below in the same PR so it
+# appears in the sidebar (unregistered pages still build but warn).
+
+site_name: Nexus Trade Engine
+site_description: >-
+  Engineering documentation for Nexus Trade Engine — an AI-native,
+  plugin-driven algorithmic trading framework with first-class cost
+  modeling. Written for engineers who read the source alongside the prose.
+site_url: https://example.com/nexus-trade-engine/
+repo_url: https://github.com/your-org/nexus-trade-engine
+repo_name: nexus-trade-engine
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+# Output goes to ./site/ (the default). Add `site/` to .gitignore.
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections       # group nav items by section header
+    - navigation.expand         # expand all sections by default
+    - navigation.indexes        # let a section's README double as its index
+    - navigation.top            # "back to top" button on long pages
+    - navigation.tracking       # URL hash updates on scroll
+    - toc.follow                # TOC highlights the section in view
+    - search.suggest            # type-ahead in the search box
+    - search.highlight          # highlight matches in results
+    - content.code.copy         # copy button on code blocks
+    - content.code.annotate     # render code annotations
+    - content.tabs.link         # sync tabbed blocks across the page
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light
+  icon:
+    repo: fontawesome/brands/github
+
+# --------------------------------------------------------------------------- #
+# Validation
+#
+# `not_found: warn` is deliberate, not laziness. Many doc pages link to
+# source files with repo-root-relative paths (e.g. ../engine/app.py). Those
+# resolve on GitHub (the primary reading surface) but point *outside*
+# docs_dir, so MkDocs cannot resolve them at build time. `warn` keeps the
+# build green and the GitHub links working; `--strict` would upgrade these
+# to errors. See docs/README.md "Building & previewing" for why --strict is
+# not yet used in CI.
+# --------------------------------------------------------------------------- #
+validation:
+  links:
+    not_found: warn
+    absolute_links: warn
+    unrecognized_links: warn
+  nav:
+    omitted_files: warn
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      # Material 9.x renders ```mermaid fences client-side via this mapping.
+      # No separate mkdocs-mermaid plugin is required.
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+plugins:
+  - search:
+      lang: en
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/your-org/nexus-trade-engine
+
+# --------------------------------------------------------------------------- #
+# Navigation
+#
+# Mirrors the reading-order table in docs/README.md. The top-level README
+# (doc-stack rationale + index) is the site home page. Every other page is
+# listed so there are no `omitted_files` warnings on a clean build.
+# --------------------------------------------------------------------------- #
+nav:
+  - Home: README.md
+  - Architecture:
+      - Index: architecture/README.md
+      - Overview: architecture/overview.md
+      - Core domains: architecture/core-domains.md
+      - Database: architecture/database.md
+      - Plugin system: architecture/plugins.md
+  - API & integrations:
+      - REST & WebSocket reference: api-reference.md
+      - MCP server (LLM agents): mcp-server.md
+  - Data model: data-model.md
+  - Development: development.md
+  - Deployment: deployment.md
+  - Releasing: RELEASING.md
+  - Strategy plugins:
+      - Plugin developer guide: PLUGIN_DEV_GUIDE.md
+      - Contributors: contributors.md
+  - Decisions:
+      - ADR index: adr/README.md
+      - ADR template: adr/template.md
+      - 0001 — Scaffold tech choices: adr/0001-scaffold-tech-choices.md
+      - 0002 — Auth & RBAC: adr/0002-auth-rbac.md
+      - 0003 — Mobile / PWA strategy: adr/0003-mobile-app-strategy.md
+      - 0004 — Task queue (TaskIQ): adr/0004-task-queue-taskiq.md
+      - 0005 — Valkey over Redis: adr/0005-valkey-over-redis.md
+      - 0006 — bcrypt + Fernet: adr/0006-bcrypt-fernet.md
+      - 0007 — Strategy sandbox import allowlist: adr/0007-strategy-sandbox-allowlist-imports.md
+      - 0008 — Pluggable metrics backend: adr/0008-pluggable-metrics-backend.md
+      - 0009 — Cross-replica EventBus bridge: adr/0009-cross-replica-eventbus-bridge.md
+  - Operations:
+      - SLOs: operations/slos.md
+      - Backup & recovery: operations/backup-and-recovery.md
+      - DR drill checklist: operations/dr-drill-checklist.md
+      - Load testing: operations/load-testing.md
+      - Runbooks:
+          - Index: operations/runbooks/README.md
+          - Common issues: operations/runbooks/common-issues.md
+          - API availability: operations/runbooks/api-availability.md
+          - API latency: operations/runbooks/api-latency.md
+          - Auth & MFA: operations/runbooks/auth-mfa.md
+          - Backtest submit: operations/runbooks/backtest-submit.md
+          - Task pipeline: operations/runbooks/task-pipeline.md
+          - Webhook delivery: operations/runbooks/webhook-delivery.md
+  - Observability:
+      - Logging: observability/logging.md
+  - Compliance:
+      - Legal: legal/processors.md
+      - Last audit: LAST_AUDIT.md
+  - Known limitations: known-limitations.md
