@@ -192,7 +192,7 @@ on the public API surface or not production-validated.
       in [`engine/mcp/`](docs/mcp-server.md); the runnable transport entry
       point (`server.py`) is not yet on disk, so the surface cannot be
       started today)*
-- [ ] React dashboard MVP *(missing)*
+- [~] React dashboard *(partial — `frontend/` ships an 11-screen React/Vite/Tailwind app wired to the API with react-query and an `ErrorBoundary`→`/client/errors` reporter; runs in the dev compose stack, but there is no production build/static-serve step yet — see [known-limitations](docs/known-limitations.md))*
 - [ ] Observability export *(OpenTelemetry/Prometheus/Sentry wired but
       SLI metric coverage incomplete — see [SLO doc](docs/operations/slos.md))*
 

@@ -126,6 +126,56 @@ The marketplace routes exist purely to lock the public API shape.
 
 ---
 
+## P1 — React dashboard is dev-only (no production build/serve)
+
+**Where**: [`frontend/`](../frontend/) · [`docker-compose.dev.yml`](../docker-compose.dev.yml) ·
+[`docker-compose.yml`](../docker-compose.yml) · [`frontend/Dockerfile`](../frontend/Dockerfile)
+
+The dashboard is real and substantial — an 11-screen React 18 + Vite +
+Tailwind app (login/register/OAuth callback, onboarding wizard,
+dashboard, market-watch with symbol autocomplete + charting, backtest,
+strategies, marketplace, positions, cost analysis, risk monitor,
+settings, dev console, legal-doc viewer) wired to the API through a
+typed fetch client with react-query, plus an `ErrorBoundary` that
+reports to `POST /api/v1/client/errors`. 79 source files are tracked
+under `frontend/src/`.
+
+What is **missing** is the production serve path:
+
+- [`docker-compose.yml`](../docker-compose.yml) (prod) defines only
+  `postgres`, `valkey`, `nexus-api`, and `worker` — there is no frontend
+  service. [`docker-compose.dev.yml`](../docker-compose.dev.yml) has one,
+  but it runs `npm run dev` (Vite HMR on `:5173`), not a built artifact.
+- [`frontend/Dockerfile`](../frontend/Dockerfile) also runs
+  `npm run dev` on `node:20-alpine` — there is no `vite build` step and
+  no static-serve (nginx / Caddy / `vite preview`) image, so a prod
+  `dist/` bundle is never produced or shipped by the compose stack.
+- No reverse-proxy config exists to route `/` to a static bundle and
+  `/api` + `/api/v1/ws` to the engine, so the dashboard can't be served
+  behind the same origin as the API in prod.
+
+**Impact**: the dashboard runs for local development
+(`cd frontend && npm install && npm run dev`, or
+`docker compose -f docker-compose.dev.yml up frontend`), but there is
+no documented or containerised way to ship it to end users. The README
+roadmap previously listed it as *missing*, which was stale; it now
+reads *partial*.
+
+**Workaround today**: run the frontend from `frontend/` in dev mode
+against a locally-running engine (`VITE_API_BASE_URL` points the client
+at the API). For any shared deployment, build `dist/` manually
+(`npm run build`) and host it behind your own static server / CDN with
+CORS to the engine origin (`NEXUS_CORS_ORIGINS` must include the
+dashboard origin — it defaults to `http://localhost:3000`).
+
+**Fix path**: add a prod `frontend` build stage (multi-stage: build
+`dist/` with node, serve with nginx) and a frontend service to
+`docker-compose.yml` behind a reverse proxy that owns the single
+origin; then add a short `docs/frontend.md` covering build, env
+(`VITE_API_BASE_URL`), and the proxy contract.
+
+---
+
 ## P1 — Data provider registry has no first-class credentials store
 
 **Where**: [`engine/data/providers/config.py`](../engine/data/providers/config.py),
@@ -231,9 +281,10 @@ it.
 
 **Impact**: the MCP surface cannot be started today. The tool/resource/
 auth contract is implemented and unit-tested, but no client (Claude
-Desktop, a custom agent, …) can connect to it. `.env.example` also does
-not list the `NEXUS_MCP_*` vars, so operators have no inventory of the
-knobs without reading [`config.py`](../engine/mcp/config.py).
+Desktop, a custom agent, …) can connect to it. The `NEXUS_MCP_*` knobs are
+inventoried in [`.env.example`](../.env.example) (lines 127–151) and
+[`config.py`](../engine/mcp/config.py), so configuration is documented —
+only the transport binding is missing.
 
 **Workaround today**: none at runtime. To exercise the components,
 instantiate `EngineServices` (online or `for_testing`) and call
@@ -244,10 +295,10 @@ must bind.
 
 **Fix path**: write `engine/mcp/server.py` that binds the transport to
 the existing `dispatch_tool` / `read_resource` / `extract_principal` /
-`RateLimiter`, add a `[project.scripts]` entry (e.g.
-`nexus-mcp = engine.mcp.server:main`), and add the `NEXUS_MCP_*` block
-to `.env.example` in the same PR. The PLR0911 ignore already in
-`pyproject.toml` anticipates the multi-branch transport dispatcher.
+`RateLimiter`, and add a `[project.scripts]` entry (e.g.
+`nexus-mcp = engine.mcp.server:main`). The `NEXUS_MCP_*` block is already
+present in `.env.example` (lines 127–151), and the PLR0911 ignore already
+in `pyproject.toml` anticipates the multi-branch transport dispatcher.
 
 ---
 
