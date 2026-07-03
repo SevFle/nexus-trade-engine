@@ -1,0 +1,217 @@
+# =============================================================================
+# Nexus Trade Engine — MkDocs Material configuration
+# =============================================================================
+#
+# Doc-stack rationale lives at the top of docs/README.md. In short: this is a
+# Python-only repo (FastAPI + SQLAlchemy + TaskIQ + Polars), so we build the
+# docs with MkDocs + the Material theme rather than a JS toolchain
+# (VitePress/Nextra, which would drag a Node build into a Python repo) or raw
+# GitHub Markdown (no search, no nav, no reliable Mermaid). Material 9.x
+# bundles the Mermaid.js renderer, so the ```mermaid fenced blocks in
+# architecture/*.md render with no extra plugin.
+#
+# Source-relative links (../engine/...) point *outside* docs_dir. They resolve
+# on GitHub (the primary reading surface) but emit `not_found` under MkDocs,
+# so validation.links.not_found is set to `warn`, not `error`. Do NOT add
+# `--strict` to `mkdocs build` in CI until those links are moved behind a
+# generated API section — see docs/README.md "Building & previewing".
+#
+# Install:  uv sync --extra docs
+# Serve:    uv run mkdocs serve    → http://127.0.0.1:8000
+# Build:    uv run mkdocs build     → ./site/
+# =============================================================================
+
+site_name: Nexus Trade Engine
+site_description: >-
+  Engineering documentation for Nexus Trade Engine — an AI-native,
+  plugin-driven algorithmic trading framework with a cost-first backtest
+  engine. Written for engineers who read the source alongside the prose.
+site_url: https://github.com/SevFle/nexus-trade-engine
+repo_url: https://github.com/SevFle/nexus-trade-engine
+repo_name: SevFle/nexus-trade-engine
+edit_uri: blob/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+# README.md serves as each directory's index page (mirrors GitHub's behaviour),
+# so the repo-root docs/README.md becomes the site homepage without a rename.
+use_directory_urls: true
+
+# ---------------------------------------------------------------------------
+# Link / nav validation (MkDocs >= 1.6 schema; pyproject pins mkdocs>=1.6.1).
+# Kept at `warn` deliberately — see the header comment.
+# ---------------------------------------------------------------------------
+validation:
+  links:
+    not_found: warn          # ../engine/... source links point outside docs_dir
+    absolute_links: warn     # we don't use absolute links by intent
+    unrecognized_links: warn
+  nav:
+    omitted_files: warn      # nudge: register new pages in nav (see docs/README.md)
+    not_found: warn
+
+# ---------------------------------------------------------------------------
+# Theme
+# ---------------------------------------------------------------------------
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  icon:
+    logo: material/chart-line-variant
+    repo: fontawesome/brands/github
+
+# ---------------------------------------------------------------------------
+# Markdown extensions. Standard Material 9.x set + Mermaid via superfences.
+# ---------------------------------------------------------------------------
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        # Material 9.x bundles the Mermaid.js client renderer, so the
+        # ```mermaid blocks in architecture/*.md render with no extra plugin.
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# ---------------------------------------------------------------------------
+# Plugins
+# ---------------------------------------------------------------------------
+plugins:
+  - search:
+      lang: en
+
+# ---------------------------------------------------------------------------
+# Extra
+# ---------------------------------------------------------------------------
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/SevFle/nexus-trade-engine
+  # Status badges surfaced next to the page title. Kept minimal: the docs
+  # themselves carry the honest per-feature status (known-limitations.md).
+  status:
+    new: "Recently added"
+
+# ---------------------------------------------------------------------------
+# Navigation — mirrors the layout table in docs/README.md. A new page must be
+# registered here in the same PR (enforced via the omitted_files warn above).
+# ---------------------------------------------------------------------------
+nav:
+  - Overview: README.md
+  - Architecture:
+      - architecture/README.md
+      - System overview: architecture/overview.md
+      - Core domains: architecture/core-domains.md
+      - Database & migrations: architecture/database.md
+      - Plugin system: architecture/plugins.md
+  - Reference:
+      - API reference: api-reference.md
+      - MCP server: mcp-server.md
+      - Data model: data-model.md
+  - Guides:
+      - Development setup: development.md
+      - Deployment: deployment.md
+      - Releasing: RELEASING.md
+      - Plugin developer guide: PLUGIN_DEV_GUIDE.md
+      - Contributors: contributors.md
+  - Decisions (ADRs):
+      - About ADRs: adr/README.md
+      - "0001 — Scaffold technology choices": adr/0001-scaffold-tech-choices.md
+      - "0002 — Auth & RBAC model": adr/0002-auth-rbac.md
+      - "0003 — Mobile experience strategy (PWA)": adr/0003-mobile-app-strategy.md
+      - "0004 — Task queue — TaskIQ": adr/0004-task-queue-taskiq.md
+      - "0005 — Valkey client + broker over redis-py / Redis": adr/0005-valkey-over-redis.md
+      - "0006 — Password hashing (bcrypt) & MFA at rest (Fernet)": adr/0006-bcrypt-fernet.md
+      - "0007 — Strategy sandbox allowlist imports": adr/0007-strategy-sandbox-allowlist-imports.md
+      - "0008 — Pluggable MetricsBackend Protocol": adr/0008-pluggable-metrics-backend.md
+      - "0009 — Cross-replica WebSocket event bridge": adr/0009-cross-replica-eventbus-bridge.md
+      - ADR template: adr/template.md
+  - Operations:
+      - SLOs: operations/slos.md
+      - Backup & recovery: operations/backup-and-recovery.md
+      - DR drill checklist: operations/dr-drill-checklist.md
+      - Load testing: operations/load-testing.md
+      - Alert runbooks: operations/runbooks/README.md
+      - Runbooks:
+          - API availability: operations/runbooks/api-availability.md
+          - API latency: operations/runbooks/api-latency.md
+          - Auth & MFA: operations/runbooks/auth-mfa.md
+          - Backtest submit: operations/runbooks/backtest-submit.md
+          - Webhook delivery: operations/runbooks/webhook-delivery.md
+          - Task pipeline: operations/runbooks/task-pipeline.md
+          - Common issues: operations/runbooks/common-issues.md
+  - Observability:
+      - Logging schema & redaction: observability/logging.md
+  - Compliance:
+      - Legal data processors: legal/processors.md
+  - Status:
+      - Known limitations & tech debt: known-limitations.md
+      - Last audit: LAST_AUDIT.md

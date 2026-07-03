@@ -1,0 +1,3244 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Engineering documentation for Nexus Trade Engine — an AI-native, plugin-driven algorithmic trading framework with a cost-first backtest engine. Written for engineers who read the source alongside the prose.">
+      
+      
+      
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/architecture/core-domains/">
+      
+      
+        <link rel="prev" href="../overview/">
+      
+      
+        <link rel="next" href="../database/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Core domains - Nexus Trade Engine</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#core-engine-domains" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Nexus Trade Engine" class="md-header__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m3.5 18.5 6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Nexus Trade Engine
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Core domains
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/SevFle/nexus-trade-engine" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    SevFle/nexus-trade-engine
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../api-reference/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../development/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../adr/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Decisions (ADRs)
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../operations/slos/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Operations
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../observability/logging/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Observability
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../legal/processors/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Compliance
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../known-limitations/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Status
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Nexus Trade Engine" class="md-nav__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m3.5 18.5 6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17z"/></svg>
+
+    </a>
+    Nexus Trade Engine
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/SevFle/nexus-trade-engine" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    SevFle/nexus-trade-engine
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core domains
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#component-map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Component map
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-strategy-orchestration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-strategy orchestration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Multi-strategy orchestration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#engineorchestrationorchestratorpy-strategyorchestrator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        engine/orchestration/orchestrator.py — StrategyOrchestrator
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#enginecorestrategy_orchestratorpy-async-orchestrator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        engine/core/strategy_orchestrator.py — async orchestrator
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-risk-modeling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost &amp; risk modeling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#portfolio-accounting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Portfolio accounting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-analytics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance analytics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance analytics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#metricsreport-live-used-today" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MetricsReport — live, used today
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performancereport-86-kpi-schema-not-yet-wired" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PerformanceReport — 86-KPI schema, not yet wired
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#companion-analytics-modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Companion analytics modules
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategy-scoring-governance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Strategy scoring &amp; governance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Strategy scoring &amp; governance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#composite-scoring-strategy_evaluatorpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Composite scoring — strategy_evaluator.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lifecycle-versioning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle &amp; versioning
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optimization-param_optimizerpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optimization — param_optimizer.py
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#wired-vs-schema-only-quick-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wired vs. schema-only (quick reference)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database & migrations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plugins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugin system
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mcp-server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../RELEASING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releasing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../PLUGIN_DEV_GUIDE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugin developer guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../adr/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decisions (ADRs)
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Decisions (ADRs)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0001-scaffold-tech-choices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0001 — Scaffold technology choices
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0002-auth-rbac/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0002 — Auth & RBAC model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0003-mobile-app-strategy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0003 — Mobile experience strategy (PWA)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0004-task-queue-taskiq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0004 — Task queue — TaskIQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0005-valkey-over-redis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0005 — Valkey client + broker over redis-py / Redis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0006-bcrypt-fernet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0006 — Password hashing (bcrypt) & MFA at rest (Fernet)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0007 — Strategy sandbox allowlist imports
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0008-pluggable-metrics-backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0008 — Pluggable MetricsBackend Protocol
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0009-cross-replica-eventbus-bridge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0009 — Cross-replica WebSocket event bridge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../operations/runbooks/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/slos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SLOs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/backup-and-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backup & recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/dr-drill-checklist/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DR drill checklist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/load-testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Load testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_6" id="__nav_6_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runbooks
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Runbooks
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/api-availability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API availability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/api-latency/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API latency
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/auth-mfa/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth & MFA
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/backtest-submit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backtest submit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/webhook-delivery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Webhook delivery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/task-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Task pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/common-issues/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Common issues
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Observability
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../observability/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging schema & redaction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compliance
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Compliance
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../legal/processors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Legal data processors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Status
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Status
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../known-limitations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Known limitations & tech debt
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../LAST_AUDIT/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Last audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#component-map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Component map
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-strategy-orchestration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-strategy orchestration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Multi-strategy orchestration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#engineorchestrationorchestratorpy-strategyorchestrator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        engine/orchestration/orchestrator.py — StrategyOrchestrator
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#enginecorestrategy_orchestratorpy-async-orchestrator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        engine/core/strategy_orchestrator.py — async orchestrator
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-risk-modeling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost &amp; risk modeling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#portfolio-accounting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Portfolio accounting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-analytics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance analytics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance analytics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#metricsreport-live-used-today" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MetricsReport — live, used today
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performancereport-86-kpi-schema-not-yet-wired" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PerformanceReport — 86-KPI schema, not yet wired
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#companion-analytics-modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Companion analytics modules
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategy-scoring-governance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Strategy scoring &amp; governance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Strategy scoring &amp; governance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#composite-scoring-strategy_evaluatorpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Composite scoring — strategy_evaluator.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lifecycle-versioning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle &amp; versioning
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optimization-param_optimizerpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optimization — param_optimizer.py
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#wired-vs-schema-only-quick-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wired vs. schema-only (quick reference)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="core-engine-domains">Core engine domains<a class="headerlink" href="#core-engine-domains" title="Permanent link">&para;</a></h1>
+<p><a href="../overview/"><code>overview.md</code></a> describes the engine as a <em>service</em> —
+FastAPI app, request lifecycle, middleware, deploy topology. This
+document is the companion view: it maps the <strong>domain layer</strong> under
+<a href="../../engine/core/"><code>engine/core/</code></a> (and its sibling
+<a href="../../engine/orchestration/"><code>engine/orchestration/</code></a>) — the modules
+that turn signals into decisions, decisions into fills, and fills into
+performance numbers.</p>
+<p>The repo-root <a href="../../ARCHITECTURE.md"><code>ARCHITECTURE.md</code></a> is the
+authoritative reference for the four "headline" components
+(<code>OrderManager</code>, <code>CostModel</code>, <code>Portfolio</code>, <code>RiskEngine</code>,
+<code>BacktestRunner</code>); we cross-reference it rather than duplicate it and
+focus here on the layers that file does <strong>not</strong> enumerate: multi-strategy
+orchestration, the analytics taxonomy, strategy governance, optimization,
+and post-trade cost analysis.</p>
+<h2 id="component-map">Component map<a class="headerlink" href="#component-map" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart TD
+    subgraph input["Inputs (per bar)"]
+        MKT["MarketState"]
+        COST["ICostModel"]
+    end
+
+    subgraph strat["Strategy layer"]
+        ONE["single strategy&lt;br/&gt;IStrategy.evaluate"]
+        MANY["StrategyOrchestrator&lt;br/&gt;engine/orchestration"]
+    end
+
+    ONE --&gt; SIG["list[Signal]"]
+    MANY --&gt; AGG["SignalAggregator&lt;br/&gt;majority / weighted / net"]
+    AGG --&gt; SIG
+
+    SIG --&gt; OM["OrderManager&lt;br/&gt;validate → cost → risk → submit"]
+    COST -.-&gt;|estimate| OM
+    OM --&gt; RISK["RiskEngine&lt;br/&gt;(final veto)"]
+    RISK --&gt; EXEC["ExecutionBackend&lt;br/&gt;backtest / paper / live"]
+    EXEC --&gt; PORT["Portfolio&lt;br/&gt;tax-lot accounting"]
+    PORT --&gt; TAX["tax/*&lt;br/&gt;FIFO/LIFO, wash sale, jurisdictions"]
+    EXEC --&gt; TCA["tca.py&lt;br/&gt;implementation shortfall"]
+
+    PORT --&gt; MET["metrics.py&lt;br/&gt;MetricsReport (25 fields, live)"]
+    MET --&gt; EVAL["strategy_evaluator&lt;br/&gt;composite score [0,100]"]
+    MET -.-&gt;|schema only| REPORT["analytics/*&lt;br/&gt;PerformanceReport (86 KPIs)"]
+    MET --&gt; MC["monte_carlo&lt;br/&gt;robustness"]
+    MET --&gt; OPT["param_optimizer&lt;br/&gt;grid / random / genetic"]
+
+    GOV["strategy_lifecycle&lt;br/&gt;draft→bt→paper→live"]
+    VER["strategy_versioning&lt;br/&gt;content-addressed deploys"]
+    GOV -.-&gt;|gates promotions| ONE
+    VER -.-&gt;|pinned code| ONE</code></pre>
+<h2 id="multi-strategy-orchestration">Multi-strategy orchestration<a class="headerlink" href="#multi-strategy-orchestration" title="Permanent link">&para;</a></h2>
+<p>Two orchestrators exist. They overlap in spirit but are deliberately
+separate modules with different conflict-resolution semantics. Pick by
+voting model, not by file name.</p>
+<h3 id="engineorchestrationorchestratorpy-strategyorchestrator"><code>engine/orchestration/orchestrator.py</code> — <code>StrategyOrchestrator</code><a class="headerlink" href="#engineorchestrationorchestratorpy-strategyorchestrator" title="Permanent link">&para;</a></h3>
+<p>The "register N strategies, run them all, collapse to one decision set"
+loop. Two-step API: <code>await orch.run_all(market)</code> collects every
+strategy's signals, then <code>orch.aggregate_signals()</code> resolves conflicts.</p>
+<p><code>ConflictResolution</code> selects the merge rule:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PRIORITY</code> <em>(default)</em></td>
+<td>The highest-priority strategy with a non-HOLD opinion wins. Opposing signals from strategies tied at top priority → HOLD (stalemate). HOLD abstains.</td>
+</tr>
+<tr>
+<td><code>NET_POSITION</code></td>
+<td><code>BUY = +weight</code>, <code>SELL = −weight</code> summed per symbol. Positive net → BUY, negative → SELL, zero → HOLD. Resolved weight is the net magnitude clamped to <code>[0, 1]</code>, so conviction can override headcount. <em>(Unique to this orchestrator.)</em></td>
+</tr>
+</tbody>
+</table>
+<h3 id="enginecorestrategy_orchestratorpy-async-orchestrator"><code>engine/core/strategy_orchestrator.py</code> — async orchestrator<a class="headerlink" href="#enginecorestrategy_orchestratorpy-async-orchestrator" title="Permanent link">&para;</a></h3>
+<p>The heavier async counterpart. Three responsibilities that the bare
+<a href="../../engine/core/signal_aggregator.py"><code>SignalAggregator</code></a> (gh#21) does
+not own:</p>
+<ol>
+<li><strong>Registry</strong> — each strategy is registered with a per-strategy
+   <code>weight</code>.</li>
+<li><strong>Evaluation</strong> — every registered strategy sees the <em>same</em>
+   <code>market_data</code> and <code>cost_model</code> so cross-strategy comparisons are
+   apples-to-apples. A single failing strategy is isolated: its error is
+   recorded and the rest still vote.</li>
+<li><strong>Dispatch</strong> — hands the per-strategy <code>SignalBatch</code>es to
+   <code>SignalAggregator</code>, which is the single source of truth for tie
+   handling.</li>
+</ol>
+<p>Aggregation modes (in <a href="../../engine/core/signal_aggregator.py"><code>signal_aggregator.py</code></a>):</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MAJORITY</code></td>
+<td>Strictly more than half of BUY-vs-SELL votes wins; tie → HOLD. HOLD abstains and is excluded from the denominator.</td>
+</tr>
+<tr>
+<td><code>WEIGHTED</code></td>
+<td>Vote × registered weight (default 1.0); strictly higher total wins; tie → HOLD. Lets a high-conviction strategy override a numerical majority.</td>
+</tr>
+</tbody>
+</table>
+<p>HOLD-as-abstain is the unifying contract across both modes and both
+orchestrators: a strategy that declines to vote never blocks the others,
+and a symbol on which every strategy abstains still yields a single HOLD
+record so downstream consumers know it was considered.</p>
+<h2 id="cost-risk-modeling">Cost &amp; risk modeling<a class="headerlink" href="#cost-risk-modeling" title="Permanent link">&para;</a></h2>
+<p>The cost model is what makes Nexus "cost-first" — <code>ICostModel</code> is an
+argument to every <code>evaluate()</code>, so a strategy can price in commissions,
+spread, slippage, taxes, and wash-sale risk <em>before</em> emitting a signal.
+The headline <code>DefaultCostModel</code> (<code>cost_model.py</code>) is documented in
+<a href="../../ARCHITECTURE.md"><code>ARCHITECTURE.md</code></a>. The specialized models layer on top:</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Adds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../../engine/core/market_impact.py"><code>market_impact.py</code></a></td>
+<td><strong>Almgren-Chriss</strong> square-root market-impact model (gh#96). Estimates the price drift an order <em>causes</em>, decomposed into temporary impact (reverts post-fill) and permanent impact (information leakage, does not revert). The institutional standard when order size is large vs. ADV.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/tca.py"><code>tca.py</code></a></td>
+<td><strong>Post-trade TCA.</strong> Per-fill implementation shortfall and arrival slippage, plus <code>aggregate_tca()</code> rollups by broker and symbol. Distinct decision price (signal quote) vs. arrival price (venue entry).</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/execution_costs.py"><code>execution_costs.py</code></a> / <a href="../../engine/core/holding_costs.py"><code>holding_costs.py</code></a></td>
+<td>Per-leg execution cost and borrow/carry holding-cost accrual.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/regulatory_fees.py"><code>regulatory_fees.py</code></a> / <a href="../../engine/core/crypto_costs.py"><code>crypto_costs.py</code></a></td>
+<td>Asset-class-specific statutory and venue fees.</td>
+</tr>
+</tbody>
+</table>
+<p><code>RiskEngine</code> (<code>risk_engine.py</code>) is the <strong>final veto</strong> in the
+<code>OrderManager</code> pipeline: it runs after the cost estimate and can reject
+an order the cost model was happy with. Circuit breaker (10 % drawdown
+halt), max open positions, concentration cap, single-order value cap, and
+daily trade limit are the default rule set — see
+<a href="../../ARCHITECTURE.md"><code>ARCHITECTURE.md</code></a> for the table.</p>
+<h2 id="portfolio-accounting">Portfolio accounting<a class="headerlink" href="#portfolio-accounting" title="Permanent link">&para;</a></h2>
+<p><a href="../../engine/core/portfolio.py"><code>Portfolio</code></a> is full tax-lot accounting.
+<code>open_position()</code> deducts cash and opens a lot; <code>close_position()</code>
+walks lots under the selected method (FIFO / LIFO / SPECIFIC_LOT),
+computes realized P&amp;L, and records the sale for wash-sale detection.
+<code>snapshot()</code> returns an immutable <code>PortfolioSnapshot</code> handed to
+strategies (mutating it can't corrupt the live book). The root
+<a href="../../ARCHITECTURE.md"><code>ARCHITECTURE.md</code></a> covers the lot mechanics.</p>
+<p>Two allocation modules sit beside it:</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../../engine/core/capital_allocation.py"><code>capital_allocation.py</code></a></td>
+<td><strong>Largest-remainder (Hamilton) apportionment</strong> of total capital across strategies proportional to weights, computed in fixed-point <code>Decimal</code> so the result is exact to the cent. Floors each raw share, then distributes the leftover cents to the largest fractional remainders.</td>
+</tr>
+<tr>
+<td><a href="../../engine/portfolio/allocation.py"><code>portfolio/allocation.py</code></a></td>
+<td><code>CapitalAllocation</code> — the <strong>immutable value object</strong> recording the split. Weights sum to exactly 1.0 (ε-tolerant), are non-negative, and the strategy count is capped by <code>max_strategies</code>. In-place mutation is blocked (gh#1042).</td>
+</tr>
+</tbody>
+</table>
+<p>Tax reporting lives in <a href="../../engine/core/tax/"><code>engine/core/tax/</code></a>:
+FIFO/LIFO lot matching, US wash-sale detection (<code>wash_sale.py</code>), and
+per-jurisdiction summarizers exposed by <code>POST /api/v1/tax/report/{code}</code>
+(<code>US</code>, <code>GB</code>, <code>DE</code>, <code>FR</code>) — see <a href="../../api-reference/#tax"><code>api-reference.md</code></a>.</p>
+<h2 id="performance-analytics">Performance analytics<a class="headerlink" href="#performance-analytics" title="Permanent link">&para;</a></h2>
+<p>There are <strong>two</strong> analytics containers. Do not conflate them:</p>
+<h3 id="metricsreport-live-used-today"><code>MetricsReport</code> — live, used today<a class="headerlink" href="#metricsreport-live-used-today" title="Permanent link">&para;</a></h3>
+<p><a href="../../engine/core/metrics.py"><code>engine/core/metrics.py</code></a>. The container
+the backtest runner actually computes and that <code>GET /backtest/results/{id}</code>
+returns as <code>metrics</code>. ~25 scalar fields (total/annualized return, Sharpe,
+Sortino, Calmar, max drawdown + duration + recovery, volatility,
+win-rate, profit factor, avg winner/loser, streaks, total costs/taxes,
+cost-drag %, turnover, exposure %) plus three series (<code>equity_curve</code>,
+<code>drawdown_curve</code>, <code>rolling_metrics</code>).</p>
+<h3 id="performancereport-86-kpi-schema-not-yet-wired"><code>PerformanceReport</code> — 86-KPI schema, not yet wired<a class="headerlink" href="#performancereport-86-kpi-schema-not-yet-wired" title="Permanent link">&para;</a></h3>
+<p><a href="../../engine/core/analytics/"><code>engine/core/analytics/</code></a> is the
+<strong>86-KPI taxonomy</strong> (gh#97), split into eight section models:</p>
+<table>
+<thead>
+<tr>
+<th>Section (file)</th>
+<th>KPI range</th>
+<th>Covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>returns.py</code></td>
+<td>1–14</td>
+<td>Return ratios + <code>PeriodReturn</code> value object.</td>
+</tr>
+<tr>
+<td><code>risk_adjusted.py</code></td>
+<td>15–24</td>
+<td>Sharpe/Sortino/Omega/Calmar/Treynor/Information/Payoff/Profit-factor. Infinite/undefined ratios → <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>drawdown.py</code></td>
+<td>25–34</td>
+<td>Underwater series + duration/recovery.</td>
+</tr>
+<tr>
+<td><code>trades.py</code></td>
+<td>35–50</td>
+<td>Win/loss rates, streaks, holding periods, cadence.</td>
+</tr>
+<tr>
+<td><code>costs.py</code></td>
+<td>51–58</td>
+<td>Cost breakdown + slippage/IS in basis points.</td>
+</tr>
+<tr>
+<td><code>positions.py</code></td>
+<td>59–66</td>
+<td>Exposure, long/short, concentration, simultaneous positions.</td>
+</tr>
+<tr>
+<td><code>volatility.py</code></td>
+<td>67–76</td>
+<td>VaR/CVaR (positive magnitudes), capture ratios, tail ratio.</td>
+</tr>
+<tr>
+<td><code>time_analysis.py</code></td>
+<td>77–86</td>
+<td>Monthly heatmap, day-of-week/hour returns, rolling Sharpe/DD, dual equity curve.</td>
+</tr>
+<tr>
+<td><code>report.py</code></td>
+<td>envelope</td>
+<td><code>PerformanceReport</code> aggregates the eight; <code>metric_count</code> asserts all 86 present.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Status — accurate caveat.</strong> The section modules and the envelope
+are on disk, but the builder (<code>engine/core/analytics/analyzer.py</code>)
+referenced by their docstrings is <strong>not</strong>, and nothing under
+<code>engine/api/</code> or <code>engine/core/backtest_runner.py</code> imports the report.
+So <code>PerformanceReport</code> is a landed schema, not yet a live output: the
+API surface still serves <code>MetricsReport</code>. Treat the 86-KPI contract as
+the intended shape; a future PR wires an analyzer and a route.</p>
+</blockquote>
+<h3 id="companion-analytics-modules">Companion analytics modules<a class="headerlink" href="#companion-analytics-modules" title="Permanent link">&para;</a></h3>
+<p>These operate on an equity curve / trade log and are independently
+usable:</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Computes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../../engine/core/rolling_metrics.py"><code>rolling_metrics.py</code></a> / <a href="../../engine/core/rolling_correlation.py"><code>rolling_correlation.py</code></a> / <a href="../../engine/core/rolling_benchmark.py"><code>rolling_benchmark.py</code></a> / <a href="../../engine/core/rolling_trade_stats.py"><code>rolling_trade_stats.py</code></a></td>
+<td>Rolling-window Sharpe, correlation, benchmark-relative, and trade statistics.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/drawdown_analytics.py"><code>drawdown_analytics.py</code></a></td>
+<td>Drawdown depth/duration/recovery + excursion stats (<a href="../../engine/core/excursion_stats.py"><code>excursion_stats.py</code></a>).</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/distribution_metrics.py"><code>distribution_metrics.py</code></a></td>
+<td>VaR / CVaR / skew / kurtosis / tail ratio.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/benchmark_comparison.py"><code>benchmark_comparison.py</code></a></td>
+<td>Alpha/beta/R-squared, up/down capture, tracking error vs. a benchmark.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/cumulative_returns.py"><code>cumulative_returns.py</code></a></td>
+<td>Cumulative + <code>PeriodReturn</code> series (daily/weekly/monthly).</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/monte_carlo.py"><code>monte_carlo.py</code></a></td>
+<td>Robustness testing — <code>bootstrap_returns</code> (Efron i.i.d.) and <code>block_bootstrap</code> (Künsch, preserves autocorrelation). Pure numpy, deterministic given a <code>seed</code>.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/portfolio_aggregator.py"><code>portfolio_aggregator.py</code></a> / <a href="../../engine/core/portfolio_concentration.py"><code>portfolio_concentration.py</code></a></td>
+<td>Cross-portfolio rollups and concentration metrics.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="strategy-scoring-governance">Strategy scoring &amp; governance<a class="headerlink" href="#strategy-scoring-governance" title="Permanent link">&para;</a></h2>
+<h3 id="composite-scoring-strategy_evaluatorpy">Composite scoring — <a href="../../engine/core/strategy_evaluator.py"><code>strategy_evaluator.py</code></a><a class="headerlink" href="#composite-scoring-strategy_evaluatorpy" title="Permanent link">&para;</a></h3>
+<p>Turns a <code>MetricsReport</code> into one number in <code>[0, 100]</code> plus a
+per-dimension breakdown, a letter grade, and warnings. Used by the
+marketplace ranking, A/B comparison surfaces, and the backtest summary
+endpoint (so the UI doesn't re-derive it). <strong>Six dimensions</strong>, each
+normalized to <code>[0, 100]</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Inputs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RISK_ADJUSTED_RETURN</code></td>
+<td>Sharpe ratio, piecewise mapping.</td>
+</tr>
+<tr>
+<td><code>DRAWDOWN_CONTROL</code></td>
+<td>Max drawdown, piecewise mapping.</td>
+</tr>
+<tr>
+<td><code>CONSISTENCY</code></td>
+<td>Coefficient of variation of rolling-window Sharpe.</td>
+</tr>
+<tr>
+<td><code>COST_EFFICIENCY</code></td>
+<td>Exponential decay on <code>cost_drag_pct</code>.</td>
+</tr>
+<tr>
+<td><code>WIN_RATE_QUALITY</code></td>
+<td><code>win_rate × (avg_winner / |avg_loser|)</code>.</td>
+</tr>
+<tr>
+<td><code>STABILITY</code></td>
+<td>Annual volatility, piecewise mapping.</td>
+</tr>
+</tbody>
+</table>
+<p>Default weights mirror the spec and sum to 1.0 (risk-adjusted 0.30, …).
+Composite = <code>Σ(dimension × weight)</code>. The evaluator is <strong>stateless</strong> —
+construct one per weight configuration. (See also the persisted
+<code>scoring_snapshots</code> table, written by the scoring routes.)</p>
+<h3 id="lifecycle-versioning">Lifecycle &amp; versioning<a class="headerlink" href="#lifecycle-versioning" title="Permanent link">&para;</a></h3>
+<p>Two services govern <em>when</em> a strategy may run and <em>what code</em> runs:</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../../engine/core/strategy_lifecycle.py"><code>strategy_lifecycle.py</code></a></td>
+<td>State machine <code>draft → backtest → paper → live</code>, with <code>retired</code> reachable from any non-draft stage. <strong>No skipping</strong> — you cannot jump draft→live. Each promotion is gated by a <code>LifecycleEvidence</code> payload: paper requires a backtest id + minimum Sharpe; live requires a paper window + minimum live-paper Sharpe.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/strategy_versioning.py"><code>strategy_versioning.py</code></a></td>
+<td><strong>Content-addressed deploys.</strong> A <code>StrategyVersion</code> is a SHA-256 of the code blob + a hash of its canonical-JSON config, so the same code+config never creates two records (re-deploys are idempotent). <code>deploy</code> → new <code>DRAFT</code>; <code>activate</code> promotes to <code>ACTIVE</code> (demoting the prior); <code>rollback</code> returns to a previous <code>ACTIVE</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Together: <code>StrategyVersionService</code> controls <em>what</em> code runs;
+<code>StrategyLifecycleService</code> controls <em>which stage</em> it's allowed to run at.</p>
+<h2 id="optimization-param_optimizerpy">Optimization — <a href="../../engine/core/param_optimizer.py"><code>param_optimizer.py</code></a><a class="headerlink" href="#optimization-param_optimizerpy" title="Permanent link">&para;</a></h2>
+<p>Pure-Python hyperparameter search against an objective function
+(typically a backtest's Sharpe or compound return).</p>
+<ul>
+<li><strong><code>ParameterSpace</code></strong> — typed search space (continuous / discrete /
+  categorical dimensions).</li>
+<li><strong><code>Optimizer</code></strong> — Protocol the algorithms implement.</li>
+<li><strong><code>optimize(...)</code></strong> — the dispatch entry point.</li>
+</ul>
+<p>Algorithms shipped (PR1): <code>GridSearchOptimizer</code>,
+<code>RandomSearchOptimizer</code>, <code>GeneticOptimizer</code>. Bayesian search and
+Hyperband are TODO and noted in the module docstring. Runs are
+deterministic given a seed; pair with <code>monte_carlo</code> to sanity-check that
+an "optimal" parameter set isn't an overfit artifact.</p>
+<h2 id="wired-vs-schema-only-quick-reference">Wired vs. schema-only (quick reference)<a class="headerlink" href="#wired-vs-schema-only-quick-reference" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>Wired into a route/runner?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MetricsReport</code>, <code>strategy_evaluator</code>, <code>monte_carlo</code>, <code>param_optimizer</code></td>
+<td>Yes — consumed by the backtest runner / scoring routes.</td>
+</tr>
+<tr>
+<td><code>tca.py</code>, <code>market_impact.py</code></td>
+<td>Library-only today — no public route, and neither is consumed by <code>DefaultCostModel</code> yet (the square-root model is available for strategies / evaluators to call directly).</td>
+</tr>
+<tr>
+<td><code>PerformanceReport</code> (86-KPI)</td>
+<td><strong>No</strong> — schema landed, no analyzer/route yet.</td>
+</tr>
+<tr>
+<td><code>strategy_lifecycle</code> / <code>strategy_versioning</code></td>
+<td>Library-only; the public promotion/version API is part of the still-partial live-trading story (see <a href="../../known-limitations/"><code>known-limitations.md</code></a>).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../../ARCHITECTURE.md"><code>ARCHITECTURE.md</code></a> — headline components
+  (<code>OrderManager</code>, <code>CostModel</code>, <code>Portfolio</code>, <code>RiskEngine</code>,
+  <code>BacktestRunner</code>), the signal→fill pipeline, and the SDK plugin
+  interface.</li>
+<li><a href="../overview/"><code>overview.md</code></a> — service-level view (app factory,
+  middleware, request lifecycle, deploy topology).</li>
+<li><a href="../plugins/"><code>plugins.md</code></a> — strategy discovery, the registry, and the
+  five-layer sandbox.</li>
+<li><a href="../../known-limitations/"><code>known-limitations.md</code></a> — what is
+  half-built, including the live/paper execution and TaskIQ wiring.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../overview/" class="md-footer__link md-footer__link--prev" aria-label="Previous: System overview">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                System overview
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../database/" class="md-footer__link md-footer__link--next" aria-label="Next: Database &amp; migrations">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Database & migrations
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/SevFle/nexus-trade-engine" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

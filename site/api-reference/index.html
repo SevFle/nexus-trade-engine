@@ -1,0 +1,3998 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Engineering documentation for Nexus Trade Engine — an AI-native, plugin-driven algorithmic trading framework with a cost-first backtest engine. Written for engineers who read the source alongside the prose.">
+      
+      
+      
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/api-reference/">
+      
+      
+        <link rel="prev" href="../architecture/plugins/">
+      
+      
+        <link rel="next" href="../mcp-server/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>API reference - Nexus Trade Engine</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#api-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Nexus Trade Engine" class="md-header__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m3.5 18.5 6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Nexus Trade Engine
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              API reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/SevFle/nexus-trade-engine" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    SevFle/nexus-trade-engine
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../development/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../adr/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Decisions (ADRs)
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../operations/slos/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Operations
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../observability/logging/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Observability
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../legal/processors/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Compliance
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../known-limitations/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Status
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Nexus Trade Engine" class="md-nav__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m3.5 18.5 6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17z"/></svg>
+
+    </a>
+    Nexus Trade Engine
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/SevFle/nexus-trade-engine" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    SevFle/nexus-trade-engine
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../architecture/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/core-domains/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database & migrations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/plugins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugin system
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#authentication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authentication
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Authentication">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#roles-rbac-hierarchy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roles (RBAC hierarchy)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#api-key-scopes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API-key scopes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#legal-acceptance-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Legal acceptance gate
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#health-observability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Health &amp; observability
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#client-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Client errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#auth-mfa" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Auth &amp; MFA
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Auth &amp; MFA">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mfa-totp-backup-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MFA (TOTP + backup codes)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#api-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API keys
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#legal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Legal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#portfolio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Portfolio
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Strategies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backtest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backtest
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scoring
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#marketplace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Marketplace
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#market-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Market data
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tax" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tax
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#webhooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Webhooks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#privacy-gdpr-ccpa" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Privacy (GDPR / CCPA)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#websocket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WebSocket
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="WebSocket">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#channels-valid-subscriptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Channels (valid subscriptions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#auth-scopes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Auth &amp; scopes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#event-delivery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Event delivery
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-cutting-middleware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-cutting middleware
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp-server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../data-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releasing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLUGIN_DEV_GUIDE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugin developer guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../adr/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decisions (ADRs)
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Decisions (ADRs)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0001-scaffold-tech-choices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0001 — Scaffold technology choices
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0002-auth-rbac/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0002 — Auth & RBAC model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0003-mobile-app-strategy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0003 — Mobile experience strategy (PWA)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0004-task-queue-taskiq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0004 — Task queue — TaskIQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0005-valkey-over-redis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0005 — Valkey client + broker over redis-py / Redis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0006-bcrypt-fernet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0006 — Password hashing (bcrypt) & MFA at rest (Fernet)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0007 — Strategy sandbox allowlist imports
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0008-pluggable-metrics-backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0008 — Pluggable MetricsBackend Protocol
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0009-cross-replica-eventbus-bridge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0009 — Cross-replica WebSocket event bridge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../operations/runbooks/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/slos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SLOs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/backup-and-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backup & recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/dr-drill-checklist/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DR drill checklist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/load-testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Load testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_6" id="__nav_6_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runbooks
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Runbooks
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/runbooks/api-availability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API availability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/runbooks/api-latency/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API latency
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/runbooks/auth-mfa/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth & MFA
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/runbooks/backtest-submit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backtest submit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/runbooks/webhook-delivery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Webhook delivery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/runbooks/task-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Task pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/runbooks/common-issues/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Common issues
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Observability
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../observability/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging schema & redaction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compliance
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Compliance
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../legal/processors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Legal data processors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Status
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Status
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../known-limitations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Known limitations & tech debt
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LAST_AUDIT/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Last audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#authentication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authentication
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Authentication">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#roles-rbac-hierarchy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roles (RBAC hierarchy)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#api-key-scopes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API-key scopes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#legal-acceptance-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Legal acceptance gate
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#health-observability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Health &amp; observability
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#client-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Client errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#auth-mfa" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Auth &amp; MFA
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Auth &amp; MFA">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mfa-totp-backup-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MFA (TOTP + backup codes)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#api-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API keys
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#legal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Legal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#portfolio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Portfolio
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Strategies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backtest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backtest
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scoring
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#marketplace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Marketplace
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#market-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Market data
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tax" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tax
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#webhooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Webhooks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#privacy-gdpr-ccpa" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Privacy (GDPR / CCPA)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#websocket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WebSocket
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="WebSocket">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#channels-valid-subscriptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Channels (valid subscriptions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#auth-scopes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Auth &amp; scopes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#event-delivery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Event delivery
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-cutting-middleware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-cutting middleware
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h1>
+<p>The engine exposes one FastAPI app under <code>/api/v1/*</code> (plus <code>/health</code>,
+<code>/ready</code>, <code>/metrics</code> outside the v1 prefix). OpenAPI is auto-generated
+at <code>/docs</code> and <code>/redoc</code> when the engine is running; this document is
+the curated, narrative version that explains <em>why</em> each endpoint
+exists, what it requires, and how it behaves on error.</p>
+<p>All routes are mounted by <a href="../engine/api/router.py"><code>engine/api/router.py</code></a>.
+Each table below maps to one router module so you can jump to source.</p>
+<h2 id="authentication">Authentication<a class="headerlink" href="#authentication" title="Permanent link">&para;</a></h2>
+<p>Every protected route accepts either:</p>
+<ul>
+<li><code>Authorization: Bearer &lt;jwt&gt;</code> — short-lived JWT issued by
+  <code>POST /api/v1/auth/login</code> or <code>/register</code>/<code>/refresh</code>/<code>/auth/{provider}/callback</code>.</li>
+<li><code>X-API-Key: nxs_&lt;prefix&gt;_&lt;secret&gt;</code> — long-lived, bcrypt-hashed API
+  key (gh#94). The plaintext secret is returned <strong>exactly once</strong> on
+  creation. Issued by <code>POST /api/v1/auth/api-keys</code>.</li>
+</ul>
+<p>JWT and API-key paths share <a href="../engine/api/auth/dependency.py"><code>get_current_user</code></a>;
+the dependency stashes the active <code>ApiKey</code> on <code>request.state</code> when
+present, so scope checks downstream don't re-authenticate.</p>
+<h3 id="roles-rbac-hierarchy">Roles (RBAC hierarchy)<a class="headerlink" href="#roles-rbac-hierarchy" title="Permanent link">&para;</a></h3>
+<p>Enforced via <code>Depends(require_role("developer"))</code> etc. Numeric levels
+in <a href="../engine/api/auth/dependency.py#L27"><code>engine/api/auth/dependency.py</code></a>:</p>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Level</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>viewer</code></td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>user</code></td>
+<td>1</td>
+</tr>
+<tr>
+<td><code>retail_trader</code></td>
+<td>2</td>
+</tr>
+<tr>
+<td><code>quant_dev</code></td>
+<td>3</td>
+</tr>
+<tr>
+<td><code>developer</code></td>
+<td>4</td>
+</tr>
+<tr>
+<td><code>portfolio_manager</code></td>
+<td>5</td>
+</tr>
+<tr>
+<td><code>admin</code></td>
+<td>6</td>
+</tr>
+</tbody>
+</table>
+<p>A request with role <code>R</code> satisfies <code>require_role(X)</code> iff
+<code>level(R) &gt;= level(X)</code>.</p>
+<h3 id="api-key-scopes">API-key scopes<a class="headerlink" href="#api-key-scopes" title="Permanent link">&para;</a></h3>
+<p>Hierarchy (gh#86): <code>admin &gt; trade &gt; read</code>. JWT-authenticated requests
+bypass scope enforcement — JWTs are gated by role instead. API keys
+that lack the required scope get <code>403</code>.</p>
+<ul>
+<li><code>read</code> — GET / HEAD only.</li>
+<li><code>trade</code> — POST / PUT / PATCH for backtest, portfolio, webhooks, etc.</li>
+<li><code>admin</code> — equivalent to the <code>admin</code> role.</li>
+</ul>
+<h3 id="legal-acceptance-gate">Legal acceptance gate<a class="headerlink" href="#legal-acceptance-gate" title="Permanent link">&para;</a></h3>
+<p><code>backtest</code>, <code>scoring</code>, <code>market-data</code>, <code>marketplace</code>, <code>portfolio</code>, and
+<code>strategies</code> routers are mounted with
+<code>Depends(require_legal_acceptance)</code>. Callers without an
+<code>acceptances</code> row for the <em>current version</em> of every
+<code>requires_acceptance</code> document get <strong><code>451 Unavailable For Legal
+Reasons</code></strong> with body <code>{code:"legal_re_acceptance_required",
+documents:[&lt;slug&gt;, …]}</code> (not <code>403</code> — the dedicated code lets clients
+and the frontend distinguish a consent gate from an RBAC denial; see
+<a href="../engine/legal/dependencies.py"><code>engine/legal/dependencies.py</code></a>).
+An unauthenticated request hits <code>401</code> first: the dependency's
+principal guard treats both an unresolved <code>Depends</code> marker and an
+explicit <code>None</code> as "no user" so the gate can't be silently bypassed
+when it is invoked outside FastAPI DI. Acceptance is recorded via
+<code>POST /api/v1/legal/accept</code>. See <a href="../data-model/"><code>data-model.md</code></a> for
+the immutable acceptance table.</p>
+<p>Legal acceptance is wired in two places: most routers declare it at
+the <code>APIRouter(dependencies=…)</code> level
+(<a href="../engine/api/routes/portfolio.py"><code>portfolio.py</code></a>,
+<a href="../engine/api/routes/strategies.py"><code>strategies.py</code></a>,
+<a href="../engine/api/routes/marketplace.py"><code>marketplace.py</code></a>,
+<a href="../engine/api/routes/scoring.py"><code>scoring.py</code></a>); <code>backtest</code> and
+<code>market-data</code> get it from the top-level include in
+<a href="../engine/api/router.py"><code>router.py</code></a>. <code>reference</code>, <code>tax</code>, <code>webhooks</code>,
+<code>privacy</code>, and <code>auth</code> are <strong>not</strong> gated — they need to be reachable
+before the user has accepted anything (e.g. the legal docs UI itself
+calls <code>/reference/suggest</code> to render attributions).</p>
+<hr />
+<h2 id="health-observability">Health &amp; observability<a class="headerlink" href="#health-observability" title="Permanent link">&para;</a></h2>
+<p>Unauthenticated probes for load balancers and Prometheus.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Source</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/health</code></td>
+<td><a href="../engine/api/routes/health.py#L19"><code>routes/health.py</code></a></td>
+<td>Liveness. Always returns <code>{"status": "ok"}</code>.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/health/providers</code></td>
+<td>same</td>
+<td>Reports each registered data provider (up/degraded/down + latency).</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/ready</code></td>
+<td>same</td>
+<td>Readiness — pings DB (<code>SELECT 1</code>) and <code>valkey.ping()</code>. Returns <code>degraded</code> if either fails.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/metrics</code></td>
+<td><a href="../engine/api/routes/metrics.py"><code>routes/metrics.py</code></a></td>
+<td>Prometheus exposition. The <code>RateLimitMiddleware</code> exempts <code>/metrics</code> from throttling.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="system">System<a class="headerlink" href="#system" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/system/*</code> — operational metadata for CI probes.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Auth</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/system/status</code></td>
+<td>any</td>
+<td>Engine version, uptime, DB reachability, and counts (<code>users</code>, <code>portfolios</code>, <code>backtests</code>, <code>webhooks_active</code>, <code>api_keys_active</code>).</td>
+</tr>
+</tbody>
+</table>
+<p>Source: <a href="../engine/api/routes/system.py"><code>routes/system.py</code></a>.</p>
+<h2 id="client-errors">Client errors<a class="headerlink" href="#client-errors" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/client/*</code> — browser-side error ingest. Source:
+<a href="../engine/api/routes/client_errors.py"><code>routes/client_errors.py</code></a>.</p>
+<p>The frontend's <code>ErrorBoundary</code> POSTs unhandled exceptions here so
+browser-side failures correlate with the audit trail. The endpoint is
+<strong>not auth-gated</strong> (an authenticated session is exactly when error
+reporting is most likely to fail); abuse is bounded by a tight
+per-route rate limit (<code>30 req/min/IP</code>, configured in
+<a href="../engine/app.py"><code>engine/app.py</code></a>). There is no persistence slice —
+it emits one structlog <code>client.error</code> event and returns a stable id.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Body</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/client/errors</code></td>
+<td><code>{message, stack?, component_stack?, url?, user_agent?, error_id?}</code></td>
+<td><code>201 {error_id}</code>. All text fields are capped at 64 KiB; CRLF/ANSI escapes are stripped, <code>url</code> is reduced to scheme+host+path (query strings carry tokens), and a caller-supplied <code>error_id</code> must parse as a UUID.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="auth-mfa">Auth &amp; MFA<a class="headerlink" href="#auth-mfa" title="Permanent link">&para;</a></h2>
+<p>Mounted at <code>/api/v1/auth/*</code> and <code>/api/v1/auth/mfa/*</code>. Source:
+<a href="../engine/api/routes/auth.py"><code>routes/auth.py</code></a>, <a href="../engine/api/routes/mfa.py"><code>routes/mfa.py</code></a>.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Body</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/auth/register</code></td>
+<td><code>{email, password, display_name?}</code></td>
+<td><code>201</code> <code>{access_token, refresh_token, token_type:"bearer", expires_in}</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/auth/login</code></td>
+<td><code>{email, password}</code></td>
+<td>Either <code>200</code> token pair or <code>200</code> <code>{mfa_required:true, challenge_token}</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/auth/refresh</code></td>
+<td><code>{refresh_token}</code></td>
+<td>New token pair. <strong>Detects reuse</strong>: if a revoked token is presented, <em>all</em> the user's sessions are revoked (<code>401</code>).</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/auth/me</code></td>
+<td>—</td>
+<td><code>UserProfileResponse</code> (<code>id, email, display_name, role, auth_provider, is_active</code>)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/auth/logout</code></td>
+<td><code>{refresh_token?}</code></td>
+<td>Revokes one token or every active session for the caller.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/auth/{provider}/authorize</code></td>
+<td>—</td>
+<td>Returns <code>{authorize_url, state}</code>; sets an HttpOnly <code>oauth_state_&lt;provider&gt;</code> cookie for 10 minutes.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/auth/{provider}/callback</code></td>
+<td><code>?code=&amp;state=</code></td>
+<td>Validates state against cookie, mints tokens, returns token pair.</td>
+</tr>
+</tbody>
+</table>
+<p>Providers enabled by <code>NEXUS_AUTH_PROVIDERS</code> (csv): <code>local</code>, <code>google</code>,
+<code>github</code>, <code>oidc</code>, <code>ldap</code>. Each provider registers in
+<a href="../engine/api/auth/"><code>engine/api/auth/</code></a> at app startup via
+<a href="../engine/app.py#L86"><code>_build_auth_registry</code></a>.</p>
+<h3 id="mfa-totp-backup-codes">MFA (TOTP + backup codes)<a class="headerlink" href="#mfa-totp-backup-codes" title="Permanent link">&para;</a></h3>
+<p>TOTP secrets are Fernet-encrypted with <code>NEXUS_MFA_ENCRYPTION_KEY</code>.
+Backup codes are bcrypt-hashed and stored in <code>users.mfa_backup_codes</code>
+(JSONB). The plaintext is returned <strong>once</strong> on enrollment / regen.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Body</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/auth/mfa/enroll</code></td>
+<td>—</td>
+<td>Generates a TOTP secret + <code>otpauth://</code> URI. Doesn't enable yet.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/auth/mfa/enroll/confirm</code></td>
+<td><code>{secret, code}</code></td>
+<td>Verifies the code, persists encrypted secret, enables MFA, returns plaintext backup codes.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/auth/mfa/verify</code></td>
+<td><code>{challenge_token, code}</code></td>
+<td>Exchange a login challenge + TOTP/backup code for a token pair.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/auth/mfa/disable</code></td>
+<td><code>{password, code}</code></td>
+<td>Requires the user's password AND a valid TOTP code (defense in depth).</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/auth/mfa/backup-codes/regen</code></td>
+<td><code>{code}</code></td>
+<td>Generates a fresh batch, returns plaintext.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="api-keys">API keys<a class="headerlink" href="#api-keys" title="Permanent link">&para;</a></h3>
+<p>Long-lived, scoped, bcrypt-hashed. Source: <a href="../engine/api/routes/api_keys.py"><code>routes/api_keys.py</code></a>.
+Mounted at <code>/api/v1/auth/api-keys</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Auth</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/auth/api-keys</code></td>
+<td><code>user</code></td>
+<td><code>{name, scopes:["read"\|"trade"\|"admin"], expires_at?, env?}</code> → <code>201</code> <code>{id, name, prefix, scopes, ..., token}</code> — <code>token</code> is shown this one time only.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/auth/api-keys</code></td>
+<td><code>user</code></td>
+<td>Lists caller's keys (excluding hash).</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/api/v1/auth/api-keys/{key_id}</code></td>
+<td><code>user</code></td>
+<td><code>204</code> — sets <code>revoked_at</code> (idempotent).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="legal">Legal<a class="headerlink" href="#legal" title="Permanent link">&para;</a></h2>
+<p>The legal router is mounted without a router-level <code>prefix=</code> in
+<a href="../engine/api/router.py"><code>router.py</code></a> — every route declares its full
+<code>/api/v1/legal/*</code> path in the decorator instead, so the effective URLs
+are still under the v1 namespace. It is deliberately <strong>not</strong> gated by
+<code>require_legal_acceptance</code>: it has to stay reachable so the user can
+record the acceptance the gate checks for. Source:
+<a href="../engine/api/routes/legal.py"><code>routes/legal.py</code></a>.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Auth</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/legal/documents?category=</code></td>
+<td>optional</td>
+<td>Lists documents, with per-user acceptance status if a bearer token is sent.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/legal/documents/{slug}?version=</code></td>
+<td>optional</td>
+<td>Returns rendered markdown. Template vars (<code>{{OPERATOR_NAME}}</code>, <code>{{EFFECTIVE_DATE}}</code>, …) are substituted server-side.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/legal/accept</code></td>
+<td><code>user</code></td>
+<td>Records acceptance(s); <code>acceptances</code> are append-only (migration 006).</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/legal/acceptances/me?document_slug=</code></td>
+<td><code>user</code></td>
+<td>Caller's acceptance history.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/legal/attributions?context=</code></td>
+<td>—</td>
+<td><code>DataProviderAttribution</code> rows shown in the UI footer.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="portfolio">Portfolio<a class="headerlink" href="#portfolio" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/portfolio/*</code>. Source: <a href="../engine/api/routes/portfolio.py"><code>routes/portfolio.py</code></a>.
+All routes require legal acceptance.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Body</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/portfolio/</code></td>
+<td><code>{name, description?, initial_capital?}</code></td>
+<td><code>201</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/portfolio/</code></td>
+<td>—</td>
+<td>Lists caller's portfolios.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/portfolio/{portfolio_id}</code></td>
+<td>—</td>
+<td><code>403</code> if not owner.</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/api/v1/portfolio/{portfolio_id}</code></td>
+<td>—</td>
+<td>Hard delete (cascades to positions, orders, tax lots, installed strategies).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="strategies">Strategies<a class="headerlink" href="#strategies" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/strategies/*</code>. Source: <a href="../engine/api/routes/strategies.py"><code>routes/strategies.py</code></a>.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/strategies/</code></td>
+<td>Lists installed strategies via <code>app.state.plugin_registry.list_all()</code>.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/strategies/{strategy_id}</code></td>
+<td>Manifest details: <code>config_schema</code>, <code>data_feeds</code>, <code>watchlist</code>, <code>requires_network</code>, <code>requires_gpu</code>, <code>is_loaded</code>.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/strategies/{strategy_id}/activate</code></td>
+<td><code>{params:dict}</code> — instantiates the strategy under its sandbox.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/strategies/{strategy_id}/deactivate</code></td>
+<td>Unloads.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/strategies/{strategy_id}/reload</code></td>
+<td>Hot-reload from disk.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/strategies/{strategy_id}/health</code></td>
+<td>Runtime health (active flag only today).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="backtest">Backtest<a class="headerlink" href="#backtest" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/backtest/*</code>. Source: <a href="../engine/api/routes/backtest.py"><code>routes/backtest.py</code></a>.</p>
+<p>Backtest results currently live in an <strong>in-process dict</strong> keyed by
+<code>backtest_id</code> with a 1-hour TTL (see <code>_RESULTS_TTL_SECONDS</code>). A future
+refactor persists them to the <code>backtest_results</code> table; today, results
+are lost on process restart.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Body</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/backtest/run</code></td>
+<td><code>{strategy_name, symbol, start_date, end_date, initial_capital?, config?}</code></td>
+<td>Returns <code>202 {status:"accepted", backtest_id}</code>. Computation runs as a <code>BackgroundTasks</code> job (not TaskIQ — see <a href="../known-limitations/">known-limitations.md</a>).</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/backtest/results/{backtest_id}</code></td>
+<td>—</td>
+<td><code>202 {status:"running"}</code> · <code>200 {status:"completed", metrics, equity_curve, drawdown_curve, evaluation?}</code> · <code>200 {status:"failed", error}</code> · <code>404</code> · <code>403</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>metrics</code> object is <code>MetricsSummary</code> (24 fields including rolling
+windows); see source for the canonical schema. The full list is also
+served via OpenAPI.</p>
+<h2 id="scoring">Scoring<a class="headerlink" href="#scoring" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/scoring/*</code>. Source: <a href="../engine/api/routes/scoring.py"><code>routes/scoring.py</code></a>.
+Requires legal acceptance.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Body</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/scoring/{strategy_name}/run</code></td>
+<td><code>{universe:string[], raw_data:{symbol:{factor:value}}}</code></td>
+<td>Computes scores via a scoring-strategy plugin, persists a <code>ScoringSnapshot</code> row. <code>400</code> if strategy isn't a scoring strategy.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/scoring/{strategy_name}/results?limit=&amp;offset=&amp;sort_by=&amp;sort_order=</code></td>
+<td>—</td>
+<td>Paginated history.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="marketplace">Marketplace<a class="headerlink" href="#marketplace" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/marketplace/*</code>. Source: <a href="../engine/api/routes/marketplace.py"><code>routes/marketplace.py</code></a>.
+<strong>Most routes are stubs</strong> (<code>{status:"not_implemented"}</code>) — see
+<a href="../known-limitations/">known-limitations.md</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Auth</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/marketplace/browse?category=&amp;search=&amp;sort_by=&amp;page=&amp;per_page=</code></td>
+<td><code>user</code></td>
+<td>Returns empty list (stub).</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/marketplace/categories</code></td>
+<td><code>user</code></td>
+<td>Static category list (algorithmic, ml, llm, hybrid, income, macro).</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/marketplace/install</code></td>
+<td><code>developer</code></td>
+<td>Stub.</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/api/v1/marketplace/uninstall/{strategy_id}</code></td>
+<td><code>developer</code></td>
+<td>Stub.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/marketplace/{strategy_id}/rate?rating=&amp;review=</code></td>
+<td><code>user</code></td>
+<td>Stub. <code>400</code> if <code>rating ∉ [1,5]</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="reference">Reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/reference/*</code>. Source: <a href="../engine/api/routes/reference.py"><code>routes/reference.py</code></a>.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/reference/suggest?q=&amp;limit=&amp;asset_class=</code></td>
+<td>Typeahead. Tries the local <code>SearchIndex</code> first (seeded at startup), then falls through to the Yahoo Finance search API. Caps <code>limit</code> at 50; rejects empty / oversize <code>q</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="market-data">Market data<a class="headerlink" href="#market-data" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/market-data/*</code>. Source: <a href="../engine/api/routes/market_data.py"><code>routes/market_data.py</code></a>.
+Requires legal acceptance.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/market-data/{symbol}/bars?interval=&amp;period=&amp;asset_class=&amp;provider=</code></td>
+<td>OHLCV via the provider registry. Asset class is inferred from the symbol shape (<code>BTC/USD → CRYPTO</code>, <code>EURUSD=X → FOREX</code>, default <code>EQUITY</code>) and can be overridden.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/market-data/{symbol}/quote?asset_class=&amp;provider=</code></td>
+<td>Latest quote.</td>
+</tr>
+</tbody>
+</table>
+<p>Errors follow the provider hierarchy
+(<a href="../engine/api/routes/market_data.py"><code>market_data.py</code></a>):</p>
+<table>
+<thead>
+<tr>
+<th>Exception</th>
+<th>Status</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TransientProviderError</code>, <code>TimeoutError</code></td>
+<td><code>503</code></td>
+<td>Upstream temporarily unavailable.</td>
+</tr>
+<tr>
+<td><code>NoProviderAvailableError</code></td>
+<td><code>503</code></td>
+<td>Every candidate adapter failed / none registered.</td>
+</tr>
+<tr>
+<td><code>CapabilityNotSupportedError</code></td>
+<td><code>501</code></td>
+<td>No adapter supports the requested operation for this asset class.</td>
+</tr>
+<tr>
+<td><code>FatalProviderError</code></td>
+<td><code>400</code></td>
+<td>Caller-side problem (bad symbol, rate-limited by vendor, etc.).</td>
+</tr>
+<tr>
+<td><code>ProviderError</code> (quote only)</td>
+<td><code>502</code></td>
+<td>Generic upstream failure that isn't transient or fatal.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="tax">Tax<a class="headerlink" href="#tax" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/tax/*</code>. Source: <a href="../engine/api/routes/tax.py"><code>routes/tax.py</code></a>.</p>
+<p>The dispatcher routes a two-letter jurisdiction <code>code</code> (<code>US</code>, <code>GB</code>,
+<code>DE</code>, <code>FR</code>) to a per-jurisdiction summariser in
+<a href="../engine/core/tax/reports"><code>engine/core/tax/reports/</code></a>. The endpoint
+is stateless — callers re-submit the disposals they care about.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Body</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/tax/report/{code}</code></td>
+<td><code>{disposals:[{description, acquired, disposed, proceeds:str, cost:str}]}</code></td>
+<td><code>{jurisdiction, summary:{...}}</code> — shape depends on the jurisdiction.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/tax/report/{code}/csv</code></td>
+<td>same</td>
+<td><code>text/csv</code> attachment (header + values).</td>
+</tr>
+</tbody>
+</table>
+<p><code>proceeds</code>/<code>cost</code> are strings to preserve <code>Decimal</code> precision.</p>
+<h2 id="webhooks">Webhooks<a class="headerlink" href="#webhooks" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/webhooks/*</code>. Source: <a href="../engine/api/routes/webhooks.py"><code>routes/webhooks.py</code></a>.
+The HMAC-signed <code>signing_secret</code> is returned <strong>only on create</strong>.</p>
+<p>Templates: <code>generic</code>, <code>discord</code>, <code>slack</code>, <code>telegram</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/webhooks</code></td>
+<td><code>{url, event_types[], custom_headers?, template, max_retries?, portfolio_id?}</code> → <code>201</code>. <strong>Enforces <code>trade</code> scope</strong> for API keys (<code>require_api_scope("trade")</code>); JWTs bypass.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/webhooks</code></td>
+<td>Lists caller's configs. <code>get_current_user</code> (any authed principal); ownership filtered in handler.</td>
+</tr>
+<tr>
+<td>PUT</td>
+<td><code>/api/v1/webhooks/{webhook_id}</code></td>
+<td>Partial update. <code>get_current_user</code>; handler enforces ownership.</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/api/v1/webhooks/{webhook_id}</code></td>
+<td><code>204</code>. <code>get_current_user</code>; handler enforces ownership.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/webhooks/{webhook_id}/test</code></td>
+<td>Synchronously fan out a test event; returns the resulting <code>WebhookDelivery</code>.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/webhooks/{webhook_id}/deliveries</code></td>
+<td>Delivery history.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="privacy-gdpr-ccpa">Privacy (GDPR / CCPA)<a class="headerlink" href="#privacy-gdpr-ccpa" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/privacy/*</code>. Source: <a href="../engine/api/routes/privacy.py"><code>routes/privacy.py</code></a>.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/privacy/export</code></td>
+<td>Synchronous export of the caller's data + audit row in <code>dsr_requests</code>.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/privacy/delete</code></td>
+<td><code>202</code>. Initiates a 30-day grace deletion. <code>409</code> if already pending.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/privacy/delete/cancel</code></td>
+<td>Cancels during the grace window. <code>404</code> if not pending.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/privacy/delete/status</code></td>
+<td><code>{pending, sla_due_at?, request?}</code>.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/privacy/requests</code></td>
+<td>DSR history for the caller.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/privacy/kinds</code></td>
+<td>Allow-list of <code>kind</code> values for openapi clients.</td>
+</tr>
+</tbody>
+</table>
+<p>DSR rows are auditable under GDPR Art. 12 (one-month SLA tracked in
+<code>sla_due_at</code>).</p>
+<h2 id="websocket">WebSocket<a class="headerlink" href="#websocket" title="Permanent link">&para;</a></h2>
+<p><code>WS /api/v1/ws</code>. The active implementation is the <code>engine/api/ws/</code>
+package:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../engine/api/ws/router.py"><code>ws/router.py</code></a></td>
+<td>Endpoint + message dispatch loop</td>
+</tr>
+<tr>
+<td><a href="../engine/api/ws/connection_manager.py"><code>ws/connection_manager.py</code></a></td>
+<td>Connection registry, room-based fan-out, heartbeat, backpressure</td>
+</tr>
+<tr>
+<td><a href="../engine/api/ws/channels.py"><code>ws/channels.py</code></a></td>
+<td>Resolves <code>subscribe</code> requests to rooms with permission checks</td>
+</tr>
+<tr>
+<td><a href="../engine/api/ws/permissions.py"><code>ws/permissions.py</code></a></td>
+<td>Channel access control + room-name resolution</td>
+</tr>
+<tr>
+<td><a href="../engine/api/ws/protocol.py"><code>ws/protocol.py</code></a></td>
+<td>Pydantic wire schemas + valid channel set</td>
+</tr>
+<tr>
+<td><a href="../engine/api/ws/event_bridge.py"><code>ws/event_bridge.py</code></a></td>
+<td>Subscribes to the <code>EventBus</code> and broadcasts events to rooms</td>
+</tr>
+<tr>
+<td><a href="../engine/api/ws/auth.py"><code>ws/auth.py</code></a></td>
+<td>In-band token validation + per-IP auth rate limiting</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Note: <code>engine/api/routes/websocket.py</code> and
+<code>engine/api/websocket/manager.py</code> are a <strong>legacy</strong> implementation
+that is no longer mounted by <a href="../engine/api/router.py"><code>router.py</code></a>.
+The active route comes from <code>ws/router.py</code>. Do not extend the legacy
+files.</p>
+</blockquote>
+<p>Auth is JWT-only (the active <code>ws/auth.py</code> calls <code>decode_token</code>; unlike the
+legacy endpoint it does <strong>not</strong> accept <code>nxs_*</code> API keys). The token is
+delivered either as a <code>?token=</code> query param or as the first JSON message
+within <code>NEXUS_WS_AUTH_TIMEOUT_SECONDS</code> (default 5 s). The handshake:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>client                                   server
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>  │── accept ────────────────────────────────▶│
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>  │── {&quot;type&quot;:&quot;auth&quot;,&quot;token&quot;:&quot;&lt;jwt&gt;&quot;} ────────▶│   (5 s window)
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>  │                                          │── {&quot;type&quot;:&quot;ack&quot;,&quot;status&quot;:&quot;ok&quot;,&quot;message&quot;:&quot;connected&quot;}
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>  │── {&quot;type&quot;:&quot;subscribe&quot;,&quot;channel&quot;:&quot;portfolio&quot;,&quot;params&quot;:{...}}─▶│
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>  │◀──── {&quot;type&quot;:&quot;ack&quot;,&quot;status&quot;:&quot;ok&quot;,&quot;room&quot;:&quot;portfolio:...&quot;} ──│
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>  │◀──── {&quot;type&quot;:&quot;event&quot;,&quot;channel&quot;:...,&quot;room&quot;:...,&quot;payload&quot;:{...},&quot;seq&quot;:N} ──│  (broadcasts)
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>  │── {&quot;type&quot;:&quot;ping&quot;,&quot;ref&quot;:&quot;1&quot;} ─────────────▶│── {&quot;type&quot;:&quot;pong&quot;,&quot;ref&quot;:&quot;1&quot;}
+</span></code></pre></div>
+<p>Inbound message types (see <code>protocol.py</code>): <code>auth</code>, <code>subscribe</code>,
+<code>unsubscribe</code>, <code>ping</code>. Every message accepts an optional <code>ref</code> that
+the server echoes back in the matching <code>ack</code>/<code>pong</code>.</p>
+<p>Outbound message types: <code>ack</code>, <code>error</code>, <code>event</code>, <code>pong</code>, <code>close</code>.</p>
+<h3 id="channels-valid-subscriptions">Channels (valid subscriptions)<a class="headerlink" href="#channels-valid-subscriptions" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Channel</th>
+<th>Sub-keyed by</th>
+<th>Room shape</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>portfolio</code></td>
+<td>account / strategy id</td>
+<td><code>portfolio:account:&lt;id&gt;</code>, <code>portfolio:strategy:&lt;id&gt;</code></td>
+</tr>
+<tr>
+<td><code>orders</code></td>
+<td>symbol / status</td>
+<td><code>orders:symbol:&lt;sym&gt;</code>, <code>orders:status:&lt;status&gt;</code></td>
+</tr>
+<tr>
+<td><code>strategies</code></td>
+<td>strategy id</td>
+<td><code>strategies:strategy:&lt;id&gt;</code></td>
+</tr>
+</tbody>
+</table>
+<p>Each connection is also auto-joined to a private <code>user:&lt;user_id&gt;</code> room
+on registration, so user-scoped events can be targeted directly.</p>
+<h3 id="auth-scopes">Auth &amp; scopes<a class="headerlink" href="#auth-scopes" title="Permanent link">&para;</a></h3>
+<p><code>authenticate_websocket</code> (<code>ws/auth.py</code>) accepts the JWT from either a
+<code>?token=</code> query parameter or the first <code>auth</code> message. Prefer the
+first-message form — query strings are recorded by reverse proxies and
+log aggregators. Auth attempts are rate-limited per IP
+(<code>NEXUS_WS_AUTH_RATE_LIMIT_PER_MINUTE</code>, default 10) via a token bucket.</p>
+<p>Connection scopes are derived from the JWT <code>role</code> claim (see
+<a href="../engine/api/ws/auth.py#L80"><code>ws/auth.py:_extract_scopes</code></a>):</p>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Scopes granted</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>admin</code>, <code>portfolio_manager</code></td>
+<td>base + <code>:all</code> for every channel</td>
+</tr>
+<tr>
+<td>all others (<code>viewer</code> … <code>quant_dev</code>)</td>
+<td>base <code>read:&lt;channel&gt;</code> only</td>
+</tr>
+</tbody>
+</table>
+<p>Permission checks (<code>ws/permissions.py</code>) run on every <code>subscribe</code>:</p>
+<ul>
+<li><code>:all</code> scope → unrestricted access to the channel.</li>
+<li>base scope only → <strong>owner-based</strong> access: the channel's owner param
+  (<code>account_id</code> / <code>strategy_id</code>) in <code>params</code> must equal the caller's
+  <code>user_id</code>, else <code>403</code>.</li>
+<li>neither → <code>403</code>. Unknown channel → <code>error_code:"404"</code>. Subscription
+  cap exceeded (<code>NEXUS_WS_MAX_SUBSCRIPTIONS_PER_CONNECTION</code>) → <code>429</code>.</li>
+</ul>
+<p>Mid-session, a client can send <code>{"type":"auth","token":"&lt;new JWT&gt;"}</code> to
+refresh an expiring token; the server re-derives scopes on the live
+connection.</p>
+<h3 id="event-delivery">Event delivery<a class="headerlink" href="#event-delivery" title="Permanent link">&para;</a></h3>
+<p><a href="../engine/api/ws/event_bridge.py"><code>ws/event_bridge.py</code></a>
+(<code>EventBusBridge</code>) subscribes to the <a href="../engine/events/bus.py"><code>EventBus</code></a>
+for portfolio / order / strategy event types and broadcasts each to the
+matching room(s) as an <code>event</code> message with a per-room <code>seq</code>. Because
+the <code>EventBus</code> itself publishes over Redis/Valkey pub/sub, events
+published on <strong>any</strong> replica reach local WebSocket connections on
+<strong>every</strong> replica. The <code>ConnectionManager</code> (the live socket objects) is
+still per-process, but event distribution is cross-replica.</p>
+<h2 id="errors">Errors<a class="headerlink" href="#errors" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Auth</strong>: <code>401</code> for missing/invalid/expired credentials; <code>403</code> for
+  insufficient role/scope; <strong><code>451</code></strong> for missing legal acceptance
+  (body <code>{code:"legal_re_acceptance_required", documents:[…]}</code>).</li>
+<li><strong>Validation</strong>: <code>422</code> from FastAPI; <code>400</code> for hand-rolled checks
+  (e.g. invalid scope in API keys, unknown tax jurisdiction).</li>
+<li><strong>Rate limit</strong>: <code>429</code> with <code>Retry-After</code> from
+  <a href="../engine/api/rate_limit.py"><code>RateLimitMiddleware</code></a>. Default 600
+  req/min/IP, burst 60. <code>/health</code> and <code>/metrics</code> are exempt;
+  <code>/api/v1/client/errors</code> is capped at 30/min to prevent log DoS.</li>
+<li><strong>Body size</strong>: hard 1 MiB cap on every request
+  (<a href="../engine/api/body_size_limit.py"><code>BodySizeLimitMiddleware</code></a>).</li>
+<li><strong>Provider errors</strong>: see Market data section above.</li>
+</ul>
+<h2 id="cross-cutting-middleware">Cross-cutting middleware<a class="headerlink" href="#cross-cutting-middleware" title="Permanent link">&para;</a></h2>
+<p>Applied in reverse order in <a href="../engine/app.py#L154"><code>create_app</code></a> so the
+last-added wraps everything:</p>
+<ol>
+<li><code>SecurityHeadersMiddleware</code> — CSP, HSTS, X-Content-Type-Options, …</li>
+<li><code>CORSMiddleware</code> — <code>NEXUS_CORS_ORIGINS</code> (defaults to <code>http://localhost:3000</code>).</li>
+<li><code>RateLimitMiddleware</code></li>
+<li><code>BodySizeLimitMiddleware</code> (1 MiB)</li>
+<li><code>CorrelationIdMiddleware</code> — stamps <code>X-Request-ID</code>.</li>
+<li><code>HttpMetricsMiddleware</code> — Prometheus histogram + counter for every
+   route (including <code>/metrics</code> itself, deliberately, so scrape latency
+   is observable).</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../architecture/plugins/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Plugin system">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Plugin system
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../mcp-server/" class="md-footer__link md-footer__link--next" aria-label="Next: MCP server">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                MCP server
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/SevFle/nexus-trade-engine" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
