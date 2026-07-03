@@ -55,6 +55,30 @@ _SCHEME_ALIASES: dict[str, str] = {
 }
 
 
+def _sanitize_url(url: str) -> str:
+    """Return ``url`` with any userinfo (username[:password]) stripped.
+
+    Credentials embedded in a connection URL — e.g.
+    ``redis://:s3cret@host`` or ``redis://user:pass@host:6379/0`` — must
+    never leak into log lines or error strings. This helper rewrites the
+    netloc to drop the userinfo while leaving the scheme, host, port and
+    path untouched, so the result is safe to embed in a ``ValueError``
+    message or a structured log event.
+
+    A URL that carries no userinfo is returned unchanged.
+    """
+    parsed = urlparse(url)
+    if parsed.username is None and parsed.password is None:
+        return url
+    host = parsed.hostname or ""
+    # ``hostname`` strips the IPv6 brackets; re-add them so the rebuilt
+    # netloc round-trips correctly for ``redis://user:pass@[::1]:6379/0``.
+    if ":" in host:
+        host = f"[{host}]"
+    port = f":{parsed.port}" if parsed.port is not None else ""
+    return urlunparse(parsed._replace(netloc=f"{host}{port}"))
+
+
 def _normalize_broker_url(url: str) -> str:
     """Translate a Redis/Valkey URL into the scheme ``taskiq_redis`` expects.
 
@@ -62,14 +86,18 @@ def _normalize_broker_url(url: str) -> str:
         (``redis://``, ``rediss://``, ``valkey://`` or ``valkeys://``).
     :returns: the same URL with its scheme rewritten to ``redis://`` or
         ``rediss://`` as appropriate; the host/port/path are unchanged.
-    :raises ValueError: if the URL's scheme is not recognised.
+    :raises ValueError: if the URL's scheme is not recognised. The
+        offending URL is included in the message *after* having its
+        userinfo stripped via :func:`_sanitize_url`, so embedded
+        credentials are never leaked into logs.
     """
     parsed = urlparse(url)
     scheme = parsed.scheme.lower()
     if scheme not in _SCHEME_ALIASES:
         raise ValueError(
             f"Unsupported broker URL scheme {scheme!r}; expected one of "
-            f"redis://, rediss://, valkey:// or valkeys:// (url={url!r})"
+            f"redis://, rediss://, valkey:// or valkeys:// "
+            f"(url={_sanitize_url(url)!r})"
         )
     return urlunparse(parsed._replace(scheme=_SCHEME_ALIASES[scheme]))
 
@@ -108,20 +136,49 @@ def build_broker(url: str | None = None) -> ListQueueBroker:
     )
 
 
+def _build_module_broker() -> tuple[str, ListQueueBroker]:
+    """Resolve the configured URL once and build the shared broker.
+
+    Centralises the import-time construction so a misconfigured
+    :attr:`settings.valkey_url` — typically an unsupported scheme — is
+    reported as a clear, structured *fatal* log event (with the URL
+    sanitised of any embedded credentials) instead of surfacing as a bare
+    ``ValueError`` traceback deep in the import chain. The underlying
+    ``ValueError`` is re-raised afterwards so the process still fails fast:
+    without a valid broker no tasks can be registered, so there is no
+    useful way to continue.
+
+    :returns: ``(normalised_url, broker_instance)``.
+    """
+    configured = settings.valkey_url
+    try:
+        normalised = _normalize_broker_url(configured)
+        instance = build_broker(normalised)
+    except ValueError as exc:
+        logger.fatal(
+            "tasks.broker.config_invalid",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            scheme=urlparse(configured).scheme.lower(),
+            url=_sanitize_url(configured),
+        )
+        raise
+    return normalised, instance
+
+
 # Module-level mirror of the normalised configured URL, kept for backwards
 # compatibility with anything importing ``broker_url`` directly (it is part
 # of ``__all__``). Derived purely from settings so it tracks the deployment
 # configuration without opening a connection.
-broker_url: str = _normalize_broker_url(settings.valkey_url)
-
-
+broker_url: str
 # The single shared broker instance. Importing this module does NOT open a
 # connection — the Redis connection pool is only created on
 # ``await broker.startup()``, which the FastAPI lifespan invokes on app
 # boot (see :func:`engine.app.lifespan`). Tasks registered anywhere via
 # ``@broker.task`` therefore land on this same object, and a single
 # ``await broker.shutdown()`` tears the pool down.
-broker: ListQueueBroker = build_broker()
+broker: ListQueueBroker
+broker_url, broker = _build_module_broker()
 
 # A scheduler is required by the taskiq worker process to drive scheduled
 # (cron-like) tasks. There are none registered yet, but keeping it here

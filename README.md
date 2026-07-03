@@ -152,7 +152,6 @@ for a reading-order map; key entry points:
 - [Runbooks](docs/operations/runbooks/README.md) — on-call debug
   guides, per-SLO and common-issue.
 - [ADRs](docs/adr/README.md) — architecture decision records.
-- [Runbooks](docs/operations/runbooks/README.md) — on-call debug guides.
 
 ## Tech Stack
 
