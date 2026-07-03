@@ -429,10 +429,11 @@ class TestNetPositionResolution:
 
     async def test_aggregate_signals_accepts_explicit_input(self):
         # aggregate_signals works standalone on a provided iterable and
-        # does not require a prior run_all.
+        # does not require a prior run_all. Two DISTINCT strategies voting
+        # opposing sides with equal weight net to zero → HOLD.
         orch = self._orch([])
         out = orch.aggregate_signals(
-            [_sig("AAPL", Side.BUY, "a"), _sig("AAPL", Side.SELL, "a")]
+            [_sig("AAPL", Side.BUY, "a"), _sig("AAPL", Side.SELL, "b")]
         )
         assert out[0].side == Side.HOLD  # 1 - 1 == 0 → HOLD
 
@@ -729,3 +730,143 @@ class TestMetadataDeepCopyIsolation:
         resolved = orch.aggregate_signals()[0]
         assert resolved.strategy_id == "orchestrator"
         assert resolved.metadata["orchestrator_sources"] == ["x"]
+
+
+# --------------------------------------------------------------------- #
+# Robustness fix: float-dust in priority comparisons (math.isclose)
+# --------------------------------------------------------------------- #
+
+
+class TestPriorityFloatComparison:
+    """``_priority`` must treat priorities that are equal in intent but
+    differ by float dust (e.g. ``0.1 + 0.2`` vs ``0.3``) as tied."""
+
+    def test_near_equal_priorities_tie_to_hold(self):
+        # ``0.1 + 0.2`` evaluates to ``0.30000000000000004``, which compares
+        # *unequal* to ``0.3`` under ``==``. The two strategies should still
+        # be treated as tied at the top priority on opposing sides, so the
+        # resolution is the HOLD stalemate rather than one side winning.
+        assert (0.1 + 0.2) != 0.3  # precondition: this is the float hazard
+        orch = StrategyOrchestrator(
+            [
+                _AsyncStrategy("a", [_sig("AAPL", Side.BUY, "a")]),
+                _AsyncStrategy("b", [_sig("AAPL", Side.SELL, "b")]),
+            ],
+            _FakeCostModel(),
+            priorities={"a": 0.3, "b": 0.1 + 0.2},
+        )
+        out = orch.aggregate_signals(
+            [_sig("AAPL", Side.BUY, "a"), _sig("AAPL", Side.SELL, "b")]
+        )
+        assert out[0].side == Side.HOLD
+
+    def test_clearly_distinct_priorities_still_pick_winner(self):
+        # Regression guard: priorities that are genuinely far apart must
+        # NOT be collapsed into a tie by the isclose tolerance.
+        orch = StrategyOrchestrator(
+            [
+                _AsyncStrategy("low", [_sig("AAPL", Side.BUY, "low")]),
+                _AsyncStrategy("high", [_sig("AAPL", Side.SELL, "high")]),
+            ],
+            _FakeCostModel(),
+            priorities={"low": 1.0, "high": 9.0},
+        )
+        out = orch.aggregate_signals(
+            [_sig("AAPL", Side.BUY, "low"), _sig("AAPL", Side.SELL, "high")]
+        )
+        assert out[0].side == Side.SELL
+
+
+# --------------------------------------------------------------------- #
+# Robustness fix: deduplicate signals per (strategy_id, symbol)
+# --------------------------------------------------------------------- #
+
+
+class TestDeduplicationPerStrategySymbol:
+    """``aggregate_signals`` keeps at most one signal per
+    (strategy_id, symbol) before voting."""
+
+    def test_net_position_does_not_double_count_same_strategy(self):
+        # Strategy "a" emits two BUY votes on AAPL. Without dedup the net
+        # would be ``0.6 + 0.6 - 1.0 == 0.2`` → BUY ("a" double-counted).
+        # After dedup only the first "a" vote counts, so the net is
+        # ``0.6 - 1.0 == -0.4`` → SELL.
+        orch = StrategyOrchestrator(
+            [],
+            _FakeCostModel(),
+            conflict_resolution=ConflictResolution.NET_POSITION,
+        )
+        out = orch.aggregate_signals(
+            [
+                _sig("AAPL", Side.BUY, "a", weight=0.6),
+                _sig("AAPL", Side.BUY, "a", weight=0.6),
+                _sig("AAPL", Side.SELL, "b", weight=1.0),
+            ]
+        )
+        assert out[0].side == Side.SELL
+        assert out[0].weight == pytest.approx(0.4)
+        # Only one "a" vote survives into the audit trail.
+        assert out[0].metadata["orchestrator_sources"] == ["a", "b"]
+
+    def test_priority_self_conflict_resolves_to_first_signal(self):
+        # A single strategy emitting both BUY and SELL on the same symbol
+        # used to fill the entire winner set and deadlock itself to HOLD.
+        # After dedup only its first signal survives, resolving to BUY.
+        orch = StrategyOrchestrator(
+            [_AsyncStrategy("a")],
+            _FakeCostModel(),
+            priorities={"a": 5.0},
+        )
+        out = orch.aggregate_signals(
+            [_sig("AAPL", Side.BUY, "a"), _sig("AAPL", Side.SELL, "a")]
+        )
+        assert out[0].side == Side.BUY
+        assert out[0].metadata["orchestrator_sources"] == ["a"]
+
+    def test_distinct_strategies_on_same_symbol_unaffected(self):
+        # Sanity: dedup is keyed on (strategy_id, symbol), so multiple
+        # strategies legitimately voting the same symbol are all kept.
+        orch = StrategyOrchestrator(
+            [],
+            _FakeCostModel(),
+            conflict_resolution=ConflictResolution.NET_POSITION,
+        )
+        out = orch.aggregate_signals(
+            [
+                _sig("AAPL", Side.BUY, "a", weight=0.6),
+                _sig("AAPL", Side.BUY, "b", weight=0.6),
+            ]
+        )
+        assert out[0].side == Side.BUY
+        assert out[0].weight == pytest.approx(1.0)  # 0.6 + 0.6 clamped
+
+    def test_same_strategy_different_symbols_unaffected(self):
+        # A strategy voting two different symbols is NOT a duplicate.
+        orch = StrategyOrchestrator([_AsyncStrategy("a")], _FakeCostModel())
+        out = orch.aggregate_signals(
+            [_sig("AAPL", Side.BUY, "a"), _sig("MSFT", Side.SELL, "a")]
+        )
+        assert {s.symbol: s.side for s in out} == {"AAPL": Side.BUY, "MSFT": Side.SELL}
+
+    async def test_dedup_applies_to_run_all_pipeline(self):
+        # End-to-end: a strategy emitting two signals for the same symbol
+        # is deduplicated before NET_POSITION aggregation, so a single
+        # strategy cannot cast two votes.
+        class _Greedy:
+            id = "a"
+
+            def evaluate(self, md, cm):
+                return [
+                    _sig("AAPL", Side.BUY, "a", weight=0.6),
+                    _sig("AAPL", Side.BUY, "a", weight=0.6),
+                ]
+
+        orch = StrategyOrchestrator(
+            [_Greedy(), _AsyncStrategy("b", [_sig("AAPL", Side.SELL, "b", weight=1.0)])],
+            _FakeCostModel(),
+            conflict_resolution=ConflictResolution.NET_POSITION,
+        )
+        await orch.run_all({})
+        agg = orch.aggregate_signals()
+        assert agg[0].side == Side.SELL
+        assert agg[0].weight == pytest.approx(0.4)

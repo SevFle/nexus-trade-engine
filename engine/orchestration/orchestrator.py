@@ -216,8 +216,19 @@ class StrategyOrchestrator:
         """Collapse ``signals`` to one decision per symbol. Defaults to the
         most recent :meth:`run_all` output."""
         source = list(signals) if signals is not None else list(self._last_signals)
+        # Deduplicate to at most one signal per (strategy_id, symbol)
+        # before any voting. A single strategy emitting several signals on
+        # the same symbol (a plugin bug or a conflicting re-evaluation)
+        # must not double-count in NET_POSITION nor skew the PRIORITY
+        # winner set. The first occurrence per key wins, so the result is
+        # deterministic and reflects insertion / run order.
+        seen: set[tuple[str, str]] = set()
         per_symbol: dict[str, list[Signal]] = defaultdict(list)
         for sig in source:
+            key = (sig.strategy_id, sig.symbol)
+            if key in seen:
+                continue
+            seen.add(key)
             per_symbol[sig.symbol].append(sig)
         return [self._resolve(group) for group in per_symbol.values()]
 
@@ -231,8 +242,14 @@ class StrategyOrchestrator:
         if not active:
             return self._resolved(group[0], Side.HOLD, active)
         top = max(self._priorities.get(s.strategy_id, _DEFAULT_PRIORITY) for s in active)
+        # Use math.isclose rather than ``==`` so priorities that are equal
+        # in intent but differ by float dust (e.g. ``0.1 + 0.2`` vs ``0.3``)
+        # still tie at the top. Otherwise a near-tie could let one side win
+        # outright instead of resolving to the HOLD stalemate.
         winners = [
-            s for s in active if self._priorities.get(s.strategy_id, _DEFAULT_PRIORITY) == top
+            s
+            for s in active
+            if math.isclose(self._priorities.get(s.strategy_id, _DEFAULT_PRIORITY), top)
         ]
         if len({s.side for s in winners}) > 1:  # top-priority stalemate → HOLD
             return self._resolved(winners[0], Side.HOLD, active)
