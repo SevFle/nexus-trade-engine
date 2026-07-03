@@ -44,7 +44,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from engine.core.signal import Signal
-from engine.plugins.restricted_importer import RestrictedImporter, _extract_hostnames
+from engine.plugins.restricted_importer import RestrictedImporter, extract_hostnames
 from engine.plugins.sandboxed_http import SandboxedHttpClient
 
 if TYPE_CHECKING:
@@ -380,7 +380,7 @@ class StrategySandbox:
         return self._original_getattr(obj, name, *default)  # type: ignore[misc]
 
     def _make_restricted_send(self) -> Any:
-        allowed = _extract_hostnames(self.manifest.network.allowed_endpoints)
+        allowed = extract_hostnames(self.manifest.network.allowed_endpoints)
         original_send = self._original_httpx_send
 
         async def restricted_send(
@@ -393,6 +393,10 @@ class StrategySandbox:
             if not _in_sandbox_execution.get(False):
                 return await original_send(client, request, stream=stream, **kwargs)
             host = request.url.host
+            if host is None:
+                raise PermissionError(
+                    "Network access to a host-less request URL is not allowed"
+                )
             if not any(host == ep or host.endswith(f".{ep}") for ep in allowed):
                 raise PermissionError(f"Network access to {host} is not allowed")
             return await original_send(client, request, stream=stream, **kwargs)

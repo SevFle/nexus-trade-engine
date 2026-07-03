@@ -42,14 +42,14 @@ if TYPE_CHECKING:
 BLOCKED_MODULES: frozenset[str] = DENYLIST_MODULES
 
 
-# Sentinel used by :func:`_extract_hostnames` to represent an *invalid*
+# Sentinel used by :func:`extract_hostnames` to represent an *invalid*
 # (non-numeric) port.  ``parsed.port`` raises ``ValueError`` for such an entry,
 # so we cannot represent it with ``None`` (which means "no port present");
 # instead we normalise the exception to this sentinel and reject the entry.
 _INVALID_PORT: int = -1
 
 
-def _extract_hostnames(endpoints: list[str] | None) -> list[str]:
+def extract_hostnames(endpoints: list[str] | None) -> list[str]:
     """Normalise and validate a manifest ``allowed_endpoints`` list.
 
     Each entry may be a bare hostname (``api.example.com``) or a full URL
@@ -239,7 +239,7 @@ class RestrictedImporter(MetaPathFinder):
         # hostnames are lower-cased, and entries carrying a path or port are
         # rejected with a clear ``ValueError``.  This guarantees that the
         # matching logic below only ever compares bare lower-cased hostnames.
-        self.allowed_hosts: list[str] = _extract_hostnames(allowed_hosts)
+        self.allowed_hosts: list[str] = extract_hostnames(allowed_hosts)
         self._installed = False
         # Stable identity for the hook.  ``self._restricted_import`` creates a
         # *new* bound-method object on every attribute access (a Python
@@ -458,5 +458,5 @@ __all__ = [
     "ALLOWED_MODULES",
     "BLOCKED_MODULES",
     "RestrictedImporter",
-    "_extract_hostnames",
+    "extract_hostnames",
 ]
