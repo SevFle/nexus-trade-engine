@@ -112,6 +112,12 @@ ignore = ["S101", "TRY003", "PLR0913"]
 "engine/core/cost_model.py" = ["ARG002", "PLR2004"]
 "engine/tasks/worker.py" = ["PLC0415", "TRY301"]
 "engine/tasks/definitions.py" = ["PLC0415", "TRY301"]
+# heartbeat.py defers ``import redis`` to call time so importing the module
+# never pulls redis-py (a transitive dep via taskiq-redis) into modules that
+# only need the pure helpers (is_fresh, write_heartbeat). The explicit
+# ``except asyncio.CancelledError: raise`` documents that CancelledError must
+# not be caught by the following broad ``except Exception``.
+"engine/tasks/heartbeat.py" = ["PLC0415", "TRY203"]
 "engine/events/bus.py" = ["PLC0415", "E501"]
 "engine/mcp/**/*.py" = ["PLC0415", "TRY300", "TRY301", "E501", "ARG002", "RUF013"]
 "engine/mcp/server.py" = ["PLR0911"]
