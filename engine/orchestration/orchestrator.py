@@ -59,6 +59,15 @@ class ConflictResolution(StrEnum):
 # Stamped onto aggregated output so audit code can tell orchestrator
 # decisions apart from raw per-strategy signals.
 _AGGREGATED_STRATEGY_ID = "orchestrator"
+# Float-comparison tolerance for priority equality. Priorities are an
+# ordering key that may be computed via float arithmetic (e.g.
+# ``1.0 - 0.7``), so an exact ``==`` would let sub-epsilon dust flip a
+# genuine top-priority tie into a phantom winner — or, worse, make one
+# side of an opposing-signal stalemate silently "win". ``math.isclose``
+# with ``abs_tol=_EPSILON`` collapses near-equal priorities to a tie.
+# Kept distinct from _NET_EPSILON so the two concerns (priority ties vs.
+# net-position dead band) can evolve independently.
+_EPSILON = 1e-9
 # Net-position dead band: |net| below this is a tie → HOLD, so float dust
 # (e.g. 1.0 - 0.5 - 0.5 == 1.1e-16) can't flip a HOLD into a phantom signal.
 _NET_EPSILON = 1e-9
@@ -214,12 +223,49 @@ class StrategyOrchestrator:
 
     def aggregate_signals(self, signals: Iterable[Signal] | None = None) -> list[Signal]:
         """Collapse ``signals`` to one decision per symbol. Defaults to the
-        most recent :meth:`run_all` output."""
+        most recent :meth:`run_all` output.
+
+        Exact duplicate votes — the *same* strategy voting the same side
+        on the same symbol more than once — carry no extra information and
+        would skew NET_POSITION magnitude / inflate PRIORITY headcount, so
+        they are dropped (first occurrence wins) and logged at warning
+        level via :func:`structlog.get_logger`.
+        """
         source = list(signals) if signals is not None else list(self._last_signals)
+        source = self._dedup_signals(source)
         per_symbol: dict[str, list[Signal]] = defaultdict(list)
         for sig in source:
             per_symbol[sig.symbol].append(sig)
         return [self._resolve(group) for group in per_symbol.values()]
+
+    @staticmethod
+    def _dedup_signals(signals: list[Signal]) -> list[Signal]:
+        """Drop exact duplicate votes keyed on ``(strategy_id, symbol, side)``.
+
+        The same strategy emitting two BUY signals for AAPL (say) is a
+        plugin bug, not a stronger conviction: a duplicate adds no
+        information yet would double-count in NET_POSITION and inflate the
+        PRIORITY winner set. The first occurrence wins; each later duplicate
+        is dropped and surfaced through structlog so the misbehaving plugin
+        is visible in the audit trail. Signals from *different* strategies,
+        or from the same strategy on a *different* side, are legitimate
+        conflict-resolution input and are preserved untouched.
+        """
+        seen: set[tuple[str, str, str]] = set()
+        deduped: list[Signal] = []
+        for sig in signals:
+            key = (sig.strategy_id, sig.symbol, str(sig.side))
+            if key in seen:
+                structlog.get_logger().warning(
+                    "orchestrator.duplicate_signal_dropped",
+                    strategy_id=sig.strategy_id,
+                    symbol=sig.symbol,
+                    side=str(sig.side),
+                )
+                continue
+            seen.add(key)
+            deduped.append(sig)
+        return deduped
 
     def _resolve(self, group: list[Signal]) -> Signal:
         if self._mode is ConflictResolution.NET_POSITION:
@@ -231,8 +277,18 @@ class StrategyOrchestrator:
         if not active:
             return self._resolved(group[0], Side.HOLD, active)
         top = max(self._priorities.get(s.strategy_id, _DEFAULT_PRIORITY) for s in active)
+        # ``math.isclose`` with ``abs_tol=_EPSILON`` collapses sub-epsilon
+        # float dust (e.g. 1.0 vs 1.0 + 1e-12) so a genuine top-priority tie
+        # — including an opposing-signal stalemate — is detected instead of
+        # one side silently "winning" on rounding error.
         winners = [
-            s for s in active if self._priorities.get(s.strategy_id, _DEFAULT_PRIORITY) == top
+            s
+            for s in active
+            if math.isclose(
+                self._priorities.get(s.strategy_id, _DEFAULT_PRIORITY),
+                top,
+                abs_tol=_EPSILON,
+            )
         ]
         if len({s.side for s in winners}) > 1:  # top-priority stalemate → HOLD
             return self._resolved(winners[0], Side.HOLD, active)
