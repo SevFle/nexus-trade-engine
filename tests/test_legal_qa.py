@@ -150,13 +150,11 @@ class TestConsentEnforcementIntegration:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             yield client
 
-    @pytest.mark.skip(
-        reason="require_legal_acceptance is a no-op until the auth dependency "
-        "is wired (tracked separately as consent-enforcement follow-up)."
-    )
     async def test_require_legal_acceptance_raises_451_when_pending(
         self, db_session: AsyncSession
     ):
+        user = make_user(email=f"consent-{uuid.uuid4()}@example.com")
+        db_session.add(user)
         doc = LegalDocument(
             slug=f"consent-test-{uuid.uuid4().hex[:8]}",
             title="Consent Enforcement Doc",
@@ -170,13 +168,33 @@ class TestConsentEnforcementIntegration:
         db_session.add(doc)
         await db_session.flush()
 
+        # Enforcement path #1: required doc not yet accepted -> 451.
         with pytest.raises(HTTPException) as exc_info:
-            await require_legal_acceptance(db_session)
+            await require_legal_acceptance(db=db_session, principal=user)
         assert exc_info.value.status_code == 451
         detail = exc_info.value.detail
         assert detail["code"] == "legal_re_acceptance_required"
         assert "documents" in detail
         assert isinstance(detail["documents"], list)
+        assert doc.slug in detail["documents"]
+
+        # Enforcement path #2: once the user accepts the doc at its current
+        # version, the dependency returns None (request allowed).
+        db_session.add(
+            LegalAcceptance(
+                user_id=user.id,
+                document_slug=doc.slug,
+                document_version="1.0.0",
+                accepted_at=datetime.now(tz=UTC),
+                ip_address="127.0.0.1",
+                user_agent="test",
+                context="onboarding",
+            )
+        )
+        await db_session.flush()
+
+        result = await require_legal_acceptance(db=db_session, principal=user)
+        assert result is None
 
     async def test_no_451_when_all_accepted(self, db_session: AsyncSession):
         doc = LegalDocument(
@@ -207,11 +225,9 @@ class TestConsentEnforcementIntegration:
         db_session.add(acceptance)
         await db_session.flush()
 
-    @pytest.mark.skip(
-        reason="require_legal_acceptance is a no-op until the auth dependency "
-        "is wired (tracked separately as consent-enforcement follow-up)."
-    )
     async def test_451_response_contains_pending_document_slugs(self, db_session: AsyncSession):
+        user = make_user(email=f"pending-{uuid.uuid4()}@example.com")
+        db_session.add(user)
         slugs = [f"pending-{uuid.uuid4().hex[:8]}" for _ in range(3)]
         for i, slug in enumerate(slugs):
             doc = LegalDocument(
@@ -228,9 +244,10 @@ class TestConsentEnforcementIntegration:
         await db_session.flush()
 
         with pytest.raises(HTTPException) as exc_info:
-            await require_legal_acceptance(db_session)
+            await require_legal_acceptance(db=db_session, principal=user)
         assert exc_info.value.status_code == 451
         pending_slugs = exc_info.value.detail["documents"]
+        assert isinstance(pending_slugs, list)
         for slug in slugs:
             assert slug in pending_slugs
 
