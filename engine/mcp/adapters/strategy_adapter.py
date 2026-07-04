@@ -1,8 +1,12 @@
-"""Strategy enumeration adapters.
+"""Strategy enumeration and inspection adapters.
 
-Uses :func:`engine.plugins.registry.discover_strategies`, which reads
-``manifest.yaml`` files from the strategies directory — so the MCP server can
-enumerate the strategy catalog without instantiating any plugin code.
+The strategy catalog is sourced exclusively from the
+:class:`~engine.plugins.registry.PluginRegistry` carried on
+:class:`~engine.mcp.adapters.EngineServices`. The registry discovers and
+caches the parsed ``manifest.yaml`` for every installed strategy at
+construction time, so these adapters never import plugin code and never
+re-scan the strategies directory on each call — the registry is the single
+source of truth for installed-strategy metadata.
 """
 
 from __future__ import annotations
@@ -10,19 +14,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.mcp.adapters import EngineServices, to_jsonable
-from engine.mcp.errors import NotFoundError
+from engine.mcp.errors import NotFoundError, ValidationError
 
 if TYPE_CHECKING:
     from engine.mcp.auth import AuthPrincipal
 
 
-def _discover(services: EngineServices) -> dict[str, dict[str, Any]]:
-    from engine.plugins.registry import discover_strategies
-
-    return discover_strategies(services.strategies_dir)
-
-
 def _summarize(name: str, manifest: dict[str, Any]) -> dict[str, Any]:
+    """Project a raw manifest dict into the LLM-facing strategy summary."""
     return {
         "name": name,
         "version": manifest.get("version"),
@@ -39,9 +38,11 @@ async def list_strategies(
     _principal: AuthPrincipal,
     _arguments: dict[str, Any],
 ) -> dict[str, Any]:
-    discovered = _discover(services)
+    """Enumerate every installed strategy as a list of summary dicts."""
+    registry = services.plugin_registry
     strategies = [
-        _summarize(name, entry.get("manifest") or {}) for name, entry in discovered.items()
+        _summarize(name, registry.get_manifest(name) or {})
+        for name in registry.list_strategies()
     ]
     return to_jsonable({"count": len(strategies), "strategies": strategies})
 
@@ -51,18 +52,27 @@ async def get_strategy_details(
     _principal: AuthPrincipal,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
-    name = arguments.get("strategy_name")
-    if not name:
-        from engine.mcp.errors import ValidationError
+    """Return full metadata for a single strategy by its registry identifier.
 
+    The ``strategy_name`` argument is the identifier returned by
+    :func:`list_strategies` (the strategy directory / manifest ``name``). The
+    lookup goes through the :class:`PluginRegistry`, so the same registry the
+    rest of the engine uses is the source of truth here. Unknown identifiers
+    raise :class:`~engine.mcp.errors.NotFoundError`.
+    """
+    name = arguments.get("strategy_name")
+    if not isinstance(name, str) or not name.strip():
         raise ValidationError("strategy_name is required")
-    discovered = _discover(services)
-    entry = discovered.get(name)
-    if entry is None:
+    name = name.strip()
+
+    registry = services.plugin_registry
+    manifest = registry.get_manifest(name)
+    if manifest is None:
         raise NotFoundError(f"Strategy not found: {name}")
-    manifest = entry.get("manifest") or {}
+
     detail = _summarize(name, manifest)
-    detail["module_path"] = entry.get("module_path")
+    # module_path is bonus metadata (code location); it is None-safe.
+    detail["module_path"] = registry.get_module_path(name)
     return to_jsonable(detail)
 
 

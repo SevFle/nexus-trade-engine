@@ -107,3 +107,17 @@ class PluginRegistry:
             logger.warning("strategy_not_found", strategy=strategy_name)
             return None
         return entry.get("manifest")
+
+    def get_module_path(self, strategy_name: str) -> str | None:
+        """Return the on-disk path of ``strategy.py`` for ``strategy_name``.
+
+        Returns ``None`` when the strategy is not installed. Together with
+        :meth:`get_manifest` this exposes everything the MCP server needs to
+        describe a strategy (metadata + code location) without importing the
+        plugin, keeping the registry the single source of truth.
+        """
+        entry = self._strategies.get(strategy_name)
+        if entry is None:
+            logger.warning("strategy_not_found", strategy=strategy_name)
+            return None
+        return entry.get("module_path")

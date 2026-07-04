@@ -152,6 +152,47 @@ class TestPluginRegistry:
         registry = PluginRegistry(strategies_dir)
         assert registry.load_strategy("no_class") is None
 
+    def test_get_manifest_returns_parsed_manifest(self, strategies_dir):
+        _write_strategy(
+            strategies_dir / "strat_a",
+            {
+                "name": "strat_a",
+                "version": "2.3.1",
+                "description": "A test strategy",
+                "parameters": {"window": 14},
+            },
+            "class Strategy: pass\n",
+        )
+
+        registry = PluginRegistry(strategies_dir)
+        manifest = registry.get_manifest("strat_a")
+        assert manifest is not None
+        assert manifest["name"] == "strat_a"
+        assert manifest["version"] == "2.3.1"
+        assert manifest["parameters"] == {"window": 14}
+
+    def test_get_manifest_returns_none_for_unknown_strategy(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+        assert registry.get_manifest("does_not_exist") is None
+
+    def test_get_module_path_returns_strategy_py_path(self, strategies_dir):
+        _write_strategy(
+            strategies_dir / "strat_a",
+            {"name": "strat_a", "version": "1.0.0"},
+            "class Strategy: pass\n",
+        )
+
+        registry = PluginRegistry(strategies_dir)
+        module_path = registry.get_module_path("strat_a")
+        assert module_path is not None
+        assert module_path.endswith("strat_a/strategy.py")
+        # Same path that discover_strategies records for the entry.
+        assert module_path == discover_strategies(strategies_dir)["strat_a"]["module_path"]
+
+    def test_get_module_path_returns_none_for_unknown_strategy(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+        assert registry.get_module_path("does_not_exist") is None
+
 
 class TestIsScoringStrategyFallback:
     def test_returns_false_when_scoring_module_unavailable(self):

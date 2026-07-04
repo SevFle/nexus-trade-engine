@@ -107,8 +107,21 @@ class EngineServices:
         factory: Callable[[], MarketDataProvider] = (
             (lambda: provider) if provider is not None else _default_provider_factory()
         )
+        # Keep the registry and strategies_dir coherent: if a caller points
+        # at a temp strategies directory but does not inject a registry,
+        # build one that reads that directory so both the strategy adapters
+        # (which consult the registry) and the resources layer (which reads
+        # strategies_dir directly) observe the same catalog.
+        if plugin_registry is not None:
+            registry: PluginRegistry = plugin_registry
+        elif strategies_dir is not None:
+            from engine.plugins.registry import PluginRegistry as _PluginRegistry
+
+            registry = _PluginRegistry(strategies_dir)
+        else:
+            registry = _default_registry()
         return cls(
-            plugin_registry=plugin_registry or _default_registry(),
+            plugin_registry=registry,
             portfolio_store=portfolio_store or PortfolioStore(),
             cost_model=cost_model or DefaultCostModel(),
             market_data_provider_factory=factory,
