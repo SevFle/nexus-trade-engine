@@ -122,6 +122,102 @@ async def test_list_strategies_uses_registry_not_strategies_dir():
     registry.get_manifest.assert_called_once_with("momentum")
 
 
+# ── 1b. list_strategies — marketplace hardening & per-entry resilience ──── #
+@pytest.mark.parametrize(
+    "value",
+    ["not-a-dict", ["a", "b"], 42, ["marketplace"], ("tuple",)],
+    ids=["string", "list", "int", "list-of-str", "tuple"],
+)
+async def test_list_strategies_marketplace_non_dict_degrades_to_empty_dict(value):
+    """A malformed manifest storing a non-dict under ``marketplace`` must
+    not leak that unexpected type into the JSON summary — it degrades to
+    ``{}`` instead of being passed through (the bug a naive
+    ``manifest.get("marketplace") or {}`` would let slip for truthy values)."""
+    manifest = dict(MANIFEST_MOMENTUM)
+    manifest["marketplace"] = value
+    services = _make_services(_make_registry({"momentum": manifest}))
+
+    result = await list_strategies(services, PRINCIPAL, {})
+
+    assert result["count"] == 1
+    entry = result["strategies"][0]
+    assert entry["marketplace"] == {}
+    # Everything else still projects correctly from the manifest.
+    assert entry["name"] == "momentum"
+    assert entry["version"] == "1.2.0"
+
+
+async def test_list_strategies_marketplace_dict_is_passed_through():
+    """A well-formed dict ``marketplace`` block is surfaced unchanged."""
+    manifest = dict(MANIFEST_MOMENTUM)
+    manifest["marketplace"] = {"category": "momentum", "featured": True}
+    services = _make_services(_make_registry({"momentum": manifest}))
+
+    result = await list_strategies(services, PRINCIPAL, {})
+
+    assert result["strategies"][0]["marketplace"] == {
+        "category": "momentum",
+        "featured": True,
+    }
+
+
+async def test_list_strategies_missing_marketplace_defaults_to_empty_dict():
+    """No ``marketplace`` key at all still resolves to ``{}``."""
+    services = _make_services(_make_registry({"momentum": MANIFEST_MOMENTUM}))
+
+    result = await list_strategies(services, PRINCIPAL, {})
+
+    assert result["strategies"][0]["marketplace"] == {}
+
+
+async def test_list_strategies_skips_entry_when_registry_get_manifest_raises():
+    """If ``get_manifest`` raises for one entry, that entry is skipped and a
+    warning is logged — the rest of the catalogue is still returned.
+
+    This proves the per-strategy loop body is wrapped in try/except, so a
+    single unhealthy plugin cannot poison the whole listing.
+    """
+    from structlog.testing import capture_logs
+
+    def boom(_name: str):
+        raise RuntimeError("registry blew up")
+
+    # Two healthy entries plus one whose manifest lookup raises. Order is
+    # preserved by list_strategies so we can assert exactly which survived.
+    registry = MagicMock(name="PluginRegistry")
+    registry.list_strategies.return_value = [
+        "momentum",
+        "broken",
+        "mean_reversion",
+    ]
+    registry.get_manifest.side_effect = lambda name: (
+        boom(name) if name == "broken" else
+        {"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV}.get(name)
+    )
+    services = _make_services(registry)
+
+    with capture_logs() as cap_logs:
+        result = await list_strategies(services, PRINCIPAL, {})
+
+    # The healthy strategies still come through; the broken one is dropped.
+    assert result["count"] == 2
+    assert {s["name"] for s in result["strategies"]} == {
+        "momentum",
+        "mean_reversion",
+    }
+    # A warning was emitted for the failing entry, naming the strategy and
+    # carrying the exception type/message for triage.
+    warnings = [
+        e for e in cap_logs
+        if e.get("event") == "mcp.strategy_summary_failed"
+        and e.get("log_level") == "warning"
+    ]
+    assert len(warnings) == 1
+    assert warnings[0]["strategy"] == "broken"
+    assert warnings[0]["error"] == "RuntimeError"
+    assert "registry blew up" in warnings[0]["message"]
+
+
 # ── 2. get_strategy_details — happy path ────────────────────────────────── #
 async def test_get_strategy_details_returns_full_metadata():
     registry = _make_registry({"momentum": MANIFEST_MOMENTUM})
@@ -140,6 +236,9 @@ async def test_get_strategy_details_returns_full_metadata():
     assert detail["author"] == "nexus-team"
     assert detail["symbols"] == ["AAPL", "MSFT"]
     assert detail["timeframe"] == "1d"
+    # ``marketplace`` is absent from MANIFEST_MOMENTUM, so it degrades to
+    # an empty dict (the same isinstance-guarded default as list_strategies).
+    assert detail["marketplace"] == {}
     # The per-strategy detail additionally surfaces the code location.
     assert detail["module_path"] == "/strategies/momentum/strategy.py"
 
@@ -162,6 +261,7 @@ async def test_get_strategy_details_handles_minimal_manifest():
     assert detail["symbols"] == []
     assert detail["timeframe"] is None
     assert detail["parameters"] == {}
+    assert detail["marketplace"] == {}
     assert detail["module_path"] == "/strategies/bare/strategy.py"
 
 

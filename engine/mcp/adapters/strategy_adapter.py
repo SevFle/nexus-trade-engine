@@ -13,15 +13,27 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import structlog
+
 from engine.mcp.adapters import EngineServices, to_jsonable
 from engine.mcp.errors import NotFoundError, ValidationError
 
 if TYPE_CHECKING:
     from engine.mcp.auth import AuthPrincipal
 
+logger = structlog.get_logger()
+
 
 def _summarize(name: str, manifest: dict[str, Any]) -> dict[str, Any]:
-    """Project a raw manifest dict into the LLM-facing strategy summary."""
+    """Project a raw manifest dict into the LLM-facing strategy summary.
+
+    ``marketplace`` is guarded with an :func:`isinstance` check rather than a
+    bare ``... or {}`` so that a malformed manifest that stores a non-dict
+    truthy value (e.g. a string or list) under ``marketplace`` degrades to an
+    empty dict instead of leaking an unexpected type into the JSON output.
+    """
+    mp = manifest.get("marketplace")
+    marketplace = mp if isinstance(mp, dict) else {}
     return {
         "name": name,
         "version": manifest.get("version"),
@@ -30,6 +42,7 @@ def _summarize(name: str, manifest: dict[str, Any]) -> dict[str, Any]:
         "symbols": manifest.get("symbols", []),
         "timeframe": manifest.get("timeframe"),
         "parameters": manifest.get("parameters", {}),
+        "marketplace": marketplace,
     }
 
 
@@ -38,12 +51,27 @@ async def list_strategies(
     _principal: AuthPrincipal,
     _arguments: dict[str, Any],
 ) -> dict[str, Any]:
-    """Enumerate every installed strategy as a list of summary dicts."""
+    """Enumerate every installed strategy as a list of summary dicts.
+
+    A single unhealthy plugin (e.g. a registry whose ``get_manifest`` raises,
+    or a manifest that fails to summarise) is logged and skipped rather than
+    aborting the whole listing, so the catalogue stays useful even when one
+    strategy is broken.
+    """
     registry = services.plugin_registry
-    strategies = [
-        _summarize(name, registry.get_manifest(name) or {})
-        for name in registry.list_strategies()
-    ]
+    strategies: list[dict[str, Any]] = []
+    for name in registry.list_strategies():
+        try:
+            manifest = registry.get_manifest(name) or {}
+            strategies.append(_summarize(name, manifest))
+        except Exception as exc:
+            logger.warning(
+                "mcp.strategy_summary_failed",
+                strategy=name,
+                error=type(exc).__name__,
+                message=str(exc),
+            )
+            continue
     return to_jsonable({"count": len(strategies), "strategies": strategies})
 
 
