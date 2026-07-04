@@ -21,15 +21,23 @@ if TYPE_CHECKING:
 
 
 def _summarize(name: str, manifest: dict[str, Any]) -> dict[str, Any]:
-    """Project a raw manifest dict into the LLM-facing strategy summary."""
+    """Project a raw manifest dict into the LLM-facing strategy summary.
+
+    Nullable fields (``version``, ``author``, ``timeframe``) are read with a
+    plain ``.get(field)`` so an explicit ``null`` in the manifest is preserved
+    as ``None`` rather than coerced to a default. Schema-required non-null
+    fields (``description``, ``symbols``, ``parameters``) use ``or`` defaults
+    so an explicit ``null`` (or missing key) normalises to the documented
+    non-null default.
+    """
     return {
         "name": name,
         "version": manifest.get("version"),
-        "description": manifest.get("description", ""),
+        "description": manifest.get("description") or "",
         "author": manifest.get("author"),
-        "symbols": manifest.get("symbols", []),
+        "symbols": manifest.get("symbols") or [],
         "timeframe": manifest.get("timeframe"),
-        "parameters": manifest.get("parameters", {}),
+        "parameters": manifest.get("parameters") or {},
     }
 
 

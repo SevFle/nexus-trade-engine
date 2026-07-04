@@ -165,6 +165,40 @@ async def test_get_strategy_details_handles_minimal_manifest():
     assert detail["module_path"] == "/strategies/bare/strategy.py"
 
 
+async def test_get_strategy_details_normalises_explicit_nulls():
+    """Explicit ``null`` values honour nullability rules in _summarize.
+
+    Nullable fields (version/author/timeframe) stay ``None``; required-non-null
+    fields (description/symbols/parameters) fall back to their documented
+    defaults instead of leaking an explicit ``null`` through to the caller.
+    """
+    registry = _make_registry(
+        {
+            "nullable": {
+                "name": "nullable",
+                "version": None,
+                "description": None,
+                "author": None,
+                "symbols": None,
+                "timeframe": None,
+                "parameters": None,
+            }
+        }
+    )
+    services = _make_services(registry)
+
+    detail = await get_strategy_details(services, PRINCIPAL, {"strategy_name": "nullable"})
+
+    # Nullable fields preserve the explicit null.
+    assert detail["version"] is None
+    assert detail["author"] is None
+    assert detail["timeframe"] is None
+    # Required-non-null fields normalise to their defaults.
+    assert detail["description"] == ""
+    assert detail["symbols"] == []
+    assert detail["parameters"] == {}
+
+
 # ── 3. get_strategy_details — validation & not-found ────────────────────── #
 @pytest.mark.parametrize(
     "name",
@@ -279,13 +313,22 @@ def test_for_testing_builds_registry_from_strategies_dir(tmp_path: Path):
     """
     import yaml
 
-    strat_dir = tmp_path / "strategies" / "alpha"
+    from engine.plugins.registry import PluginRegistry
+
+    strategies_root = tmp_path / "strategies"
+    strat_dir = strategies_root / "alpha"
     strat_dir.mkdir(parents=True)
     (strat_dir / "manifest.yaml").write_text(yaml.dump({"name": "alpha", "version": "9.9"}))
     (strat_dir / "strategy.py").write_text("class Strategy: pass\n")
 
-    services = EngineServices.for_testing(strategies_dir=tmp_path / "strategies")
+    services = EngineServices.for_testing(strategies_dir=strategies_root)
 
+    # plugin_registry is a real PluginRegistry instance (not a fake).
+    assert isinstance(services.plugin_registry, PluginRegistry)
+    # strategies_dir is echoed back verbatim so the resources layer (which
+    # reads it directly) sees the same directory the registry scanned.
+    assert services.strategies_dir == strategies_root
+    # The strategy is discoverable through the registry.
     assert services.plugin_registry.list_strategies() == ["alpha"]
     assert services.plugin_registry.get_manifest("alpha") == {"name": "alpha", "version": "9.9"}
     assert services.plugin_registry.get_module_path("alpha").endswith("alpha/strategy.py")
