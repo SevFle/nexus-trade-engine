@@ -200,6 +200,20 @@ All routes require legal acceptance.
 
 `/api/v1/strategies/*`. Source: [`routes/strategies.py`](../engine/api/routes/strategies.py).
 
+> **Resolved — previously broken at runtime.** An earlier revision of
+> these routes failed with `AttributeError` because `create_app()`'s
+> lifespan did not attach `app.state.plugin_registry` and
+> `PluginRegistry` lacked the `list_all` / `get` / `unload` / `reload`
+> methods the handlers call. Both are fixed now: the lifespan sets
+> `app.state.plugin_registry = PluginRegistry()` and the registry
+> exposes the full management surface (including a `StrategyEntry`
+> value object with `.manifest`, `.is_loaded`, `.instantiate()`).
+> Regression coverage lives in
+> [`tests/test_strategies_app_integration.py`](../tests/test_strategies_app_integration.py);
+> see [`known-limitations.md`](known-limitations.md) for the resolved
+> note. The MCP `list_strategies` tool was never affected — it reads
+> `discover_strategies()` directly.
+
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/v1/strategies/` | Lists installed strategies via `app.state.plugin_registry.list_all()`. |

@@ -729,3 +729,159 @@ class TestMetadataDeepCopyIsolation:
         resolved = orch.aggregate_signals()[0]
         assert resolved.strategy_id == "orchestrator"
         assert resolved.metadata["orchestrator_sources"] == ["x"]
+
+
+# --------------------------------------------------------------------- #
+# Duplicate-signal dedup: NET_POSITION-only, last-wins, named event
+# --------------------------------------------------------------------- #
+
+
+class TestDuplicateSignalDedup:
+    """The pre-resolution dedup of exact ``(strategy_id, symbol, side)``
+    duplicates fires ONLY in NET_POSITION mode, logs
+    ``orchestrator.duplicate_signal_overwritten``, and is last-wins."""
+
+    def test_priority_mode_preserves_both_signals_from_same_strategy(self):
+        # REQUIRED behaviour: PRIORITY mode must NOT dedup. Two exact
+        # duplicates (same strategy_id, symbol, side) from one strategy
+        # both survive to resolution, and no overwrite log is emitted.
+        # ``orchestrator_sources`` records the strategy twice, proving
+        # both signals reached the resolver (had dedup fired, it would
+        # appear exactly once).
+        with capture_logs() as logs:
+            orch = StrategyOrchestrator(
+                [],
+                _FakeCostModel(),
+                conflict_resolution=ConflictResolution.PRIORITY,
+            )
+            out = orch.aggregate_signals(
+                [
+                    _sig("AAPL", Side.BUY, "s1", weight=0.2),
+                    _sig("AAPL", Side.BUY, "s1", weight=0.8),
+                ]
+            )
+        assert len(out) == 1
+        # Both BUY votes survived → the strategy id appears twice in the
+        # contributing-voters audit list.
+        assert out[0].metadata["orchestrator_sources"] == ["s1", "s1"]
+        # No dedup ran → no overwrite log.
+        assert not any(e["event"] == "orchestrator.duplicate_signal_overwritten" for e in logs)
+
+    def test_priority_mode_opposing_sides_from_same_strategy_preserved(self):
+        # PRIORITY mode: a strategy voting both BUY and SELL on the same
+        # symbol is a top-priority stalemate with itself → HOLD. Neither
+        # signal is dropped (sides differ, so they're never duplicates
+        # anyway), and no overwrite log fires.
+        with capture_logs() as logs:
+            orch = StrategyOrchestrator(
+                [],
+                _FakeCostModel(),
+                conflict_resolution=ConflictResolution.PRIORITY,
+            )
+            out = orch.aggregate_signals(
+                [_sig("AAPL", Side.BUY, "s1"), _sig("AAPL", Side.SELL, "s1")]
+            )
+        assert out[0].side == Side.HOLD
+        assert not any(e["event"] == "orchestrator.duplicate_signal_overwritten" for e in logs)
+
+    def test_net_position_dedups_exact_duplicate_and_logs_overwrite(self):
+        # NET_POSITION mode: an exact (strategy_id, symbol, side)
+        # duplicate is collapsed (the later one wins) and a warning is
+        # logged under the renamed event with the identifying fields —
+        # so the strategy can't double-count its own vote.
+        with capture_logs() as logs:
+            orch = StrategyOrchestrator(
+                [],
+                _FakeCostModel(),
+                conflict_resolution=ConflictResolution.NET_POSITION,
+            )
+            out = orch.aggregate_signals(
+                [
+                    _sig("AAPL", Side.BUY, "s1"),
+                    _sig("AAPL", Side.BUY, "s1"),  # exact duplicate
+                    _sig("MSFT", Side.SELL, "s1"),
+                ]
+            )
+        # The duplicate was removed: two distinct (symbol, side) survive.
+        assert {(s.symbol, s.side) for s in out} == {
+            ("AAPL", Side.BUY),
+            ("MSFT", Side.SELL),
+        }
+        assert any(
+            e["event"] == "orchestrator.duplicate_signal_overwritten"
+            and e["strategy_id"] == "s1"
+            and e["symbol"] == "AAPL"
+            and e["side"] == Side.BUY
+            for e in logs
+        )
+
+    def test_net_position_last_signal_wins_with_different_weights(self):
+        # The dict-keyed dedup is last-wins: when two signals share the
+        # same (strategy_id, symbol, side) but differ in weight, the
+        # *second* one overwrites the first. A strategy re-emitting with
+        # an updated weight therefore has the fresh value win, not the
+        # stale earlier emission. (First-wins would resolve to a BUY at
+        # weight 0.2 instead of 0.8.)
+        with capture_logs() as logs:
+            orch = StrategyOrchestrator(
+                [],
+                _FakeCostModel(),
+                conflict_resolution=ConflictResolution.NET_POSITION,
+            )
+            out = orch.aggregate_signals(
+                [
+                    _sig("AAPL", Side.BUY, "s1", weight=0.2),  # stale
+                    _sig("AAPL", Side.BUY, "s1", weight=0.8),  # re-emit wins
+                ]
+            )
+        # Exactly one AAPL/BUY survives; its weight is the *second*
+        # signal's 0.8 (net = 0.8 → BUY at 0.8).
+        assert len(out) == 1
+        assert out[0].side == Side.BUY
+        assert out[0].weight == pytest.approx(0.8)
+        assert out[0].metadata["orchestrator_sources"] == ["s1"]
+        assert any(
+            e["event"] == "orchestrator.duplicate_signal_overwritten" and e["strategy_id"] == "s1"
+            for e in logs
+        )
+
+    def test_net_position_duplicate_does_not_double_count(self):
+        # Same BUY emitted twice by one strategy must count once, not
+        # twice: after dedup the net is 0.4 (BUY) - 0.4 (SELL) == 0 → HOLD.
+        # Without dedup the duplicate would push net to +0.4 (still BUY
+        # here), masking the bug; the SELL counterweight makes the
+        # double-count observable as a phantom BUY.
+        with capture_logs() as logs:
+            orch = StrategyOrchestrator(
+                [],
+                _FakeCostModel(),
+                conflict_resolution=ConflictResolution.NET_POSITION,
+            )
+            out = orch.aggregate_signals(
+                [
+                    _sig("AAPL", Side.BUY, "s1", weight=0.4),
+                    _sig("AAPL", Side.BUY, "s1", weight=0.4),  # duplicate
+                    _sig("AAPL", Side.SELL, "s2", weight=0.4),
+                ]
+            )
+        assert any(e["event"] == "orchestrator.duplicate_signal_overwritten" for e in logs)
+        # Net after dedup: 0.4 (BUY) - 0.4 (SELL) == 0 → HOLD.
+        assert out[0].side == Side.HOLD
+        assert out[0].weight == pytest.approx(0.0)
+
+    def test_net_position_opposing_sides_from_same_strategy_not_dropped(self):
+        # A strategy voting both BUY and SELL on the same symbol is NOT a
+        # duplicate (sides differ) — both signals survive to resolution
+        # and no overwrite log fires.
+        with capture_logs() as logs:
+            orch = StrategyOrchestrator(
+                [],
+                _FakeCostModel(),
+                conflict_resolution=ConflictResolution.NET_POSITION,
+            )
+            out = orch.aggregate_signals(
+                [_sig("AAPL", Side.BUY, "s1"), _sig("AAPL", Side.SELL, "s1")]
+            )
+        assert not any(e["event"] == "orchestrator.duplicate_signal_overwritten" for e in logs)
+        # Both survive → net zero → HOLD.
+        assert out[0].side == Side.HOLD

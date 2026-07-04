@@ -2241,6 +2241,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#resolved-apiv1strategies-management-routes-registry-mismatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resolved — /api/v1/strategies/* management routes (registry mismatch)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#p1-three-execution-modes-roadmap-partial" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2491,6 +2502,17 @@
     <span class="md-ellipsis">
       
         P0 — consent_records &amp; deletion_schedules have models but no migration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resolved-apiv1strategies-management-routes-registry-mismatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resolved — /api/v1/strategies/* management routes (registry mismatch)
       
     </span>
   </a>
@@ -2753,6 +2775,33 @@ adds only the missing tables):</p>
 (<code>ix_consent_user_purpose_time</code>, <code>ix_deletion_schedule_status_due</code>),
 then land the CI job from the P2 <a href="#no-alembic-check">"No Alembic check in CI"</a>
 entry so a model-without-migration can't recur silently.</p>
+<hr />
+<h2 id="resolved-apiv1strategies-management-routes-registry-mismatch">Resolved — <code>/api/v1/strategies/*</code> management routes (registry mismatch)<a class="headerlink" href="#resolved-apiv1strategies-management-routes-registry-mismatch" title="Permanent link">&para;</a></h2>
+<p><strong>Resolved by</strong>: #1147 (consolidated discovery + the <code>list_all</code> /
+<code>get</code> / <code>unload</code> / <code>reload</code> management surface and the <code>StrategyEntry</code>
+value object on <code>PluginRegistry</code>) plus the <code>create_app()</code> lifespan
+change that sets <code>app.state.plugin_registry = PluginRegistry()</code>.</p>
+<p>These routes previously failed through the production entry point
+(<code>uvicorn engine.app:create_app --factory</code>) for two coupled reasons:
+the lifespan never populated <code>app.state.plugin_registry</code>, and
+<code>PluginRegistry</code> lacked the <code>list_all</code> / <code>get</code> / <code>unload</code> / <code>reload</code>
+methods (and the <code>StrategyEntry</code> value object with <code>.manifest</code> /
+<code>.is_loaded</code> / <code>.instantiate()</code>) the handlers call. The MCP
+<code>list_strategies</code> tool was never affected — it reads the module-level
+<code>discover_strategies()</code> directly, which is why the same source-of-truth
+class served MCP correctly while the REST surface was broken.</p>
+<p>Kept here as a historical note rather than deleted so the regression
+class stays discoverable: code that looks fine because no integration
+test exercises the real <code>create_app()</code> assembly path (the same drift
+class as the open
+<a href="#privacy-tables-no-migration"><code>consent_records</code> / <code>deletion_schedules</code></a>
+entry). Regression coverage now lives in
+<a href="../tests/test_strategies_app_integration.py"><code>tests/test_strategies_app_integration.py</code></a>,
+which drives every management route through the real lifespan with a
+populated <code>app.state</code>, and
+<a href="../tests/test_strategies_status_docs.py"><code>tests/test_strategies_status_docs.py</code></a>
+guards against these docs re-advertising the bug as a current
+limitation.</p>
 <hr />
 <h2 id="p1-three-execution-modes-roadmap-partial">P1 — Three Execution Modes (Roadmap: partial)<a class="headerlink" href="#p1-three-execution-modes-roadmap-partial" title="Permanent link">&para;</a></h2>
 <p>Live and paper execution land in <code>engine/core/execution/</code>, but the

@@ -44,6 +44,7 @@ from engine.observability.middleware import CorrelationIdMiddleware
 from engine.observability.prometheus import PrometheusBackend
 from engine.observability.sentry import close_sentry, setup_sentry
 from engine.observability.tracing import setup_tracing
+from engine.plugins.registry import PluginRegistry
 from engine.reference.seed import seed_index
 
 if TYPE_CHECKING:
@@ -149,6 +150,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.valkey = Valkey.from_url(settings.valkey_url)
     app.state.auth_registry = _build_auth_registry()
     logger.info("auth.providers_loaded", providers=list(app.state.auth_registry.providers.keys()))
+    # Build the strategy plugin registry up-front so every process has a
+    # single shared handle on ``app.state``. The management routes
+    # (``/api/v1/strategies``) read ``app.state.plugin_registry`` directly;
+    # constructing it here avoids an ``AttributeError`` on the first request
+    # after startup and keeps discovery off the hot path.
+    app.state.plugin_registry = PluginRegistry()
+    logger.info(
+        "strategies.discovered",
+        count=len(app.state.plugin_registry.list_strategies()),
+    )
     _configure_data_providers()
     _seed_reference_index()
     try:

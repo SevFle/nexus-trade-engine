@@ -214,12 +214,53 @@ class StrategyOrchestrator:
 
     def aggregate_signals(self, signals: Iterable[Signal] | None = None) -> list[Signal]:
         """Collapse ``signals`` to one decision per symbol. Defaults to the
-        most recent :meth:`run_all` output."""
+        most recent :meth:`run_all` output.
+
+        Conflict-mode-dependent pre-resolution step:
+
+        * ``NET_POSITION`` collapses exact duplicates — two signals sharing
+          the same ``(strategy_id, symbol, side)`` — keeping the *last*
+          emission (later overwrites earlier) and logging a warning with
+          the identifying fields, so a strategy emitting repeats can't
+          double-count its own vote. Last-wins means a re-emitted signal
+          carrying an updated ``weight``/``metadata`` supersedes the stale
+          earlier emission.
+        * ``PRIORITY`` skips this dedup entirely: both signals survive to
+          resolution. Identical votes from a single strategy can't create
+          a stalemate or change the winner, so dedup is moot, and
+          preserving the raw stream keeps the audit trail honest.
+        """
         source = list(signals) if signals is not None else list(self._last_signals)
+        if self._mode is ConflictResolution.NET_POSITION:
+            source = self._dedup_last_wins(source)
         per_symbol: dict[str, list[Signal]] = defaultdict(list)
         for sig in source:
             per_symbol[sig.symbol].append(sig)
         return [self._resolve(group) for group in per_symbol.values()]
+
+    def _dedup_last_wins(self, signals: list[Signal]) -> list[Signal]:
+        """Collapse exact ``(strategy_id, symbol, side)`` duplicates to a
+        single surviving signal, keeping the *last* emission (later
+        overwrites earlier) while preserving first-seen insertion order so
+        the surviving list is deterministic. Each overwrite is logged as
+        ``orchestrator.duplicate_signal_overwritten`` so the audit trail
+        records what was superseded."""
+        # Dict keyed by (strategy_id, symbol, side): a later signal with
+        # the same key overwrites the earlier one (last-wins), while
+        # insertion order is preserved (a re-assigned key keeps its
+        # first-seen position), so the surviving list is deterministic.
+        deduped: dict[tuple[str, str, Side], Signal] = {}
+        for sig in signals:
+            key = (sig.strategy_id, sig.symbol, sig.side)
+            if key in deduped:
+                logger.warning(
+                    "orchestrator.duplicate_signal_overwritten",
+                    strategy_id=sig.strategy_id,
+                    symbol=sig.symbol,
+                    side=sig.side,
+                )
+            deduped[key] = sig
+        return list(deduped.values())
 
     def _resolve(self, group: list[Signal]) -> Signal:
         if self._mode is ConflictResolution.NET_POSITION:

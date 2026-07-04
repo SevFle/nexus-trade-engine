@@ -3356,6 +3356,21 @@ All routes require legal acceptance.</p>
 </table>
 <h2 id="strategies">Strategies<a class="headerlink" href="#strategies" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/strategies/*</code>. Source: <a href="../engine/api/routes/strategies.py"><code>routes/strategies.py</code></a>.</p>
+<blockquote>
+<p><strong>Resolved — previously broken at runtime.</strong> An earlier revision of
+these routes failed with <code>AttributeError</code> because <code>create_app()</code>'s
+lifespan did not attach <code>app.state.plugin_registry</code> and
+<code>PluginRegistry</code> lacked the <code>list_all</code> / <code>get</code> / <code>unload</code> / <code>reload</code>
+methods the handlers call. Both are fixed now: the lifespan sets
+<code>app.state.plugin_registry = PluginRegistry()</code> and the registry
+exposes the full management surface (including a <code>StrategyEntry</code>
+value object with <code>.manifest</code>, <code>.is_loaded</code>, <code>.instantiate()</code>).
+Regression coverage lives in
+<a href="../tests/test_strategies_app_integration.py"><code>tests/test_strategies_app_integration.py</code></a>;
+see <a href="../known-limitations/"><code>known-limitations.md</code></a> for the resolved
+note. The MCP <code>list_strategies</code> tool was never affected — it reads
+<code>discover_strategies()</code> directly.</p>
+</blockquote>
 <table>
 <thead>
 <tr>

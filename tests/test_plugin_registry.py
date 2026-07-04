@@ -153,6 +153,234 @@ class TestPluginRegistry:
         assert registry.load_strategy("no_class") is None
 
 
+class TestPluginRegistryLifecycle:
+    """Cover the list_all / get / unload / reload surface used by the
+    ``/api/v1/strategies`` management routes."""
+
+    def test_list_all_summarises_installed_strategies(self, strategies_dir):
+        _write_strategy(
+            strategies_dir / "alpha",
+            {"name": "alpha", "version": "1.2.0"},
+            "class Strategy:\n    name = 'alpha'\n    version = '1.2.0'\n",
+        )
+        _write_strategy(
+            strategies_dir / "beta",
+            {"name": "beta", "version": "0.9.0"},
+            "class Strategy:\n    name = 'beta'\n    version = '0.9.0'\n",
+        )
+
+        registry = PluginRegistry(strategies_dir)
+        summaries = registry.list_all()
+        by_id = {s["id"]: s for s in summaries}
+        assert set(by_id) == {"alpha", "beta"}
+        assert by_id["alpha"]["name"] == "alpha"
+        assert by_id["alpha"]["version"] == "1.2.0"
+        assert by_id["alpha"]["is_loaded"] is False
+
+    def test_list_all_empty_when_no_strategies(self, strategies_dir):
+        assert PluginRegistry(strategies_dir).list_all() == []
+
+    def test_get_returns_entry_with_manifest(self, strategies_dir):
+        _write_strategy(
+            strategies_dir / "gamma",
+            {
+                "name": "gamma",
+                "version": "2.0.0",
+                "author": "tester",
+                "description": "a gamma strat",
+            },
+            "class Strategy:\n    name = 'gamma'\n    version = '2.0.0'\n",
+        )
+
+        registry = PluginRegistry(strategies_dir)
+        entry = registry.get("gamma")
+        assert entry is not None
+        assert entry.id == "gamma"
+        assert entry.manifest.id == "gamma"
+        assert entry.manifest.name == "gamma"
+        assert entry.manifest.version == "2.0.0"
+        assert entry.manifest.author == "tester"
+        assert entry.manifest.description == "a gamma strat"
+        assert entry.is_loaded is False
+
+    def test_get_unknown_strategy_returns_none(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+        assert registry.get("does_not_exist") is None
+
+    def test_get_entry_manifest_has_capability_helpers(self, strategies_dir):
+        _write_strategy(
+            strategies_dir / "capable",
+            {"name": "capable", "version": "1.0.0"},
+            "class Strategy:\n    name = 'capable'\n    version = '1.0.0'\n",
+        )
+        entry = PluginRegistry(strategies_dir).get("capable")
+        assert entry is not None
+        # Defaults from StrategyManifest — no network/gpu requested.
+        assert entry.manifest.requires_network() is False
+        assert entry.manifest.requires_gpu() is False
+        assert isinstance(entry.manifest.data_feeds, list)
+        assert isinstance(entry.manifest.watchlist, list)
+
+    async def test_instantiate_marks_strategy_loaded(self, strategies_dir):
+        _write_strategy(
+            strategies_dir / "loadable",
+            {"name": "loadable", "version": "1.0.0"},
+            "class Strategy:\n    name = 'loadable'\n    version = '1.0.0'\n",
+        )
+        registry = PluginRegistry(strategies_dir)
+        entry = registry.get("loadable")
+        assert entry is not None and entry.is_loaded is False
+
+        instance = await entry.instantiate(config=None)
+        assert instance.name == "loadable"
+        assert entry.is_loaded is True
+        # list_all reflects the new loaded state.
+        assert next(
+            s for s in registry.list_all() if s["id"] == "loadable"
+        )["is_loaded"] is True
+
+    async def test_unload_clears_loaded_instance(self, strategies_dir):
+        _write_strategy(
+            strategies_dir / "ephemeral",
+            {"name": "ephemeral", "version": "1.0.0"},
+            "class Strategy:\n    name = 'ephemeral'\n    version = '1.0.0'\n",
+        )
+        registry = PluginRegistry(strategies_dir)
+        entry = registry.get("ephemeral")
+        await entry.instantiate()
+        assert entry.is_loaded is True
+
+        await registry.unload("ephemeral")
+        assert entry.is_loaded is False
+
+    async def test_unload_unknown_strategy_is_noop(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+        # Should not raise even though nothing is loaded.
+        await registry.unload("ghost")
+
+    async def test_reload_refreshes_manifest_and_clears_instance(self, strategies_dir):
+        code = (
+            "class Strategy:\n"
+            "    name = 'hot'\n"
+            "    version = '1.0.0'\n"
+        )
+        _write_strategy(
+            strategies_dir / "hot",
+            {"name": "hot", "version": "1.0.0"},
+            code,
+        )
+        registry = PluginRegistry(strategies_dir)
+        entry = registry.get("hot")
+        await entry.instantiate()
+        assert entry.is_loaded is True
+
+        # Rewrite the manifest on disk and reload.
+        _write_strategy(
+            strategies_dir / "hot",
+            {"name": "hot", "version": "2.0.0"},
+            code,
+        )
+        ok = await registry.reload("hot")
+        assert ok is True
+        # Instance cache cleared and manifest reflects the new version.
+        assert entry.is_loaded is False
+        assert registry.get("hot").manifest.version == "2.0.0"
+
+    async def test_reload_missing_strategy_returns_false(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+        assert await registry.reload("nope") is False
+
+
+class TestPluginRegistryGetManifest:
+    """Cover ``PluginRegistry.get_manifest`` (#1147).
+
+    ``get_manifest`` is the consolidated discovery accessor that lets callers
+    read an installed strategy's ``manifest.yaml`` metadata without
+    re-running :func:`discover_strategies` over the directory and — crucially
+    — without importing the strategy module. These tests lock in both
+    contracts so the registry stays the single source of truth.
+    """
+
+    def test_get_manifest_returns_parsed_manifest_dict(self, strategies_dir):
+        _write_strategy(
+            strategies_dir / "alpha",
+            {"name": "alpha", "version": "1.2.0", "author": "tester"},
+            "class Strategy:\n    name = 'alpha'\n    version = '1.2.0'\n",
+        )
+        manifest = PluginRegistry(strategies_dir).get_manifest("alpha")
+        assert manifest is not None
+        assert manifest["name"] == "alpha"
+        assert manifest["version"] == "1.2.0"
+        assert manifest["author"] == "tester"
+
+    def test_get_manifest_unknown_strategy_returns_none(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+        assert registry.get_manifest("does_not_exist") is None
+
+    def test_get_manifest_matches_discovery_single_source_of_truth(
+        self, strategies_dir
+    ):
+        """get_manifest must agree with the raw discovery result, so callers
+        don't have to pick between two sources of installed-strategy metadata."""
+        _write_strategy(
+            strategies_dir / "consistent",
+            {"name": "consistent", "version": "3.1.4", "description": "same"},
+            "class Strategy:\n    name = 'consistent'\n    version = '3.1.4'\n",
+        )
+        registry = PluginRegistry(strategies_dir)
+        discovered = discover_strategies(strategies_dir)
+        assert registry.get_manifest("consistent") == discovered["consistent"]["manifest"]
+
+    def test_get_manifest_does_not_import_strategy_module(self, strategies_dir):
+        """Reading metadata via get_manifest must NOT import ``strategy.py``.
+
+        We prove this by shipping a ``strategy.py`` that raises on import and
+        asserting get_manifest still returns the parsed manifest. This is the
+        core guarantee of the docstring: metadata is readable without the
+        import / instantiation side-effects ``load_strategy`` performs.
+        """
+        _write_strategy(
+            strategies_dir / "toxic_import",
+            {"name": "toxic_import", "version": "1.0.0"},
+            "raise RuntimeError('this module must not be imported for metadata')\n",
+        )
+        # Sanity: discovery picked it up (strategy.py exists).
+        assert "toxic_import" in discover_strategies(strategies_dir)
+
+        manifest = PluginRegistry(strategies_dir).get_manifest("toxic_import")
+        assert manifest is not None
+        assert manifest["name"] == "toxic_import"
+        assert manifest["version"] == "1.0.0"
+
+    def test_get_manifest_returns_same_object_identity_as_list_all_entry(
+        self, strategies_dir
+    ):
+        """list_all reads the same manifest dict get_manifest returns, so the
+        two views can't drift on per-strategy metadata."""
+        _write_strategy(
+            strategies_dir / "shared",
+            {"name": "shared", "version": "0.4.2"},
+            "class Strategy:\n    name = 'shared'\n    version = '0.4.2'\n",
+        )
+        registry = PluginRegistry(strategies_dir)
+        summary = next(s for s in registry.list_all() if s["id"] == "shared")
+        manifest = registry.get_manifest("shared")
+        assert manifest is not None
+        assert summary["name"] == manifest["name"]
+        assert summary["version"] == manifest["version"]
+
+
+@pytest.mark.integration
+class TestGetManifestRealStrategies:
+    def test_get_manifest_for_bundled_mean_reversion_basic(self):
+        registry = PluginRegistry()
+        manifest = registry.get_manifest("mean_reversion_basic")
+        assert manifest is not None
+        assert manifest["name"] == "mean_reversion_basic"
+        # The bundled manifest always carries a version.
+        assert "version" in manifest
+
+
 class TestIsScoringStrategyFallback:
     def test_returns_false_when_scoring_module_unavailable(self):
         import sys

@@ -91,6 +91,38 @@ entry so a model-without-migration can't recur silently.
 
 ---
 
+## Resolved — `/api/v1/strategies/*` management routes (registry mismatch)
+
+**Resolved by**: #1147 (consolidated discovery + the `list_all` /
+`get` / `unload` / `reload` management surface and the `StrategyEntry`
+value object on `PluginRegistry`) plus the `create_app()` lifespan
+change that sets `app.state.plugin_registry = PluginRegistry()`.
+
+These routes previously failed through the production entry point
+(`uvicorn engine.app:create_app --factory`) for two coupled reasons:
+the lifespan never populated `app.state.plugin_registry`, and
+`PluginRegistry` lacked the `list_all` / `get` / `unload` / `reload`
+methods (and the `StrategyEntry` value object with `.manifest` /
+`.is_loaded` / `.instantiate()`) the handlers call. The MCP
+`list_strategies` tool was never affected — it reads the module-level
+`discover_strategies()` directly, which is why the same source-of-truth
+class served MCP correctly while the REST surface was broken.
+
+Kept here as a historical note rather than deleted so the regression
+class stays discoverable: code that looks fine because no integration
+test exercises the real `create_app()` assembly path (the same drift
+class as the open
+[`consent_records` / `deletion_schedules`](#privacy-tables-no-migration)
+entry). Regression coverage now lives in
+[`tests/test_strategies_app_integration.py`](../tests/test_strategies_app_integration.py),
+which drives every management route through the real lifespan with a
+populated `app.state`, and
+[`tests/test_strategies_status_docs.py`](../tests/test_strategies_status_docs.py)
+guards against these docs re-advertising the bug as a current
+limitation.
+
+---
+
 ## P1 — Three Execution Modes (Roadmap: partial)
 
 Live and paper execution land in `engine/core/execution/`, but the
