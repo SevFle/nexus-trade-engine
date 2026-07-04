@@ -57,6 +57,11 @@ async def list_strategies(
     or a manifest that fails to summarise) is logged and skipped rather than
     aborting the whole listing, so the catalogue stays useful even when one
     strategy is broken.
+
+    Only the expected, recoverable failure types are caught so that genuine
+    programmer errors (``AttributeError`` from a broken ``_summarize`` edit,
+    ``TypeError`` from a non-dict manifest, ``KeyboardInterrupt``, …) surface
+    loudly instead of being silently swallowed and dropped from the catalogue.
     """
     registry = services.plugin_registry
     strategies: list[dict[str, Any]] = []
@@ -64,7 +69,7 @@ async def list_strategies(
         try:
             manifest = registry.get_manifest(name) or {}
             strategies.append(_summarize(name, manifest))
-        except Exception as exc:
+        except (LookupError, ValueError, RuntimeError) as exc:
             logger.warning(
                 "mcp.strategy_summary_failed",
                 strategy=name,

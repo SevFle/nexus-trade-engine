@@ -218,6 +218,34 @@ async def test_list_strategies_skips_entry_when_registry_get_manifest_raises():
     assert "registry blew up" in warnings[0]["message"]
 
 
+async def test_list_strategies_propagates_unexpected_error_types():
+    """The per-entry ``except`` is narrowed to recoverable failure types
+    (``LookupError`` / ``ValueError`` / ``RuntimeError``) so genuine
+    programmer errors surface instead of being silently dropped.
+
+    An ``AttributeError`` raised by ``get_manifest`` is *not* in that allow
+    list, so it must escape the listing loop rather than be logged-and-skipped.
+    """
+    from structlog.testing import capture_logs
+
+    def boom(_name: str):
+        raise AttributeError("registry returned a non-dict, this is a bug")
+
+    registry = MagicMock(name="PluginRegistry")
+    registry.list_strategies.return_value = ["momentum"]
+    registry.get_manifest.side_effect = boom
+    services = _make_services(registry)
+
+    with capture_logs() as cap_logs, pytest.raises(AttributeError):
+        await list_strategies(services, PRINCIPAL, {})
+
+    # The unexpected error was NOT turned into a silent skip log entry.
+    assert not [
+        e for e in cap_logs
+        if e.get("event") == "mcp.strategy_summary_failed"
+    ]
+
+
 # ── 2. get_strategy_details — happy path ────────────────────────────────── #
 async def test_get_strategy_details_returns_full_metadata():
     registry = _make_registry({"momentum": MANIFEST_MOMENTUM})
@@ -263,6 +291,55 @@ async def test_get_strategy_details_handles_minimal_manifest():
     assert detail["parameters"] == {}
     assert detail["marketplace"] == {}
     assert detail["module_path"] == "/strategies/bare/strategy.py"
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["not-a-dict", ["a", "b"], 42],
+    ids=["string", "list", "int"],
+)
+async def test_get_strategy_details_marketplace_non_dict_degrades_to_empty_dict(value):
+    """``get_strategy_details`` shares the same isinstance-guarded ``marketplace``
+    projection as :func:`list_strategies`: a malformed manifest storing a
+    non-dict (string / list / int) under ``marketplace`` degrades to ``{}``
+    rather than leaking the unexpected type into the JSON detail payload.
+
+    This guards the route against a regression where ``get_strategy_details``
+    bypasses ``_summarize`` and falls back to the naive
+    ``manifest.get("marketplace", {})`` pattern, which would pass truthy
+    non-dicts straight through.
+    """
+    manifest = dict(MANIFEST_MOMENTUM)
+    manifest["marketplace"] = value
+    registry = _make_registry({"momentum": manifest})
+    services = _make_services(registry)
+
+    detail = await get_strategy_details(
+        services, PRINCIPAL, {"strategy_name": "momentum"}
+    )
+
+    assert detail["marketplace"] == {}
+    # Everything else still projects correctly from the manifest.
+    assert detail["name"] == "momentum"
+    assert detail["version"] == "1.2.0"
+    assert detail["module_path"] == "/strategies/momentum/strategy.py"
+
+
+async def test_get_strategy_details_marketplace_dict_is_passed_through():
+    """A well-formed dict ``marketplace`` block surfaces unchanged in the detail."""
+    manifest = dict(MANIFEST_MOMENTUM)
+    manifest["marketplace"] = {"category": "momentum", "featured": True}
+    registry = _make_registry({"momentum": manifest})
+    services = _make_services(registry)
+
+    detail = await get_strategy_details(
+        services, PRINCIPAL, {"strategy_name": "momentum"}
+    )
+
+    assert detail["marketplace"] == {
+        "category": "momentum",
+        "featured": True,
+    }
 
 
 # ── 3. get_strategy_details — validation & not-found ────────────────────── #
