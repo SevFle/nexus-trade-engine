@@ -64,7 +64,14 @@ async def list_strategies(
         try:
             manifest = registry.get_manifest(name) or {}
             strategies.append(_summarize(name, manifest))
-        except Exception as exc:
+        except (AttributeError, TypeError, ValueError, KeyError) as exc:
+            # Narrowed from a bare ``except Exception``: only the expected
+            # manifest-processing failures are tolerated and skipped so the
+            # rest of the catalogue stays useful. An ``AttributeError``/
+            # ``TypeError`` arises when a manifest is not a dict (``.get`` on a
+            # string/list), ``ValueError``/``KeyError`` cover malformed values.
+            # Unexpected errors (e.g. ``RuntimeError``) deliberately propagate
+            # rather than being silently swallowed — they signal real bugs.
             logger.warning(
                 "mcp.strategy_summary_failed",
                 strategy=name,

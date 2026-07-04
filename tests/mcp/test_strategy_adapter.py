@@ -66,8 +66,8 @@ def _make_registry(strategies: dict[str, dict[str, Any]]) -> MagicMock:
     spec = MagicMock(name="PluginRegistry")
     spec.list_strategies.return_value = list(strategies)
     spec.get_manifest.side_effect = strategies.get
-    spec.get_module_path.side_effect = (
-        lambda name: f"/strategies/{name}/strategy.py" if name in strategies else None
+    spec.get_module_path.side_effect = lambda name: (
+        f"/strategies/{name}/strategy.py" if name in strategies else None
     )
     return spec
 
@@ -81,9 +81,7 @@ def _make_services(registry: MagicMock | None = None) -> EngineServices:
 
 # ── 1. list_strategies ──────────────────────────────────────────────────── #
 async def test_list_strategies_summarises_each_registered_strategy():
-    registry = _make_registry(
-        {"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV}
-    )
+    registry = _make_registry({"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV})
     services = _make_services(registry)
 
     result = await list_strategies(services, PRINCIPAL, {})
@@ -170,17 +168,20 @@ async def test_list_strategies_missing_marketplace_defaults_to_empty_dict():
     assert result["strategies"][0]["marketplace"] == {}
 
 
-async def test_list_strategies_skips_entry_when_registry_get_manifest_raises():
-    """If ``get_manifest`` raises for one entry, that entry is skipped and a
-    warning is logged — the rest of the catalogue is still returned.
+async def test_list_strategies_skips_entry_when_manifest_processing_fails():
+    """If manifest *processing* raises an expected failure type for one
+    entry, that entry is skipped and a warning is logged — the rest of the
+    catalogue is still returned.
 
-    This proves the per-strategy loop body is wrapped in try/except, so a
-    single unhealthy plugin cannot poison the whole listing.
+    The except clause is narrowed to data-processing failures
+    (``AttributeError``/``TypeError``/``ValueError``/``KeyError``), so this
+    uses one of those (``ValueError``) to prove a single unhealthy plugin
+    cannot poison the whole listing.
     """
     from structlog.testing import capture_logs
 
     def boom(_name: str):
-        raise RuntimeError("registry blew up")
+        raise ValueError("manifest is malformed")
 
     # Two healthy entries plus one whose manifest lookup raises. Order is
     # preserved by list_strategies so we can assert exactly which survived.
@@ -191,8 +192,9 @@ async def test_list_strategies_skips_entry_when_registry_get_manifest_raises():
         "mean_reversion",
     ]
     registry.get_manifest.side_effect = lambda name: (
-        boom(name) if name == "broken" else
-        {"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV}.get(name)
+        boom(name)
+        if name == "broken"
+        else {"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV}.get(name)
     )
     services = _make_services(registry)
 
@@ -208,14 +210,55 @@ async def test_list_strategies_skips_entry_when_registry_get_manifest_raises():
     # A warning was emitted for the failing entry, naming the strategy and
     # carrying the exception type/message for triage.
     warnings = [
-        e for e in cap_logs
-        if e.get("event") == "mcp.strategy_summary_failed"
-        and e.get("log_level") == "warning"
+        e
+        for e in cap_logs
+        if e.get("event") == "mcp.strategy_summary_failed" and e.get("log_level") == "warning"
     ]
     assert len(warnings) == 1
     assert warnings[0]["strategy"] == "broken"
-    assert warnings[0]["error"] == "RuntimeError"
-    assert "registry blew up" in warnings[0]["message"]
+    assert warnings[0]["error"] == "ValueError"
+    assert "manifest is malformed" in warnings[0]["message"]
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [AttributeError, TypeError, ValueError, KeyError],
+    ids=["attribute", "type", "value", "key"],
+)
+async def test_list_strategies_skips_each_expected_manifest_failure_type(exc):
+    """Every exception type in the narrowed except clause is tolerated.
+
+    Locks in the narrowing: a future widening back to ``except Exception``
+    would be caught by the propagation test below, and a future narrowing
+    that drops one of these four types would be caught here.
+    """
+    registry = MagicMock(name="PluginRegistry")
+    registry.list_strategies.return_value = ["bad"]
+    registry.get_manifest.side_effect = lambda _name: (_ for _ in ()).throw(exc("boom"))
+    services = _make_services(registry)
+
+    result = await list_strategies(services, PRINCIPAL, {})
+
+    assert result == {"count": 0, "strategies": []}
+
+
+async def test_list_strategies_propagates_unexpected_errors():
+    """Errors that are *not* expected manifest-processing failures (e.g. a
+    ``RuntimeError`` signalling a programming bug) must propagate rather than
+    being silently swallowed by the resilience wrapper.
+
+    This is the flip side of the narrowed except clause: the catalogue stays
+    useful for data failures, but real bugs stay loud.
+    """
+    registry = MagicMock(name="PluginRegistry")
+    registry.list_strategies.return_value = ["bad"]
+    registry.get_manifest.side_effect = lambda _name: (_ for _ in ()).throw(
+        RuntimeError("registry blew up")
+    )
+    services = _make_services(registry)
+
+    with pytest.raises(RuntimeError, match="registry blew up"):
+        await list_strategies(services, PRINCIPAL, {})
 
 
 # ── 2. get_strategy_details — happy path ────────────────────────────────── #
@@ -223,9 +266,7 @@ async def test_get_strategy_details_returns_full_metadata():
     registry = _make_registry({"momentum": MANIFEST_MOMENTUM})
     services = _make_services(registry)
 
-    detail = await get_strategy_details(
-        services, PRINCIPAL, {"strategy_name": "momentum"}
-    )
+    detail = await get_strategy_details(services, PRINCIPAL, {"strategy_name": "momentum"})
 
     # Required by the task: name, description, version, parameters.
     assert detail["name"] == "momentum"
@@ -265,6 +306,57 @@ async def test_get_strategy_details_handles_minimal_manifest():
     assert detail["module_path"] == "/strategies/bare/strategy.py"
 
 
+@pytest.mark.parametrize(
+    "value",
+    ["not-a-dict", ["a", "b"], 42, ["marketplace"], ("tuple",)],
+    ids=["string", "list", "int", "list-of-str", "tuple"],
+)
+async def test_get_strategy_details_marketplace_non_dict_degrades_to_empty_dict(value):
+    """``get_strategy_details`` routes through the same isinstance-guarded
+    ``_summarize`` helper as ``list_strategies``.
+
+    A malformed manifest storing a non-dict under ``marketplace`` must not
+    leak that unexpected type into the JSON detail — it degrades to ``{}``.
+    This guards against the regression where a naive
+    ``manifest.get("marketplace") or {}`` would pass through truthy non-dict
+    values (strings/lists) that ``to_jsonable`` would happily serialise but
+    downstream consumers would choke on.
+    """
+    manifest = dict(MANIFEST_MOMENTUM)
+    manifest["marketplace"] = value
+    services = _make_services(_make_registry({"momentum": manifest}))
+
+    detail = await get_strategy_details(services, PRINCIPAL, {"strategy_name": "momentum"})
+
+    assert detail["marketplace"] == {}
+    # Everything else still projects correctly from the manifest.
+    assert detail["name"] == "momentum"
+    assert detail["version"] == "1.2.0"
+    assert detail["description"] == "Trend-following momentum strategy."
+    assert detail["parameters"] == {"lookback": 20, "threshold": 0.02}
+    assert detail["module_path"] == "/strategies/momentum/strategy.py"
+
+
+async def test_get_strategy_details_marketplace_dict_is_passed_through():
+    """A well-formed dict ``marketplace`` block is surfaced unchanged in the
+    detail payload (mirror of the list_strategies assertion)."""
+    manifest = dict(MANIFEST_MOMENTUM)
+    manifest["marketplace"] = {
+        "category": "momentum",
+        "featured": True,
+        "tags": ["trend", "fast"],
+    }
+    services = _make_services(_make_registry({"momentum": manifest}))
+
+    detail = await get_strategy_details(services, PRINCIPAL, {"strategy_name": "momentum"})
+
+    assert detail["marketplace"] == {
+        "category": "momentum",
+        "featured": True,
+        "tags": ["trend", "fast"],
+    }
+
+
 # ── 3. get_strategy_details — validation & not-found ────────────────────── #
 @pytest.mark.parametrize(
     "name",
@@ -276,9 +368,7 @@ async def test_get_strategy_details_requires_strategy_name(name):
     services = _make_services(registry)
 
     with pytest.raises(ValidationError) as exc_info:
-        await get_strategy_details(
-            services, PRINCIPAL, {"strategy_name": name}
-        )
+        await get_strategy_details(services, PRINCIPAL, {"strategy_name": name})
 
     assert "strategy_name is required" in str(exc_info.value)
     # Validation short-circuits before the registry is consulted.
@@ -301,9 +391,7 @@ async def test_get_strategy_details_unknown_strategy_raises_not_found():
     services = _make_services(registry)
 
     with pytest.raises(NotFoundError) as exc_info:
-        await get_strategy_details(
-            services, PRINCIPAL, {"strategy_name": "nope"}
-        )
+        await get_strategy_details(services, PRINCIPAL, {"strategy_name": "nope"})
 
     assert str(exc_info.value) == "Strategy not found: nope"
     registry.get_manifest.assert_called_once_with("nope")
@@ -359,9 +447,7 @@ async def test_dispatch_tool_unknown_tool_rejected():
 
 
 async def test_dispatch_tool_routes_list_strategies():
-    registry = _make_registry(
-        {"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV}
-    )
+    registry = _make_registry({"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV})
     services = _make_services(registry)
 
     out = await dispatch_tool("list_strategies", {}, services, PRINCIPAL)
