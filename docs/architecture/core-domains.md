@@ -123,6 +123,50 @@ halt), max open positions, concentration cap, single-order value cap, and
 daily trade limit are the default rule set — see
 [`ARCHITECTURE.md`](../../ARCHITECTURE.md) for the table.
 
+<a id="execution-backends"></a>
+## Execution backends
+
+The order manager never calls a broker directly — it goes through the
+`ExecutionBackend` ABC
+([`engine/core/execution/base.py`](../../engine/core/execution/base.py)),
+so the same strategy code runs unchanged in backtest, paper, and live.
+The split across two packages is deliberate and worth knowing:
+
+| Location | What it is |
+|---|---|
+| [`core/execution/base.py`](../../engine/core/execution/base.py) | `ExecutionBackend` ABC + `FillResult` dataclass. The single contract the order manager holds. |
+| [`core/execution/backtest.py`](../../engine/core/execution/backtest.py) | `BacktestBackend` — fills at the bar's price. |
+| [`core/execution/paper.py`](../../engine/core/execution/paper.py) | `PaperExecutionBackend` — simulated fills with a pluggable `SlippageModel`. |
+| [`core/execution/live.py`](../../engine/core/execution/live.py) | `LiveBackend` — a **scaffold base class** (`_is_scaffold = True`). It tracks connection state but talks to *no* broker; concrete subclasses flip the flag and implement `_do_connect` / `_submit_order`. |
+| [`core/execution/factory.py`](../../engine/core/execution/factory.py) | `create_backend(name)` registry. Built-ins: `backtest`, `paper`, `live`. Extensible at startup via `register_backend()`. |
+| [`engine/execution/`](../../engine/execution/) *(top-level, SEV-223)* | `LiveExecutionBackend` — the **concrete** Alpaca-compatible REST adapter. Implements the ABC's `connect`/`disconnect`/`execute` *and* exposes broker-direct async helpers `submit_order` (`POST /v2/orders`), `cancel_order` (`DELETE /v2/orders/{id}`), `get_order_status` (`GET /v2/orders/{id}`). |
+
+A second concrete Alpaca trading client lives in
+[`engine/core/brokers/alpaca/`](../../engine/core/brokers/alpaca/) —
+`AlpacaTradingClient` (gh#136) implements the `BrokerClient` Protocol
+from [`engine/core/brokers/models.py`](../../engine/core/brokers/models.py)
+and goes direct to Alpaca's REST API over an injectable `httpx.AsyncClient`
+(no `alpaca-py` dependency). The two adapters are **not** unified yet:
+the `brokers/` package targets the broker Protocol surface (clock,
+account, positions), while `engine/execution/` targets the
+`ExecutionBackend` surface the order manager calls. Pick by which
+interface you hold.
+
+Both concrete adapters share the typed error vocabulary from
+[`engine/core/brokers/base.py`](../../engine/core/brokers/base.py):
+`401/403 → BrokerAuthError` (permanent, kill-switch), `5xx/429/408 +
+transport errors → BrokerConnectionError` (retried with backoff, then
+raised), `400/404/422 → BrokerRejectError` (per-order).
+`LiveExecutionBackend` also stamps a broker `client_order_id` (uuid4)
+on every submit so the broker can de-duplicate retries (gh#49eec71) —
+the same idempotency convention the order manager relies on.
+
+> **Status:** the `BacktestBackend` is the only execution backend wired
+> into a run path (the backtest runner). `PaperExecutionBackend`,
+> `LiveBackend`, `LiveExecutionBackend`, and `AlpacaTradingClient` are
+> library-only today — none is registered in the factory *and* mounted
+> by a route. See [`known-limitations.md`](../known-limitations.md).
+
 ## Portfolio accounting
 
 [`Portfolio`](../../engine/core/portfolio.py) is full tax-lot accounting.
