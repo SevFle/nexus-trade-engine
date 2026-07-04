@@ -193,6 +193,58 @@ GET_STRATEGY_DETAILS = ToolDefinition(
     },
 )
 
+SEARCH_STRATEGIES = ToolDefinition(
+    name="search_strategies",
+    description=(
+        "Search the installed-strategy catalog with filters: a free-text "
+        "query (matched against name and description), tags (all must be "
+        "present), risk_level (e.g. low/medium/high), and asset_class "
+        "(e.g. equity/crypto/forex). All filters are optional and "
+        "AND-combined; with none supplied every installed strategy is "
+        "returned. Use this to narrow list_strategies by attribute. "
+        "Read-only."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "minLength": 1,
+                "description": (
+                    "Case-insensitive substring matched against the strategy "
+                    "name and description."
+                ),
+            },
+            "tags": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+                "description": (
+                    "Strategies must contain ALL of these tags "
+                    "(case-insensitive). e.g. ['momentum', 'trend-following']."
+                ),
+            },
+            "risk_level": {
+                "type": "string",
+                "description": (
+                    "Exact, case-insensitive risk level, e.g. 'low', "
+                    "'medium', or 'high'."
+                ),
+            },
+            "asset_class": {
+                "type": "string",
+                "minLength": 1,
+                "description": (
+                    "Case-insensitive substring matched against the strategy's "
+                    "asset classes, e.g. 'equity' (matches 'US equities'), "
+                    "'crypto', 'forex'."
+                ),
+            },
+            **_PAGINATION_PROPS,
+        },
+        "additionalProperties": False,
+    },
+)
+
 GET_MARKET_DATA = ToolDefinition(
     name="get_market_data",
     description=(
@@ -299,6 +351,7 @@ TOOL_DEFINITIONS: list[ToolDefinition] = [
     GET_ORDERS,
     LIST_STRATEGIES,
     GET_STRATEGY_DETAILS,
+    SEARCH_STRATEGIES,
     GET_MARKET_DATA,
     GET_COST_MODEL,
     GET_PERFORMANCE_METRICS,

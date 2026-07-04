@@ -1,9 +1,10 @@
 """Unit tests for the strategy MCP adapters.
 
-Covers :func:`engine.mcp.adapters.strategy_adapter.list_strategies` and
+Covers :func:`engine.mcp.adapters.strategy_adapter.list_strategies`,
+:func:`engine.mcp.adapters.strategy_adapter.search_strategies`, and
 :func:`engine.mcp.adapters.strategy_adapter.get_strategy_details`, plus the
 :func:`~engine.mcp.handlers.dispatch_tool` integration for the
-``get_strategy_details`` route.
+``get_strategy_details`` and ``search_strategies`` routes.
 
 The :class:`~engine.plugins.registry.PluginRegistry` is mocked everywhere so
 no manifest files, plugin code, or disk I/O are required. This pins the
@@ -29,7 +30,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from engine.mcp.adapters import EngineServices
-from engine.mcp.adapters.strategy_adapter import get_strategy_details, list_strategies
+from engine.mcp.adapters.strategy_adapter import (
+    get_strategy_details,
+    list_strategies,
+    search_strategies,
+)
 from engine.mcp.auth import AuthPrincipal
 from engine.mcp.errors import MCPError, NotFoundError, ValidationError
 from engine.mcp.handlers import dispatch_tool
@@ -45,6 +50,10 @@ MANIFEST_MOMENTUM: dict[str, Any] = {
     "symbols": ["AAPL", "MSFT"],
     "timeframe": "1d",
     "parameters": {"lookback": 20, "threshold": 0.02},
+    # Filterable metadata (top-level form):
+    "tags": ["momentum", "trend-following"],
+    "risk_level": "medium",
+    "asset_class": "equity",
 }
 
 MANIFEST_MEANREV: dict[str, Any] = {
@@ -55,6 +64,33 @@ MANIFEST_MEANREV: dict[str, Any] = {
     "symbols": ["GOOGL"],
     "timeframe": "1h",
     "parameters": {"window": 14, "num_std": 2.0},
+    # Filterable metadata stored under ``marketplace`` (alternate schema):
+    "marketplace": {
+        "tags": ["mean-reversion", "low-frequency"],
+        "risk_level": "low",
+        "preferred_assets": ["US equities"],
+    },
+}
+
+MANIFEST_CRYPTO: dict[str, Any] = {
+    "name": "crypto_breakout",
+    "version": "0.2.0",
+    "description": "Breakout strategy for cryptocurrency pairs.",
+    "author": "nexus-team",
+    "symbols": ["BTC/USD"],
+    "timeframe": "1h",
+    "parameters": {"breakout_window": 24},
+    # Filterable metadata (top-level, multi-asset list form):
+    "tags": ["momentum", "breakout", "high-frequency"],
+    "risk_level": "high",
+    "asset_classes": ["crypto", "forex"],
+}
+
+# Convenience: every fixture, in a stable order, for "returns all" assertions.
+ALL_FIXTURES: dict[str, dict[str, Any]] = {
+    "momentum": MANIFEST_MOMENTUM,
+    "mean_reversion": MANIFEST_MEANREV,
+    "crypto_breakout": MANIFEST_CRYPTO,
 }
 
 
@@ -165,7 +201,224 @@ async def test_get_strategy_details_handles_minimal_manifest():
     assert detail["module_path"] == "/strategies/bare/strategy.py"
 
 
-# ── 3. get_strategy_details — validation & not-found ────────────────────── #
+# ── 3. search_strategies — no filter returns all ──────────────────────── #
+async def test_search_no_filter_returns_every_strategy():
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    result = await search_strategies(services, PRINCIPAL, {})
+
+    assert result["count"] == 3
+    assert {s["name"] for s in result["strategies"]} == set(ALL_FIXTURES)
+    # Summaries carry the filterable attributes too.
+    crypto = next(s for s in result["strategies"] if s["name"] == "crypto_breakout")
+    assert crypto["tags"] == ["momentum", "breakout", "high-frequency"]
+    assert crypto["risk_level"] == "high"
+    assert crypto["asset_class"] == ["crypto", "forex"]
+
+
+async def test_search_empty_registry_returns_empty_list():
+    services = _make_services(_make_registry({}))
+    result = await search_strategies(services, PRINCIPAL, {})
+    assert result == {"count": 0, "strategies": []}
+
+
+# ── 4. search_strategies — individual filters ──────────────────────────── #
+async def test_search_query_matches_name_substring_case_insensitive():
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    result = await search_strategies(services, PRINCIPAL, {"query": "MOMENTUM"})
+
+    # Only the momentum strategy has "momentum" in its name/description.
+    assert result["count"] == 1
+    assert result["strategies"][0]["name"] == "momentum"
+
+
+async def test_search_query_matches_description_substring():
+    """query is a free-text search hitting name AND description."""
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    result = await search_strategies(services, PRINCIPAL, {"query": "strategy"})
+
+    # 'strategy' appears in momentum and crypto descriptions, but NOT in the
+    # mean_reversion description ("Bollinger-band mean reversion.").
+    names = {s["name"] for s in result["strategies"]}
+    assert names == {"momentum", "crypto_breakout"}
+
+
+async def test_search_tags_requires_all_requested_tags():
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    # Both momentum and crypto_breakout are tagged 'momentum'.
+    result = await search_strategies(services, PRINCIPAL, {"tags": ["momentum"]})
+    assert {s["name"] for s in result["strategies"]} == {"momentum", "crypto_breakout"}
+
+    # Requiring two tags narrows to the single strategy holding both (AND).
+    result = await search_strategies(
+        services, PRINCIPAL, {"tags": ["momentum", "breakout"]}
+    )
+    assert [s["name"] for s in result["strategies"]] == ["crypto_breakout"]
+
+
+async def test_search_tags_case_insensitive_and_blank_dropped():
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    result = await search_strategies(
+        services, PRINCIPAL, {"tags": ["TREND-FOLLOWING", "  "]}
+    )
+    assert [s["name"] for s in result["strategies"]] == ["momentum"]
+
+
+async def test_search_tags_reads_marketplace_nested_tags():
+    """mean_reversion stores tags under ``marketplace.tags`` — verify the
+    extractor reads that location, not just top-level ``tags``."""
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    result = await search_strategies(
+        services, PRINCIPAL, {"tags": ["low-frequency"]}
+    )
+    assert [s["name"] for s in result["strategies"]] == ["mean_reversion"]
+
+
+async def test_search_risk_level_exact_case_insensitive_match():
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    high = await search_strategies(services, PRINCIPAL, {"risk_level": "HIGH"})
+    assert [s["name"] for s in high["strategies"]] == ["crypto_breakout"]
+
+    low = await search_strategies(services, PRINCIPAL, {"risk_level": "low"})
+    assert [s["name"] for s in low["strategies"]] == ["mean_reversion"]
+
+
+async def test_search_asset_class_substring_match():
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    # 'equity' matches both 'equity' (momentum) and 'US equities' (mean_reversion).
+    equities = await search_strategies(
+        services, PRINCIPAL, {"asset_class": "equity"}
+    )
+    assert {s["name"] for s in equities["strategies"]} == {
+        "momentum",
+        "mean_reversion",
+    }
+
+    # 'forex' only matches crypto_breakout's multi-asset list.
+    forex = await search_strategies(services, PRINCIPAL, {"asset_class": "FOREX"})
+    assert [s["name"] for s in forex["strategies"]] == ["crypto_breakout"]
+
+
+# ── 5. search_strategies — combined filters & no-match ────────────────── #
+async def test_search_combined_filters_are_anded():
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    # tag 'momentum' (momentum + crypto) intersected with risk 'high' → crypto.
+    result = await search_strategies(
+        services,
+        PRINCIPAL,
+        {"tags": ["momentum"], "risk_level": "high"},
+    )
+    assert [s["name"] for s in result["strategies"]] == ["crypto_breakout"]
+
+
+async def test_search_combined_query_and_asset_class():
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    result = await search_strategies(
+        services,
+        PRINCIPAL,
+        {"query": "reversion", "asset_class": "equity"},
+    )
+    assert [s["name"] for s in result["strategies"]] == ["mean_reversion"]
+
+
+async def test_search_no_match_returns_empty():
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    result = await search_strategies(services, PRINCIPAL, {"query": "zzznope"})
+    assert result == {"count": 0, "strategies": []}
+
+
+async def test_search_filters_that_mutually_exclude_return_empty():
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    # No equity strategy is 'high' risk.
+    result = await search_strategies(
+        services, PRINCIPAL, {"asset_class": "equity", "risk_level": "high"}
+    )
+    assert result["count"] == 0
+    assert result["strategies"] == []
+
+
+async def test_search_unknown_tag_returns_empty_without_error():
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    result = await search_strategies(services, PRINCIPAL, {"tags": ["nonexistent"]})
+    assert result == {"count": 0, "strategies": []}
+
+
+# ── 6. search_strategies — argument validation ───────────────────────── #
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"query": 123},
+        {"tags": "momentum"},
+        {"tags": ["ok", 5]},
+        {"risk_level": ["high"]},
+        {"asset_class": {"a": 1}},
+    ],
+    ids=[
+        "query-not-string",
+        "tags-not-list",
+        "tags-has-non-string",
+        "risk_level-not-string",
+        "asset_class-not-string",
+    ],
+)
+async def test_search_rejects_wrong_argument_types(arguments):
+    services = _make_services(_make_registry(ALL_FIXTURES))
+    with pytest.raises(ValidationError):
+        await search_strategies(services, PRINCIPAL, arguments)
+
+
+async def test_search_blank_filters_behave_as_no_filter():
+    """Empty/blank strings and empty tag list are no-ops (return all)."""
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    result = await search_strategies(
+        services,
+        PRINCIPAL,
+        {"query": "   ", "tags": [], "risk_level": "", "asset_class": "  "},
+    )
+    assert result["count"] == 3
+
+
+async def test_search_uses_registry_as_single_source_of_truth():
+    """search_strategies must enumerate via the injected registry only —
+    no latent discover_strategies() against strategies_dir."""
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    await search_strategies(services, PRINCIPAL, {"query": "crypto"})
+
+    registry.list_strategies.assert_called_once_with()
+    # get_manifest consulted once per registered strategy.
+    assert registry.get_manifest.call_count == len(ALL_FIXTURES)
+
+
+# ── 7. get_strategy_details — validation & not-found ────────────────────── #
 @pytest.mark.parametrize(
     "name",
     [None, "", "   "],
@@ -211,7 +464,7 @@ async def test_get_strategy_details_unknown_strategy_raises_not_found():
     registry.get_module_path.assert_not_called()
 
 
-# ── 4. dispatch_tool integration ─────────────────────────────────────────── #
+# ── 8. dispatch_tool integration ─────────────────────────────────────────── #
 async def test_dispatch_tool_routes_get_strategy_details():
     registry = _make_registry({"momentum": MANIFEST_MOMENTUM})
     services = _make_services(registry)
@@ -270,7 +523,39 @@ async def test_dispatch_tool_routes_list_strategies():
     assert {s["name"] for s in out["strategies"]} == {"momentum", "mean_reversion"}
 
 
-# ── 5. EngineServices.for_testing coherence ──────────────────────────────── #
+async def test_dispatch_tool_routes_search_strategies():
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    out = await dispatch_tool(
+        "search_strategies", {"risk_level": "high"}, services, PRINCIPAL
+    )
+
+    assert out["count"] == 1
+    assert out["strategies"][0]["name"] == "crypto_breakout"
+    # Pagination metadata is attached by the dispatcher (list-heavy tool).
+    assert out["total"] == 1
+    assert "next_cursor" in out
+
+
+async def test_dispatch_tool_search_strategies_no_filter_paginates_all():
+    registry = _make_registry(ALL_FIXTURES)
+    services = _make_services(registry)
+
+    out = await dispatch_tool("search_strategies", {}, services, PRINCIPAL)
+
+    assert out["total"] == 3
+    assert {s["name"] for s in out["strategies"]} == set(ALL_FIXTURES)
+
+
+async def test_dispatch_tool_search_strategies_unknown_tool_rejected():
+    services = _make_services(_make_registry(ALL_FIXTURES))
+    with pytest.raises(ValidationError) as exc_info:
+        await dispatch_tool("search_strategys", {}, services, PRINCIPAL)
+    assert "Unknown tool" in str(exc_info.value)
+
+
+# ── 9. EngineServices.for_testing coherence ──────────────────────────────── #
 def test_for_testing_builds_registry_from_strategies_dir(tmp_path: Path):
     """A temp strategies_dir (with no injected registry) drives the catalog.
 

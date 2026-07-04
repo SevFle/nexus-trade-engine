@@ -45,6 +45,7 @@ _PAGINATED_KEYS: dict[str, str] = {
     "get_orders": "orders",
     "get_market_data": "bars",
     "list_strategies": "strategies",
+    "search_strategies": "strategies",
 }
 
 _ADAPTERS: dict[str, AdapterFunc] = {}
@@ -91,6 +92,13 @@ async def _strategy_details(services, principal, arguments):  # type: ignore[no-
     from engine.mcp.adapters.strategy_adapter import get_strategy_details
 
     return await get_strategy_details(services, principal, arguments)
+
+
+@_register("search_strategies")
+async def _search_strategies(services, principal, arguments):  # type: ignore[no-untyped-def]
+    from engine.mcp.adapters.strategy_adapter import search_strategies
+
+    return await search_strategies(services, principal, arguments)
 
 
 @_register("get_market_data")
