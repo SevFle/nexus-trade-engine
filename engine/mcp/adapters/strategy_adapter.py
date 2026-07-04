@@ -21,15 +21,22 @@ if TYPE_CHECKING:
 
 
 def _summarize(name: str, manifest: dict[str, Any]) -> dict[str, Any]:
-    """Project a raw manifest dict into the LLM-facing strategy summary."""
+    """Project a raw manifest dict into the LLM-facing strategy summary.
+
+    Uses ``or`` rather than the second positional default of :meth:`dict.get`
+    so that manifest fields set to an explicit ``None`` (a YAML ``null``) are
+    normalised to the documented empty defaults instead of leaking ``None``
+    for description / symbols / parameters, which the MCP schema declares as
+    string / array / object respectively.
+    """
     return {
         "name": name,
-        "version": manifest.get("version"),
-        "description": manifest.get("description", ""),
-        "author": manifest.get("author"),
-        "symbols": manifest.get("symbols", []),
-        "timeframe": manifest.get("timeframe"),
-        "parameters": manifest.get("parameters", {}),
+        "version": manifest.get("version") or None,
+        "description": manifest.get("description") or "",
+        "author": manifest.get("author") or None,
+        "symbols": manifest.get("symbols") or [],
+        "timeframe": manifest.get("timeframe") or None,
+        "parameters": manifest.get("parameters") or {},
     }
 
 
@@ -41,8 +48,7 @@ async def list_strategies(
     """Enumerate every installed strategy as a list of summary dicts."""
     registry = services.plugin_registry
     strategies = [
-        _summarize(name, registry.get_manifest(name) or {})
-        for name in registry.list_strategies()
+        _summarize(name, registry.get_manifest(name) or {}) for name in registry.list_strategies()
     ]
     return to_jsonable({"count": len(strategies), "strategies": strategies})
 
@@ -71,8 +77,11 @@ async def get_strategy_details(
         raise NotFoundError(f"Strategy not found: {name}")
 
     detail = _summarize(name, manifest)
-    # module_path is bonus metadata (code location); it is None-safe.
-    detail["module_path"] = registry.get_module_path(name)
+    # NOTE: module_path (the on-disk code location) is intentionally *not*
+    # surfaced here. Exposing it would leak absolute filesystem paths to LLM
+    # clients, and the basename is constant (``strategy.py``) for every
+    # strategy so it carries no useful identifying information either. The
+    # strategy ``name`` above is the stable identifier callers need.
     return to_jsonable(detail)
 
 

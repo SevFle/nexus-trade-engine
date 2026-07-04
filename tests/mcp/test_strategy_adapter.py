@@ -11,13 +11,19 @@ adapter contract:
 
 * ``list_strategies`` summaries one entry per registered strategy.
 * ``get_strategy_details`` returns name / description / version / parameters
-  (plus author, symbols, timeframe, module_path) for a known strategy and
-  consults the registry — making the registry the single lookup source.
+  (plus author, symbols, timeframe) for a known strategy and consults the
+  registry — making the registry the single lookup source. The filesystem
+  ``module_path`` is intentionally *not* surfaced to avoid leaking absolute
+  paths.
 * unknown strategy identifiers raise :class:`NotFoundError`.
 * missing / empty ``strategy_name`` raises :class:`ValidationError` without
   consulting the registry.
 * :func:`dispatch_tool` routes, validates required args, and propagates the
   not-found error unchanged.
+* null-valued manifest fields are normalised to the documented defaults.
+* :meth:`EngineServices.for_testing` supports three construction modes:
+  explicit registry passthrough, ``strategies_dir``-only, and the default
+  fallback.
 """
 
 from __future__ import annotations
@@ -33,6 +39,7 @@ from engine.mcp.adapters.strategy_adapter import get_strategy_details, list_stra
 from engine.mcp.auth import AuthPrincipal
 from engine.mcp.errors import MCPError, NotFoundError, ValidationError
 from engine.mcp.handlers import dispatch_tool
+from engine.plugins.registry import PluginRegistry
 
 # ── Shared constants ─────────────────────────────────────────────────────── #
 PRINCIPAL = AuthPrincipal(user_id="quant-1", role="viewer", auth_method="jwt")
@@ -66,8 +73,8 @@ def _make_registry(strategies: dict[str, dict[str, Any]]) -> MagicMock:
     spec = MagicMock(name="PluginRegistry")
     spec.list_strategies.return_value = list(strategies)
     spec.get_manifest.side_effect = strategies.get
-    spec.get_module_path.side_effect = (
-        lambda name: f"/strategies/{name}/strategy.py" if name in strategies else None
+    spec.get_module_path.side_effect = lambda name: (
+        f"/strategies/{name}/strategy.py" if name in strategies else None
     )
     return spec
 
@@ -81,9 +88,7 @@ def _make_services(registry: MagicMock | None = None) -> EngineServices:
 
 # ── 1. list_strategies ──────────────────────────────────────────────────── #
 async def test_list_strategies_summarises_each_registered_strategy():
-    registry = _make_registry(
-        {"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV}
-    )
+    registry = _make_registry({"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV})
     services = _make_services(registry)
 
     result = await list_strategies(services, PRINCIPAL, {})
@@ -127,9 +132,7 @@ async def test_get_strategy_details_returns_full_metadata():
     registry = _make_registry({"momentum": MANIFEST_MOMENTUM})
     services = _make_services(registry)
 
-    detail = await get_strategy_details(
-        services, PRINCIPAL, {"strategy_name": "momentum"}
-    )
+    detail = await get_strategy_details(services, PRINCIPAL, {"strategy_name": "momentum"})
 
     # Required by the task: name, description, version, parameters.
     assert detail["name"] == "momentum"
@@ -140,12 +143,14 @@ async def test_get_strategy_details_returns_full_metadata():
     assert detail["author"] == "nexus-team"
     assert detail["symbols"] == ["AAPL", "MSFT"]
     assert detail["timeframe"] == "1d"
-    # The per-strategy detail additionally surfaces the code location.
-    assert detail["module_path"] == "/strategies/momentum/strategy.py"
+    # The on-disk code location is intentionally *not* exposed to avoid
+    # leaking absolute filesystem paths to LLM clients.
+    assert "module_path" not in detail
 
     # The lookup went through the registry — single source of truth.
     registry.get_manifest.assert_called_once_with("momentum")
-    registry.get_module_path.assert_called_once_with("momentum")
+    # module_path is never queried by the adapter anymore.
+    registry.get_module_path.assert_not_called()
 
 
 async def test_get_strategy_details_handles_minimal_manifest():
@@ -162,7 +167,72 @@ async def test_get_strategy_details_handles_minimal_manifest():
     assert detail["symbols"] == []
     assert detail["timeframe"] is None
     assert detail["parameters"] == {}
-    assert detail["module_path"] == "/strategies/bare/strategy.py"
+    # No filesystem code location is surfaced.
+    assert "module_path" not in detail
+
+
+async def test_get_strategy_details_normalises_null_manifest_fields():
+    """Manifest fields set to an explicit ``null`` (YAML ``None``) are
+    normalised to the documented empty defaults — not leaked through as
+    ``None`` for description / symbols / parameters.
+
+    The MCP schema declares description as a string and symbols / parameters
+    as array / object, so emitting ``None`` for any of them would be invalid
+    JSON-schema output. ``_summarize`` therefore uses ``or`` rather than the
+    ``dict.get(key, default)`` second positional, which only fires when the
+    key is *absent* (not when it is present-but-null).
+    """
+    registry = _make_registry(
+        {
+            "alpha": {
+                "name": "alpha",
+                "version": None,
+                "description": None,
+                "author": None,
+                "symbols": None,
+                "timeframe": None,
+                "parameters": None,
+            }
+        }
+    )
+    services = _make_services(registry)
+
+    detail = await get_strategy_details(services, PRINCIPAL, {"strategy_name": "alpha"})
+
+    assert detail["name"] == "alpha"
+    assert detail["description"] == ""
+    assert detail["symbols"] == []
+    assert detail["parameters"] == {}
+    # Optional scalars stay None (their declared type is nullable).
+    assert detail["version"] is None
+    assert detail["author"] is None
+    assert detail["timeframe"] is None
+
+
+async def test_list_strategies_normalises_null_manifest_fields():
+    """The same null-normalisation applies to ``list_strategies`` summaries,
+    since both adapters funnel through :func:`_summarize`.
+    """
+    registry = _make_registry(
+        {
+            "alpha": {
+                "name": "alpha",
+                "description": None,
+                "symbols": None,
+                "parameters": None,
+            }
+        }
+    )
+    services = _make_services(registry)
+
+    result = await list_strategies(services, PRINCIPAL, {})
+
+    assert result["count"] == 1
+    summary = result["strategies"][0]
+    assert summary["name"] == "alpha"
+    assert summary["description"] == ""
+    assert summary["symbols"] == []
+    assert summary["parameters"] == {}
 
 
 # ── 3. get_strategy_details — validation & not-found ────────────────────── #
@@ -176,9 +246,7 @@ async def test_get_strategy_details_requires_strategy_name(name):
     services = _make_services(registry)
 
     with pytest.raises(ValidationError) as exc_info:
-        await get_strategy_details(
-            services, PRINCIPAL, {"strategy_name": name}
-        )
+        await get_strategy_details(services, PRINCIPAL, {"strategy_name": name})
 
     assert "strategy_name is required" in str(exc_info.value)
     # Validation short-circuits before the registry is consulted.
@@ -201,13 +269,12 @@ async def test_get_strategy_details_unknown_strategy_raises_not_found():
     services = _make_services(registry)
 
     with pytest.raises(NotFoundError) as exc_info:
-        await get_strategy_details(
-            services, PRINCIPAL, {"strategy_name": "nope"}
-        )
+        await get_strategy_details(services, PRINCIPAL, {"strategy_name": "nope"})
 
     assert str(exc_info.value) == "Strategy not found: nope"
     registry.get_manifest.assert_called_once_with("nope")
-    # module_path must never be queried when the manifest lookup failed.
+    # module_path is never queried by the adapter (not even on the
+    # not-found path), so the registry short-circuits on the manifest lookup.
     registry.get_module_path.assert_not_called()
 
 
@@ -259,9 +326,7 @@ async def test_dispatch_tool_unknown_tool_rejected():
 
 
 async def test_dispatch_tool_routes_list_strategies():
-    registry = _make_registry(
-        {"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV}
-    )
+    registry = _make_registry({"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV})
     services = _make_services(registry)
 
     out = await dispatch_tool("list_strategies", {}, services, PRINCIPAL)
@@ -289,3 +354,58 @@ def test_for_testing_builds_registry_from_strategies_dir(tmp_path: Path):
     assert services.plugin_registry.list_strategies() == ["alpha"]
     assert services.plugin_registry.get_manifest("alpha") == {"name": "alpha", "version": "9.9"}
     assert services.plugin_registry.get_module_path("alpha").endswith("alpha/strategy.py")
+
+
+def test_for_testing_uses_explicit_registry_passthrough():
+    """``for_testing`` returns the injected registry verbatim — it must not be
+    re-created, swapped, or wrapped. This is what makes the registry the
+    single source of truth in hermetic tests: callers can hand-pick the
+    exact manifest fixture per test.
+    """
+    injected = _make_registry({"momentum": MANIFEST_MOMENTUM})
+
+    services = EngineServices.for_testing(plugin_registry=injected)
+
+    # ``is`` identity, not equality: the very same object must come back.
+    assert services.plugin_registry is injected
+    assert services.strategies_dir is None
+
+
+def test_for_testing_default_fallback_uses_real_registry():
+    """When neither an explicit registry nor a ``strategies_dir`` is supplied,
+    ``for_testing`` falls back to the production default
+    (:class:`PluginRegistry` reading from ``STRATEGIES_DIR``).
+
+    The result must be a *real* ``PluginRegistry`` (so tests can introspect
+    installed strategies), distinct from any other services instance.
+    """
+    services = EngineServices.for_testing()
+
+    assert isinstance(services.plugin_registry, PluginRegistry)
+    assert services.strategies_dir is None
+    # list_strategies is defined and returns a list — proves the registry is
+    # wired correctly without depending on any particular installed strategy.
+    assert isinstance(services.plugin_registry.list_strategies(), list)
+
+
+def test_for_testing_strategies_dir_only_builds_registry_from_that_dir(tmp_path: Path):
+    """A ``strategies_dir`` with no injected registry builds a real
+    :class:`PluginRegistry` that reads exactly that directory — proving the
+    two never disagree, which is the invariant the registry-only adapter
+    lookup relies on.
+    """
+    import yaml
+
+    strat_dir = tmp_path / "strategies" / "beta"
+    strat_dir.mkdir(parents=True)
+    (strat_dir / "manifest.yaml").write_text(yaml.dump({"name": "beta", "version": "0.2.0"}))
+    (strat_dir / "strategy.py").write_text("class Strategy: pass\n")
+
+    services = EngineServices.for_testing(strategies_dir=tmp_path / "strategies")
+
+    assert isinstance(services.plugin_registry, PluginRegistry)
+    assert services.plugin_registry is not None
+    assert services.plugin_registry.list_strategies() == ["beta"]
+    # strategies_dir is echoed back so the resources layer reads the same
+    # catalog as the registry the adapters consult.
+    assert services.strategies_dir == tmp_path / "strategies"
