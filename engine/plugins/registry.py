@@ -92,3 +92,18 @@ class PluginRegistry:
 
     def list_strategies(self) -> list[str]:
         return list(self._strategies.keys())
+
+    def get_manifest(self, strategy_name: str) -> dict[str, Any] | None:
+        """Return the parsed ``manifest.yaml`` dict for ``strategy_name``.
+
+        Returns ``None`` when the strategy is not installed. This lets
+        callers read a strategy's metadata (version, description, author,
+        symbols, parameters, …) without re-running :func:`discover_strategies`
+        over the directory or importing the strategy module, so the registry
+        stays the single source of truth for installed-strategy metadata.
+        """
+        entry = self._strategies.get(strategy_name)
+        if entry is None:
+            logger.warning("strategy_not_found", strategy=strategy_name)
+            return None
+        return entry.get("manifest")
