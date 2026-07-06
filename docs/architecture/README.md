@@ -18,14 +18,17 @@ For *why* we made specific structural choices, see
    optimization, and post-trade cost analysis. The companion to
    `overview.md` (which is the *service* view; this is the *capability*
    view).
-3. **[database.md](database.md)** — table inventory, migration policy,
+3. **[instruments.md](instruments.md)** — the typed `Instrument` model,
+   the two-asset-class-enum design, and exactly how far multi-asset
+   support has been threaded through the engine (the `[partial]` status).
+4. **[database.md](database.md)** — table inventory, migration policy,
    data ownership.
-4. **[plugins.md](plugins.md)** — plugin SDK and the registry that
+5. **[plugins.md](plugins.md)** — plugin SDK and the registry that
    loads strategies / data providers / execution backends at runtime.
-5. **[`docs/operations/`](../operations/)** — how the running system is
+6. **[`docs/operations/`](../operations/)** — how the running system is
    monitored, backed up, and recovered. Lives next to the runbooks
    that on-call uses.
-6. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
+7. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
    Read these before proposing a change that contradicts them.
 
 ## Existing diagrams

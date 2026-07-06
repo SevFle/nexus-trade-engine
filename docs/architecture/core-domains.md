@@ -412,6 +412,10 @@ an "optimal" parameter set isn't an overfit artifact.
   interface.
 - [`overview.md`](overview.md) — service-level view (app factory,
   middleware, request lifecycle, deploy topology).
+- [`instruments.md`](instruments.md) — the typed `Instrument` model and
+  multi-asset status (the `InstrumentAssetClass` enum, the two-enum design,
+  `uid` position-keying convention, and how far it is threaded through
+  core today).
 - [`plugins.md`](plugins.md) — strategy discovery, the registry, and the
   five-layer sandbox.
 - [`known-limitations.md`](../known-limitations.md) — what is

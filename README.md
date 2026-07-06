@@ -188,8 +188,11 @@ on the public API surface or not production-validated.
       Alpaca surface today; see
       [known-limitations](docs/known-limitations.md))*
 - [ ] Strategy marketplace *(stub routes only — returns `not_implemented`)*
-- [~] Multi-asset support *(partial — equity/ETF/crypto/forex/options
-      primitives exist; asset-class inference on market-data route works)*
+- [~] Multi-asset support *(partial — typed [`Instrument`](docs/architecture/instruments.md)
+      model with the `InstrumentAssetClass` enum landed on `Signal`; threaded
+      through the market-data route's asset-class inference but **not** yet
+      through the OMS/portfolio/backtest, which still key on `symbol: str`;
+      see [instruments doc](docs/architecture/instruments.md))*
 - [~] WebSocket real-time streams *(partial — see
       [known-limitations](docs/known-limitations.md): connection registry
       is process-local)*

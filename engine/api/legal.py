@@ -112,13 +112,13 @@ class AcceptanceStore(Protocol):
     changing any route or dependency code.
     """
 
-    def record(self, user_id: str, document_version: str) -> LegalAcceptance: ...
+    async def record(self, user_id: str, document_version: str) -> LegalAcceptance: ...
 
-    def get(self, user_id: str) -> LegalAcceptance | None: ...
+    async def get(self, user_id: str) -> LegalAcceptance | None: ...
 
-    def clear(self, user_id: str) -> None: ...
+    async def clear(self, user_id: str) -> None: ...
 
-    def reset(self) -> None: ...
+    async def reset(self) -> None: ...
 
 
 class InMemoryAcceptanceStore:
@@ -133,7 +133,7 @@ class InMemoryAcceptanceStore:
         self._data: dict[str, LegalAcceptance] = {}
         self._lock = threading.Lock()
 
-    def record(self, user_id: str, document_version: str) -> LegalAcceptance:
+    async def record(self, user_id: str, document_version: str) -> LegalAcceptance:
         acceptance = LegalAcceptance(
             user_id=user_id,
             document_version=document_version,
@@ -143,7 +143,7 @@ class InMemoryAcceptanceStore:
             self._data[user_id] = acceptance
         return acceptance
 
-    def get(self, user_id: str) -> LegalAcceptance | None:
+    async def get(self, user_id: str) -> LegalAcceptance | None:
         with self._lock:
             # Return a defensive copy so callers cannot mutate internal state.
             stored = self._data.get(user_id)
@@ -151,11 +151,11 @@ class InMemoryAcceptanceStore:
                 return None
             return stored.model_copy(deep=True)
 
-    def clear(self, user_id: str) -> None:
+    async def clear(self, user_id: str) -> None:
         with self._lock:
             self._data.pop(user_id, None)
 
-    def reset(self) -> None:
+    async def reset(self) -> None:
         with self._lock:
             self._data.clear()
 
@@ -201,7 +201,7 @@ async def require_legal_acceptance(
     routes can inspect the accepted version without re-querying the store.
     """
     current_version = current_legal_version()
-    latest = store.get(str(user.id))
+    latest = await store.get(str(user.id))
 
     if _is_currently_accepted(latest, current_version):
         # ``_is_currently_accepted`` guarantees ``latest`` is not None here.
@@ -255,7 +255,7 @@ async def accept_legal_document(
             },
         )
 
-    acceptance = store.record(str(user.id), body.document_version)
+    acceptance = await store.record(str(user.id), body.document_version)
     logger.info(
         "legal.acceptance_recorded",
         user_id=str(user.id),
@@ -276,7 +276,7 @@ async def get_legal_status(
     ``needs_acceptance=True``.
     """
     current_version = current_legal_version()
-    latest = store.get(str(user.id))
+    latest = await store.get(str(user.id))
     accepted = _is_currently_accepted(latest, current_version)
     return AcceptStatusResponse(
         accepted=accepted,

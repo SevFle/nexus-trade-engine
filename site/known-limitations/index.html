@@ -514,6 +514,8 @@
       
         
       
+        
+      
     
     
     
@@ -613,6 +615,34 @@
     
   
     Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/instruments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruments & multi-asset
   
 
     
@@ -2252,6 +2282,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#p1-multi-asset-instrument-model-is-landed-but-not-threaded-through-core" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        P1 — Multi-asset Instrument model is landed but not threaded through core
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#p1-strategy-marketplace-is-a-stub" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2502,6 +2543,17 @@
     <span class="md-ellipsis">
       
         P1 — Three Execution Modes (Roadmap: partial)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#p1-multi-asset-instrument-model-is-landed-but-not-threaded-through-core" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        P1 — Multi-asset Instrument model is landed but not threaded through core
       
     </span>
   </a>
@@ -2792,6 +2844,44 @@ factory, then expose a <code>POST /api/v1/.../run</code> route guarded by the
 strategy-lifecycle <code>live</code> gate and the <code>RiskEngine</code> kill-switch. The
 broker-direct helpers, error mapping, and <code>client_order_id</code> idempotency
 are already in place — the missing piece is the route + worker glue.</p>
+<hr />
+<p><a id="multi-asset-unthreaded"></a></p>
+<h2 id="p1-multi-asset-instrument-model-is-landed-but-not-threaded-through-core">P1 — Multi-asset <code>Instrument</code> model is landed but not threaded through core<a class="headerlink" href="#p1-multi-asset-instrument-model-is-landed-but-not-threaded-through-core" title="Permanent link">&para;</a></h2>
+<p><strong>Where</strong>: <a href="../engine/core/instruments.py"><code>engine/core/instruments.py</code></a>
+(the <code>Instrument</code> value object + <code>InstrumentAssetClass</code> enum, gh#1213).</p>
+<p>The typed model is correct and is wired into the two edges of the
+engine: every <a href="../engine/core/signal.py"><code>Signal</code></a> carries an
+<code>instrument</code> field (auto-populated from <code>symbol</code> via
+<code>Instrument.from_string</code>), and the market-data route infers the
+provider <a href="../engine/data/providers/base.py"><code>AssetClass</code></a> from the
+symbol shape. It stops there. The core trading path still operates on
+raw <code>symbol: str</code>:</p>
+<ul>
+<li><a href="../engine/core/order_manager.py"><code>OrderManager</code></a> builds orders from
+  <code>signal.symbol</code> and the <code>Order</code> model is <code>symbol: str</code>.</li>
+<li><a href="../engine/core/portfolio.py"><code>Portfolio.open_position</code>/<code>close_position</code></a>
+  take <code>symbol: str</code>; positions are keyed on <code>(portfolio_id, symbol)</code>.</li>
+<li>The backtest runner has zero references to <code>instrument</code>.</li>
+<li>The <code>positions</code> table has no <code>asset_class</code> / <code>instrument_uid</code> column.</li>
+</ul>
+<p><strong>Impact</strong>: today this is latent, not active — the only public run path
+is equity-style backtests, and option/crypto callers have no route to
+drive through. It <strong>becomes</strong> a correctness bug the moment live/paper
+trading or multi-asset positions land: an equity <code>AAPL</code> and an option
+on <code>AAPL</code> that shared a symbol string would collapse onto one position
+row. The <code>Instrument.uid</code> convention (per asset class — see
+<a href="../architecture/instruments/#uid-the-stable-identity"><code>architecture/instruments.md</code></a>) is designed
+to be the drop-in position key for exactly this.</p>
+<p><strong>Workaround today</strong>: none needed on the equity backtest path. Code that
+needs multi-asset identity today should compute <code>Instrument(...).uid</code>
+explicitly and key on it in its own bookkeeping rather than relying on
+the OMS.</p>
+<p><strong>Fix path</strong>: thread <code>instrument.uid</code> from <code>Signal</code> → <code>Order</code> →
+<code>Portfolio</code> → <code>positions</code>, add an <code>instrument_uid</code>/<code>asset_class</code> column
+in a new migration (run <code>alembic history</code> for the next number — <code>013</code> is
+the latest revision today), and switch the backtest runner to fan out by
+instrument when a strategy emits multi-asset signals. The full shape and
+status table live in <a href="../architecture/instruments/"><code>architecture/instruments.md</code></a>.</p>
 <hr />
 <h2 id="p1-strategy-marketplace-is-a-stub">P1 — Strategy Marketplace is a stub<a class="headerlink" href="#p1-strategy-marketplace-is-a-stub" title="Permanent link">&para;</a></h2>
 <p><strong>Where</strong>: <a href="../engine/api/routes/marketplace.py"><code>engine/api/routes/marketplace.py</code></a></p>

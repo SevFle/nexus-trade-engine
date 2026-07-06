@@ -134,6 +134,50 @@ are already in place — the missing piece is the route + worker glue.
 
 ---
 
+<a id="multi-asset-unthreaded"></a>
+## P1 — Multi-asset `Instrument` model is landed but not threaded through core
+
+**Where**: [`engine/core/instruments.py`](../engine/core/instruments.py)
+(the `Instrument` value object + `InstrumentAssetClass` enum, gh#1213).
+
+The typed model is correct and is wired into the two edges of the
+engine: every [`Signal`](../engine/core/signal.py) carries an
+`instrument` field (auto-populated from `symbol` via
+`Instrument.from_string`), and the market-data route infers the
+provider [`AssetClass`](../engine/data/providers/base.py) from the
+symbol shape. It stops there. The core trading path still operates on
+raw `symbol: str`:
+
+- [`OrderManager`](../engine/core/order_manager.py) builds orders from
+  `signal.symbol` and the `Order` model is `symbol: str`.
+- [`Portfolio.open_position`/`close_position`](../engine/core/portfolio.py)
+  take `symbol: str`; positions are keyed on `(portfolio_id, symbol)`.
+- The backtest runner has zero references to `instrument`.
+- The `positions` table has no `asset_class` / `instrument_uid` column.
+
+**Impact**: today this is latent, not active — the only public run path
+is equity-style backtests, and option/crypto callers have no route to
+drive through. It **becomes** a correctness bug the moment live/paper
+trading or multi-asset positions land: an equity `AAPL` and an option
+on `AAPL` that shared a symbol string would collapse onto one position
+row. The `Instrument.uid` convention (per asset class — see
+[`architecture/instruments.md`](architecture/instruments.md#uid-the-stable-identity)) is designed
+to be the drop-in position key for exactly this.
+
+**Workaround today**: none needed on the equity backtest path. Code that
+needs multi-asset identity today should compute `Instrument(...).uid`
+explicitly and key on it in its own bookkeeping rather than relying on
+the OMS.
+
+**Fix path**: thread `instrument.uid` from `Signal` → `Order` →
+`Portfolio` → `positions`, add an `instrument_uid`/`asset_class` column
+in a new migration (run `alembic history` for the next number — `013` is
+the latest revision today), and switch the backtest runner to fan out by
+instrument when a strategy emits multi-asset signals. The full shape and
+status table live in [`architecture/instruments.md`](architecture/instruments.md).
+
+---
+
 ## P1 — Strategy Marketplace is a stub
 
 **Where**: [`engine/api/routes/marketplace.py`](../engine/api/routes/marketplace.py)

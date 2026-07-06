@@ -170,6 +170,7 @@ nav:
       - architecture/README.md
       - System overview: architecture/overview.md
       - Core domains: architecture/core-domains.md
+      - Instruments & multi-asset: architecture/instruments.md
       - Database & migrations: architecture/database.md
       - Plugin system: architecture/plugins.md
   - Reference:

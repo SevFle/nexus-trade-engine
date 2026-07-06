@@ -66,7 +66,7 @@ we explain *why*, not *what*.
 | Get a 10-minute mental model of the system | [`architecture/overview.md`](architecture/overview.md) |
 | Understand the domain layer (orchestration, analytics, scoring, optimization) | [`architecture/core-domains.md`](architecture/core-domains.md) |
 | Understand every table and its constraints | [`data-model.md`](data-model.md) |
-| Understand the 86-KPI analytics + scoring + optimization internals | [`architecture/core-domains.md`](architecture/core-domains.md) |
+| Understand the typed `Instrument` model & multi-asset status | [`architecture/instruments.md`](architecture/instruments.md) |
 | Call the REST / WebSocket API | [`api-reference.md`](api-reference.md) |
 | Drive the engine from an LLM agent (MCP) | [`mcp-server.md`](mcp-server.md) |
 | Run the engine locally | [`development.md`](development.md) |
@@ -87,6 +87,7 @@ docs/
 ├── architecture/                   ← component-by-component "current state"
 │   ├── overview.md                 ← service view (app, lifecycle, deploy)
 │   ├── core-domains.md             ← domain view (orchestration, analytics, scoring)
+│   ├── instruments.md              ← typed Instrument model & multi-asset status
 │   ├── database.md                 ← migration policy, table inventory
 │   └── plugins.md                  ← plugin SDK + registry
 ├── adr/                            ← architecture decision records (why we chose X)
