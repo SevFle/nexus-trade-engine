@@ -527,9 +527,19 @@ class TestRouteProtection:
 # ─── OAuth Flow (mocked) ─────────────────────────────────────────────────────
 
 
-@pytest.mark.skip(
-    reason="OAuth callback tests pre-date the state-cookie requirement; rewrite needed to plumb state + cookie through the mock client"
-)
+async def _oauth_authorize(client: AsyncClient, provider: str = "google") -> str:
+    """Mint a state token and its matching cookie by hitting the authorize
+    endpoint.
+
+    The ``AsyncClient`` persists the ``Set-Cookie`` header (``oauth_state_{provider}``)
+    in its cookie jar, so the returned ``state`` can be passed straight to the
+    callback endpoint — satisfying the CSRF state-cookie check enforced there.
+    """
+    resp = await client.get(f"/api/v1/auth/{provider}/authorize")
+    assert resp.status_code == 200, f"Authorize failed: {resp.text}"
+    return resp.json()["state"]
+
+
 class TestOAuthFlowMocked:
     async def test_authorize_returns_url_for_configured_provider(self, e2e_db: AsyncSession):
         from engine.api.auth.google import GoogleAuthProvider
@@ -601,8 +611,11 @@ class TestOAuthFlowMocked:
             ),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/v1/auth/google/callback?code=mock-auth-code")
-                assert resp.status_code == 200
+                state = await _oauth_authorize(client)
+                resp = await client.get(
+                    f"/api/v1/auth/google/callback?code=mock-auth-code&state={state}"
+                )
+                assert resp.status_code == 200, resp.text
                 data = resp.json()
                 assert "access_token" in data
                 assert "refresh_token" in data
@@ -655,7 +668,10 @@ class TestOAuthFlowMocked:
             return_value=AuthResult(success=False, error="Invalid authorization code"),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/v1/auth/google/callback?code=bad-code")
+                state = await _oauth_authorize(client)
+                resp = await client.get(
+                    f"/api/v1/auth/google/callback?code=bad-code&state={state}"
+                )
                 assert resp.status_code == 401
         app.dependency_overrides.clear()
 
@@ -707,8 +723,11 @@ class TestOAuthFlowMocked:
             ),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/v1/auth/google/callback?code=first-code")
-                assert resp.status_code == 200
+                state = await _oauth_authorize(client)
+                resp = await client.get(
+                    f"/api/v1/auth/google/callback?code=first-code&state={state}"
+                )
+                assert resp.status_code == 200, resp.text
 
         from sqlalchemy import select
 
@@ -776,12 +795,18 @@ class TestOAuthFlowMocked:
             return_value=auth_result,
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                first = await client.get("/api/v1/auth/google/callback?code=first-code")
-                assert first.status_code == 200
+                first_state = await _oauth_authorize(client)
+                first = await client.get(
+                    f"/api/v1/auth/google/callback?code=first-code&state={first_state}"
+                )
+                assert first.status_code == 200, first.text
                 first_data = first.json()
 
-                second = await client.get("/api/v1/auth/google/callback?code=second-code")
-                assert second.status_code == 200
+                second_state = await _oauth_authorize(client)
+                second = await client.get(
+                    f"/api/v1/auth/google/callback?code=second-code&state={second_state}"
+                )
+                assert second.status_code == 200, second.text
                 second_data = second.json()
 
                 first_decode = decode_token(first_data["access_token"])
