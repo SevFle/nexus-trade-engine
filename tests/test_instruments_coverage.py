@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 
 import pydantic
@@ -54,6 +55,41 @@ class TestToProviderClass:
         from engine.data.providers.base import AssetClass
 
         assert InstrumentAssetClass.FUTURE.to_provider_class() == AssetClass.FUTURES
+
+    def test_unmapped_asset_class_logs_warning(self, caplog):
+        # Build an InstrumentAssetClass member that none of the explicit
+        # match arms in to_provider_class covers. We instantiate it via
+        # str.__new__ (StrEnum's member type) and set the name/value
+        # attributes, but deliberately avoid registering it in the enum's
+        # member maps so the global enum is not mutated between tests.
+        unmapped = str.__new__(InstrumentAssetClass, "warrant")
+        unmapped._name_ = "WARRANT"
+        unmapped._value_ = "warrant"
+
+        assert isinstance(unmapped, InstrumentAssetClass)
+        assert "WARRANT" not in InstrumentAssetClass.__members__
+
+        with (
+            caplog.at_level(logging.WARNING, logger="engine.core.instruments"),
+            pytest.raises(AssertionError),
+        ):
+            # Under ``__debug__`` (the default in CI/dev) assert_never fires
+            # *after* the warning has already been emitted.
+            unmapped.to_provider_class()
+
+        records = [
+            rec
+            for rec in caplog.records
+            if rec.levelno == logging.WARNING and rec.name == "engine.core.instruments"
+        ]
+        assert len(records) == 1
+        message = records[0].getMessage()
+        assert "Unmapped InstrumentAssetClass" in message
+        assert "routing as EQUITY" in message
+        assert repr(unmapped) in message
+
+        # The isolated member must not have leaked into the enum.
+        assert "WARRANT" not in InstrumentAssetClass.__members__
 
 
 class TestCryptoValidation:

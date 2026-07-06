@@ -18,6 +18,7 @@ evolves independently from the instrument taxonomy (what the engine
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping  # noqa: TC003
 from datetime import date  # noqa: TC003 - needed at runtime by pydantic
 from enum import StrEnum
@@ -27,6 +28,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 if TYPE_CHECKING:
     from engine.data.providers.base import AssetClass as ProviderAssetClass
+
+logger = logging.getLogger(__name__)
 
 
 class InstrumentAssetClass(StrEnum):
@@ -63,8 +66,12 @@ class InstrumentAssetClass(StrEnum):
             case InstrumentAssetClass.FUTURE:
                 return P.FUTURES
             case _:
-                assert_never(self)
-        return P.EQUITY  # unreachable — assert_never never returns
+                logger.warning("Unmapped InstrumentAssetClass %r routing as EQUITY", self)
+                if __debug__:
+                    # CI/dev catches the missing mapping loudly…
+                    assert_never(self)
+                # …while production (-O) degrades gracefully to EQUITY.
+                return P.EQUITY
 
 
 class OptionType(StrEnum):
