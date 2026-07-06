@@ -27,11 +27,17 @@ logger = structlog.get_logger()
 def _summarize(name: str, manifest: dict[str, Any]) -> dict[str, Any]:
     """Project a raw manifest dict into the LLM-facing strategy summary.
 
-    ``marketplace`` is guarded with an :func:`isinstance` check rather than a
-    bare ``... or {}`` so that a malformed manifest that stores a non-dict
-    truthy value (e.g. a string or list) under ``marketplace`` degrades to an
-    empty dict instead of leaking an unexpected type into the JSON output.
+    ``manifest`` itself is guarded with an :func:`isinstance` check so that a
+    malformed manifest that parsed into a non-dict value — e.g. an empty YAML
+    document that loaded to ``None``, or a bare scalar/list — degrades to an
+    empty summary dict instead of raising :class:`AttributeError` on the first
+    ``manifest.get(...)`` call. ``marketplace`` is guarded the same way rather
+    than with a bare ``... or {}`` so that a manifest storing a non-dict truthy
+    value (e.g. a string or list) under ``marketplace`` degrades to an empty
+    dict instead of leaking an unexpected type into the JSON output.
     """
+    if not isinstance(manifest, dict):
+        return {}
     mp = manifest.get("marketplace")
     marketplace = mp if isinstance(mp, dict) else {}
     return {
