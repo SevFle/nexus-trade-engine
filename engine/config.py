@@ -68,6 +68,10 @@ class Settings(BaseSettings):
 
     # Legal / Operator
     legal_documents_dir: str = "legal"
+    # Current version of the legal document (e.g. terms of service) that
+    # users must accept. Bump this to force re-acceptance on next request.
+    # Used by the self-contained acceptance dependency in engine.api.legal.
+    legal_terms_version: str = "1.0.0"
     operator_name: str = "Nexus Trade Engine"
     operator_email: str = "legal@example.com"
     operator_url: str = "https://example.com"
