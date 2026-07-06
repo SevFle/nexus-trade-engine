@@ -90,6 +90,7 @@ Unauthenticated probes for load balancers and Prometheus.
 | Method | Path | Source | Notes |
 |---|---|---|---|
 | GET | `/health` | [`routes/health.py`](../engine/api/routes/health.py#L19) | Liveness. Always returns `{"status": "ok"}`. |
+| GET | `/api/v1/health` | same | Aliased liveness path so the k6 baseline load test (`GET /api/v1/health`) resolves without a 404. Distinct route (not a prefix change) so `/health`, `/ready`, and the rate-limit exempt list stay intact. |
 | GET | `/health/providers` | same | Reports each registered data provider (up/degraded/down + latency). |
 | GET | `/ready` | same | Readiness — pings DB (`SELECT 1`) and `valkey.ping()`. Returns `degraded` if either fails. |
 | GET | `/metrics` | [`routes/metrics.py`](../engine/api/routes/metrics.py) | Prometheus exposition. The `RateLimitMiddleware` exempts `/metrics` from throttling. |
@@ -221,6 +222,7 @@ are lost on process restart.
 | Method | Path | Body | Notes |
 |---|---|---|---|
 | POST | `/api/v1/backtest/run` | `{strategy_name, symbol, start_date, end_date, initial_capital?, config?}` | Returns `202 {status:"accepted", backtest_id}`. Computation runs as a `BackgroundTasks` job (not TaskIQ — see [known-limitations.md](known-limitations.md)). |
+| POST | `/api/v1/backtest` | `BacktestSubmitRequest` — accepts **both** the canonical payload above and the load-test spellings via `AliasChoices`: `strategy_id` (= `strategy_name`), `start` (= `start_date`), `end` (= `end_date`), plus `symbol`, `initial_capital?` (default `100000`), `config?`. | Returns `202 {status:"accepted", backtest_id}`. Same background path as `/run`; exists so the k6 baseline (`tests/load/api-baseline.js`) can submit without tracking Pydantic renames. |
 | GET | `/api/v1/backtest/results/{backtest_id}` | — | `202 {status:"running"}` · `200 {status:"completed", metrics, equity_curve, drawdown_curve, evaluation?}` · `200 {status:"failed", error}` · `404` · `403`. |
 
 The `metrics` object is `MetricsSummary` (24 fields including rolling
@@ -258,6 +260,7 @@ Requires legal acceptance.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/v1/reference/suggest?q=&limit=&asset_class=` | Typeahead. Tries the local `SearchIndex` first (seeded at startup), then falls through to the Yahoo Finance search API. Caps `limit` at 50; rejects empty / oversize `q`. |
+| GET | `/api/v1/reference/exchanges` | Static, fully-cached list of supported trading venues (ISO 10383 MIC → `{name, country, currency}`). No DB / no network — backs the frontend venue picker and the k6 baseline (`GET /api/v1/reference/exchanges`). |
 
 ## Market data
 

@@ -2263,6 +2263,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#p1-multistrategyportfolio-is-landed-but-library-only-roadmap-partial" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        P1 — MultiStrategyPortfolio is landed but library-only (Roadmap: partial)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#p1-data-provider-registry-has-no-first-class-credentials-store" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2520,6 +2531,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#p1-multistrategyportfolio-is-landed-but-library-only-roadmap-partial" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        P1 — MultiStrategyPortfolio is landed but library-only (Roadmap: partial)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#p1-data-provider-registry-has-no-first-class-credentials-store" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2755,21 +2777,43 @@ then land the CI job from the P2 <a href="#no-alembic-check">"No Alembic check i
 entry so a model-without-migration can't recur silently.</p>
 <hr />
 <h2 id="p1-three-execution-modes-roadmap-partial">P1 — Three Execution Modes (Roadmap: partial)<a class="headerlink" href="#p1-three-execution-modes-roadmap-partial" title="Permanent link">&para;</a></h2>
-<p>Live and paper execution land in <code>engine/core/execution/</code>, but the
-public surface only exposes backtest. Specifically:</p>
+<p>The execution layer is split across two packages — both land on disk
+but neither is wired to a public run route:</p>
 <ul>
-<li><code>engine/core/execution/paper.py</code> and <code>live.py</code> exist but are wired
-  to nothing on the API surface.</li>
-<li><code>engine/core/live/loop.py</code> and <code>kill_switch.py</code> are scaffolded; the
-  live loop has no route entry, no worker task, and no LB / health
-  integration.</li>
-<li>The README lists "Live broker integration (Alpaca, IBKR)" as a
-  roadmap item; only <code>AlpacaDataProvider</code> (read-only market data) is
-  shipped.</li>
+<li><a href="../engine/core/execution/"><code>engine/core/execution/</code></a> holds the
+  <code>ExecutionBackend</code> ABC, the concrete <code>BacktestBackend</code> and
+  <code>PaperExecutionBackend</code>, the <strong>scaffold</strong> <code>LiveBackend</code>
+  (<code>_is_scaffold = True</code>, talks to no broker), and the
+  <code>create_backend(...)</code> factory.</li>
+<li><a href="../engine/execution/"><code>engine/execution/</code></a> (SEV-223) holds the
+  <strong>concrete</strong> <code>LiveExecutionBackend</code> — an Alpaca-compatible REST
+  adapter over an injectable <code>httpx.AsyncClient</code> with broker-direct
+  <code>submit_order</code> / <code>cancel_order</code> / <code>get_order_status</code> helpers, typed
+  broker-error translation, and a uuid <code>client_order_id</code> on every
+  submit for idempotent retries (gh#49eec71). It is unit-tested
+  (<a href="../tests/test_live_backend.py"><code>tests/test_live_backend.py</code></a>) but
+  <strong>not</strong> registered in the factory and <strong>not</strong> mounted by any route.</li>
+<li>A second concrete Alpaca adapter — <code>AlpacaTradingClient</code> in
+  <a href="../engine/core/brokers/alpaca/"><code>engine/core/brokers/alpaca/</code></a>
+  (gh#136) — targets the <code>BrokerClient</code> Protocol (clock / account /
+  positions) rather than the <code>ExecutionBackend</code> the order manager
+  calls. The two adapters are not yet unified.</li>
+<li><a href="../engine/core/live/"><code>engine/core/live/</code></a> (<code>loop.py</code>,
+  <code>kill_switch.py</code>) is scaffolded; the live loop has no route entry,
+  no worker task, and no LB / health integration.</li>
+<li>Read-only <code>AlpacaDataProvider</code> market data is the only shipped
+  Alpaca surface that <em>is</em> reachable from a route today.</li>
 </ul>
 <p><strong>Workaround today</strong>: the engine is a <strong>backtest engine</strong> for
-production purposes. Treat the live execution code as an internal
-preview.</p>
+production purposes. Treat every live/paper code path as an internal
+preview. The concrete pieces (<code>LiveExecutionBackend</code>,
+<code>AlpacaTradingClient</code>) are callable as a library, but there is no
+<code>POST /.../live/run</code> (or paper) route to drive them.</p>
+<p><strong>Fix path</strong>: register <code>LiveExecutionBackend</code> with the execution
+factory, then expose a <code>POST /api/v1/.../run</code> route guarded by the
+strategy-lifecycle <code>live</code> gate and the <code>RiskEngine</code> kill-switch. The
+broker-direct helpers, error mapping, and <code>client_order_id</code> idempotency
+are already in place — the missing piece is the route + worker glue.</p>
 <hr />
 <h2 id="p1-strategy-marketplace-is-a-stub">P1 — Strategy Marketplace is a stub<a class="headerlink" href="#p1-strategy-marketplace-is-a-stub" title="Permanent link">&para;</a></h2>
 <p><strong>Where</strong>: <a href="../engine/api/routes/marketplace.py"><code>engine/api/routes/marketplace.py</code></a></p>
@@ -2780,6 +2824,40 @@ behind the routes.</p>
 <p><strong>Workaround today</strong>: install strategies by placing them under
 <code>engine/plugins/&lt;kind&gt;/&lt;name&gt;/</code> and reloading the plugin registry.
 The marketplace routes exist purely to lock the public API shape.</p>
+<hr />
+<h2 id="p1-multistrategyportfolio-is-landed-but-library-only-roadmap-partial">P1 — <code>MultiStrategyPortfolio</code> is landed but library-only (Roadmap: partial)<a class="headerlink" href="#p1-multistrategyportfolio-is-landed-but-library-only-roadmap-partial" title="Permanent link">&para;</a></h2>
+<p><strong>Where</strong>: <a href="../engine/portfolio/multi_strategy.py"><code>engine/portfolio/multi_strategy.py</code></a>
+(gh#1179).</p>
+<p>The capital-aware multi-strategy combiner is fully implemented and
+unit-tested (<a href="../tests/test_multi_strategy_portfolio.py"><code>tests/test_multi_strategy_portfolio.py</code></a>,
+661 lines): it allocates dollars across strategies via relative
+<code>capital_weight</code>s, evaluates each with a deep-copied cost model (a
+misbehaving/timed-out strategy is isolated into <code>errors</code>), and merges
+signals by netted capital-weighted dollar exposure (<code>RISK_ADJUSTED</code>).
+It is <strong>distinct</strong> from the two capital-agnostic voters in
+<a href="../engine/orchestration/orchestrator.py"><code>engine/orchestration/</code></a> and
+<a href="../engine/core/strategy_orchestrator.py"><code>engine/core/strategy_orchestrator.py</code></a>
+— see <a href="../architecture/core-domains/"><code>architecture/core-domains.md</code></a>.</p>
+<p>It is <strong>not referenced anywhere in <code>engine/</code> outside <code>engine/portfolio/</code></strong>:
+no route constructs it, the execution factory does not call it, and the
+backtest runner still drives strategies through a single-strategy path.
+So the multi-strategy portfolio roadmap item is <em>code-complete but
+unreachable</em> from the API.</p>
+<p><strong>Impact</strong>: the engine still effectively runs one strategy per
+backtest/portfolio for API consumers, even though the machinery to run
+and dollar-weight-merge N strategies against shared capital is ready.</p>
+<p><strong>Workaround today</strong>: use it as a library — construct
+<code>MultiStrategyPortfolio(total_capital, cost_model)</code>, <code>.register(...)</code>
+your strategies with weights, and call <code>await portfolio.evaluate_all(market_data)</code>.
+The returned <code>PortfolioEvaluation</code> gives merged <code>signals</code>, per-symbol
+<code>positions</code>, full <code>per_strategy_signals</code> provenance, and <code>errors</code>.</p>
+<p><strong>Fix path</strong>: pick a run surface (backtest runner first, since paper/live
+are themselves unregistered — see the
+<a href="#p1-three-execution-modes-roadmap-partial">Three Execution Modes</a> entry
+above) and route a list of <code>(strategy, capital_weight)</code> through
+<code>evaluate_all</code> instead of the single-strategy evaluator. No new merge
+logic is needed; the merge, deep-copy isolation, and timeout handling
+are already in place.</p>
 <hr />
 <h2 id="p1-data-provider-registry-has-no-first-class-credentials-store">P1 — Data provider registry has no first-class credentials store<a class="headerlink" href="#p1-data-provider-registry-has-no-first-class-credentials-store" title="Permanent link">&para;</a></h2>
 <p><strong>Where</strong>: <a href="../engine/data/providers/config.py"><code>engine/data/providers/config.py</code></a>,

@@ -149,6 +149,48 @@ The marketplace routes exist purely to lock the public API shape.
 
 ---
 
+## P1 — `MultiStrategyPortfolio` is landed but library-only (Roadmap: partial)
+
+**Where**: [`engine/portfolio/multi_strategy.py`](../engine/portfolio/multi_strategy.py)
+(gh#1179).
+
+The capital-aware multi-strategy combiner is fully implemented and
+unit-tested ([`tests/test_multi_strategy_portfolio.py`](../tests/test_multi_strategy_portfolio.py),
+661 lines): it allocates dollars across strategies via relative
+`capital_weight`s, evaluates each with a deep-copied cost model (a
+misbehaving/timed-out strategy is isolated into `errors`), and merges
+signals by netted capital-weighted dollar exposure (`RISK_ADJUSTED`).
+It is **distinct** from the two capital-agnostic voters in
+[`engine/orchestration/`](../engine/orchestration/orchestrator.py) and
+[`engine/core/strategy_orchestrator.py`](../engine/core/strategy_orchestrator.py)
+— see [`architecture/core-domains.md`](architecture/core-domains.md).
+
+It is **not referenced anywhere in `engine/` outside `engine/portfolio/`**:
+no route constructs it, the execution factory does not call it, and the
+backtest runner still drives strategies through a single-strategy path.
+So the multi-strategy portfolio roadmap item is *code-complete but
+unreachable* from the API.
+
+**Impact**: the engine still effectively runs one strategy per
+backtest/portfolio for API consumers, even though the machinery to run
+and dollar-weight-merge N strategies against shared capital is ready.
+
+**Workaround today**: use it as a library — construct
+`MultiStrategyPortfolio(total_capital, cost_model)`, `.register(...)`
+your strategies with weights, and call `await portfolio.evaluate_all(market_data)`.
+The returned `PortfolioEvaluation` gives merged `signals`, per-symbol
+`positions`, full `per_strategy_signals` provenance, and `errors`.
+
+**Fix path**: pick a run surface (backtest runner first, since paper/live
+are themselves unregistered — see the
+[Three Execution Modes](#p1-three-execution-modes-roadmap-partial) entry
+above) and route a list of `(strategy, capital_weight)` through
+`evaluate_all` instead of the single-strategy evaluator. No new merge
+logic is needed; the merge, deep-copy isolation, and timeout handling
+are already in place.
+
+---
+
 ## P1 — Data provider registry has no first-class credentials store
 
 **Where**: [`engine/data/providers/config.py`](../engine/data/providers/config.py),

@@ -712,6 +712,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#engineportfoliomulti_strategypy-multistrategyportfolio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        engine/portfolio/multi_strategy.py — MultiStrategyPortfolio
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -722,6 +733,17 @@
     <span class="md-ellipsis">
       
         Cost &amp; risk modeling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#execution-backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Execution backends
       
     </span>
   </a>
@@ -2527,6 +2549,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#engineportfoliomulti_strategypy-multistrategyportfolio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        engine/portfolio/multi_strategy.py — MultiStrategyPortfolio
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2537,6 +2570,17 @@
     <span class="md-ellipsis">
       
         Cost &amp; risk modeling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#execution-backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Execution backends
       
     </span>
   </a>
@@ -2746,9 +2790,11 @@ and post-trade cost analysis.</p>
     GOV -.-&gt;|gates promotions| ONE
     VER -.-&gt;|pinned code| ONE</code></pre>
 <h2 id="multi-strategy-orchestration">Multi-strategy orchestration<a class="headerlink" href="#multi-strategy-orchestration" title="Permanent link">&para;</a></h2>
-<p>Two orchestrators exist. They overlap in spirit but are deliberately
-separate modules with different conflict-resolution semantics. Pick by
-voting model, not by file name.</p>
+<p>Three strategy combiners exist. They overlap in spirit but are
+deliberately separate modules with different conflict-resolution
+semantics. Pick by voting model <strong>and capital awareness</strong>, not by file
+name — the first two are pure signal voters (capital-agnostic); the
+third is capital-aware (see below).</p>
 <h3 id="engineorchestrationorchestratorpy-strategyorchestrator"><code>engine/orchestration/orchestrator.py</code> — <code>StrategyOrchestrator</code><a class="headerlink" href="#engineorchestrationorchestratorpy-strategyorchestrator" title="Permanent link">&para;</a></h3>
 <p>The "register N strategies, run them all, collapse to one decision set"
 loop. Two-step API: <code>await orch.run_all(market)</code> collects every
@@ -2810,6 +2856,64 @@ not own:</p>
 orchestrators: a strategy that declines to vote never blocks the others,
 and a symbol on which every strategy abstains still yields a single HOLD
 record so downstream consumers know it was considered.</p>
+<h3 id="engineportfoliomulti_strategypy-multistrategyportfolio"><code>engine/portfolio/multi_strategy.py</code> — <code>MultiStrategyPortfolio</code><a class="headerlink" href="#engineportfoliomulti_strategypy-multistrategyportfolio" title="Permanent link">&para;</a></h3>
+<p>The <strong>capital-aware</strong> combiner. Unlike the two orchestrators above
+(which answer "given these signals, what do we do?" with no notion of
+dollars), this one answers "given these strategies <em>and this much money
+split this way</em>, what do we do?" — dollar allocation is a first-class
+input to the merge. It owns three concerns the pure voters do not:</p>
+<ol>
+<li><strong>Capital allocation</strong> — each strategy is registered with a relative
+   <code>capital_weight</code>; dollar allocations are normalised against the
+   weight sum at lookup time, so weights need not sum to 1.0 and the
+   portfolio is the source of truth for <em>how much money</em> each strategy
+   may deploy. Construction rejects <code>total_capital &lt; 0</code> outright
+   (division-by-zero guard, gh#1179) and rejects non-finite weights.</li>
+<li><strong>Evaluation</strong> — every registered strategy is invoked with the same
+   <code>market_data</code> and the portfolio's <code>ICostModel</code>, each receiving an
+   independent deep copy so a misbehaving plugin cannot poison its
+   siblings or the caller's originals. A strategy that raises — or
+   exceeds the configured <code>eval_timeout</code> — is isolated: its error lands
+   in <code>PortfolioEvaluation.errors</code> and the remaining strategies still
+   contribute. Sync and async strategies are both supported; only the
+   awaitable result is bounded by the timeout.</li>
+<li><strong>Risk-adjusted merging</strong> — per symbol, the capital-weighted <em>dollar
+   exposure</em> is netted (<code>BUY = +allocation·weight</code>, <code>SELL = −</code>…, HOLD
+   abstains). The merged side is the sign of the net; the merged
+   <code>net_weight</code> is <code>|net exposure| / total_capital</code> clamped to <code>[0, 1]</code>.
+   Conviction is therefore dollar-weighted: a strategy with more capital
+   at risk moves the decision proportionally more, and the merged
+   weight is itself a measure of how much of the book is committed.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Merge mode</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RISK_ADJUSTED</code> <em>(default, only mode today)</em></td>
+<td>Net signed dollar exposure per symbol; <code>|net|</code> within <code>_NET_EPSILON</code> (1e-9) → HOLD so float dust (e.g. <code>100 − 50 − 50</code>) cannot manufacture a phantom trade.</td>
+</tr>
+</tbody>
+</table>
+<p>The merged <code>Signal</code> is re-stamped <code>strategy_id = "portfolio"</code> with a
+<code>metadata.portfolio_contributors</code> list of the voting strategy ids, so
+the audit trail preserves the merge and its provenance.
+<code>PortfolioEvaluation</code> also exposes <code>positions</code> (per-symbol
+<code>CombinedPosition</code>), <code>per_strategy_signals</code> (full provenance),
+<code>capital_deployed</code>, <code>net_exposure</code>, <code>capital_utilization</code>, and <code>errors</code>.
+<code>is_noop</code> is true only when no merged signal was produced <em>or</em> total
+capital is zero — both short-circuit before any strategy runs.</p>
+<blockquote>
+<p><strong>Status:</strong> landed and fully unit-tested
+(<a href="../../tests/test_multi_strategy_portfolio.py"><code>tests/test_multi_strategy_portfolio.py</code></a>)
+but <strong>library-only</strong> — it is not referenced anywhere in <code>engine/</code>
+outside <code>engine/portfolio/</code> and is not wired to a route or the
+execution factory. See <a href="../../known-limitations/">known-limitations.md</a>.</p>
+</blockquote>
 <h2 id="cost-risk-modeling">Cost &amp; risk modeling<a class="headerlink" href="#cost-risk-modeling" title="Permanent link">&para;</a></h2>
 <p>The cost model is what makes Nexus "cost-first" — <code>ICostModel</code> is an
 argument to every <code>evaluate()</code>, so a strategy can price in commissions,
@@ -2848,6 +2952,72 @@ an order the cost model was happy with. Circuit breaker (10 % drawdown
 halt), max open positions, concentration cap, single-order value cap, and
 daily trade limit are the default rule set — see
 <a href="../../ARCHITECTURE.md"><code>ARCHITECTURE.md</code></a> for the table.</p>
+<p><a id="execution-backends"></a></p>
+<h2 id="execution-backends">Execution backends<a class="headerlink" href="#execution-backends" title="Permanent link">&para;</a></h2>
+<p>The order manager never calls a broker directly — it goes through the
+<code>ExecutionBackend</code> ABC
+(<a href="../../engine/core/execution/base.py"><code>engine/core/execution/base.py</code></a>),
+so the same strategy code runs unchanged in backtest, paper, and live.
+The split across two packages is deliberate and worth knowing:</p>
+<table>
+<thead>
+<tr>
+<th>Location</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../../engine/core/execution/base.py"><code>core/execution/base.py</code></a></td>
+<td><code>ExecutionBackend</code> ABC + <code>FillResult</code> dataclass. The single contract the order manager holds.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/execution/backtest.py"><code>core/execution/backtest.py</code></a></td>
+<td><code>BacktestBackend</code> — fills at the bar's price.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/execution/paper.py"><code>core/execution/paper.py</code></a></td>
+<td><code>PaperExecutionBackend</code> — simulated fills with a pluggable <code>SlippageModel</code>.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/execution/live.py"><code>core/execution/live.py</code></a></td>
+<td><code>LiveBackend</code> — a <strong>scaffold base class</strong> (<code>_is_scaffold = True</code>). It tracks connection state but talks to <em>no</em> broker; concrete subclasses flip the flag and implement <code>_do_connect</code> / <code>_submit_order</code>.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/execution/factory.py"><code>core/execution/factory.py</code></a></td>
+<td><code>create_backend(name)</code> registry. Built-ins: <code>backtest</code>, <code>paper</code>, <code>live</code>. Extensible at startup via <code>register_backend()</code>.</td>
+</tr>
+<tr>
+<td><a href="../../engine/execution/"><code>engine/execution/</code></a> <em>(top-level, SEV-223)</em></td>
+<td><code>LiveExecutionBackend</code> — the <strong>concrete</strong> Alpaca-compatible REST adapter. Implements the ABC's <code>connect</code>/<code>disconnect</code>/<code>execute</code> <em>and</em> exposes broker-direct async helpers <code>submit_order</code> (<code>POST /v2/orders</code>), <code>cancel_order</code> (<code>DELETE /v2/orders/{id}</code>), <code>get_order_status</code> (<code>GET /v2/orders/{id}</code>).</td>
+</tr>
+</tbody>
+</table>
+<p>A second concrete Alpaca trading client lives in
+<a href="../../engine/core/brokers/alpaca/"><code>engine/core/brokers/alpaca/</code></a> —
+<code>AlpacaTradingClient</code> (gh#136) implements the <code>BrokerClient</code> Protocol
+from <a href="../../engine/core/brokers/models.py"><code>engine/core/brokers/models.py</code></a>
+and goes direct to Alpaca's REST API over an injectable <code>httpx.AsyncClient</code>
+(no <code>alpaca-py</code> dependency). The two adapters are <strong>not</strong> unified yet:
+the <code>brokers/</code> package targets the broker Protocol surface (clock,
+account, positions), while <code>engine/execution/</code> targets the
+<code>ExecutionBackend</code> surface the order manager calls. Pick by which
+interface you hold.</p>
+<p>Both concrete adapters share the typed error vocabulary from
+<a href="../../engine/core/brokers/base.py"><code>engine/core/brokers/base.py</code></a>:
+<code>401/403 → BrokerAuthError</code> (permanent, kill-switch), <code>5xx/429/408 +
+transport errors → BrokerConnectionError</code> (retried with backoff, then
+raised), <code>400/404/422 → BrokerRejectError</code> (per-order).
+<code>LiveExecutionBackend</code> also stamps a broker <code>client_order_id</code> (uuid4)
+on every submit so the broker can de-duplicate retries (gh#49eec71) —
+the same idempotency convention the order manager relies on.</p>
+<blockquote>
+<p><strong>Status:</strong> the <code>BacktestBackend</code> is the only execution backend wired
+into a run path (the backtest runner). <code>PaperExecutionBackend</code>,
+<code>LiveBackend</code>, <code>LiveExecutionBackend</code>, and <code>AlpacaTradingClient</code> are
+library-only today — none is registered in the factory <em>and</em> mounted
+by a route. See <a href="../../known-limitations/"><code>known-limitations.md</code></a>.</p>
+</blockquote>
 <h2 id="portfolio-accounting">Portfolio accounting<a class="headerlink" href="#portfolio-accounting" title="Permanent link">&para;</a></h2>
 <p><a href="../../engine/core/portfolio.py"><code>Portfolio</code></a> is full tax-lot accounting.
 <code>open_position()</code> deducts cash and opens a lot; <code>close_position()</code>
@@ -2872,6 +3042,10 @@ strategies (mutating it can't corrupt the live book). The root
 <tr>
 <td><a href="../../engine/portfolio/allocation.py"><code>portfolio/allocation.py</code></a></td>
 <td><code>CapitalAllocation</code> — the <strong>immutable value object</strong> recording the split. Weights sum to exactly 1.0 (ε-tolerant), are non-negative, and the strategy count is capped by <code>max_strategies</code>. In-place mutation is blocked (gh#1042).</td>
+</tr>
+<tr>
+<td><a href="../../engine/portfolio/multi_strategy.py"><code>portfolio/multi_strategy.py</code></a></td>
+<td><code>MultiStrategyPortfolio</code> — the capital-aware registry that <em>evaluates</em> every strategy with a deep-copied cost model and merges signals by netted dollar exposure (the <code>RISK_ADJUSTED</code> mode above). Distinct from the two pure-voter orchestrators because the dollar allocation drives the merge. Library-only today (gh#1179).</td>
 </tr>
 </tbody>
 </table>

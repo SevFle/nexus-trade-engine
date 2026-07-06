@@ -2566,12 +2566,16 @@ React app under <code>frontend/</code>.</p>
 <td>Domain logic: backtest runner, OMS, cost/risk models, analytics. The <em>capability</em> map of this tree is <a href="../core-domains/"><code>core-domains.md</code></a>.</td>
 </tr>
 <tr>
+<td><a href="../../engine/execution/"><code>engine/execution/</code></a></td>
+<td>Concrete broker execution adapter: <code>LiveExecutionBackend</code> (SEV-223) — an Alpaca-compatible REST-backed <code>ExecutionBackend</code>. Sits <strong>on top of</strong> the <code>engine/core/execution/</code> ABC/factory rather than inside it; see <a href="../core-domains/#execution-backends"><code>core-domains.md</code></a>.</td>
+</tr>
+<tr>
 <td><a href="../../engine/orchestration/"><code>engine/orchestration/</code></a></td>
 <td>Multi-strategy <code>StrategyOrchestrator</code> (priority / net-position conflict resolution). See <a href="../core-domains/"><code>core-domains.md</code></a>.</td>
 </tr>
 <tr>
 <td><a href="../../engine/portfolio/"><code>engine/portfolio/</code></a></td>
-<td>Cross-strategy capital allocation (immutable <code>CapitalAllocation</code> value object).</td>
+<td>Cross-strategy capital allocation: the immutable <code>CapitalAllocation</code> value object <strong>and</strong> the capital-aware <code>MultiStrategyPortfolio</code> (dollar-weighted signal merge — see <a href="../core-domains/"><code>core-domains.md</code></a>).</td>
 </tr>
 <tr>
 <td><a href="../../engine/data/"><code>engine/data/</code></a></td>

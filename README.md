@@ -187,6 +187,12 @@ on the public API surface or not production-validated.
       to a run route — read-only `AlpacaDataProvider` is the only reachable
       Alpaca surface today; see
       [known-limitations](docs/known-limitations.md))*
+- [~] Multi-strategy portfolio *(partial — `MultiStrategyPortfolio`
+      (`engine/portfolio/multi_strategy.py`, gh#1179) landed and
+      unit-tested: dollar-weighted capital allocation + risk-adjusted
+      signal merge with per-strategy deep-copy isolation and timeouts;
+      library-only — not wired to a run route yet, see
+      [known-limitations](docs/known-limitations.md))*
 - [ ] Strategy marketplace *(stub routes only — returns `not_implemented`)*
 - [~] Multi-asset support *(partial — equity/ETF/crypto/forex/options
       primitives exist; asset-class inference on market-data route works)*

@@ -3058,6 +3058,12 @@ calls <code>/reference/suggest</code> to render attributions).</p>
 </tr>
 <tr>
 <td>GET</td>
+<td><code>/api/v1/health</code></td>
+<td>same</td>
+<td>Aliased liveness path so the k6 baseline load test (<code>GET /api/v1/health</code>) resolves without a 404. Distinct route (not a prefix change) so <code>/health</code>, <code>/ready</code>, and the rate-limit exempt list stay intact.</td>
+</tr>
+<tr>
+<td>GET</td>
 <td><code>/health/providers</code></td>
 <td>same</td>
 <td>Reports each registered data provider (up/degraded/down + latency).</td>
@@ -3420,6 +3426,12 @@ are lost on process restart.</p>
 <td>Returns <code>202 {status:"accepted", backtest_id}</code>. Computation runs as a <code>BackgroundTasks</code> job (not TaskIQ — see <a href="../known-limitations/">known-limitations.md</a>).</td>
 </tr>
 <tr>
+<td>POST</td>
+<td><code>/api/v1/backtest</code></td>
+<td><code>BacktestSubmitRequest</code> — accepts <strong>both</strong> the canonical payload above and the load-test spellings via <code>AliasChoices</code>: <code>strategy_id</code> (= <code>strategy_name</code>), <code>start</code> (= <code>start_date</code>), <code>end</code> (= <code>end_date</code>), plus <code>symbol</code>, <code>initial_capital?</code> (default <code>100000</code>), <code>config?</code>.</td>
+<td>Returns <code>202 {status:"accepted", backtest_id}</code>. Same background path as <code>/run</code>; exists so the k6 baseline (<code>tests/load/api-baseline.js</code>) can submit without tracking Pydantic renames.</td>
+</tr>
+<tr>
 <td>GET</td>
 <td><code>/api/v1/backtest/results/{backtest_id}</code></td>
 <td>—</td>
@@ -3518,6 +3530,11 @@ Requires legal acceptance.</p>
 <td>GET</td>
 <td><code>/api/v1/reference/suggest?q=&amp;limit=&amp;asset_class=</code></td>
 <td>Typeahead. Tries the local <code>SearchIndex</code> first (seeded at startup), then falls through to the Yahoo Finance search API. Caps <code>limit</code> at 50; rejects empty / oversize <code>q</code>.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/reference/exchanges</code></td>
+<td>Static, fully-cached list of supported trading venues (ISO 10383 MIC → <code>{name, country, currency}</code>). No DB / no network — backs the frontend venue picker and the k6 baseline (<code>GET /api/v1/reference/exchanges</code>).</td>
 </tr>
 </tbody>
 </table>

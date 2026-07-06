@@ -56,9 +56,11 @@ flowchart TD
 
 ## Multi-strategy orchestration
 
-Two orchestrators exist. They overlap in spirit but are deliberately
-separate modules with different conflict-resolution semantics. Pick by
-voting model, not by file name.
+Three strategy combiners exist. They overlap in spirit but are
+deliberately separate modules with different conflict-resolution
+semantics. Pick by voting model **and capital awareness**, not by file
+name — the first two are pure signal voters (capital-agnostic); the
+third is capital-aware (see below).
 
 ### `engine/orchestration/orchestrator.py` — `StrategyOrchestrator`
 
@@ -100,6 +102,55 @@ HOLD-as-abstain is the unifying contract across both modes and both
 orchestrators: a strategy that declines to vote never blocks the others,
 and a symbol on which every strategy abstains still yields a single HOLD
 record so downstream consumers know it was considered.
+
+### `engine/portfolio/multi_strategy.py` — `MultiStrategyPortfolio`
+
+The **capital-aware** combiner. Unlike the two orchestrators above
+(which answer "given these signals, what do we do?" with no notion of
+dollars), this one answers "given these strategies *and this much money
+split this way*, what do we do?" — dollar allocation is a first-class
+input to the merge. It owns three concerns the pure voters do not:
+
+1. **Capital allocation** — each strategy is registered with a relative
+   `capital_weight`; dollar allocations are normalised against the
+   weight sum at lookup time, so weights need not sum to 1.0 and the
+   portfolio is the source of truth for *how much money* each strategy
+   may deploy. Construction rejects `total_capital < 0` outright
+   (division-by-zero guard, gh#1179) and rejects non-finite weights.
+2. **Evaluation** — every registered strategy is invoked with the same
+   `market_data` and the portfolio's `ICostModel`, each receiving an
+   independent deep copy so a misbehaving plugin cannot poison its
+   siblings or the caller's originals. A strategy that raises — or
+   exceeds the configured `eval_timeout` — is isolated: its error lands
+   in `PortfolioEvaluation.errors` and the remaining strategies still
+   contribute. Sync and async strategies are both supported; only the
+   awaitable result is bounded by the timeout.
+3. **Risk-adjusted merging** — per symbol, the capital-weighted *dollar
+   exposure* is netted (`BUY = +allocation·weight`, `SELL = −`…, HOLD
+   abstains). The merged side is the sign of the net; the merged
+   `net_weight` is `|net exposure| / total_capital` clamped to `[0, 1]`.
+   Conviction is therefore dollar-weighted: a strategy with more capital
+   at risk moves the decision proportionally more, and the merged
+   weight is itself a measure of how much of the book is committed.
+
+| Merge mode | Rule |
+|---|---|
+| `RISK_ADJUSTED` *(default, only mode today)* | Net signed dollar exposure per symbol; `|net|` within `_NET_EPSILON` (1e-9) → HOLD so float dust (e.g. `100 − 50 − 50`) cannot manufacture a phantom trade. |
+
+The merged `Signal` is re-stamped `strategy_id = "portfolio"` with a
+`metadata.portfolio_contributors` list of the voting strategy ids, so
+the audit trail preserves the merge and its provenance.
+`PortfolioEvaluation` also exposes `positions` (per-symbol
+`CombinedPosition`), `per_strategy_signals` (full provenance),
+`capital_deployed`, `net_exposure`, `capital_utilization`, and `errors`.
+`is_noop` is true only when no merged signal was produced *or* total
+capital is zero — both short-circuit before any strategy runs.
+
+> **Status:** landed and fully unit-tested
+> ([`tests/test_multi_strategy_portfolio.py`](../../tests/test_multi_strategy_portfolio.py))
+> but **library-only** — it is not referenced anywhere in `engine/`
+> outside `engine/portfolio/` and is not wired to a route or the
+> execution factory. See [known-limitations.md](../known-limitations.md).
 
 ## Cost & risk modeling
 
@@ -183,6 +234,7 @@ Two allocation modules sit beside it:
 |---|---|
 | [`capital_allocation.py`](../../engine/core/capital_allocation.py) | **Largest-remainder (Hamilton) apportionment** of total capital across strategies proportional to weights, computed in fixed-point `Decimal` so the result is exact to the cent. Floors each raw share, then distributes the leftover cents to the largest fractional remainders. |
 | [`portfolio/allocation.py`](../../engine/portfolio/allocation.py) | `CapitalAllocation` — the **immutable value object** recording the split. Weights sum to exactly 1.0 (ε-tolerant), are non-negative, and the strategy count is capped by `max_strategies`. In-place mutation is blocked (gh#1042). |
+| [`portfolio/multi_strategy.py`](../../engine/portfolio/multi_strategy.py) | `MultiStrategyPortfolio` — the capital-aware registry that *evaluates* every strategy with a deep-copied cost model and merges signals by netted dollar exposure (the `RISK_ADJUSTED` mode above). Distinct from the two pure-voter orchestrators because the dollar allocation drives the merge. Library-only today (gh#1179). |
 
 Tax reporting lives in [`engine/core/tax/`](../../engine/core/tax/):
 FIFO/LIFO lot matching, US wash-sale detection (`wash_sale.py`), and
