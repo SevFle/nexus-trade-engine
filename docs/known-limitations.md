@@ -93,21 +93,44 @@ entry so a model-without-migration can't recur silently.
 
 ## P1 — Three Execution Modes (Roadmap: partial)
 
-Live and paper execution land in `engine/core/execution/`, but the
-public surface only exposes backtest. Specifically:
+The execution layer is split across two packages — both land on disk
+but neither is wired to a public run route:
 
-- `engine/core/execution/paper.py` and `live.py` exist but are wired
-  to nothing on the API surface.
-- `engine/core/live/loop.py` and `kill_switch.py` are scaffolded; the
-  live loop has no route entry, no worker task, and no LB / health
-  integration.
-- The README lists "Live broker integration (Alpaca, IBKR)" as a
-  roadmap item; only `AlpacaDataProvider` (read-only market data) is
-  shipped.
+- [`engine/core/execution/`](../engine/core/execution/) holds the
+  `ExecutionBackend` ABC, the concrete `BacktestBackend` and
+  `PaperExecutionBackend`, the **scaffold** `LiveBackend`
+  (`_is_scaffold = True`, talks to no broker), and the
+  `create_backend(...)` factory.
+- [`engine/execution/`](../engine/execution/) (SEV-223) holds the
+  **concrete** `LiveExecutionBackend` — an Alpaca-compatible REST
+  adapter over an injectable `httpx.AsyncClient` with broker-direct
+  `submit_order` / `cancel_order` / `get_order_status` helpers, typed
+  broker-error translation, and a uuid `client_order_id` on every
+  submit for idempotent retries (gh#49eec71). It is unit-tested
+  ([`tests/test_live_backend.py`](../tests/test_live_backend.py)) but
+  **not** registered in the factory and **not** mounted by any route.
+- A second concrete Alpaca adapter — `AlpacaTradingClient` in
+  [`engine/core/brokers/alpaca/`](../engine/core/brokers/alpaca/)
+  (gh#136) — targets the `BrokerClient` Protocol (clock / account /
+  positions) rather than the `ExecutionBackend` the order manager
+  calls. The two adapters are not yet unified.
+- [`engine/core/live/`](../engine/core/live/) (`loop.py`,
+  `kill_switch.py`) is scaffolded; the live loop has no route entry,
+  no worker task, and no LB / health integration.
+- Read-only `AlpacaDataProvider` market data is the only shipped
+  Alpaca surface that *is* reachable from a route today.
 
 **Workaround today**: the engine is a **backtest engine** for
-production purposes. Treat the live execution code as an internal
-preview.
+production purposes. Treat every live/paper code path as an internal
+preview. The concrete pieces (`LiveExecutionBackend`,
+`AlpacaTradingClient`) are callable as a library, but there is no
+`POST /.../live/run` (or paper) route to drive them.
+
+**Fix path**: register `LiveExecutionBackend` with the execution
+factory, then expose a `POST /api/v1/.../run` route guarded by the
+strategy-lifecycle `live` gate and the `RiskEngine` kill-switch. The
+broker-direct helpers, error mapping, and `client_order_id` idempotency
+are already in place — the missing piece is the route + worker glue.
 
 ---
 
