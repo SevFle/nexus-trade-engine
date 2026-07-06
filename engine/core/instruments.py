@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from engine.instruments import AssetType
+
 if TYPE_CHECKING:
     from engine.data.providers.base import AssetClass as ProviderAssetClass
 
@@ -94,6 +96,16 @@ class Instrument(BaseModel):
         description="Canonical symbol — e.g. 'AAPL', 'BTC/USDT'",
     )
     asset_class: InstrumentAssetClass
+    asset_type: AssetType = Field(
+        default=AssetType.STOCK,
+        description=(
+            "Public, user-facing asset-type classification "
+            "(stock/option/future/forex/crypto/etf). Defaults to 'stock' "
+            "for backward compatibility with instruments created before "
+            "the field existed; auto-synced from 'asset_class' where the "
+            "two would otherwise disagree."
+        ),
+    )
 
     # Listing
     exchange: str | None = Field(default=None, description="Primary venue MIC/name")
@@ -144,6 +156,29 @@ class Instrument(BaseModel):
                 data["expiration"] = data["expiry_date"]
             del data["expiry_date"]
         return data
+
+    @model_validator(mode="after")
+    def _sync_asset_type_from_class(self) -> Instrument:
+        """Keep the public ``asset_type`` consistent with ``asset_class``.
+
+        ``asset_type`` defaults to :attr:`AssetType.STOCK` so legacy
+        instruments (and serialized payloads that pre-date the field)
+        keep validating. When such an instrument's ``asset_class`` clearly
+        implies a *different* public type — e.g. an option, forex pair, or
+        crypto listing built via the explicit factories — we promote
+        ``asset_type`` to the matching value so callers reading the public
+        taxonomy always see a coherent answer rather than a stale
+        ``stock`` default.
+
+        We bypass ``validate_assignment`` (``object.__setattr__``) because
+        we are mid-construction and the value is *derived*, not
+        user-supplied — re-running field validators here would be wasted
+        work, and we deliberately do not recurse into model validation.
+        """
+        implied = AssetType.from_asset_class(self.asset_class)
+        if self.asset_type == AssetType.STOCK and implied != AssetType.STOCK:
+            object.__setattr__(self, "asset_type", implied)
+        return self
 
     @model_validator(mode="after")
     def _enforce_class_invariants(self) -> Instrument:
