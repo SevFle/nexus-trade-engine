@@ -679,6 +679,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#multi-asset-instrument-modeling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-asset instrument modeling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#multi-strategy-orchestration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1354,6 +1365,8 @@
       
         
       
+        
+      
     
     
     
@@ -1649,6 +1662,34 @@
     
   
     0009 — Cross-replica WebSocket event bridge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0010-instrument-asset-class-taxonomy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0010 — Instrument / asset-class taxonomy split
   
 
     
@@ -2516,6 +2557,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#multi-asset-instrument-modeling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-asset instrument modeling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#multi-strategy-orchestration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2792,6 +2844,60 @@ and post-trade cost analysis.</p>
     VER["strategy_versioning&lt;br/&gt;content-addressed deploys"]
     GOV -.-&gt;|gates promotions| ONE
     VER -.-&gt;|pinned code| ONE</code></pre>
+<h2 id="multi-asset-instrument-modeling">Multi-asset instrument modeling<a class="headerlink" href="#multi-asset-instrument-modeling" title="Permanent link">&para;</a></h2>
+<p>Everything the engine trades flows through a typed
+<a href="../../engine/core/instruments.py"><code>Instrument</code></a> — but <strong>only inside the
+engine</strong>. This section is short precisely because the surface is narrow;
+see <a href="../../adr/0010-instrument-asset-class-taxonomy/">ADR-0010</a> for the
+<em>why</em>.</p>
+<p><strong>Two enums, one bridge.</strong> Modeling and routing evolve independently, so
+they have separate taxonomies joined by an explicit mapping:</p>
+<p>| Enum | Location | Members | Answers |
+|---|---|---|---|---|
+| <code>InstrumentAssetClass</code> | <a href="../../engine/core/instruments.py"><code>engine/core/instruments.py</code></a> | <code>equity, etf, crypto, crypto_perp, crypto_future, forex, option, future</code> (8) | <em>What position is this?</em> |
+| <code>AssetClass</code> | <a href="../../engine/data/providers/base.py"><code>engine/data/providers/base.py</code></a> | <code>equity, etf, crypto, forex, options, futures</code> (6) | <em>Which provider can serve it?</em> |</p>
+<p><code>Instrument.to_provider_class()</code> is the bridge — the three crypto flavors
+collapse to routing <code>CRYPTO</code> (one Binance adapter serves all three),
+<code>option → OPTIONS</code>, <code>future → FUTURES</code>. It <code>assert_never</code>s on an unmapped
+member so the coupling can't drift silently.</p>
+<p><strong><code>Instrument</code> is a runtime value object, not a persisted entity.</strong> It is a
+<code>Pydantic</code> model (<code>validate_assignment=True</code>) that validates per-class
+required fields at construction: options demand <code>strike / expiration /
+option_type / underlying</code>; crypto (spot/perp/future) and forex demand
+<code>base_asset / quote_asset</code>. Typed constructors (<code>.equity()</code>, <code>.crypto()</code>,
+<code>.crypto_perp()</code>, <code>.forex()</code>, <code>.option()</code>, <code>.future()</code>, <code>.etf()</code>) are the
+intended entry points; <code>from_string()</code> exists for backward compat and
+<strong>defaults to equity</strong> for any free-form symbol so <code>EUR/USD</code> (a forex
+pair) is not silently misread as crypto.</p>
+<p>Derived properties carry the modeling load:</p>
+<ul>
+<li><strong><code>uid</code></strong> — stable identity, distinct across spot vs. perpetual vs.
+  dated future on the <em>same</em> pair, and across option strikes, so
+  positions in different products never collapse onto one key
+  (<code>BTC/USD</code> vs. <code>BTC/USD:PERP</code> vs. <code>BTC/USD:20260930</code>).</li>
+<li><strong><code>is_derivative</code></strong> — true for options, futures, crypto perp/future.</li>
+<li><strong><code>contract_value</code></strong> — per-contract notional (<code>strike * multiplier</code> for
+  options; <code>None</code> otherwise).</li>
+</ul>
+<p>The engine's internal <a href="../../engine/core/signal.py"><code>Signal</code></a> carries an
+<code>instrument</code> field that is <strong>auto-derived from <code>symbol</code></strong> via
+<code>Instrument.from_string</code> when a caller omits it (validator
+<code>_ensure_instrument</code>), so every existing strategy keeps working. The
+<code>model_copy</code> override re-runs every validator on update so a copy can't
+smuggle in an invalid field set (pydantic's default short-circuits).</p>
+<blockquote>
+<p><strong>Status — be honest.</strong> <code>Instrument</code> is engine-internal: the public SDK
+(<a href="../../sdk/nexus_sdk/signals.py"><code>sdk/nexus_sdk/signals.py</code></a>) <code>Signal</code>
+exposes only <code>symbol</code>; nothing is persisted (<code>engine/db/models.py</code> has
+no instrument table — positions/orders/tax lots still key on string
+<code>symbol</code>); and the market-data route uses its own string-shape
+<code>detect_asset_class()</code> heuristic that returns the routing <code>AssetClass</code>
+directly, never constructing an <code>Instrument</code>. Fully unit-tested
+(<a href="../../tests/test_instruments.py"><code>tests/test_instruments.py</code></a>,
+<a href="../../tests/test_instruments_coverage.py"><code>tests/test_instruments_coverage.py</code></a>)
+but not yet on the live order path. See <a href="../../adr/0010-instrument-asset-class-taxonomy/">ADR-0010</a>
+and <a href="../../known-limitations/"><code>known-limitations.md</code></a>.</p>
+</blockquote>
 <h2 id="multi-strategy-orchestration">Multi-strategy orchestration<a class="headerlink" href="#multi-strategy-orchestration" title="Permanent link">&para;</a></h2>
 <p>Three orchestrators exist. They overlap in spirit but are deliberately
 separate modules with different conflict-resolution semantics — and, in

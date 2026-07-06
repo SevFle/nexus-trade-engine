@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/adr/0002-auth-rbac/">
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/adr/0010-instrument-asset-class-taxonomy/">
       
       
-        <link rel="prev" href="../0001-scaffold-tech-choices/">
+        <link rel="prev" href="../0009-cross-replica-eventbus-bridge/">
       
       
-        <link rel="next" href="../0003-mobile-app-strategy/">
+        <link rel="next" href="../template/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>0002 — Auth & RBAC model - Nexus Trade Engine</title>
+        <title>0010 — Instrument / asset-class taxonomy split - Nexus Trade Engine</title>
       
     
     
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#adr-0002-authentication-role-based-access-control" class="md-skip">
+        <a href="#adr-0010-instrument-asset-class-taxonomy-split" class="md-skip">
           Skip to content
         </a>
       
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              0002 — Auth & RBAC model
+              0010 — Instrument / asset-class taxonomy split
             
           </span>
         </div>
@@ -1181,37 +1181,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    0002 — Auth & RBAC model
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../0002-auth-rbac/" class="md-nav__link">
         
   
   
@@ -1227,142 +1200,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#context" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Context
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#decision" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Decision
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Decision">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#layer-1-authbackend-protocol-in-engineauthbackendpy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Layer 1 — AuthBackend protocol (in engine/auth/backend.py)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#layer-2-rbac-enforcement-in-engineauthrbacpy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Layer 2 — RBAC enforcement (in engine/auth/rbac.py)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#v1-backend-jwt-on-postgres" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        v1 backend: JWT-on-Postgres
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#out-of-scope-for-v1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Out of scope for v1
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#implementation-phases" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Implementation phases
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#consequences" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Consequences
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#alternatives-considered" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Alternatives considered
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#open-questions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Open questions
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1568,10 +1405,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../0010-instrument-asset-class-taxonomy/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0010 — Instrument / asset-class taxonomy split
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1587,6 +1451,159 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#context-and-problem-statement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context and Problem Statement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-drivers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Drivers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#considered-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Considered Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-outcome" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Outcome
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision Outcome">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#status-caveat-be-honest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status caveat (be honest)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pros and Cons of the Options
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pros and Cons of the Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-1-single-shared-enum-plain-strings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 1 — Single shared enum + plain strings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-2-unified-persisted-instrument-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 2 — Unified persisted Instrument table
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-3-two-enums-value-object-instrument-chosen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 3 — Two enums + value-object Instrument (chosen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Links
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -2435,10 +2452,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#context" class="md-nav__link">
+  <a href="#context-and-problem-statement" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Context
+        Context and Problem Statement
       
     </span>
   </a>
@@ -2446,55 +2463,44 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#decision" class="md-nav__link">
+  <a href="#decision-drivers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Decision
+        Decision Drivers
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Decision">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#considered-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Considered Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-outcome" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Outcome
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision Outcome">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#layer-1-authbackend-protocol-in-engineauthbackendpy" class="md-nav__link">
+  <a href="#consequences" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Layer 1 — AuthBackend protocol (in engine/auth/backend.py)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#layer-2-rbac-enforcement-in-engineauthrbacpy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Layer 2 — RBAC enforcement (in engine/auth/rbac.py)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#v1-backend-jwt-on-postgres" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        v1 backend: JWT-on-Postgres
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#out-of-scope-for-v1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Out of scope for v1
+        Consequences
       
     </span>
   </a>
@@ -2507,10 +2513,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#implementation-phases" class="md-nav__link">
+  <a href="#status-caveat-be-honest" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Implementation phases
+        Status caveat (be honest)
       
     </span>
   </a>
@@ -2518,32 +2524,60 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#consequences" class="md-nav__link">
+  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Consequences
+        Pros and Cons of the Options
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pros and Cons of the Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-1-single-shared-enum-plain-strings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 1 — Single shared enum + plain strings
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#alternatives-considered" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#option-2-unified-persisted-instrument-table" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Alternatives considered
+        Option 2 — Unified persisted Instrument table
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#open-questions" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#option-3-two-enums-value-object-instrument-chosen" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Open questions
+        Option 3 — Two enums + value-object Instrument (chosen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Links
       
     </span>
   </a>
@@ -2570,111 +2604,172 @@
   
 
 
-<h1 id="adr-0002-authentication-role-based-access-control">ADR-0002: Authentication &amp; Role-Based Access Control<a class="headerlink" href="#adr-0002-authentication-role-based-access-control" title="Permanent link">&para;</a></h1>
-<p><strong>Status:</strong> Proposed
-<strong>Date:</strong> 2026-04-17
-<strong>Tracks:</strong> SEV-233 (gh#86), SEV-273 (gh#9) — closed as duplicate of this ADR
-<strong>Owner:</strong> TBD</p>
-<h2 id="context">Context<a class="headerlink" href="#context" title="Permanent link">&para;</a></h2>
-<p>The engine currently has zero authentication. Every API route is reachable by anyone who can hit the host. Before any non-localhost deploy — let alone exposing live broker integration (SEV-266) — we must gate the API behind authentication and a permission model.</p>
-<p>Two existing issues describe this:
-- <strong>SEV-273 (gh#9)</strong>: "Implement user authentication and RBAC" (smaller scope, JWT-only)
-- <strong>SEV-233 (gh#86)</strong>: "Pluggable authentication system with RBAC (JWT, OAuth2, LDAP, OIDC)" (larger pluggable scope)</p>
-<p>This ADR consolidates them. SEV-273 should be closed as superseded.</p>
-<h2 id="decision">Decision<a class="headerlink" href="#decision" title="Permanent link">&para;</a></h2>
-<p>Adopt a <strong>two-layer authentication architecture</strong>: a thin pluggable interface in front, with a sane default backend (JWT-on-Postgres) shipped first.</p>
-<h3 id="layer-1-authbackend-protocol-in-engineauthbackendpy">Layer 1 — <code>AuthBackend</code> protocol (in <code>engine/auth/backend.py</code>)<a class="headerlink" href="#layer-1-authbackend-protocol-in-engineauthbackendpy" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">AuthBackend</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Identity</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">issue_token</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">user_id</span><span class="p">:</span> <span class="n">UUID</span><span class="p">,</span> <span class="n">scopes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Token</span><span class="p">:</span> <span class="o">...</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">revoke_token</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">token_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
-</span></code></pre></div>
-<p>Plugins ship as separate modules: <code>engine.auth.backends.jwt_local</code>, <code>engine.auth.backends.oauth2_proxy</code> (later), <code>engine.auth.backends.oidc</code> (later). Selected via <code>NEXUS_AUTH_BACKEND</code> env var.</p>
-<h3 id="layer-2-rbac-enforcement-in-engineauthrbacpy">Layer 2 — <code>RBAC</code> enforcement (in <code>engine/auth/rbac.py</code>)<a class="headerlink" href="#layer-2-rbac-enforcement-in-engineauthrbacpy" title="Permanent link">&para;</a></h3>
-<p>Resource × action grid stored in DB. Three default roles to start:</p>
-<table>
-<thead>
-<tr>
-<th>Role</th>
-<th>Read</th>
-<th>Write</th>
-<th>Live trading</th>
-<th>Admin</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>viewer</code></td>
-<td>✓</td>
-<td>—</td>
-<td>—</td>
-<td>—</td>
-</tr>
-<tr>
-<td><code>trader</code></td>
-<td>✓</td>
-<td>✓</td>
-<td>✓ (own portfolios)</td>
-<td>—</td>
-</tr>
-<tr>
-<td><code>admin</code></td>
-<td>✓</td>
-<td>✓</td>
-<td>✓ (any portfolio)</td>
-<td>✓</td>
-</tr>
-</tbody>
-</table>
-<p>Enforced via FastAPI dependency: <code>Depends(require_role("trader"))</code> or <code>Depends(require_scope("portfolio:write"))</code>.</p>
-<h3 id="v1-backend-jwt-on-postgres">v1 backend: JWT-on-Postgres<a class="headerlink" href="#v1-backend-jwt-on-postgres" title="Permanent link">&para;</a></h3>
+<h1 id="adr-0010-instrument-asset-class-taxonomy-split">ADR-0010: Instrument / asset-class taxonomy split<a class="headerlink" href="#adr-0010-instrument-asset-class-taxonomy-split" title="Permanent link">&para;</a></h1>
 <ul>
-<li>HS256 signed (RS256 swap is a one-line config change later)</li>
-<li>Tokens stored hashed in <code>auth_tokens</code> table for revocation</li>
-<li>24h TTL on access tokens, 30d on refresh tokens</li>
-<li>Secret rotation via <code>NEXUS_JWT_SECRET_ROTATE</code> env (dual-key window)</li>
-<li>Argon2id for password hashing</li>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-07-06</li>
+<li><strong>Deciders</strong>: Lead maintainer + core-engine reviewer</li>
+<li><strong>Tags</strong>: core, instruments, multi-asset, data-model</li>
 </ul>
-<h3 id="out-of-scope-for-v1">Out of scope for v1<a class="headerlink" href="#out-of-scope-for-v1" title="Permanent link">&para;</a></h3>
+<h2 id="context-and-problem-statement">Context and Problem Statement<a class="headerlink" href="#context-and-problem-statement" title="Permanent link">&para;</a></h2>
+<p>Nexus grew up as an <strong>equity</strong> engine. Every tradable thing was a free-form
+<code>symbol</code> string (<code>"AAPL"</code>) and the database keys positions, orders, and
+tax lots on that string. As multi-asset support landed (PR #1213), that
+representation stopped being adequate: a crypto pair (<code>BTC/USDT</code>), a
+forex pair (<code>EUR/USD</code>), an option (<code>AAPL_20260115_C_150.00</code>), and a
+dated future are not "strings with a convention" — each carries a
+<strong>distinct, class-specific required field set</strong> that must be validated
+(strike/expiration/option-type/underlying for options;
+base/quote for crypto and forex; multiplier and expiration for futures).
+A plain string can neither enforce those invariants nor answer
+derivable questions ("is this a derivative?", "what is the per-contract
+notional?", "is this the <em>same</em> position as the perpetual on the same
+pair?").</p>
+<p>At the same time the data-routing layer already had an <code>AssetClass</code>
+enum (<a href="../../engine/data/providers/base.py"><code>engine/data/providers/base.py</code></a>)
+used to pick which provider can serve a query. That taxonomy is
+deliberately coarse: a single <code>CRYPTO</code> routes spot, perpetual, and dated
+futures alike because one adapter (Binance) serves all three. We needed
+typed instruments for <em>modeling</em> without forcing the <em>routing</em> taxonomy
+to fan out to match it.</p>
+<h2 id="decision-drivers">Decision Drivers<a class="headerlink" href="#decision-drivers" title="Permanent link">&para;</a></h2>
 <ul>
-<li>OAuth2/OIDC backends (SSO providers)</li>
-<li>LDAP backend (enterprise on-prem)</li>
-<li>MFA (added in a follow-up)</li>
-<li>Session management UI</li>
-<li>Per-tenant multi-org</li>
+<li><strong>Per-class invariants.</strong> An option without a strike is a bug, and the
+  type system should say so at construction time, not at fill time.</li>
+<li><strong>Independent evolution of the two taxonomies.</strong> The routing enum
+  changes when a provider's coverage changes; the modeling enum changes
+  when the engine learns a new product. Coupling them couples their
+  release cadences.</li>
+<li><strong>Backward compatibility.</strong> Existing strategies and the entire DB
+  schema speak <code>symbol</code>. The new model must be opt-in and never break a
+  caller that passes a bare string.</li>
+<li><strong>No premature persistence.</strong> Nothing in the running engine joins on
+  an instrument identity today; <code>symbol</code> is the established join key.
+  Adding an <code>instruments</code> table before anything reads it is speculative
+  schema.</li>
 </ul>
-<p>These each get their own ADR when they land.</p>
-<h2 id="implementation-phases">Implementation phases<a class="headerlink" href="#implementation-phases" title="Permanent link">&para;</a></h2>
+<h2 id="considered-options">Considered Options<a class="headerlink" href="#considered-options" title="Permanent link">&para;</a></h2>
 <ol>
-<li><strong>DB schema</strong> (~½ day) — Alembic migration <code>004_auth_users_roles.py</code>: <code>users</code>, <code>roles</code>, <code>user_roles</code>, <code>auth_tokens</code> tables.</li>
-<li><strong>AuthBackend protocol + JWT default impl</strong> (~1 day) — pure logic, unit-tested, no FastAPI dependency.</li>
-<li><strong>FastAPI integration</strong> (~½ day) — <code>Depends(get_current_user)</code>, <code>require_role</code>, <code>require_scope</code> helpers.</li>
-<li><strong>Route protection</strong> (~1 day) — apply to every existing route in <code>engine/api/routes/</code>. Add <code>@public</code> marker for <code>/health</code>, <code>/ready</code>, <code>/metrics</code>.</li>
-<li><strong>CLI bootstrapping</strong> (~½ day) — <code>nexus user create</code>, <code>nexus user grant-role</code> so first-run works without UI.</li>
-<li><strong>Frontend integration</strong> (~1 day) — login page, token storage in <code>httpOnly</code> cookie, axios interceptor refresh.</li>
-<li><strong>Migration guide for existing deployments</strong> (~½ day) — there are none today, but document the upgrade path.</li>
+<li><strong>Single shared enum + plain symbol strings</strong> (status quo ante) — keep
+   one <code>AssetClass</code>, keep everything keyed by string.</li>
+<li><strong>One unified <code>Instrument</code>, persisted as a table</strong> — make instruments
+   first-class DB entities; key positions/orders on <code>instrument_id</code>.</li>
+<li><strong>Two enums</strong> — a domain <code>InstrumentAssetClass</code> for modeling plus the
+   existing data-routing <code>AssetClass</code>, bridged by an explicit
+   <code>to_provider_class()</code> mapping; <code>Instrument</code> is a <strong>non-persisted
+   runtime value object</strong> that the engine derives from each signal's
+   <code>symbol</code>.</li>
 </ol>
-<p><strong>Total</strong>: ~5 days of focused work.</p>
-<h2 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h2>
-<p><strong>Positive</strong>
-- Engine becomes deployable beyond localhost.
-- Live trading routes (SEV-266 Alpaca etc.) can land safely behind <code>require_role("trader")</code>.
-- Plugin architecture means OIDC/LDAP land later without touching the core.</p>
-<p><strong>Negative</strong>
-- All current API consumers (the in-repo frontend, any local dev scripts) must obtain a token. We need a <code>nexus dev-token</code> CLI helper to keep DX tolerable.
-- JWT secrets are now deployment-critical secrets. Add to runbook + secret rotation procedure.
-- Revocation requires DB hits per request — accept the overhead for v1; cache lookups in Valkey if it becomes a problem (premature optimization otherwise).</p>
-<h2 id="alternatives-considered">Alternatives considered<a class="headerlink" href="#alternatives-considered" title="Permanent link">&para;</a></h2>
+<h2 id="decision-outcome">Decision Outcome<a class="headerlink" href="#decision-outcome" title="Permanent link">&para;</a></h2>
+<p>Chosen option: <strong>Option 3 — two enums with a value-object <code>Instrument</code></strong>,
+because it enforces per-class invariants and decouples the two
+taxonomies without coupling their release cadences or churning the
+persistence layer before anything consumes it.</p>
+<p>Concrete shape (source: <a href="../../engine/core/instruments.py"><code>engine/core/instruments.py</code></a>):</p>
 <ul>
-<li><strong>Session cookies only (no JWT)</strong>: simpler, but doesn't compose well with the planned MCP server (SEV-223) where token-based auth is more natural.</li>
-<li><strong>External OAuth2 proxy (oauth2-proxy / Pomerium)</strong>: punts auth to infra. Reasonable for self-hosted, but doesn't help embedded use cases (SDK clients, MCP, CI). Plugin design lets users opt into this later.</li>
-<li><strong>Auth0/Clerk/Stytch SaaS</strong>: fastest path, but introduces vendor lock-in for an OSS-trending project. Plugin design lets users wire one in if they want.</li>
+<li><strong><code>InstrumentAssetClass</code></strong> (modeling) — 8 members: <code>equity</code>, <code>etf</code>,
+  <code>crypto</code>, <code>crypto_perp</code>, <code>crypto_future</code>, <code>forex</code>, <code>option</code>, <code>future</code>.
+  This is the <em>finer</em> taxonomy: spot, perpetual, and dated crypto
+  futures are distinct because they are different <em>positions</em>.</li>
+<li><strong><code>AssetClass</code></strong> (<a href="../../engine/data/providers/base.py"><code>engine/data/providers/base.py</code></a>,
+  routing) — 6 members: <code>equity</code>, <code>etf</code>, <code>crypto</code>, <code>forex</code>, <code>options</code>,
+  <code>futures</code>. This is the <em>coarser</em> taxonomy: it answers "which provider
+  can serve this?", not "what position is this?".</li>
+<li><strong><code>Instrument.to_provider_class()</code></strong> is the explicit bridge between
+  them (the three crypto flavors all collapse to routing <code>CRYPTO</code>;
+  <code>option → OPTIONS</code>, <code>future → FUTURES</code>).</li>
+<li><strong><code>Instrument</code></strong> is a <code>Pydantic</code> model (<code>validate_assignment=True</code>)
+  with factories (<code>equity()</code>, <code>etf()</code>, <code>crypto()</code>, <code>crypto_perp()</code>,
+  <code>forex()</code>, <code>option()</code>, <code>future()</code>) and a <code>from_string()</code> coercion that
+  <strong>defaults to equity</strong> for any free-form symbol (so a slash-bearing
+  <code>EUR/USD</code> is not silently misread as a crypto pair). Class invariants
+  are enforced in <code>_enforce_class_invariants</code>; the <code>model_copy</code> override
+  re-runs every validator on update so a copy can't smuggle in an
+  invalid field set.</li>
+<li><strong><code>uid</code></strong> is the stable per-instrument identity — distinct across
+  spot/perp/dated-future on the same pair, and across option strikes —
+  so positions in different products never collapse onto one key.</li>
 </ul>
-<h2 id="open-questions">Open questions<a class="headerlink" href="#open-questions" title="Permanent link">&para;</a></h2>
+<h3 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Do we need per-portfolio ACLs in v1, or is per-user RBAC sufficient until multi-tenant lands?</li>
-<li>Should the JWT include scope claims, or look them up per request? (Trade-off: token size vs. dynamic permission updates.)</li>
-<li>API key auth (long-lived, scoped) for SDK clients — v1 or follow-up?</li>
+<li><strong>Positive</strong> — per-class required fields are validated at construction;
+  <code>is_derivative</code> / <code>contract_value</code> / <code>uid</code> are derivable from one
+  typed object; the routing and modeling taxonomies can ship
+  independently.</li>
+<li><strong>Positive</strong> — backward compatible by construction. The engine's
+  internal <code>Signal</code> (<a href="../../engine/core/signal.py"><code>engine/core/signal.py</code></a>)
+  carries an <code>instrument</code> field that is <strong>auto-derived from <code>symbol</code></strong>
+  via <code>Instrument.from_string</code> when the caller omits it, so every
+  existing strategy keeps working unchanged.</li>
+<li><strong>Negative</strong> — there are now <strong>two enums that must be kept bridged</strong>.
+  A new modeling class with no routing equivalent (or vice versa) is a
+  real edit, not a no-op. <code>to_provider_class</code> uses <code>assert_never</code> so an
+  unmapped member fails loudly at the boundary.</li>
+<li><strong>Negative</strong> — "what is being traded" now has <strong>three representations</strong>:
+  the SDK <code>Signal.symbol</code> (string), the engine <code>Signal.instrument</code>
+  (typed), and the persisted <code>symbol</code> column (string). They are
+  consistent today because <code>instrument</code> is derived from <code>symbol</code>, but a
+  future schema that persists instruments must reconcile all three.</li>
+<li><strong>Neutral</strong> — the market-data route keeps its own string-shape
+  <code>detect_asset_class()</code> heuristic
+  (<a href="../../engine/api/routes/market_data.py"><code>engine/api/routes/market_data.py</code></a>),
+  which returns the <em>routing</em> <code>AssetClass</code> directly without constructing
+  an <code>Instrument</code>. That is correct for routing and avoids a model
+  allocation per request, but it means the <code>Instrument</code> model is not yet
+  on the request hot path.</li>
+</ul>
+<h2 id="status-caveat-be-honest">Status caveat (be honest)<a class="headerlink" href="#status-caveat-be-honest" title="Permanent link">&para;</a></h2>
+<p><code>Instrument</code> / <code>InstrumentAssetClass</code> are <strong>engine-internal today</strong>:</p>
+<ul>
+<li>The <strong>public SDK</strong> (<a href="../../sdk/nexus_sdk/signals.py"><code>sdk/nexus_sdk/signals.py</code></a>)
+  <code>Signal</code> exposes only <code>symbol</code>; it does <strong>not</strong> export <code>Instrument</code> or
+  <code>InstrumentAssetClass</code>. Strategy authors still emit string-symbol
+  signals; the engine derives the typed instrument on ingest.</li>
+<li>Nothing is <strong>persisted</strong> — <code>engine/db/models.py</code> has no instrument
+  table or <code>asset_class</code> column; positions/orders/tax lots remain keyed
+  by string <code>symbol</code>.</li>
+<li>The model is fully unit-tested
+  (<a href="../../tests/test_instruments.py"><code>tests/test_instruments.py</code></a>,
+  <a href="../../tests/test_instruments_coverage.py"><code>tests/test_instruments_coverage.py</code></a>)
+  but is not yet consumed by the live order/execution path.</li>
+</ul>
+<p>See <a href="../../known-limitations/"><code>docs/known-limitations.md</code></a> and the
+"Multi-asset instrument modeling" section of
+<a href="../../architecture/core-domains/"><code>docs/architecture/core-domains.md</code></a>.</p>
+<h2 id="pros-and-cons-of-the-options">Pros and Cons of the Options<a class="headerlink" href="#pros-and-cons-of-the-options" title="Permanent link">&para;</a></h2>
+<h3 id="option-1-single-shared-enum-plain-strings">Option 1 — Single shared enum + plain strings<a class="headerlink" href="#option-1-single-shared-enum-plain-strings" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Zero new surface; no bridge to maintain.</li>
+<li><strong>Cons:</strong> Cannot enforce per-class required fields; cannot derive
+  <code>uid</code>/<code>is_derivative</code>/<code>contract_value</code>; routing and modeling share one
+  taxonomy whether or not their lifecycles align.</li>
+</ul>
+<h3 id="option-2-unified-persisted-instrument-table">Option 2 — Unified persisted <code>Instrument</code> table<a class="headerlink" href="#option-2-unified-persisted-instrument-table" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Single source of truth; positions/orders/tax lots gain a
+  stable foreign key independent of symbol formatting.</li>
+<li><strong>Cons:</strong> Speculative schema — nothing joins on instrument identity
+  yet, so the table would sit unwritten. Churns every persisted model
+  and migration at once. Forces the routing taxonomy to fan out to match
+  modeling (or vice versa) if coupled.</li>
+</ul>
+<h3 id="option-3-two-enums-value-object-instrument-chosen">Option 3 — Two enums + value-object <code>Instrument</code> (chosen)<a class="headerlink" href="#option-3-two-enums-value-object-instrument-chosen" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Enforces invariants; decouples taxonomies; opt-in and
+  backward compatible; no persistence churn until a consumer exists.</li>
+<li><strong>Cons:</strong> Two enums to bridge; three representations of "what is
+  traded" until unified; the bridge mapping is hand-maintained.</li>
+</ul>
+<h2 id="links">Links<a class="headerlink" href="#links" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Feature PR: #1213 (<code>feat(core): add AssetType enum with conversions and
+  instrument support</code>)</li>
+<li>Source: <a href="../../engine/core/instruments.py"><code>engine/core/instruments.py</code></a>,
+  <a href="../../engine/core/signal.py"><code>engine/core/signal.py</code></a>,
+  <a href="../../engine/data/providers/base.py"><code>engine/data/providers/base.py</code></a>,
+  <a href="../../engine/api/routes/market_data.py"><code>engine/api/routes/market_data.py</code></a></li>
+<li>Related: <a href="../../architecture/core-domains/"><code>docs/architecture/core-domains.md</code></a>,
+  <a href="../../data-model/"><code>docs/data-model.md</code></a></li>
 </ul>
 
 
@@ -2713,7 +2808,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../0001-scaffold-tech-choices/" class="md-footer__link md-footer__link--prev" aria-label="Previous: 0001 — Scaffold technology choices">
+          <a href="../0009-cross-replica-eventbus-bridge/" class="md-footer__link md-footer__link--prev" aria-label="Previous: 0009 — Cross-replica WebSocket event bridge">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -2723,20 +2818,20 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                0001 — Scaffold technology choices
+                0009 — Cross-replica WebSocket event bridge
               </div>
             </div>
           </a>
         
         
           
-          <a href="../0003-mobile-app-strategy/" class="md-footer__link md-footer__link--next" aria-label="Next: 0003 — Mobile experience strategy (PWA)">
+          <a href="../template/" class="md-footer__link md-footer__link--next" aria-label="Next: ADR template">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                0003 — Mobile experience strategy (PWA)
+                ADR template
               </div>
             </div>
             <div class="md-footer__button md-icon">

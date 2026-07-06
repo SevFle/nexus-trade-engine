@@ -188,8 +188,13 @@ on the public API surface or not production-validated.
       Alpaca surface today; see
       [known-limitations](docs/known-limitations.md))*
 - [ ] Strategy marketplace *(stub routes only — returns `not_implemented`)*
-- [~] Multi-asset support *(partial — equity/ETF/crypto/forex/options
-      primitives exist; asset-class inference on market-data route works)*
+- [~] Multi-asset support *(partial — typed `Instrument` value object +
+      `InstrumentAssetClass` enum landed in `engine/core/instruments.py` (#1213);
+      the engine's internal `Signal` auto-derives it from `symbol`. Engine-
+      internal only today: not surfaced in the public SDK, not persisted —
+      positions/orders/tax lots still key on string `symbol`. See
+      [ADR-0010](docs/adr/0010-instrument-asset-class-taxonomy.md) and the
+      [instrument-modeling section](docs/architecture/core-domains.md))*
 - [~] WebSocket real-time streams *(partial — see
       [known-limitations](docs/known-limitations.md): connection registry
       is process-local)*

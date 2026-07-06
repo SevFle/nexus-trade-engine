@@ -9,6 +9,16 @@ This doc explains the *invariants and ownership rules* — for the table
 inventory and migration policy, see
 [`architecture/database.md`](architecture/database.md).
 
+> **What is *not* here: `Instrument`.** The engine models typed
+> instruments ([`engine/core/instruments.py`](../engine/core/instruments.py),
+> `InstrumentAssetClass`) but **does not persist them**. Positions,
+> orders, and tax lots are still keyed by the string `symbol` column.
+> `Instrument` is a runtime value object the engine derives from each
+> signal's `symbol` — see [ADR-0010](adr/0010-instrument-asset-class-taxonomy.md)
+> and the *Multi-asset instrument modeling* section of
+> [`architecture/core-domains.md`](architecture/core-domains.md). There is
+> no `instruments` table and no `asset_class` column on any model today.
+
 ## Diagram
 
 ```mermaid

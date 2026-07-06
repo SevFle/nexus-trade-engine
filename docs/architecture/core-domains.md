@@ -57,6 +57,66 @@ flowchart TD
     VER -.->|pinned code| ONE
 ```
 
+## Multi-asset instrument modeling
+
+Everything the engine trades flows through a typed
+[`Instrument`](../../engine/core/instruments.py) — but **only inside the
+engine**. This section is short precisely because the surface is narrow;
+see [ADR-0010](../adr/0010-instrument-asset-class-taxonomy.md) for the
+*why*.
+
+**Two enums, one bridge.** Modeling and routing evolve independently, so
+they have separate taxonomies joined by an explicit mapping:
+
+| Enum | Location | Members | Answers |
+|---|---|---|---|---|
+| `InstrumentAssetClass` | [`engine/core/instruments.py`](../../engine/core/instruments.py) | `equity, etf, crypto, crypto_perp, crypto_future, forex, option, future` (8) | *What position is this?* |
+| `AssetClass` | [`engine/data/providers/base.py`](../../engine/data/providers/base.py) | `equity, etf, crypto, forex, options, futures` (6) | *Which provider can serve it?* |
+
+`Instrument.to_provider_class()` is the bridge — the three crypto flavors
+collapse to routing `CRYPTO` (one Binance adapter serves all three),
+`option → OPTIONS`, `future → FUTURES`. It `assert_never`s on an unmapped
+member so the coupling can't drift silently.
+
+**`Instrument` is a runtime value object, not a persisted entity.** It is a
+`Pydantic` model (`validate_assignment=True`) that validates per-class
+required fields at construction: options demand `strike / expiration /
+option_type / underlying`; crypto (spot/perp/future) and forex demand
+`base_asset / quote_asset`. Typed constructors (`.equity()`, `.crypto()`,
+`.crypto_perp()`, `.forex()`, `.option()`, `.future()`, `.etf()`) are the
+intended entry points; `from_string()` exists for backward compat and
+**defaults to equity** for any free-form symbol so `EUR/USD` (a forex
+pair) is not silently misread as crypto.
+
+Derived properties carry the modeling load:
+
+- **`uid`** — stable identity, distinct across spot vs. perpetual vs.
+  dated future on the *same* pair, and across option strikes, so
+  positions in different products never collapse onto one key
+  (`BTC/USD` vs. `BTC/USD:PERP` vs. `BTC/USD:20260930`).
+- **`is_derivative`** — true for options, futures, crypto perp/future.
+- **`contract_value`** — per-contract notional (`strike * multiplier` for
+  options; `None` otherwise).
+
+The engine's internal [`Signal`](../../engine/core/signal.py) carries an
+`instrument` field that is **auto-derived from `symbol`** via
+`Instrument.from_string` when a caller omits it (validator
+`_ensure_instrument`), so every existing strategy keeps working. The
+`model_copy` override re-runs every validator on update so a copy can't
+smuggle in an invalid field set (pydantic's default short-circuits).
+
+> **Status — be honest.** `Instrument` is engine-internal: the public SDK
+> ([`sdk/nexus_sdk/signals.py`](../../sdk/nexus_sdk/signals.py)) `Signal`
+> exposes only `symbol`; nothing is persisted (`engine/db/models.py` has
+> no instrument table — positions/orders/tax lots still key on string
+> `symbol`); and the market-data route uses its own string-shape
+> `detect_asset_class()` heuristic that returns the routing `AssetClass`
+> directly, never constructing an `Instrument`. Fully unit-tested
+> ([`tests/test_instruments.py`](../../tests/test_instruments.py),
+> [`tests/test_instruments_coverage.py`](../../tests/test_instruments_coverage.py))
+> but not yet on the live order path. See [ADR-0010](../adr/0010-instrument-asset-class-taxonomy.md)
+> and [`known-limitations.md`](../known-limitations.md).
+
 ## Multi-strategy orchestration
 
 Three orchestrators exist. They overlap in spirit but are deliberately

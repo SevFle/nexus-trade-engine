@@ -1482,6 +1482,8 @@
       
         
       
+        
+      
     
     
     
@@ -1777,6 +1779,34 @@
     
   
     0009 — Cross-replica WebSocket event bridge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0010-instrument-asset-class-taxonomy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0010 — Instrument / asset-class taxonomy split
   
 
     
@@ -3004,6 +3034,17 @@ captures every change.</p>
 <p>This doc explains the <em>invariants and ownership rules</em> — for the table
 inventory and migration policy, see
 <a href="../architecture/database/"><code>architecture/database.md</code></a>.</p>
+<blockquote>
+<p><strong>What is <em>not</em> here: <code>Instrument</code>.</strong> The engine models typed
+instruments (<a href="../engine/core/instruments.py"><code>engine/core/instruments.py</code></a>,
+<code>InstrumentAssetClass</code>) but <strong>does not persist them</strong>. Positions,
+orders, and tax lots are still keyed by the string <code>symbol</code> column.
+<code>Instrument</code> is a runtime value object the engine derives from each
+signal's <code>symbol</code> — see <a href="../adr/0010-instrument-asset-class-taxonomy/">ADR-0010</a>
+and the <em>Multi-asset instrument modeling</em> section of
+<a href="../architecture/core-domains/"><code>architecture/core-domains.md</code></a>. There is
+no <code>instruments</code> table and no <code>asset_class</code> column on any model today.</p>
+</blockquote>
 <h2 id="diagram">Diagram<a class="headerlink" href="#diagram" title="Permanent link">&para;</a></h2>
 <pre class="mermaid"><code>erDiagram
     users ||--o{ portfolios : owns

@@ -1086,6 +1086,8 @@
       
         
       
+        
+      
     
     
     
@@ -1381,6 +1383,34 @@
     
   
     0009 — Cross-replica WebSocket event bridge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0010-instrument-asset-class-taxonomy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0010 — Instrument / asset-class taxonomy split
   
 
     
@@ -2194,6 +2224,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Last audit
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -2210,6 +2258,36 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#changes-this-audit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changes this audit
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -2243,6 +2321,25 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#changes-this-audit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changes this audit
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -2263,14 +2360,31 @@
 
 <h1 id="last-engineering-docs-audit">Last engineering-docs audit<a class="headerlink" href="#last-engineering-docs-audit" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>Timestamp:</strong> 2026-07-04T08:53:52Z</li>
-<li><strong>Cycle:</strong> 1572</li>
-<li><strong>Commit:</strong> <code>3026383</code></li>
-<li><strong>Target:</strong> reflect latest 1572 cycles of development</li>
+<li><strong>Timestamp:</strong> 2026-07-06T19:30:00Z</li>
+<li><strong>Cycle:</strong> 1584</li>
+<li><strong>Commit:</strong> <code>677bf37</code></li>
+<li><strong>Target:</strong> reflect latest 1584 cycles of development</li>
 </ul>
 <p>This file is touched on every <code>do_engineering_docs</code> run by kaizen, so
 its mtime tells you when documentation was last reconciled with the
 codebase — even when the audit produced no diff.</p>
+<h2 id="changes-this-audit">Changes this audit<a class="headerlink" href="#changes-this-audit" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Documented the <code>Instrument</code> / <code>InstrumentAssetClass</code> feature (#1213,
+  commit <code>677bf37</code>), which had landed in <code>engine/core/instruments.py</code> and
+  <code>engine/core/signal.py</code> but was absent from <code>/docs</code>:</li>
+<li>New <a href="../adr/0010-instrument-asset-class-taxonomy/">ADR-0010</a> — the
+    two-enum (modeling vs. data-routing) taxonomy split and the decision
+    to keep <code>Instrument</code> a non-persisted runtime value object.</li>
+<li>New <em>Multi-asset instrument modeling</em> section in
+    <a href="../architecture/core-domains/">architecture/core-domains.md</a>.</li>
+<li>Data-model note clarifying there is <strong>no</strong> <code>instruments</code> table
+    (positions/orders/tax lots still key on string <code>symbol</code>).</li>
+<li>ADR registered in <code>adr/README.md</code>, <code>docs/README.md</code>, and <code>mkdocs.yml</code>.</li>
+<li>README roadmap <em>Multi-asset support</em> line updated to the honest,
+    source-accurate status (engine-internal; not in the public SDK; not
+    persisted).</li>
+</ul>
 
 
 
