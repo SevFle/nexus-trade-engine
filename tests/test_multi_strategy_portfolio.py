@@ -173,7 +173,9 @@ class TestConstruction:
 
     @pytest.mark.parametrize("bad", [-1.0, -0.01, -1e9])
     def test_negative_capital_rejected(self, bad: float) -> None:
-        with pytest.raises(MultiStrategyPortfolioError, match="total_capital must be non-negative"):
+        with pytest.raises(
+            MultiStrategyPortfolioError, match="total_capital must be non-negative"
+        ):
             MultiStrategyPortfolio(total_capital=bad, cost_model=_CostModel())
 
     def test_zero_capital_is_valid_noop_state(self) -> None:
@@ -199,7 +201,9 @@ class TestConstruction:
 
     def test_non_finite_eval_timeout_rejected(self) -> None:
         with pytest.raises(MultiStrategyPortfolioError, match="eval_timeout must be finite"):
-            MultiStrategyPortfolio(total_capital=100.0, cost_model=_CostModel(), eval_timeout=math.inf)
+            MultiStrategyPortfolio(
+                total_capital=100.0, cost_model=_CostModel(), eval_timeout=math.inf
+            )
 
     def test_max_strategies_must_be_at_least_one(self) -> None:
         with pytest.raises(MultiStrategyPortfolioError, match="max_strategies must be >= 1"):
@@ -255,7 +259,9 @@ class TestRegistration:
             pf.register(_Strategy("a", []), capital_weight=math.nan)
 
     def test_register_enforces_max_strategies(self) -> None:
-        pf = MultiStrategyPortfolio(total_capital=1000.0, cost_model=_CostModel(), max_strategies=2)
+        pf = MultiStrategyPortfolio(
+            total_capital=1000.0, cost_model=_CostModel(), max_strategies=2
+        )
         pf.register(_Strategy("a", []))
         pf.register(_Strategy("b", []))
         with pytest.raises(MultiStrategyPortfolioError, match="max_strategies"):
@@ -462,9 +468,7 @@ class TestEvaluateAll:
         # pattern used by ``test_orchestration.py``. The portfolio must
         # treat a non-finite weight as an abstention (it cannot scale an
         # exposure) and resolve the symbol to HOLD with no emitted signal.
-        bad = _sig("AAPL", Side.BUY, "a", weight=1.0).model_copy(
-            update={"weight": math.nan}
-        )
+        bad = _sig("AAPL", Side.BUY, "a", weight=1.0).model_copy(update={"weight": math.nan})
         pf = MultiStrategyPortfolio(total_capital=1000.0, cost_model=_CostModel())
         pf.register(_Strategy("a", [bad]))
         result = await pf.evaluate_all(_MARKET)
@@ -659,3 +663,131 @@ class TestIsNoopContract:
         assert ev.errors == {}
         assert ev.total_capital == 0.0
         assert ev.is_noop is True  # zero capital default -> noop
+
+
+# --------------------------------------------------------------------- #
+# Weighted-output contract (the spec'd "dict[str,float] weighted
+# portfolio" use case): each strategy's aggregated position size must be
+# scaled by its normalised capital share. The existing suite covers this
+# for the *conflict* case; these lock down the independent-symbol and
+# additive-exposure paths plus the allocation algebra invariants.
+# --------------------------------------------------------------------- #
+
+
+class TestWeightedOutput:
+    """The task's minimal slice: two mock strategies, verify the merged
+    output's position sizes are scaled by weight."""
+
+    async def test_two_strategies_different_symbols_each_scaled_by_weight(self) -> None:
+        # The headline scenario. Two independent strategies, equal weights,
+        # each BUY a distinct symbol. Each merged signal's ``weight`` must
+        # equal that strategy's normalised capital share — i.e. the
+        # position size is scaled by the portfolio weight.
+        pf = MultiStrategyPortfolio(total_capital=1000.0, cost_model=_CostModel())
+        pf.register(_Strategy("a", [_sig("AAPL", Side.BUY, "a")]), capital_weight=0.6)
+        pf.register(_Strategy("b", [_sig("MSFT", Side.BUY, "b")]), capital_weight=0.4)
+        result = await pf.evaluate_all(_MARKET)
+
+        by_symbol = {s.symbol: s for s in result.signals}
+        assert set(by_symbol) == {"AAPL", "MSFT"}
+        # a owns 0.6 of the book -> its signal is scaled to 0.6.
+        assert by_symbol["AAPL"].side == Side.BUY
+        assert by_symbol["AAPL"].weight == pytest.approx(0.6)
+        assert by_symbol["AAPL"].strategy_id == "portfolio"
+        # b owns 0.4 of the book -> its signal is scaled to 0.4.
+        assert by_symbol["MSFT"].side == Side.BUY
+        assert by_symbol["MSFT"].weight == pytest.approx(0.4)
+        # Combined position net_exposure == dollars deployed per symbol.
+        assert result.positions["AAPL"].net_exposure == pytest.approx(600.0)
+        assert result.positions["MSFT"].net_exposure == pytest.approx(400.0)
+
+    async def test_weights_need_not_sum_to_one_are_normalised(self) -> None:
+        # The spec says "validated to sum ~1.0"; the implementation instead
+        # normalises arbitrary positive weights. {a:3, b:1} must deploy the
+        # same as {a:0.75, b:0.25}.
+        pf = MultiStrategyPortfolio(total_capital=1000.0, cost_model=_CostModel())
+        pf.register(_Strategy("a", [_sig("AAPL", Side.BUY, "a")]), capital_weight=3.0)
+        pf.register(_Strategy("b", [_sig("MSFT", Side.BUY, "b")]), capital_weight=1.0)
+        result = await pf.evaluate_all(_MARKET)
+        by_symbol = {s.symbol: s for s in result.signals}
+        assert by_symbol["AAPL"].weight == pytest.approx(0.75)
+        assert by_symbol["MSFT"].weight == pytest.approx(0.25)
+        # And the normalised shares themselves sum to 1.0.
+        total = pf.capital_weight_normalized("a") + pf.capital_weight_normalized("b")
+        assert total == pytest.approx(1.0)
+
+    async def test_two_strategies_same_symbol_same_side_add_exposure(self) -> None:
+        # When two strategies agree on a symbol their dollar exposures add,
+        # so the merged weight is the sum of their capital shares.
+        pf = MultiStrategyPortfolio(total_capital=1000.0, cost_model=_CostModel())
+        pf.register(_Strategy("a", [_sig("AAPL", Side.BUY, "a")]), capital_weight=0.5)
+        pf.register(_Strategy("b", [_sig("AAPL", Side.BUY, "b")]), capital_weight=0.5)
+        result = await pf.evaluate_all(_MARKET)
+
+        assert len(result.signals) == 1
+        out = result.signals[0]
+        assert out.side == Side.BUY
+        # 0.5 + 0.5 = full book committed.
+        assert out.weight == pytest.approx(1.0)
+        assert result.positions["AAPL"].net_exposure == pytest.approx(1000.0)
+        assert set(result.positions["AAPL"].contributors) == {"a", "b"}
+        assert set(out.metadata["portfolio_contributors"]) == {"a", "b"}
+        assert result.capital_deployed == pytest.approx(1000.0)
+        assert result.capital_utilization == pytest.approx(1.0)
+        assert not result.is_noop
+
+    async def test_aggregated_signal_list_has_one_entry_per_symbol(self) -> None:
+        # ``evaluate_all`` returns an aggregated Signal list: exactly one
+        # merged signal per symbol regardless of how many strategies voted.
+        pf = MultiStrategyPortfolio(total_capital=1000.0, cost_model=_CostModel())
+        pf.register(
+            _Strategy(
+                "a",
+                [
+                    _sig("AAPL", Side.BUY, "a"),
+                    _sig("MSFT", Side.SELL, "a"),
+                    _sig("GOOG", Side.BUY, "a"),
+                ],
+            )
+        )
+        pf.register(_Strategy("b", [_sig("AAPL", Side.BUY, "b")]))
+        result = await pf.evaluate_all(_MARKET)
+        symbols = sorted(s.symbol for s in result.signals)
+        assert symbols == ["AAPL", "GOOG", "MSFT"]
+        # AAPL was voted by two strategies -> one merged signal.
+        aapl = next(s for s in result.signals if s.symbol == "AAPL")
+        assert aapl.strategy_id == "portfolio"
+        assert set(aapl.metadata["portfolio_contributors"]) == {"a", "b"}
+
+    def test_allocations_always_sum_to_total_capital(self) -> None:
+        # Invariant: with at least one positive weight and positive capital,
+        # the per-strategy dollar allocations partition total_capital.
+        pf = MultiStrategyPortfolio(total_capital=1000.0, cost_model=_CostModel())
+        pf.register(_Strategy("a", []), capital_weight=0.3)
+        pf.register(_Strategy("b", []), capital_weight=0.3)
+        pf.register(_Strategy("c", []), capital_weight=0.4)
+        allocs = pf.allocations()
+        assert sum(allocs.values()) == pytest.approx(1000.0)
+        assert allocs == {
+            "a": pytest.approx(300.0),
+            "b": pytest.approx(300.0),
+            "c": pytest.approx(400.0),
+        }
+
+    def test_capital_weights_snapshot_is_independent_copy(self) -> None:
+        # Mutating the dict returned by ``capital_weights`` must not bleed
+        # back into the portfolio's internal state.
+        pf = MultiStrategyPortfolio(total_capital=1000.0, cost_model=_CostModel())
+        pf.register(_Strategy("a", []), capital_weight=1.0)
+        snapshot = pf.capital_weights
+        snapshot["a"] = 999.0
+        snapshot["ghost"] = 1.0
+        assert pf.get_capital_weight("a") == 1.0
+        assert "ghost" not in pf
+
+    def test_strategy_ids_snapshot_is_independent_copy(self) -> None:
+        pf = MultiStrategyPortfolio(total_capital=1000.0, cost_model=_CostModel())
+        pf.register(_Strategy("a", []))
+        ids = pf.strategy_ids
+        ids.append("ghost")
+        assert pf.strategy_ids == ["a"]
