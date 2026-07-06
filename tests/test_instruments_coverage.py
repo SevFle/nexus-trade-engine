@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date
+from unittest import mock
 
 import pydantic
 import pytest
@@ -289,3 +291,60 @@ class TestExpiryDateAlias:
         rebuilt = Instrument.model_validate(original)
         assert rebuilt.uid == original.uid
         assert rebuilt.option_type == OptionType.CALL
+
+
+class TestToProviderClassDefaultArm:
+    """The ``case _:`` arm of :meth:`to_provider_class`.
+
+    Two regimes are exercised:
+      * debug / CI (``__debug__`` is True, the pytest default) —
+        :func:`assert_never` trips so a missing mapping fails loudly;
+      * production (``python -O``) — the assertion is elided and the
+        unknown class degrades to ``EQUITY`` after emitting a warning.
+
+    The default arm is reached by calling ``to_provider_class`` through the
+    unbound function with a bare string that equals no enum member.
+    """
+
+    def test_exhaustiveness_raises_in_debug_mode(self):
+        """An unmapped class must trip ``assert_never`` under debug builds.
+
+        Pytest runs un-optimised (``__debug__`` is True), so the default
+        arm raises before reaching the graceful-degradation fallback.
+        """
+        # A bare string never equals any InstrumentAssetClass member, so
+        # the match falls through to the default arm.
+        with pytest.raises(AssertionError, match="unreachable"):
+            InstrumentAssetClass.to_provider_class("bogus")
+
+    def test_unmapped_class_logs_warning_and_falls_back_to_equity(self, caplog):
+        """In the production path an unknown class routes as EQUITY + warns.
+
+        ``assert_never`` is imported lazily *inside* ``to_provider_class``,
+        so stubbing ``typing.assert_never`` out lets execution reach the
+        warning + fallback exactly as it would under ``-O`` (where
+        ``__debug__`` is False and the guarded body is elided).
+        """
+        import typing
+
+        from engine.data.providers.base import AssetClass
+
+        # assert_never is imported lazily inside to_provider_class, so
+        # stubbing typing.assert_never lets execution reach the warning
+        # + fallback exactly as it would under -O.
+        patch_assert = mock.patch.object(typing, "assert_never", return_value=None)
+        with patch_assert, caplog.at_level(logging.WARNING, logger="engine.core.instruments"):
+            result = InstrumentAssetClass.to_provider_class("bogus")
+
+        # graceful degradation: routes as EQUITY rather than crashing
+        assert result == AssetClass.EQUITY
+
+        # exactly one WARNING breadcrumb from the instruments logger
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        assert warnings[0].name == "engine.core.instruments"
+        message = warnings[0].getMessage()
+        assert "Unmapped InstrumentAssetClass" in message
+        assert "routing as EQUITY" in message
+        # %r formatting surfaces the offending value's repr
+        assert "'bogus'" in message
