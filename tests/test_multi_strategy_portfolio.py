@@ -389,11 +389,15 @@ class TestEqualWeight:
         # lookup, never raises) rather than a stale value.
         assert pf.allocation("c") == 0.0
 
+    @pytest.mark.asyncio
     async def test_equal_weight_signal_aggregation_majority(self) -> None:
         # Signal-aggregation happy path under equal weights: three
         # equal-capital strategies, two BUY one SELL on the same symbol.
-        # Net dollar exposure = +333.33 + 333.33 - 333.33 = +333.33 -> BUY,
-        # merged weight = |net| / total_capital ~= 0.3333.
+        # Each strategy is allocated total_capital / 3 = 333.33, so the
+        # per-leg signed exposures are +333.33, +333.33, -333.33:
+        #   * gross exposure = sum of |exposures| = 333.33 * 3 = 1000.0;
+        #   * net exposure   = signed sum        = +333.33 -> BUY;
+        #   * merged weight  = |net| / total_capital = 333.33 / 1000 ~= 1/3.
         pf = MultiStrategyPortfolio(total_capital=1000.0, cost_model=_CostModel())
         pf.register(_Strategy("a", [_sig("AAPL", Side.BUY, "a")]))
         pf.register(_Strategy("b", [_sig("AAPL", Side.BUY, "b")]))
@@ -406,9 +410,15 @@ class TestEqualWeight:
         assert out.weight == pytest.approx(1 / 3, abs=1e-3)
         # All three strategies expressed an opinion -> all credited.
         assert set(result.positions["AAPL"].contributors) == {"a", "b", "c"}
-        # Gross capital at risk == |net exposure| ~= 333.33 of 1000.
+        # net_exposure is the signed sum (+333.33); capital_deployed is the
+        # sum of |per-symbol net| (333.33 here — a single symbol, so it
+        # equals |net|, NOT the gross 1000.0). capital_utilization measures
+        # capital_deployed / total_capital = 333.33 / 1000 ~= 1/3.
+        assert result.net_exposure == pytest.approx(1000.0 / 3, abs=1e-2)
+        assert result.capital_deployed == pytest.approx(1000.0 / 3, abs=1e-2)
         assert result.capital_utilization == pytest.approx(1 / 3, abs=1e-3)
 
+    @pytest.mark.asyncio
     async def test_equal_weight_unanimous_buy_full_deploy(self) -> None:
         # When every equal-weight strategy agrees on direction, the full
         # book is deployed: weight 1.0, capital_utilization 1.0.
