@@ -18,6 +18,7 @@ evolves independently from the instrument taxonomy (what the engine
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping  # noqa: TC003
 from datetime import date  # noqa: TC003 - needed at runtime by pydantic
 from enum import StrEnum
@@ -25,8 +26,12 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from engine.instruments import AssetType
+
 if TYPE_CHECKING:
     from engine.data.providers.base import AssetClass as ProviderAssetClass
+
+logger = logging.getLogger(__name__)
 
 
 class InstrumentAssetClass(StrEnum):
@@ -94,6 +99,19 @@ class Instrument(BaseModel):
         description="Canonical symbol — e.g. 'AAPL', 'BTC/USDT'",
     )
     asset_class: InstrumentAssetClass
+    asset_type: AssetType | None = Field(
+        default=None,
+        description=(
+            "Public, user-facing asset-type classification "
+            "(stock/option/future/forex/crypto/etf). Defaults to None "
+            "(a sentinel) so the validator can distinguish 'user did "
+            "not provide' from 'user explicitly set a value'. When "
+            "omitted it is auto-synced from 'asset_class'; when "
+            "provided it is cross-checked against 'asset_class' and a "
+            "contradiction is logged as a warning while the explicit "
+            "value is preserved."
+        ),
+    )
 
     # Listing
     exchange: str | None = Field(default=None, description="Primary venue MIC/name")
@@ -144,6 +162,47 @@ class Instrument(BaseModel):
                 data["expiration"] = data["expiry_date"]
             del data["expiry_date"]
         return data
+
+    @model_validator(mode="after")
+    def _sync_asset_type_from_class(self) -> Instrument:
+        """Reconcile the public ``asset_type`` with ``asset_class``.
+
+        ``asset_type`` defaults to ``None`` (a sentinel) so we can tell
+        the two intentions apart:
+
+        * **User did not provide one** (``None``) — derive the public
+          type from ``asset_class`` via :meth:`AssetType.from_asset_class`.
+          This keeps every factory and every legacy caller that omits
+          ``asset_type`` working unchanged: they still see a coherent
+          value after construction.
+        * **User explicitly provided one** — cross-validate it against
+          the ``asset_class``-implied type. Agreement (explicit value
+          matches the implied type) leaves the field untouched. A
+          *contradictory* value (e.g. ``asset_type=STOCK`` on an
+          ``asset_class=option`` instrument, or ``asset_type=OPTION`` on
+          an equity) is logged as a warning so callers learn about the
+          mismatch, but the explicit value is **preserved** — an
+          explicit choice is treated as authoritative for the public
+          taxonomy rather than being silently rewritten or rejected.
+
+        We bypass ``validate_assignment`` (``object.__setattr__``) for
+        the auto-sync path because we are mid-construction and the value
+        is *derived*, not user-supplied — re-running field validators
+        here would be wasted work, and we deliberately do not recurse
+        into model validation.
+        """
+        implied = AssetType.from_asset_class(self.asset_class)
+        if self.asset_type is None:
+            object.__setattr__(self, "asset_type", implied)
+        elif self.asset_type != implied:
+            logger.warning(
+                "asset_type %r contradicts asset_class %r "
+                "(expected %r); preserving the explicit asset_type",
+                str(self.asset_type),
+                str(self.asset_class),
+                str(implied),
+            )
+        return self
 
     @model_validator(mode="after")
     def _enforce_class_invariants(self) -> Instrument:
