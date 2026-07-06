@@ -42,10 +42,14 @@ class InstrumentAssetClass(StrEnum):
     OPTION = "option"
     FUTURE = "future"
 
-    def to_provider_class(self) -> ProviderAssetClass:  # noqa: PLR0911 - one return per case
-        """Map to the data-routing :class:`AssetClass` used by providers."""
-        from typing import assert_never  # noqa: PLC0415
+    def to_provider_class(self) -> ProviderAssetClass:
+        """Map to the data-routing :class:`AssetClass` used by providers.
 
+        Raises :class:`UnknownAssetClassError` when this asset class has
+        no provider mapping (e.g. an unmapped or dynamically constructed
+        member). The exception *is* the failure signal — there is no
+        silent fallback to a default asset class.
+        """
         from engine.data.providers.base import AssetClass as P  # noqa: PLC0415
 
         match self:
@@ -66,12 +70,22 @@ class InstrumentAssetClass(StrEnum):
             case InstrumentAssetClass.FUTURE:
                 return P.FUTURES
             case _:
-                logger.warning("Unmapped InstrumentAssetClass %r routing as EQUITY", self)
-                if __debug__:
-                    # CI/dev catches the missing mapping loudly…
-                    assert_never(self)
-                # …while production (-O) degrades gracefully to EQUITY.
-                return P.EQUITY
+                raise UnknownAssetClassError(self)
+
+
+class UnknownAssetClassError(ValueError):
+    """Raised when an :class:`InstrumentAssetClass` has no provider mapping.
+
+    Constructing the error also emits a ``WARNING`` log so operators
+    notice the unmapped value even when the exception is caught higher
+    up the stack. The exception itself is the failure signal — callers
+    must not rely on a silent fallback to a default asset class.
+    """
+
+    def __init__(self, asset_class: InstrumentAssetClass) -> None:
+        self.asset_class = asset_class
+        logger.warning("Unmapped InstrumentAssetClass %r", asset_class)
+        super().__init__(f"Unmapped InstrumentAssetClass: {asset_class!r}")
 
 
 class OptionType(StrEnum):
@@ -393,4 +407,5 @@ __all__ = [
     "Instrument",
     "InstrumentAssetClass",
     "OptionType",
+    "UnknownAssetClassError",
 ]
