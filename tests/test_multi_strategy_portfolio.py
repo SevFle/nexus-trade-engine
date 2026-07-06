@@ -173,7 +173,9 @@ class TestConstruction:
 
     @pytest.mark.parametrize("bad", [-1.0, -0.01, -1e9])
     def test_negative_capital_rejected(self, bad: float) -> None:
-        with pytest.raises(MultiStrategyPortfolioError, match="total_capital must be non-negative"):
+        with pytest.raises(
+            MultiStrategyPortfolioError, match="total_capital must be non-negative"
+        ):
             MultiStrategyPortfolio(total_capital=bad, cost_model=_CostModel())
 
     def test_zero_capital_is_valid_noop_state(self) -> None:
@@ -199,7 +201,9 @@ class TestConstruction:
 
     def test_non_finite_eval_timeout_rejected(self) -> None:
         with pytest.raises(MultiStrategyPortfolioError, match="eval_timeout must be finite"):
-            MultiStrategyPortfolio(total_capital=100.0, cost_model=_CostModel(), eval_timeout=math.inf)
+            MultiStrategyPortfolio(
+                total_capital=100.0, cost_model=_CostModel(), eval_timeout=math.inf
+            )
 
     def test_max_strategies_must_be_at_least_one(self) -> None:
         with pytest.raises(MultiStrategyPortfolioError, match="max_strategies must be >= 1"):
@@ -255,7 +259,9 @@ class TestRegistration:
             pf.register(_Strategy("a", []), capital_weight=math.nan)
 
     def test_register_enforces_max_strategies(self) -> None:
-        pf = MultiStrategyPortfolio(total_capital=1000.0, cost_model=_CostModel(), max_strategies=2)
+        pf = MultiStrategyPortfolio(
+            total_capital=1000.0, cost_model=_CostModel(), max_strategies=2
+        )
         pf.register(_Strategy("a", []))
         pf.register(_Strategy("b", []))
         with pytest.raises(MultiStrategyPortfolioError, match="max_strategies"):
@@ -331,6 +337,90 @@ class TestAllocation:
         pf.register(_Strategy("a", []), capital_weight=1.0)
         assert pf.allocation("a") == 0.0
         assert pf.allocations() == {"a": 0.0}
+
+
+# --------------------------------------------------------------------- #
+# Equal-weight allocation (the task's headline capability)
+# --------------------------------------------------------------------- #
+
+
+class TestEqualWeight:
+    """The canonical equal-weight allocation: every strategy registered
+    with the *default* weight (1.0) receives an equal slice of total
+    capital (1/N), capital is conserved, and re-derivation follows the
+    live registry. The existing ``TestAllocation`` class only exercises
+    *relative* weights ({a:2, b:1}); these pin down the plain equal-weight
+    case the task explicitly requires ("compute equal-weight allocation")."""
+
+    def test_equal_weight_splits_capital_evenly(self) -> None:
+        pf = MultiStrategyPortfolio(total_capital=3000.0, cost_model=_CostModel())
+        for sid in ("a", "b", "c"):
+            pf.register(_Strategy(sid, []))  # default weight 1.0
+        # 3 equal-weight strategies -> 1/3 of the normalised weight, and
+        # 1/3 of total capital in dollars.
+        assert pf.capital_weight_normalized("a") == pytest.approx(1 / 3)
+        assert pf.allocation("a") == pytest.approx(1000.0)
+        assert pf.allocation("b") == pytest.approx(1000.0)
+        assert pf.allocation("c") == pytest.approx(1000.0)
+
+    def test_equal_weight_sums_to_total_capital(self) -> None:
+        # Conservation invariant: dollar allocations across the whole
+        # registry must sum to total_capital — no leakage, no
+        # double-counting — for any number of equal-weight strategies.
+        pf = MultiStrategyPortfolio(total_capital=10000.0, cost_model=_CostModel())
+        for sid in ("a", "b", "c", "d"):
+            pf.register(_Strategy(sid, []))
+        total = sum(pf.allocations().values())
+        assert total == pytest.approx(10000.0)
+
+    def test_unregister_re_derives_equal_split(self) -> None:
+        # Allocation is derived from the live registry at lookup time, so
+        # removing one of three equal-weight strategies promotes the
+        # survivors to a 50/50 split (registration/derivation round-trip).
+        pf = MultiStrategyPortfolio(total_capital=1000.0, cost_model=_CostModel())
+        for sid in ("a", "b", "c"):
+            pf.register(_Strategy(sid, []))
+        assert pf.allocation("a") == pytest.approx(1000.0 / 3)
+        assert pf.unregister("c") is True
+        assert pf.strategy_ids == ["a", "b"]
+        assert pf.allocation("a") == pytest.approx(500.0)
+        assert pf.allocation("b") == pytest.approx(500.0)
+        # A deregistered strategy resolves to a zero allocation (total
+        # lookup, never raises) rather than a stale value.
+        assert pf.allocation("c") == 0.0
+
+    async def test_equal_weight_signal_aggregation_majority(self) -> None:
+        # Signal-aggregation happy path under equal weights: three
+        # equal-capital strategies, two BUY one SELL on the same symbol.
+        # Net dollar exposure = +333.33 + 333.33 - 333.33 = +333.33 -> BUY,
+        # merged weight = |net| / total_capital ~= 0.3333.
+        pf = MultiStrategyPortfolio(total_capital=1000.0, cost_model=_CostModel())
+        pf.register(_Strategy("a", [_sig("AAPL", Side.BUY, "a")]))
+        pf.register(_Strategy("b", [_sig("AAPL", Side.BUY, "b")]))
+        pf.register(_Strategy("c", [_sig("AAPL", Side.SELL, "c")]))
+        result = await pf.evaluate_all(_MARKET)
+        assert not result.is_noop
+        assert len(result.signals) == 1
+        out = result.signals[0]
+        assert out.side == Side.BUY
+        assert out.weight == pytest.approx(1 / 3, abs=1e-3)
+        # All three strategies expressed an opinion -> all credited.
+        assert set(result.positions["AAPL"].contributors) == {"a", "b", "c"}
+        # Gross capital at risk == |net exposure| ~= 333.33 of 1000.
+        assert result.capital_utilization == pytest.approx(1 / 3, abs=1e-3)
+
+    async def test_equal_weight_unanimous_buy_full_deploy(self) -> None:
+        # When every equal-weight strategy agrees on direction, the full
+        # book is deployed: weight 1.0, capital_utilization 1.0.
+        pf = MultiStrategyPortfolio(total_capital=900.0, cost_model=_CostModel())
+        pf.register(_Strategy("a", [_sig("AAPL", Side.BUY, "a")]))
+        pf.register(_Strategy("b", [_sig("AAPL", Side.BUY, "b")]))
+        pf.register(_Strategy("c", [_sig("AAPL", Side.BUY, "c")]))
+        result = await pf.evaluate_all(_MARKET)
+        assert len(result.signals) == 1
+        assert result.signals[0].side == Side.BUY
+        assert result.signals[0].weight == pytest.approx(1.0)
+        assert result.capital_utilization == pytest.approx(1.0)
 
 
 # --------------------------------------------------------------------- #
@@ -462,9 +552,7 @@ class TestEvaluateAll:
         # pattern used by ``test_orchestration.py``. The portfolio must
         # treat a non-finite weight as an abstention (it cannot scale an
         # exposure) and resolve the symbol to HOLD with no emitted signal.
-        bad = _sig("AAPL", Side.BUY, "a", weight=1.0).model_copy(
-            update={"weight": math.nan}
-        )
+        bad = _sig("AAPL", Side.BUY, "a", weight=1.0).model_copy(update={"weight": math.nan})
         pf = MultiStrategyPortfolio(total_capital=1000.0, cost_model=_CostModel())
         pf.register(_Strategy("a", [bad]))
         result = await pf.evaluate_all(_MARKET)
