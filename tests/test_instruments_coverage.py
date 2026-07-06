@@ -289,3 +289,48 @@ class TestExpiryDateAlias:
         rebuilt = Instrument.model_validate(original)
         assert rebuilt.uid == original.uid
         assert rebuilt.option_type == OptionType.CALL
+
+
+class TestToProviderClassUnmapped:
+    """An asset class with no explicit mapping must not crash routing."""
+
+    def test_unknown_value_returns_default_instead_of_raising(self):
+        # ``to_provider_class`` dispatches purely on equality against the
+        # known members, so calling it (unbound) with a value that is not
+        # one of them lands in the default arm — exactly the path a
+        # future-added asset class or a stray value would take. It must
+        # fall back to EQUITY rather than raising AssertionError.
+        from engine.data.providers.base import AssetClass
+
+        result = InstrumentAssetClass.to_provider_class("not-a-real-asset-class")
+        assert result == AssetClass.EQUITY
+
+    def test_every_enum_member_routes_without_crash(self):
+        from engine.data.providers.base import AssetClass
+
+        valid_provider_classes = set(AssetClass)
+        for member in InstrumentAssetClass:
+            # Must not raise, and must resolve to a real provider class.
+            assert member.to_provider_class() in valid_provider_classes
+
+
+class TestUnmappedAssetClassInstrument:
+    """An instrument built from a class that has no special-case
+    invariant handling must still construct and route cleanly."""
+
+    @pytest.mark.parametrize(
+        "asset_class",
+        [
+            InstrumentAssetClass.EQUITY,
+            InstrumentAssetClass.ETF,
+            InstrumentAssetClass.FUTURE,
+        ],
+    )
+    def test_constructs_and_routes_without_crash(self, asset_class):
+        from engine.data.providers.base import AssetClass
+
+        inst = Instrument(symbol="X", asset_class=asset_class)
+        assert inst.asset_class == asset_class
+        # Routing must never crash, even for classes with no special
+        # invariant handling in ``_enforce_class_invariants``.
+        assert inst.asset_class.to_provider_class() in set(AssetClass)

@@ -40,9 +40,16 @@ class InstrumentAssetClass(StrEnum):
     FUTURE = "future"
 
     def to_provider_class(self) -> ProviderAssetClass:  # noqa: PLR0911 - one return per case
-        """Map to the data-routing :class:`AssetClass` used by providers."""
-        from typing import assert_never  # noqa: PLC0415
+        """Map to the data-routing :class:`AssetClass` used by providers.
 
+        Known instrument classes map 1:1 (or N:1 for the crypto variants)
+        onto the provider taxonomy. Any value that is *not* one of the
+        explicitly-handled members — e.g. an asset class added to the
+        enum later, or a value that slips past validation — falls back to
+        :attr:`AssetClass.EQUITY` instead of raising, so an unmapped class
+        never crashes the data-routing layer. This deliberately trades
+        mypy/pyright exhaustiveness checking for runtime robustness.
+        """
         from engine.data.providers.base import AssetClass as P  # noqa: PLC0415
 
         match self:
@@ -63,8 +70,9 @@ class InstrumentAssetClass(StrEnum):
             case InstrumentAssetClass.FUTURE:
                 return P.FUTURES
             case _:
-                assert_never(self)
-        return P.EQUITY  # unreachable — assert_never never returns
+                # Unmapped / unknown class: fall back to the most neutral
+                # provider class rather than crashing the routing layer.
+                return P.EQUITY
 
 
 class OptionType(StrEnum):
@@ -373,7 +381,14 @@ class Instrument(BaseModel):
 
     @classmethod
     def coerce(cls, value: Any) -> Instrument:
-        """Accept Instrument or string; return Instrument."""
+        """Coerce a duck-typed input into an :class:`Instrument`.
+
+        Dispatches on the *shape* of ``value`` rather than its concrete
+        type: an :class:`Instrument` is returned unchanged, a ``str``
+        symbol is delegated to :meth:`from_string` (defaulting to an
+        equity instrument), and anything else raises :class:`TypeError`
+        so misuse fails loudly instead of being silently misclassified.
+        """
         if isinstance(value, cls):
             return value
         if isinstance(value, str):
