@@ -14,10 +14,18 @@ This is a *separate* enum from ``engine.data.providers.base.AssetClass``
 because the data-routing taxonomy (which providers can serve a query)
 evolves independently from the instrument taxonomy (what the engine
 *models*). Use :meth:`InstrumentAssetClass.to_provider_class` to bridge.
+
+The provider-side :class:`~engine.data.providers.base.AssetClass` is
+imported only under ``typing.TYPE_CHECKING`` so this module carries no
+runtime dependency on the data layer (keeping the import graph acyclic).
+The return annotation of :meth:`InstrumentAssetClass.to_provider_class`
+references that symbol for static analysis only; the method body does
+its own local runtime import of the concrete enum.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping  # noqa: TC003
 from datetime import date  # noqa: TC003 - needed at runtime by pydantic
 from enum import StrEnum
@@ -27,6 +35,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 if TYPE_CHECKING:
     from engine.data.providers.base import AssetClass as ProviderAssetClass
+
+logger = logging.getLogger(__name__)
 
 
 class InstrumentAssetClass(StrEnum):
@@ -40,7 +50,15 @@ class InstrumentAssetClass(StrEnum):
     FUTURE = "future"
 
     def to_provider_class(self) -> ProviderAssetClass:  # noqa: PLR0911 - one return per case
-        """Map to the data-routing :class:`AssetClass` used by providers."""
+        """Map to the data-routing :class:`AssetClass` used by providers.
+
+        Falls back to :attr:`AssetClass.EQUITY` with a logged warning for any
+        asset class that has no provider-side mapping (e.g. an enum member
+        added before this table is extended). In normal (``__debug__``) runs
+        such drift is caught loudly via :func:`assert_never`; under
+        ``python -O`` the engine degrades gracefully instead of crashing
+        mid-trade.
+        """
         from typing import assert_never  # noqa: PLC0415
 
         from engine.data.providers.base import AssetClass as P  # noqa: PLC0415
@@ -63,8 +81,11 @@ class InstrumentAssetClass(StrEnum):
             case InstrumentAssetClass.FUTURE:
                 return P.FUTURES
             case _:
-                assert_never(self)
-        return P.EQUITY  # unreachable — assert_never never returns
+                # Loud in dev/tests, graceful in production (-O).
+                if __debug__:
+                    assert_never(self)
+                logger.warning("Unmapped InstrumentAssetClass %r; defaulting to EQUITY", self)
+                return P.EQUITY
 
 
 class OptionType(StrEnum):
