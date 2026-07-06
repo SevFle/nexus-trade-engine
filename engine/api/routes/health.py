@@ -21,6 +21,15 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.get("/api/v1/health")
+async def health_v1() -> dict[str, str]:
+    # Aliased path so the k6 smoke load test
+    # (``GET /api/v1/health``) resolves without a 404. Kept as a
+    # distinct route rather than a prefix change so the existing
+    # ``/health``, ``/ready`` and rate-limit exempt config stay intact.
+    return {"status": "ok"}
+
+
 @router.get("/health/providers")
 async def provider_health() -> dict[str, object]:
     registry = get_registry()

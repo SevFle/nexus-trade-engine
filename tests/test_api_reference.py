@@ -66,6 +66,25 @@ async def reference_client():
 
 
 class TestSuggestEndpoint:
+    async def test_exchanges_returns_cached_list(self, reference_client: AsyncClient):
+        # k6 baseline load test reads GET /api/v1/reference/exchanges as a
+        # cheap cached reference read; it must return 200 with a list.
+        r = await reference_client.get("/api/v1/reference/exchanges")
+        assert r.status_code == HTTPStatus.OK
+        body = r.json()
+        assert isinstance(body["exchanges"], list)
+        assert body["exchanges"]
+        first = body["exchanges"][0]
+        assert {"mic", "name", "country", "currency"} <= set(first)
+        mics = {row["mic"] for row in body["exchanges"]}
+        assert {"XNAS", "XNYS"} <= mics
+
+    async def test_exchanges_response_is_stable(self, reference_client: AsyncClient):
+        # Cached read must be deterministic across calls.
+        first = (await reference_client.get("/api/v1/reference/exchanges")).json()
+        second = (await reference_client.get("/api/v1/reference/exchanges")).json()
+        assert first == second
+
     async def test_ticker_prefix_suggests(self, reference_client: AsyncClient):
         r = await reference_client.get("/api/v1/reference/suggest", params={"q": "AA"})
         assert r.status_code == HTTPStatus.OK

@@ -38,6 +38,26 @@ _MAX_QUERY_LEN = SearchIndex.MAX_QUERY_LEN
 _YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 _YAHOO_SEARCH_TIMEOUT = 5.0
 
+# Static, cached listing of supported trading venues (ISO 10383 MIC ->
+# human-readable metadata). This is the cheap, fully-cached reference
+# read that ``tests/load/api-baseline.js`` exercises; it never touches
+# the network or the DB so it stays well inside the load-test latency
+# budget.
+_EXCHANGES: list[dict[str, str]] = [
+    {"mic": "XNAS", "name": "Nasdaq", "country": "US", "currency": "USD"},
+    {"mic": "XNYS", "name": "New York Stock Exchange", "country": "US", "currency": "USD"},
+    {"mic": "XASE", "name": "NYSE American", "country": "US", "currency": "USD"},
+    {"mic": "ARCX", "name": "NYSE Arca", "country": "US", "currency": "USD"},
+    {"mic": "BATS", "name": "Cboe BZX", "country": "US", "currency": "USD"},
+    {"mic": "XETR", "name": "Xetra", "country": "DE", "currency": "EUR"},
+    {"mic": "XLON", "name": "London Stock Exchange", "country": "GB", "currency": "GBP"},
+    {"mic": "XTKS", "name": "Tokyo Stock Exchange", "country": "JP", "currency": "JPY"},
+    {"mic": "XHKG", "name": "Hong Kong Stock Exchange", "country": "HK", "currency": "HKD"},
+    {"mic": "XTSE", "name": "Toronto Stock Exchange", "country": "CA", "currency": "CAD"},
+    {"mic": "XASX", "name": "Australian Securities Exchange", "country": "AU", "currency": "AUD"},
+    {"mic": "XCRY", "name": "Crypto", "country": "--", "currency": "USD"},
+]
+
 _INDEX: SearchIndex | None = None
 
 
@@ -140,6 +160,17 @@ async def _yahoo_search(query: str, limit: int) -> list[dict[str, object]]:
     except Exception:
         logger.exception("reference.yahoo_search.unexpected_error")
         return []
+
+
+@router.get("/exchanges")
+async def list_exchanges() -> dict[str, list[dict[str, str]]]:
+    """Return the static list of supported trading venues.
+
+    A fully cached read (no DB / no network) used by the frontend
+    venue picker and by the k6 baseline load test
+    (``GET /api/v1/reference/exchanges``).
+    """
+    return {"exchanges": list(_EXCHANGES)}
 
 
 @router.get("/suggest")

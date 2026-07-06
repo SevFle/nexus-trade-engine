@@ -8,7 +8,7 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from engine.api.auth.dependency import get_current_user
 from engine.core.backtest_runner import BacktestConfig, BacktestRunner
@@ -47,6 +47,33 @@ class BacktestRequest(BaseModel):
 class BacktestResponse(BaseModel):
     status: str
     backtest_id: str | None = None
+
+
+class BacktestSubmitRequest(BaseModel):
+    """Request body for ``POST /api/v1/backtest``.
+
+    Accepts both the canonical backtest payload
+    (``strategy_name`` / ``start_date`` / ``end_date``) and the
+    load-test contract used by ``tests/load/api-baseline.js``
+    (``strategy_id`` / ``start`` / ``end``). Keeping both spellings
+    lets the k6 baseline submit backtests without the script having
+    to track Pydantic renames (see docs/operations/load-testing.md).
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    strategy_name: str = Field(
+        validation_alias=AliasChoices("strategy_name", "strategy_id"),
+    )
+    symbol: str
+    start_date: str = Field(
+        validation_alias=AliasChoices("start_date", "start"),
+    )
+    end_date: str = Field(
+        validation_alias=AliasChoices("end_date", "end"),
+    )
+    initial_capital: float = 100_000.0
+    config: dict | None = None
 
 
 class RollingMetricsSnapshot(BaseModel):
@@ -205,6 +232,37 @@ async def run_backtest(
     background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
 ) -> BacktestResponse:
+    backtest_id = str(uuid.uuid4())
+    background_tasks.add_task(
+        _run_backtest_background,
+        backtest_id,
+        str(user.id),
+        request,
+    )
+    return BacktestResponse(status="accepted", backtest_id=backtest_id)
+
+
+@router.post("", status_code=202, response_model=BacktestResponse)
+async def submit_backtest(
+    submit: BacktestSubmitRequest,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
+) -> BacktestResponse:
+    """Async backtest submission — the entry point the k6 baseline exercises.
+
+    Returns ``202 Accepted`` immediately; the actual run happens in a
+    background task (see ``_run_backtest_background``). Accepts the
+    load-test payload (``strategy_id`` / ``start`` / ``end`` / ``symbol``)
+    as well as the canonical field names.
+    """
+    request = BacktestRequest(
+        strategy_name=submit.strategy_name,
+        symbol=submit.symbol,
+        start_date=submit.start_date,
+        end_date=submit.end_date,
+        initial_capital=submit.initial_capital,
+        config=submit.config,
+    )
     backtest_id = str(uuid.uuid4())
     background_tasks.add_task(
         _run_backtest_background,

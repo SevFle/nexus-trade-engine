@@ -29,7 +29,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from engine.mcp.adapters import EngineServices
-from engine.mcp.adapters.strategy_adapter import get_strategy_details, list_strategies
+from engine.mcp.adapters.strategy_adapter import (
+    get_strategy_details,
+    list_strategies,
+)
 from engine.mcp.auth import AuthPrincipal
 from engine.mcp.errors import MCPError, NotFoundError, ValidationError
 from engine.mcp.handlers import dispatch_tool
