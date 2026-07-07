@@ -35,7 +35,7 @@ from engine.data.providers import (
     configure_from_file,
     get_registry,
 )
-from engine.db.session import dispose_engine, get_session_factory
+from engine.db.session import dispose_engine, get_engine, get_session_factory
 from engine.legal.sync import sync_legal_documents
 from engine.observability.http_metrics import HttpMetricsMiddleware
 from engine.observability.logging import setup_logging
@@ -131,7 +131,20 @@ def _seed_reference_index() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
-    setup_tracing()
+    # Install the global OTel TracerProvider and grab instrumentation
+    # hooks for FastAPI + SQLAlchemy. The provider is a graceful no-op
+    # when no OTLP collector is configured, so this never blocks startup.
+    tracing_hooks = setup_tracing()
+    try:
+        tracing_hooks.instrument_fastapi(app)
+    except Exception:
+        logger.warning("nexus.tracing.fastapi_instrument_failed")
+    try:
+        # ``get_engine`` lazily creates the async engine; instrument it
+        # before the first query runs (e.g. the legal-doc sync below).
+        tracing_hooks.instrument_sqlalchemy(get_engine())
+    except Exception:
+        logger.warning("nexus.tracing.sqlalchemy_instrument_failed")
     try:
         setup_sentry()
     except Exception:
