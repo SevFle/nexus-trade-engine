@@ -224,11 +224,21 @@ class RestrictedImporter(MetaPathFinder):
         allowed: frozenset[str] | None = None,
         allowed_hosts: list[str] | None = None,
     ) -> None:
-        # The authoritative allowlist.  ``blocked`` is retained for explicit
-        # denylist defence-in-depth and backward compatibility with callers
-        # that pass a custom blocked set.
+        # The authoritative allowlist.  ``blocked`` is the explicit denylist
+        # used for defence-in-depth on top of the allowlist.
+        #
+        # The frozen :data:`~engine.plugins.allowlist.DENYLIST_MODULES` is
+        # **always** part of the effective denylist (union), even when a caller
+        # passes a custom ``blocked`` set.  This guarantees a blocked *root*
+        # module can never be re-enabled by a too-permissive allowlist edit —
+        # the denylist always takes priority (see :meth:`_module_is_blocked`).
+        # A caller-supplied set can only *add* names, never remove the frozen
+        # denylist, so security is monotonic.
         self.allowed: frozenset[str] = allowed if allowed is not None else ALLOWED_MODULES
-        self.blocked: set[str] = blocked if blocked is not None else set()
+        effective_blocked: set[str] = set(DENYLIST_MODULES)
+        if blocked is not None:
+            effective_blocked |= set(blocked)
+        self.blocked: set[str] = effective_blocked
         # Hostname allowlist for the DNS-resolution guard installed by
         # ``install()``.  Sourced from the strategy manifest's
         # ``network.allowed_endpoints``.  Mirrors the endpoint-matching logic
@@ -272,18 +282,36 @@ class RestrictedImporter(MetaPathFinder):
 
     # ── Core decision logic ────────────────────────────────────────────
 
+    def _module_is_blocked(self, fullname: str) -> bool:
+        """Return ``True`` iff *fullname*'s root is on the denylist.
+
+        Blocked root modules **always** take priority over the allowlist: a
+        module whose root appears in :attr:`blocked` (which always contains
+        :data:`~engine.plugins.allowlist.DENYLIST_MODULES`) is denied even if
+        a misconfiguration or permissive edit also added it to the allowlist.
+        This closes the "allowlist shadowing a blocked root" bypass (e.g. an
+        ``os`` entry sneaking into the allowlist would still be rejected).
+        """
+        root = fullname.split(".", maxsplit=1)[0]
+        return root in self.blocked
+
     def _is_allowed(self, fullname: str) -> bool:
         """Return ``True`` iff *fullname*'s root is permitted by the policy.
 
-        Interpreter/test-harness infrastructure (see
-        :data:`_INTERNAL_BYPASS_MODULES`) is always permitted so the hook
-        cannot crash the host when it happens to be active during test
-        collection or teardown.
+        Precedence (highest to lowest):
+          1. Interpreter/test-harness infrastructure
+             (:data:`_INTERNAL_BYPASS_MODULES`) — always permitted so the hook
+             cannot crash the host during test collection/teardown.
+          2. The denylist (:meth:`_module_is_blocked`) — a blocked *root*
+             module is always rejected, even if it also appears in the
+             allowlist.  This is the defence-in-depth that prevents an
+             allowlist edit from silently un-blocking a known-dangerous module.
+          3. The allowlist (:attr:`allowed`).
         """
         root = fullname.split(".", maxsplit=1)[0]
         if root in _INTERNAL_BYPASS_MODULES:
             return True
-        if root in self.blocked:
+        if self._module_is_blocked(fullname):
             return False
         return root in self.allowed
 
