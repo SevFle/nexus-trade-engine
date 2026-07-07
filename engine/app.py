@@ -329,6 +329,16 @@ def create_app() -> FastAPI:
     # /metrics route itself is included so operators can monitor scrape
     # latency.
     app.add_middleware(HttpMetricsMiddleware)
+    # Prometheus-native metrics for the /api surface (SEV-223). Resolves
+    # its collectors lazily via ``get_default_metrics`` (see
+    # engine.middleware.metrics) on the first instrumented request, so
+    # importing this module and even building the app register nothing on
+    # prometheus_client.REGISTRY at import time. Only /api paths are
+    # instrumented and their dynamic segments are normalised
+    # (UUID/numeric/hex → {id}/{n}/{hex}) to bound label cardinality.
+    from engine.middleware.metrics import MetricsMiddleware
+
+    app.add_middleware(MetricsMiddleware)
 
     app.include_router(api_router)
 

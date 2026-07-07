@@ -18,10 +18,12 @@ from engine.middleware.correlation import (
     CORRELATION_HEADER,
     BaseHTTPCorrelationIdMiddleware,
 )
+from engine.middleware.metrics import MetricsMiddleware
 from engine.observability.middleware import CorrelationIdMiddleware
 
 __all__ = [
     "CORRELATION_HEADER",
     "BaseHTTPCorrelationIdMiddleware",
     "CorrelationIdMiddleware",
+    "MetricsMiddleware",
 ]
