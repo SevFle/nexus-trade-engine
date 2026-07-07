@@ -37,6 +37,7 @@ from engine.data.providers import (
 )
 from engine.db.session import dispose_engine, get_session_factory
 from engine.legal.sync import sync_legal_documents
+from engine.middleware.metrics import PrometheusMetricsMiddleware
 from engine.observability.http_metrics import HttpMetricsMiddleware
 from engine.observability.logging import setup_logging
 from engine.observability.metrics import set_metrics
@@ -329,6 +330,12 @@ def create_app() -> FastAPI:
     # /metrics route itself is included so operators can monitor scrape
     # latency.
     app.add_middleware(HttpMetricsMiddleware)
+    # prometheus_client-backed middleware (gh#34 companion). Scoped to
+    # /api routes; writes to the default CollectorRegistry so the
+    # /metrics scrape endpoint surfaces http_requests_total,
+    # http_request_duration_seconds and http_requests_active alongside
+    # the engine's own custom exposition.
+    app.add_middleware(PrometheusMetricsMiddleware)
 
     app.include_router(api_router)
 

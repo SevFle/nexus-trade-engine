@@ -17,6 +17,7 @@ from __future__ import annotations
 import structlog
 from fastapi import APIRouter, Response
 
+from engine.middleware.metrics import generate_latest as generate_prometheus_latest
 from engine.observability.metrics import RecordingBackend, get_metrics
 from engine.observability.prometheus import render_prometheus
 
@@ -34,9 +35,12 @@ async def metrics() -> Response:
         # NullBackend (or any other non-recording adapter) cannot be
         # rendered. Empty body keeps Prometheus from flagging the
         # scrape as failed; operators see the placeholder.
-        return Response(
-            content="# metrics backend does not support exposition\n",
-            media_type=_PROM_CONTENT_TYPE,
-        )
-    body = render_prometheus(backend)
+        body = "# metrics backend does not support exposition\n"
+    else:
+        body = render_prometheus(backend)
+    # Always append the default prometheus_client registry so the scrape
+    # also surfaces the prometheus_client-backed collectors — notably the
+    # /api request counter / latency histogram / active-requests gauge
+    # emitted by engine.middleware.metrics.PrometheusMetricsMiddleware.
+    body += "\n" + generate_prometheus_latest().decode()
     return Response(content=body, media_type=_PROM_CONTENT_TYPE)

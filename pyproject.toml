@@ -23,6 +23,7 @@ dependencies = [
     "opentelemetry-exporter-otlp>=1.28.0",
     "opentelemetry-instrumentation-fastapi>=0.49b0",
     "opentelemetry-instrumentation-sqlalchemy>=0.49b0",
+    "prometheus-client>=0.20.0",
     "sentry-sdk[fastapi]>=2.18.0",
     "httpx>=0.28.0",
     "pyyaml>=6.0.0",
