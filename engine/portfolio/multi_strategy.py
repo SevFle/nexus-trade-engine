@@ -45,7 +45,6 @@ import structlog
 from engine.core.signal import Side, Signal
 
 if TYPE_CHECKING:
-
     from engine.core.cost_model import ICostModel
 
 logger = structlog.get_logger()
@@ -171,15 +170,11 @@ def _finite(value: float, label: str) -> float:
     the ``TypeError``/``ValueError`` branch below.
     """
     if isinstance(value, str):
-        raise MultiStrategyPortfolioError(
-            f"{label} must be a number, got {value!r}"
-        )
+        raise MultiStrategyPortfolioError(f"{label} must be a number, got {value!r}")
     try:
         num = float(value)
     except (TypeError, ValueError) as exc:
-        raise MultiStrategyPortfolioError(
-            f"{label} must be a number, got {value!r}"
-        ) from exc
+        raise MultiStrategyPortfolioError(f"{label} must be a number, got {value!r}") from exc
     if not math.isfinite(num):
         raise MultiStrategyPortfolioError(f"{label} must be finite, got {value!r}")
     return num
@@ -296,9 +291,7 @@ class MultiStrategyPortfolio:
             raise MultiStrategyPortfolioError(f"strategy {sid!r} already registered")
         self._strategies[sid] = strategy
         self._weights[sid] = weight
-        logger.info(
-            "portfolio.registered", strategy_id=sid, capital_weight=weight
-        )
+        logger.info("portfolio.registered", strategy_id=sid, capital_weight=weight)
 
     def set_capital_weight(self, strategy_id: str, capital_weight: float) -> None:
         """Update an already-registered strategy's capital weight."""
@@ -362,10 +355,7 @@ class MultiStrategyPortfolio:
         total = self._weight_sum()
         if total <= 0 or self._total_capital <= 0:
             return dict.fromkeys(self._strategies, 0.0)
-        return {
-            sid: (w / total) * self._total_capital
-            for sid, w in self._weights.items()
-        }
+        return {sid: (w / total) * self._total_capital for sid, w in self._weights.items()}
 
     # -- evaluation & merging ------------------------------------------
 
@@ -469,10 +459,7 @@ class MultiStrategyPortfolio:
                         strategy_id=sid,
                         timeout=self._eval_timeout,
                     )
-                    errors[sid] = (
-                        f"TimeoutError: evaluate exceeded "
-                        f"{self._eval_timeout}s timeout"
-                    )
+                    errors[sid] = f"TimeoutError: evaluate exceeded {self._eval_timeout}s timeout"
                     continue
                 except Exception as exc:
                     # An exception raised from *within* the awaited
@@ -491,11 +478,7 @@ class MultiStrategyPortfolio:
         # Gross capital at risk = sum of |net exposure| across symbols.
         capital_deployed = float(sum(abs(p.net_exposure) for p in positions.values()))
         net_exposure = float(sum(p.net_exposure for p in positions.values()))
-        utilization = (
-            capital_deployed / self._total_capital
-            if self._total_capital > 0
-            else 0.0
-        )
+        utilization = capital_deployed / self._total_capital if self._total_capital > 0 else 0.0
 
         return PortfolioEvaluation(
             signals=merged,
@@ -598,9 +581,7 @@ class MultiStrategyPortfolio:
         )
 
     @staticmethod
-    def _to_signal(
-        position: CombinedPosition, group: list[tuple[str, Signal]]
-    ) -> Signal:
+    def _to_signal(position: CombinedPosition, group: list[tuple[str, Signal]]) -> Signal:
         """Build the merged :class:`Signal` for a combined position.
 
         ``side``/``weight`` reflect the merged decision; ``strategy_id`` is

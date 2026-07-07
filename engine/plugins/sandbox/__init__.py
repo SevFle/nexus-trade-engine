@@ -394,9 +394,7 @@ class StrategySandbox:
                 return await original_send(client, request, stream=stream, **kwargs)
             host = request.url.host
             if host is None:
-                raise PermissionError(
-                    "Network access to a host-less request URL is not allowed"
-                )
+                raise PermissionError("Network access to a host-less request URL is not allowed")
             if not any(host == ep or host.endswith(f".{ep}") for ep in allowed):
                 raise PermissionError(f"Network access to {host} is not allowed")
             return await original_send(client, request, stream=stream, **kwargs)

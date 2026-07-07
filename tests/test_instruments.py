@@ -257,7 +257,9 @@ class TestToProviderClassUnmapped:
         assert isinstance(unmapped, InstrumentAssetClass)
         assert "WARRANT" not in InstrumentAssetClass.__members__
 
-        with pytest.raises(UnknownAssetClassError, match="Unmapped InstrumentAssetClass") as excinfo:
+        with pytest.raises(
+            UnknownAssetClassError, match="Unmapped InstrumentAssetClass"
+        ) as excinfo:
             unmapped.to_provider_class()
 
         # The offending asset class is attached to the exception.

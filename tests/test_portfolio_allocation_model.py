@@ -168,17 +168,13 @@ class TestImmutability:
 # ── model_copy re-runs validation ─────────────────────────────────── #
 class TestModelCopyValidation:
     def test_copy_without_update_is_cheap_copy_equal(self):
-        alloc = CapitalAllocation(
-            strategy_weights={"a": 1.0}, total_capital=Decimal("1000")
-        )
+        alloc = CapitalAllocation(strategy_weights={"a": 1.0}, total_capital=Decimal("1000"))
         copy = alloc.model_copy()
         assert copy == alloc
         assert copy is not alloc
 
     def test_copy_with_update_re_runs_validators(self):
-        alloc = CapitalAllocation(
-            strategy_weights={"a": 1.0}, total_capital=Decimal("1000")
-        )
+        alloc = CapitalAllocation(strategy_weights={"a": 1.0}, total_capital=Decimal("1000"))
         # A valid update produces a new valid allocation.
         new = alloc.model_copy(update={"total_capital": Decimal("5000")})
         assert new.total_capital == Decimal("5000")
@@ -194,7 +190,9 @@ class TestModelCopyValidation:
     def test_copy_update_too_many_strategies_rejected(self):
         alloc = CapitalAllocation(strategy_weights={"a": 1.0})
         with pytest.raises(ValidationError, match="too many strategies"):
-            alloc.model_copy(update={"max_strategies": 1, "strategy_weights": {"a": 0.0, "b": 1.0}})
+            alloc.model_copy(
+                update={"max_strategies": 1, "strategy_weights": {"a": 0.0, "b": 1.0}}
+            )
 
 
 # ── allocation math ────────────────────────────────────────────────── #
@@ -208,9 +206,7 @@ class TestAllocationMath:
         assert alloc.get_allocation("b") == Decimal("66.67")
 
     def test_get_allocation_unknown_strategy_is_zero(self):
-        alloc = CapitalAllocation(
-            strategy_weights={"a": 1.0}, total_capital=Decimal("100")
-        )
+        alloc = CapitalAllocation(strategy_weights={"a": 1.0}, total_capital=Decimal("100"))
         assert alloc.get_allocation("nope") == Decimal("0")
 
     def test_get_allocation_zero_weight_is_zero(self):
@@ -246,9 +242,7 @@ class TestSerialization:
         assert alloc.strategy_weights == {"a": 0.5, "b": 0.5}
 
     def test_model_dump_json_round_trips(self):
-        alloc = CapitalAllocation(
-            strategy_weights={"a": 1.0}, total_capital=Decimal("1000")
-        )
+        alloc = CapitalAllocation(strategy_weights={"a": 1.0}, total_capital=Decimal("1000"))
         js = alloc.model_dump_json()
         rebuilt = CapitalAllocation.model_validate_json(js)
         assert rebuilt == alloc

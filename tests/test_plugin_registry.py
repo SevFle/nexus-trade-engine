@@ -204,9 +204,7 @@ class TestLoadStrategyClassValidatedBytesAreExecuted:
     cannot smuggle un-validated code into the module namespace.
     """
 
-    def test_executed_code_object_matches_validated_bytes(
-        self, strategies_dir, monkeypatch
-    ):
+    def test_executed_code_object_matches_validated_bytes(self, strategies_dir, monkeypatch):
         code = textwrap.dedent(
             """\
             class Strategy:

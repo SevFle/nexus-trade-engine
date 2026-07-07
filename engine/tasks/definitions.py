@@ -61,9 +61,7 @@ _retry_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
 # wedged data-provider call cannot pin a worker slot indefinitely. A breach
 # surfaces as ``TimeoutError`` (== ``asyncio.TimeoutError`` on 3.11+), which
 # :func:`with_retry` treats as a transient, retryable failure.
-BACKTEST_TIMEOUT: float = float(
-    os.environ.get("NEXUS_BACKTEST_TIMEOUT_SECONDS", "300.0")
-)
+BACKTEST_TIMEOUT: float = float(os.environ.get("NEXUS_BACKTEST_TIMEOUT_SECONDS", "300.0"))
 
 _F = TypeVar("_F", bound=Callable[..., Awaitable[Any]])
 
@@ -137,7 +135,7 @@ def with_retry(
                             correlation_id=get_correlation_id(),
                         )
                         break
-                    ceiling = min(max_delay, base_delay * (2 ** attempt))
+                    ceiling = min(max_delay, base_delay * (2**attempt))
                     delay = ceiling * random.random()  # noqa: S311 - full-jitter backoff delay, non-cryptographic
                     logger.info(
                         "task.retry_scheduled",

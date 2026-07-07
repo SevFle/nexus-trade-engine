@@ -103,9 +103,7 @@ class TestBuildBrokerSchemeMapping:
         instance.with_result_backend.assert_not_called()
         instance.with_middlewares.assert_not_called()
 
-    def test_default_none_resolves_settings_valkey_url_in_body(
-        self, captured_broker, monkeypatch
-    ):
+    def test_default_none_resolves_settings_valkey_url_in_body(self, captured_broker, monkeypatch):
         captured, _ = captured_broker
 
         # Patch the module object directly: the dotted name
@@ -131,9 +129,7 @@ class TestSanitizeUrl:
         assert broker_module._sanitize_url(url) == url
 
     def test_user_and_password_are_stripped(self):
-        sanitized = broker_module._sanitize_url(
-            "redis://hunter2:s3cret@cluster.internal:6379/0"
-        )
+        sanitized = broker_module._sanitize_url("redis://hunter2:s3cret@cluster.internal:6379/0")
         assert sanitized == "redis://cluster.internal:6379/0"
         assert "hunter2" not in sanitized
         assert "s3cret" not in sanitized
@@ -162,9 +158,7 @@ class TestSanitizeUrl:
         assert "p" not in sanitized.replace("[::1]", "")
 
     def test_query_and_fragment_survive(self):
-        sanitized = broker_module._sanitize_url(
-            "redis://u:p@host:6379/0?ssl=true#frag"
-        )
+        sanitized = broker_module._sanitize_url("redis://u:p@host:6379/0?ssl=true#frag")
         assert sanitized == "redis://host:6379/0?ssl=true#frag"
 
 
@@ -189,9 +183,7 @@ class TestModuleBrokerFatalLog:
     """A misconfigured URL must surface as a clear fatal log, not a bare
     import-time traceback, and must never leak credentials."""
 
-    def test_invalid_scheme_logs_fatal_with_sanitised_url_then_reraises(
-        self, monkeypatch
-    ):
+    def test_invalid_scheme_logs_fatal_with_sanitised_url_then_reraises(self, monkeypatch):
         # Drive the helper with an invalid scheme that *also* carries
         # userinfo, so we can assert on both the fatal event and the
         # credential stripping in one shot.

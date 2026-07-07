@@ -169,9 +169,7 @@ class TestConfigValidation:
 
     def test_duplicate_strategy_id_rejected(self):
         with pytest.raises(StrategyOrchestratorError):
-            StrategyOrchestrator(
-                [_AsyncStrategy("s1"), _AsyncStrategy("s1")], _FakeCostModel()
-            )
+            StrategyOrchestrator([_AsyncStrategy("s1"), _AsyncStrategy("s1")], _FakeCostModel())
 
     def test_register_accepts_negative_priority(self):
         # Priority is an ordering key, not a magnitude: negative values are
@@ -415,12 +413,8 @@ class TestNetPositionResolution:
     async def test_per_symbol_independent_net(self):
         orch = self._orch(
             [
-                _AsyncStrategy(
-                    "a", [_sig("AAPL", Side.BUY, "a"), _sig("MSFT", Side.SELL, "a")]
-                ),
-                _AsyncStrategy(
-                    "b", [_sig("AAPL", Side.BUY, "b"), _sig("MSFT", Side.SELL, "b")]
-                ),
+                _AsyncStrategy("a", [_sig("AAPL", Side.BUY, "a"), _sig("MSFT", Side.SELL, "a")]),
+                _AsyncStrategy("b", [_sig("AAPL", Side.BUY, "b"), _sig("MSFT", Side.SELL, "b")]),
             ]
         )
         await orch.run_all({})
@@ -431,9 +425,7 @@ class TestNetPositionResolution:
         # aggregate_signals works standalone on a provided iterable and
         # does not require a prior run_all.
         orch = self._orch([])
-        out = orch.aggregate_signals(
-            [_sig("AAPL", Side.BUY, "a"), _sig("AAPL", Side.SELL, "a")]
-        )
+        out = orch.aggregate_signals([_sig("AAPL", Side.BUY, "a"), _sig("AAPL", Side.SELL, "a")])
         assert out[0].side == Side.HOLD  # 1 - 1 == 0 → HOLD
 
 
@@ -724,7 +716,9 @@ class TestMetadataDeepCopyIsolation:
         assert src.metadata["conf"] is not resolved.metadata["conf"]
 
     async def test_resolved_signal_strategy_id_is_aggregated_marker(self):
-        orch = StrategyOrchestrator([_AsyncStrategy("x", [_sig("AAPL", Side.BUY, "x")])], _FakeCostModel())
+        orch = StrategyOrchestrator(
+            [_AsyncStrategy("x", [_sig("AAPL", Side.BUY, "x")])], _FakeCostModel()
+        )
         await orch.run_all({})
         resolved = orch.aggregate_signals()[0]
         assert resolved.strategy_id == "orchestrator"

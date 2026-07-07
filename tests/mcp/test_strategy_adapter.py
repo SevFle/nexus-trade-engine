@@ -69,8 +69,8 @@ def _make_registry(strategies: dict[str, dict[str, Any]]) -> MagicMock:
     spec = MagicMock(name="PluginRegistry")
     spec.list_strategies.return_value = list(strategies)
     spec.get_manifest.side_effect = strategies.get
-    spec.get_module_path.side_effect = (
-        lambda name: f"/strategies/{name}/strategy.py" if name in strategies else None
+    spec.get_module_path.side_effect = lambda name: (
+        f"/strategies/{name}/strategy.py" if name in strategies else None
     )
     return spec
 
@@ -84,9 +84,7 @@ def _make_services(registry: MagicMock | None = None) -> EngineServices:
 
 # ── 1. list_strategies ──────────────────────────────────────────────────── #
 async def test_list_strategies_summarises_each_registered_strategy():
-    registry = _make_registry(
-        {"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV}
-    )
+    registry = _make_registry({"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV})
     services = _make_services(registry)
 
     result = await list_strategies(services, PRINCIPAL, {})
@@ -194,8 +192,9 @@ async def test_list_strategies_skips_entry_when_registry_get_manifest_raises():
         "mean_reversion",
     ]
     registry.get_manifest.side_effect = lambda name: (
-        boom(name) if name == "broken" else
-        {"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV}.get(name)
+        boom(name)
+        if name == "broken"
+        else {"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV}.get(name)
     )
     services = _make_services(registry)
 
@@ -211,9 +210,9 @@ async def test_list_strategies_skips_entry_when_registry_get_manifest_raises():
     # A warning was emitted for the failing entry, naming the strategy and
     # carrying the exception type/message for triage.
     warnings = [
-        e for e in cap_logs
-        if e.get("event") == "mcp.strategy_summary_failed"
-        and e.get("log_level") == "warning"
+        e
+        for e in cap_logs
+        if e.get("event") == "mcp.strategy_summary_failed" and e.get("log_level") == "warning"
     ]
     assert len(warnings) == 1
     assert warnings[0]["strategy"] == "broken"
@@ -226,9 +225,7 @@ async def test_get_strategy_details_returns_full_metadata():
     registry = _make_registry({"momentum": MANIFEST_MOMENTUM})
     services = _make_services(registry)
 
-    detail = await get_strategy_details(
-        services, PRINCIPAL, {"strategy_name": "momentum"}
-    )
+    detail = await get_strategy_details(services, PRINCIPAL, {"strategy_name": "momentum"})
 
     # Required by the task: name, description, version, parameters.
     assert detail["name"] == "momentum"
@@ -279,9 +276,7 @@ async def test_get_strategy_details_requires_strategy_name(name):
     services = _make_services(registry)
 
     with pytest.raises(ValidationError) as exc_info:
-        await get_strategy_details(
-            services, PRINCIPAL, {"strategy_name": name}
-        )
+        await get_strategy_details(services, PRINCIPAL, {"strategy_name": name})
 
     assert "strategy_name is required" in str(exc_info.value)
     # Validation short-circuits before the registry is consulted.
@@ -304,9 +299,7 @@ async def test_get_strategy_details_unknown_strategy_raises_not_found():
     services = _make_services(registry)
 
     with pytest.raises(NotFoundError) as exc_info:
-        await get_strategy_details(
-            services, PRINCIPAL, {"strategy_name": "nope"}
-        )
+        await get_strategy_details(services, PRINCIPAL, {"strategy_name": "nope"})
 
     assert str(exc_info.value) == "Strategy not found: nope"
     registry.get_manifest.assert_called_once_with("nope")
@@ -362,9 +355,7 @@ async def test_dispatch_tool_unknown_tool_rejected():
 
 
 async def test_dispatch_tool_routes_list_strategies():
-    registry = _make_registry(
-        {"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV}
-    )
+    registry = _make_registry({"momentum": MANIFEST_MOMENTUM, "mean_reversion": MANIFEST_MEANREV})
     services = _make_services(registry)
 
     out = await dispatch_tool("list_strategies", {}, services, PRINCIPAL)

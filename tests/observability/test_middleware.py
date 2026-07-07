@@ -285,9 +285,7 @@ class TestErrorHeaderPropagation:
         assert "X-Correlation-Id" in resp.headers
 
     @pytest.mark.asyncio
-    async def test_unhandled_exception_echoes_client_supplied_id(
-        self, error_client: AsyncClient
-    ):
+    async def test_unhandled_exception_echoes_client_supplied_id(self, error_client: AsyncClient):
         cid = "trace-this-500"
         resp = await error_client.get("/boom", headers={"X-Correlation-Id": cid})
         assert resp.status_code == 500
@@ -324,9 +322,7 @@ class TestStreamingHeaderPropagation:
         assert resp.headers["X-Correlation-Id"] == cid
 
     @pytest.mark.asyncio
-    async def test_context_visible_during_body_generation(
-        self, error_client: AsyncClient
-    ):
+    async def test_context_visible_during_body_generation(self, error_client: AsyncClient):
         # Each yielded line is the correlation id observed *inside* the
         # streaming generator. If context leaked-reset early (the
         # BaseHTTPMiddleware hazard) these would be empty/"None".
@@ -339,21 +335,13 @@ class TestStreamingHeaderPropagation:
 
 class TestExceptionPathContextReset:
     @pytest.mark.asyncio
-    async def test_context_reset_after_unhandled_exception(
-        self, error_client: AsyncClient
-    ):
+    async def test_context_reset_after_unhandled_exception(self, error_client: AsyncClient):
         # The finally block must reset tokens even when an exception
         # propagates, otherwise the outer test scope would inherit the id.
-        await error_client.get(
-"/boom", headers={"X-Correlation-Id": "should-not-leak"}
-        )
+        await error_client.get("/boom", headers={"X-Correlation-Id": "should-not-leak"})
         assert ctx.get_correlation_id() is None
 
     @pytest.mark.asyncio
-    async def test_context_reset_after_http_exception(
-        self, error_client: AsyncClient
-    ):
-        await error_client.get(
-"/http-error", headers={"X-Correlation-Id": "should-not-leak"}
-        )
+    async def test_context_reset_after_http_exception(self, error_client: AsyncClient):
+        await error_client.get("/http-error", headers={"X-Correlation-Id": "should-not-leak"})
         assert ctx.get_correlation_id() is None

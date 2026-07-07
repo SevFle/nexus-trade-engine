@@ -26,22 +26,23 @@ class TestPackageReexport:
     default ``CorrelationIdMiddleware``."""
 
     def test_default_correlation_id_middleware_is_raw_asgi(self):
-        assert (
-            mw_pkg.CorrelationIdMiddleware is obs_middleware.CorrelationIdMiddleware
-        ), "engine.middleware.CorrelationIdMiddleware must be the raw-ASGI variant"
+        assert mw_pkg.CorrelationIdMiddleware is obs_middleware.CorrelationIdMiddleware, (
+            "engine.middleware.CorrelationIdMiddleware must be the raw-ASGI variant"
+        )
 
     def test_default_is_not_base_http_subclass(self):
         assert not issubclass(mw_pkg.CorrelationIdMiddleware, BaseHTTPMiddleware)
 
     def test_base_http_variant_is_reexported(self):
         assert mw_pkg.BaseHTTPCorrelationIdMiddleware is BaseHTTPCorrelationIdMiddleware
-        assert issubclass(
-            mw_pkg.BaseHTTPCorrelationIdMiddleware, BaseHTTPMiddleware
-        )
+        assert issubclass(mw_pkg.BaseHTTPCorrelationIdMiddleware, BaseHTTPMiddleware)
 
     def test_all_exports(self):
-        for name in ("CORRELATION_HEADER", "BaseHTTPCorrelationIdMiddleware",
-                     "CorrelationIdMiddleware"):
+        for name in (
+            "CORRELATION_HEADER",
+            "BaseHTTPCorrelationIdMiddleware",
+            "CorrelationIdMiddleware",
+        ):
             assert name in mw_pkg.__all__
 
 

@@ -214,6 +214,7 @@ class EventBus:
 # concurrent access, exactly one instance is created.  Subsequent callers get
 # the cached singleton without touching the lock.
 
+
 class _EventBusState:
     """Mutable holder for the process-wide singleton and its init lock.
 
