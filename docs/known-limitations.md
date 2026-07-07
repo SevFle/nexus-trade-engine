@@ -149,6 +149,67 @@ The marketplace routes exist purely to lock the public API shape.
 
 ---
 
+<a id="react-dashboard"></a>
+## P1 — React dashboard is real but not production-built
+
+**Where**: [`frontend/`](../frontend/) — a Vite + React 18 + Tailwind +
+react-query SPA with 12 routed screens, a component library, and a
+Vitest suite.
+
+The shell and the read paths are genuinely wired to the engine:
+
+- **Auth** — `Login`, `Register`, `OAuthCallback`, `ProtectedRoute`,
+  and `AuthContext` ([`frontend/src/auth/`](../frontend/src/auth/))
+  hit the real `POST /api/v1/auth/*` routes, store the JWT, and
+  refresh it.
+- **Legal gate** — `LegalContext` + `ConsentModal` react to the `451`
+  status the engine returns for missing acceptances
+  ([`frontend/src/api/client.js`](../frontend/src/api/client.js) raises
+  `ConsentRequiredError` and emits a `legal:consent-required` event).
+- **Onboarding** + `ErrorBoundary` (per-page and app scope) POST
+  browser errors to `POST /api/v1/client/errors`.
+- **`MarketWatch`** is the one analytical screen backed by live data
+  ([`frontend/src/api/marketData.js`](../frontend/src/api/marketData.js)).
+
+What is **not** wired is the core trading surface. These screens render
+hardcoded `MOCK_*` fixtures instead of engine responses:
+
+- [`Dashboard.jsx`](../frontend/src/screens/Dashboard.jsx) — `MOCK_PORTFOLIO`.
+- [`Backtest.jsx`](../frontend/src/screens/Backtest.jsx) — `MOCK_RESULTS`,
+  `MOCK_CONFIG`, a synthetic `EQUITY_CURVE` (it never calls
+  `POST /api/v1/backtest/run`).
+- [`Positions.jsx`](../frontend/src/screens/Positions.jsx),
+  [`Strategies.jsx`](../frontend/src/screens/Strategies.jsx),
+  [`Marketplace.jsx`](../frontend/src/screens/Marketplace.jsx) — mock lists.
+
+There is also **no production artifact**:
+
+- [`frontend/Dockerfile`](../frontend/Dockerfile) `CMD`s `npm run dev`
+  (the Vite dev server) and `EXPOSE`s 3000 — there is no `vite build`
+  + static-serve step, so the image is not ship-able as-is.
+- [`docker-compose.yml`](../docker-compose.yml) (the production
+  compose) has no `frontend` service — only `app`, `worker`, `db`,
+  `valkey`. The frontend appears only in
+  [`docker-compose.dev.yml`](../docker-compose.dev.yml) (HMR dev server).
+
+**Impact**: the React app is a usable development / preview surface and
+a real integration client for auth / legal / market-data, but it is not
+a deployed product. Treat the engine REST API as the only production UI
+surface today.
+
+**Workaround today**: run the frontend locally with `cd frontend &&
+npm install && npm run dev` (or `make docker-dev`) pointed at a local
+engine. Do not serve `frontend/Dockerfile` in production.
+
+**Fix path**: (1) replace the `MOCK_*` fixtures in the five analytical
+screens with `useQuery` calls against the existing engine routes;
+(2) convert `frontend/Dockerfile` to a multi-stage build (`vite build` →
+`nginx`/`Caddy` static serve, or `vite preview`); (3) add a `frontend`
+service (static host) to `docker-compose.yml`. None of (1)–(3) require
+engine-side changes — the API surface already exists.
+
+---
+
 ## P1 — Data provider registry has no first-class credentials store
 
 **Where**: [`engine/data/providers/config.py`](../engine/data/providers/config.py),

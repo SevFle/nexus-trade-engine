@@ -2640,6 +2640,11 @@ to roll out a new version safely.</p>
   root is for development; production runs them out-of-band.</li>
 <li>No sticky sessions. JWT auth means any replica can serve any
   request.</li>
+<li><strong>No frontend service in this stack.</strong> The React SPA in
+  <a href="../frontend/"><code>frontend/</code></a> is dev-only today — <code>frontend/Dockerfile</code>
+  runs the Vite dev server and it is absent from this compose file. If
+  you need a UI in production, build and serve the static bundle
+  out-of-band; see the <a href="../known-limitations/#react-dashboard">React dashboard P1</a>.</li>
 </ul>
 <h2 id="required-infrastructure">Required infrastructure<a class="headerlink" href="#required-infrastructure" title="Permanent link">&para;</a></h2>
 <table>
