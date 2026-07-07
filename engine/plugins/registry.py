@@ -7,6 +7,9 @@ from typing import Any
 import structlog
 import yaml
 
+from engine.plugins.allowlist import DENYLIST_MODULES
+from engine.plugins.restricted_importer import ImportValidator
+
 logger = structlog.get_logger()
 
 STRATEGIES_DIR = Path(__file__).resolve().parent.parent.parent / "strategies"
@@ -54,6 +57,28 @@ def load_strategy_class(module_path: str) -> Any:
     spec = importlib.util.spec_from_file_location("strategy", module_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load strategy from {module_path}")
+
+    # Layer-0 static check: reject strategy source that imports blocked
+    # modules or invokes code-execution builtins (``exec``/``eval``/
+    # ``compile``/``__import__``/``importlib.import_module``) *before*
+    # ``exec_module`` runs any of it.  This fails fast and side-effect free,
+    # complementing the runtime :class:`RestrictedImporter` hooks.  Reading
+    # the file here is safe: restrictions are not active while the host loads
+    # strategies, so plain ``open`` is used.
+    with open(module_path, encoding="utf-8") as f:
+        source = f.read()
+    violations = ImportValidator(DENYLIST_MODULES).validate(source)
+    if violations:
+        joined = "; ".join(violations)
+        logger.warning(
+            "strategy_source_blocked",
+            path=module_path,
+            violations=violations,
+        )
+        raise ImportError(
+            f"Strategy source {module_path} rejected by import validator: {joined}"
+        )
+
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     strategy_cls = getattr(module, "Strategy", None)
