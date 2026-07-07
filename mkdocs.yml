@@ -211,6 +211,7 @@ nav:
           - Common issues: operations/runbooks/common-issues.md
   - Observability:
       - Logging schema & redaction: observability/logging.md
+      - Metrics & MetricsBackend: observability/metrics.md
   - Compliance:
       - Legal data processors: legal/processors.md
   - Status:
