@@ -37,6 +37,11 @@ For local dev, see [`development.md`](development.md) instead.
   root is for development; production runs them out-of-band.
 - No sticky sessions. JWT auth means any replica can serve any
   request.
+- **No frontend service in this stack.** The React SPA in
+  [`frontend/`](../frontend/) is dev-only today — `frontend/Dockerfile`
+  runs the Vite dev server and it is absent from this compose file. If
+  you need a UI in production, build and serve the static bundle
+  out-of-band; see the [React dashboard P1](known-limitations.md#react-dashboard).
 
 ## Required infrastructure
 

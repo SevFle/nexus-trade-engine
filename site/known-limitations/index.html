@@ -2263,6 +2263,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#p1-react-dashboard-is-real-but-not-production-built" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        P1 — React dashboard is real but not production-built
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#p1-data-provider-registry-has-no-first-class-credentials-store" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2513,6 +2524,17 @@
     <span class="md-ellipsis">
       
         P1 — Strategy Marketplace is a stub
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#p1-react-dashboard-is-real-but-not-production-built" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        P1 — React dashboard is real but not production-built
       
     </span>
   </a>
@@ -2802,6 +2824,61 @@ behind the routes.</p>
 <p><strong>Workaround today</strong>: install strategies by placing them under
 <code>engine/plugins/&lt;kind&gt;/&lt;name&gt;/</code> and reloading the plugin registry.
 The marketplace routes exist purely to lock the public API shape.</p>
+<hr />
+<p><a id="react-dashboard"></a></p>
+<h2 id="p1-react-dashboard-is-real-but-not-production-built">P1 — React dashboard is real but not production-built<a class="headerlink" href="#p1-react-dashboard-is-real-but-not-production-built" title="Permanent link">&para;</a></h2>
+<p><strong>Where</strong>: <a href="../frontend/"><code>frontend/</code></a> — a Vite + React 18 + Tailwind +
+react-query SPA with 12 routed screens, a component library, and a
+Vitest suite.</p>
+<p>The shell and the read paths are genuinely wired to the engine:</p>
+<ul>
+<li><strong>Auth</strong> — <code>Login</code>, <code>Register</code>, <code>OAuthCallback</code>, <code>ProtectedRoute</code>,
+  and <code>AuthContext</code> (<a href="../frontend/src/auth/"><code>frontend/src/auth/</code></a>)
+  hit the real <code>POST /api/v1/auth/*</code> routes, store the JWT, and
+  refresh it.</li>
+<li><strong>Legal gate</strong> — <code>LegalContext</code> + <code>ConsentModal</code> react to the <code>451</code>
+  status the engine returns for missing acceptances
+  (<a href="../frontend/src/api/client.js"><code>frontend/src/api/client.js</code></a> raises
+  <code>ConsentRequiredError</code> and emits a <code>legal:consent-required</code> event).</li>
+<li><strong>Onboarding</strong> + <code>ErrorBoundary</code> (per-page and app scope) POST
+  browser errors to <code>POST /api/v1/client/errors</code>.</li>
+<li><strong><code>MarketWatch</code></strong> is the one analytical screen backed by live data
+  (<a href="../frontend/src/api/marketData.js"><code>frontend/src/api/marketData.js</code></a>).</li>
+</ul>
+<p>What is <strong>not</strong> wired is the core trading surface. These screens render
+hardcoded <code>MOCK_*</code> fixtures instead of engine responses:</p>
+<ul>
+<li><a href="../frontend/src/screens/Dashboard.jsx"><code>Dashboard.jsx</code></a> — <code>MOCK_PORTFOLIO</code>.</li>
+<li><a href="../frontend/src/screens/Backtest.jsx"><code>Backtest.jsx</code></a> — <code>MOCK_RESULTS</code>,
+  <code>MOCK_CONFIG</code>, a synthetic <code>EQUITY_CURVE</code> (it never calls
+  <code>POST /api/v1/backtest/run</code>).</li>
+<li><a href="../frontend/src/screens/Positions.jsx"><code>Positions.jsx</code></a>,
+  <a href="../frontend/src/screens/Strategies.jsx"><code>Strategies.jsx</code></a>,
+  <a href="../frontend/src/screens/Marketplace.jsx"><code>Marketplace.jsx</code></a> — mock lists.</li>
+</ul>
+<p>There is also <strong>no production artifact</strong>:</p>
+<ul>
+<li><a href="../frontend/Dockerfile"><code>frontend/Dockerfile</code></a> <code>CMD</code>s <code>npm run dev</code>
+  (the Vite dev server) and <code>EXPOSE</code>s 3000 — there is no <code>vite build</code></li>
+<li>static-serve step, so the image is not ship-able as-is.</li>
+<li><a href="../docker-compose.yml"><code>docker-compose.yml</code></a> (the production
+  compose) has no <code>frontend</code> service — only <code>app</code>, <code>worker</code>, <code>db</code>,
+  <code>valkey</code>. The frontend appears only in
+  <a href="../docker-compose.dev.yml"><code>docker-compose.dev.yml</code></a> (HMR dev server).</li>
+</ul>
+<p><strong>Impact</strong>: the React app is a usable development / preview surface and
+a real integration client for auth / legal / market-data, but it is not
+a deployed product. Treat the engine REST API as the only production UI
+surface today.</p>
+<p><strong>Workaround today</strong>: run the frontend locally with <code>cd frontend &amp;&amp;
+npm install &amp;&amp; npm run dev</code> (or <code>make docker-dev</code>) pointed at a local
+engine. Do not serve <code>frontend/Dockerfile</code> in production.</p>
+<p><strong>Fix path</strong>: (1) replace the <code>MOCK_*</code> fixtures in the five analytical
+screens with <code>useQuery</code> calls against the existing engine routes;
+(2) convert <code>frontend/Dockerfile</code> to a multi-stage build (<code>vite build</code> →
+<code>nginx</code>/<code>Caddy</code> static serve, or <code>vite preview</code>); (3) add a <code>frontend</code>
+service (static host) to <code>docker-compose.yml</code>. None of (1)–(3) require
+engine-side changes — the API surface already exists.</p>
 <hr />
 <h2 id="p1-data-provider-registry-has-no-first-class-credentials-store">P1 — Data provider registry has no first-class credentials store<a class="headerlink" href="#p1-data-provider-registry-has-no-first-class-credentials-store" title="Permanent link">&para;</a></h2>
 <p><strong>Where</strong>: <a href="../engine/data/providers/config.py"><code>engine/data/providers/config.py</code></a>,
