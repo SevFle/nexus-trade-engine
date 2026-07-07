@@ -61,13 +61,20 @@ def load_strategy_class(module_path: str) -> Any:
     # Layer-0 static check: reject strategy source that imports blocked
     # modules or invokes code-execution builtins (``exec``/``eval``/
     # ``compile``/``__import__``/``importlib.import_module``) *before*
-    # ``exec_module`` runs any of it.  This fails fast and side-effect free,
+    # the module body executes.  This fails fast and side-effect free,
     # complementing the runtime :class:`RestrictedImporter` hooks.  Reading
     # the file here is safe: restrictions are not active while the host loads
     # strategies, so plain ``open`` is used.
-    with open(module_path, encoding="utf-8") as f:
-        source = f.read()
-    violations = ImportValidator(DENYLIST_MODULES).validate(source)
+    #
+    # The file is read **once** (as bytes) and the *exact same* bytes that
+    # pass validation are then :func:`compile`-d and :func:`exec`-d directly
+    # into the module namespace.  This closes a time-of-check/time-of-use gap:
+    # ``spec.loader.exec_module`` re-reads the file from disk, so an attacker
+    # who swaps the file between the validation read and the exec read could
+    # execute different (un-validated) bytes than the ones just checked.
+    with open(module_path, "rb") as f:
+        source_bytes = f.read()
+    violations = ImportValidator(DENYLIST_MODULES).validate(source_bytes)
     if violations:
         joined = "; ".join(violations)
         logger.warning(
@@ -80,7 +87,17 @@ def load_strategy_class(module_path: str) -> Any:
         )
 
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Compile the validated bytes into a code object bound to the module's
+    # file path (so tracebacks point at ``strategy.py``) and exec it directly
+    # into the module's namespace.  ``spec.loader.exec_module`` is deliberately
+    # avoided because it re-reads the file, which would re-open the TOCTOU gap
+    # closed above; the ``module_from_spec`` call already populated
+    # ``__file__``/``__loader__``/``__spec__``.
+    code = compile(source_bytes, module_path, "exec")
+    # ``exec`` is required (not ``spec.loader.exec_module``) so we run the
+    # exact bytes that passed validation above; see the TOCTOU note.  S102 is
+    # intentionally suppressed for this deliberate, audited call site.
+    exec(code, module.__dict__)  # noqa: S102
     strategy_cls = getattr(module, "Strategy", None)
     if strategy_cls is None:
         logger.warning("strategy_class_not_found_in_module", path=module_path)
