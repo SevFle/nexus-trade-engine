@@ -12,6 +12,7 @@ from engine.core.instruments import (
     Instrument,
     InstrumentAssetClass,
     OptionType,
+    UnknownAssetClassError,
 )
 
 
@@ -56,7 +57,7 @@ class TestToProviderClass:
 
         assert InstrumentAssetClass.FUTURE.to_provider_class() == AssetClass.FUTURES
 
-    def test_unmapped_asset_class_logs_warning(self, caplog):
+    def test_unmapped_asset_class_raises_unknown_asset_class_error(self, caplog):
         # Build an InstrumentAssetClass member that none of the explicit
         # match arms in to_provider_class covers. We instantiate it via
         # str.__new__ (StrEnum's member type) and set the name/value
@@ -71,11 +72,16 @@ class TestToProviderClass:
 
         with (
             caplog.at_level(logging.WARNING, logger="engine.core.instruments"),
-            pytest.raises(AssertionError),
+            pytest.raises(UnknownAssetClassError, match="Unmapped InstrumentAssetClass") as excinfo,
         ):
-            # Under ``__debug__`` (the default in CI/dev) assert_never fires
-            # *after* the warning has already been emitted.
+            # to_provider_class now raises UnknownAssetClassError
+            # unconditionally: the __debug__/assert_never branch and the
+            # silent EQUITY fallback are gone. Constructing the error
+            # still emits the WARNING log so operators see the value.
             unmapped.to_provider_class()
+
+        # The raised exception carries the offending asset class.
+        assert excinfo.value.asset_class is unmapped
 
         records = [
             rec
@@ -85,7 +91,6 @@ class TestToProviderClass:
         assert len(records) == 1
         message = records[0].getMessage()
         assert "Unmapped InstrumentAssetClass" in message
-        assert "routing as EQUITY" in message
         assert repr(unmapped) in message
 
         # The isolated member must not have leaked into the enum.

@@ -11,6 +11,7 @@ from engine.core.instruments import (
     Instrument,
     InstrumentAssetClass,
     OptionType,
+    UnknownAssetClassError,
 )
 
 
@@ -241,3 +242,26 @@ class TestFromString:
     def test_from_string_forex_short_pair_does_not_crash(self):
         inst = Instrument.from_string("EUR/USD")
         assert inst.symbol == "EUR/USD"
+
+
+class TestToProviderClassUnmapped:
+    def test_unmapped_asset_class_raises_unknown_asset_class_error(self):
+        # An InstrumentAssetClass member that none of the explicit match
+        # arms in to_provider_class covers must raise
+        # UnknownAssetClassError — not AssertionError and not a silent
+        # fallback to EQUITY.
+        unmapped = str.__new__(InstrumentAssetClass, "warrant")
+        unmapped._name_ = "WARRANT"
+        unmapped._value_ = "warrant"
+
+        assert isinstance(unmapped, InstrumentAssetClass)
+        assert "WARRANT" not in InstrumentAssetClass.__members__
+
+        with pytest.raises(UnknownAssetClassError, match="Unmapped InstrumentAssetClass") as excinfo:
+            unmapped.to_provider_class()
+
+        # The offending asset class is attached to the exception.
+        assert excinfo.value.asset_class is unmapped
+
+        # No leakage into the global enum.
+        assert "WARRANT" not in InstrumentAssetClass.__members__
