@@ -308,9 +308,7 @@ class TestRequireLegalAcceptanceWithoutOverride:
             yield s
         await engine.dispose()
 
-    async def test_dependency_raises_401_when_no_principal(
-        self, session: AsyncSession
-    ) -> None:
+    async def test_dependency_raises_401_when_no_principal(self, session: AsyncSession) -> None:
         """No authenticated principal (``None``) → HTTP 401, without touching
         the DB. The guard is authoritative, so the dependency never silently
         no-ops when no user is wired up."""
@@ -321,9 +319,7 @@ class TestRequireLegalAcceptanceWithoutOverride:
         assert exc.value.status_code == 401
         assert exc.value.detail == "Authentication required"
 
-    async def test_dependency_raises_401_when_depends_marker(
-        self, session: AsyncSession
-    ) -> None:
+    async def test_dependency_raises_401_when_depends_marker(self, session: AsyncSession) -> None:
         """A hand-rolled call (bypassing DI) leaves ``principal`` as the
         unresolved ``Depends`` marker. That must surface as HTTP 401 — not a
         500 from ``principal.id`` on the marker."""
@@ -334,9 +330,7 @@ class TestRequireLegalAcceptanceWithoutOverride:
         assert exc.value.status_code == 401
         assert exc.value.detail == "Authentication required"
 
-    async def test_dependency_raises_451_when_pending(
-        self, session: AsyncSession
-    ) -> None:
+    async def test_dependency_raises_451_when_pending(self, session: AsyncSession) -> None:
         """End-to-end: an authenticated principal with an unaccepted required
         document raises HTTP 451."""
         from fastapi import HTTPException
@@ -370,9 +364,7 @@ class TestRequireLegalAcceptanceWithoutOverride:
         assert exc.value.detail["code"] == "legal_re_acceptance_required"
         assert "must-accept-dep" in exc.value.detail["documents"]
 
-    async def test_dependency_passes_when_all_accepted(
-        self, session: AsyncSession
-    ) -> None:
+    async def test_dependency_passes_when_all_accepted(self, session: AsyncSession) -> None:
         """Once a user accepts every required doc at the current version,
         the dependency must return ``None`` — proving the table round-trip
         (insert acceptance + query pending) works on SQLite."""

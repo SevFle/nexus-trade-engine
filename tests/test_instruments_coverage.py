@@ -72,7 +72,9 @@ class TestToProviderClass:
 
         with (
             caplog.at_level(logging.WARNING, logger="engine.core.instruments"),
-            pytest.raises(UnknownAssetClassError, match="Unmapped InstrumentAssetClass") as excinfo,
+            pytest.raises(
+                UnknownAssetClassError, match="Unmapped InstrumentAssetClass"
+            ) as excinfo,
         ):
             # to_provider_class now raises UnknownAssetClassError
             # unconditionally: the __debug__/assert_never branch and the

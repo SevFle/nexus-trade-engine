@@ -347,9 +347,7 @@ class TestInMemoryAcceptanceStore:
         assert await store.get("user-1") is None
         assert await store.get("user-2") is None
 
-    async def test_concurrent_records_are_serialised(
-        self, store: InMemoryAcceptanceStore
-    ) -> None:
+    async def test_concurrent_records_are_serialised(self, store: InMemoryAcceptanceStore) -> None:
         # The store is guarded by an ``asyncio.Lock``; many concurrent
         # coroutines recording distinct users must all land safely without
         # dropping or corrupting entries.

@@ -82,9 +82,7 @@ def load_strategy_class(module_path: str) -> Any:
             path=module_path,
             violations=violations,
         )
-        raise ImportError(
-            f"Strategy source {module_path} rejected by import validator: {joined}"
-        )
+        raise ImportError(f"Strategy source {module_path} rejected by import validator: {joined}")
 
     module = importlib.util.module_from_spec(spec)
     # Compile the validated bytes into a code object bound to the module's

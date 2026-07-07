@@ -124,6 +124,7 @@ def extract_hostnames(endpoints: list[str] | None) -> list[str]:
         hostnames.append(hostname.lower())
     return hostnames
 
+
 # The authoritative allowlist (also re-exported for convenience).
 ALLOWED_MODULES: frozenset[str] = FROZEN_ALLOWED_MODULES
 
@@ -450,10 +451,7 @@ class RestrictedImporter(MetaPathFinder):
             # overlapping teardown.  Note we deliberately leave
             # ``_original_import`` intact: another importer may still hold a
             # reference to ``_restricted_import`` and need it to keep working.
-            if (
-                builtins.__import__ is self._import_hook
-                and self._original_import is not None
-            ):
+            if builtins.__import__ is self._import_hook and self._original_import is not None:
                 builtins.__import__ = self._original_import  # type: ignore[assignment]
             if self in sys.meta_path:
                 sys.meta_path.remove(self)
@@ -534,9 +532,7 @@ class ImportValidator(ast.NodeVisitor):
 
     #: Bare-name builtins that execute arbitrary code or load modules.  Any
     #: direct ``Name`` call of one of these is flagged by :meth:`visit_Call`.
-    _DANGEROUS_BUILTINS: frozenset[str] = frozenset(
-        {"__import__", "exec", "eval", "compile"}
-    )
+    _DANGEROUS_BUILTINS: frozenset[str] = frozenset({"__import__", "exec", "eval", "compile"})
 
     def __init__(
         self,
@@ -548,9 +544,7 @@ class ImportValidator(ast.NodeVisitor):
         #: overridden by :attr:`allowed` (see :meth:`_module_is_blocked`).
         self.blocked_imports: frozenset[str] = frozenset(blocked_imports)
         #: The frozen allowlist; ``None`` defaults to :data:`ALLOWED_MODULES`.
-        self.allowed: frozenset[str] = (
-            allowed if allowed is not None else ALLOWED_MODULES
-        )
+        self.allowed: frozenset[str] = allowed if allowed is not None else ALLOWED_MODULES
         #: Violation messages accumulated during :meth:`visit`.  Reset on
         #: every :meth:`validate` call.
         self.violations: list[str] = []
@@ -602,9 +596,7 @@ class ImportValidator(ast.NodeVisitor):
         """
         module = node.module or ""
         if module and self._module_is_blocked(module):
-            self.violations.append(
-                f"line {node.lineno}: import of blocked module {module!r}"
-            )
+            self.violations.append(f"line {node.lineno}: import of blocked module {module!r}")
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
@@ -620,9 +612,7 @@ class ImportValidator(ast.NodeVisitor):
         # Bare-name call to a dangerous builtin: ``exec(...)``, ``eval(...)``,
         # ``compile(...)`` or ``__import__(...)``.
         if isinstance(func, ast.Name) and func.id in self._DANGEROUS_BUILTINS:
-            self.violations.append(
-                f"line {node.lineno}: call to forbidden builtin {func.id!r}"
-            )
+            self.violations.append(f"line {node.lineno}: call to forbidden builtin {func.id!r}")
         # Qualified dynamic import: ``importlib.import_module(...)``.
         elif (
             isinstance(func, ast.Attribute)
