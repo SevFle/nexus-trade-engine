@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import structlog
@@ -50,12 +52,66 @@ def discover_strategies(base_dir: Path | None = None) -> dict[str, dict[str, Any
     return strategies
 
 
+def _read_strategy_source(module_path: str) -> str:
+    """Read strategy source from disk **exactly once**.
+
+    Returning the source as an in-memory string here — instead of letting
+    ``importlib`` re-read the file at execution time — is what closes the
+    time-of-check-to-time-of-use (TOCTOU) window in
+    :func:`load_strategy_class`: the bytes that are statically validated are
+    the *exact* bytes that are compiled and executed.  An ``OSError`` (missing
+    file, permission denied, …) is normalised to ``ImportError`` so callers
+    keep their existing ``except ImportError`` handling.
+    """
+    try:
+        return Path(module_path).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ImportError(f"Cannot read strategy source from {module_path}: {exc}") from exc
+
+
+def _validate_source(source: str, *, module_path: str) -> str:
+    """Statically validate strategy source; return the string that will run.
+
+    The returned string is compiled and executed **unchanged**, so callers are
+    guaranteed that *what was validated is what runs* — there is no second disk
+    read between validation and execution.  Currently this parses the source
+    into an AST purely so a ``SyntaxError`` is reported with the strategy's
+    real file path (mirroring ``spec.loader.exec_module``'s behaviour).
+    Additional static checks (forbidden imports, dangerous calls, …) belong
+    here; layered here they are guaranteed to see the exact bytes that execute.
+    """
+    ast.parse(source, filename=module_path)
+    return source
+
+
 def load_strategy_class(module_path: str) -> Any:
+    # A spec is still created so we fail fast on paths the import machinery
+    # cannot locate, and so the loaded module carries ``__spec__``/``__file__``
+    # metadata.  Critically, the spec's loader is **never** invoked: that would
+    # re-read the file from disk and reintroduce the TOCTOU gap.
     spec = importlib.util.spec_from_file_location("strategy", module_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load strategy from {module_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+
+    # ── TOCTOU-safe load: read once → validate → compile → exec ─────────
+    # ``spec.loader.exec_module`` (the previous implementation) reads the file
+    # from disk a *second* time at execution, so the bytes that were validated
+    # could differ from the bytes that actually run if the file changed
+    # between the two reads.  Instead we read the source once, statically
+    # validate it, compile the *validated* string into a code object, and exec
+    # that code object directly — guaranteeing validated bytes == executed
+    # bytes.
+    source = _read_strategy_source(module_path)
+    validated = _validate_source(source, module_path=module_path)
+    code = compile(validated, module_path, "exec")  # validated source → code object
+
+    module = ModuleType("strategy")
+    module.__file__ = module_path
+    module.__spec__ = spec
+    # Execute the *already-validated* code object directly.  No second disk
+    # read occurs here, closing the TOCTOU window.
+    exec(code, module.__dict__)  # noqa: S102 — runs the validated code object
+
     strategy_cls = getattr(module, "Strategy", None)
     if strategy_cls is None:
         logger.warning("strategy_class_not_found_in_module", path=module_path)
