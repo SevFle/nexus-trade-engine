@@ -98,13 +98,23 @@ class EventBusBridge:
         channel = mapping
         raw_data = payload.get("data", {})
         data = raw_data if isinstance(raw_data, dict) else {}
+        coro = None
         try:
             resolved = resolve_room_name(channel, data)
             room = resolved if resolved else channel
-            task = asyncio.create_task(self._dispatch(room, channel, payload))
+            # Build the coroutine before scheduling so that, if
+            # ``create_task`` itself raises (e.g. ``RuntimeError`` when there
+            # is no running event loop), we can explicitly ``close()`` it.
+            # Otherwise the orphaned coroutine is garbage-collected as
+            # "never awaited" (RuntimeWarning) and the dropped event is
+            # silently lost.
+            coro = self._dispatch(room, channel, payload)
+            task = asyncio.create_task(coro)
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
         except Exception:
+            if coro is not None:
+                coro.close()
             ws_metrics.metrics.counter(
                 "sev_ws_messages_dropped_total", tags={"reason": "dispatch_error"}
             )
