@@ -26,7 +26,14 @@ import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from engine.api.auth.jwt import decode_token
-from engine.api.ws.auth import AuthResult, _extract_scopes
+from engine.api.ws.auth import (
+    AmbiguousSubprotocolError,
+    AuthResult,
+    _extract_scopes,
+    _extract_token_from_handshake,
+    _offered_subprotocols,
+    select_echo_subprotocol,
+)
 from engine.api.ws.metrics import ws_metrics
 from engine.api.ws.protocol import (
     WS_CLOSE_AUTH_INVALID,
@@ -218,11 +225,35 @@ def _validate_session_token(ws: WebSocket) -> AuthResult | None:
     ``sub`` claim, then derive scopes with the shared
     :func:`engine.api.ws.auth._extract_scopes`.
 
+    The token is resolved from **two** channels, in order:
+
+    1. The ``bearer.<token>`` WebSocket subprotocol handshake (preferred —
+       it is not logged in access URLs). May raise
+       :class:`AmbiguousSubprotocolError` when the client offers more than
+       one bearer subprotocol; callers must reject the handshake.
+    2. The ``token`` / ``session_token`` query param (legacy fallback).
+
+    If both channels carry a token they must agree exactly; a mismatch is
+    treated as an invalid handshake (returns ``None``).
+
     Returns an :class:`AuthResult` on success or ``None`` when the token is
     missing, malformed, expired or lacks a subject. Callers must reject the
     handshake *before* ``ws.accept()`` on a ``None`` result.
     """
-    token = _read_session_token(ws)
+    query_token = _read_session_token(ws)
+
+    # Subprotocol handshake auth (preferred). Raises AmbiguousSubprotocolError
+    # on an ambiguous multi-bearer handshake — propagated to the endpoint.
+    handshake_token = _extract_token_from_handshake(_offered_subprotocols(ws))
+
+    if handshake_token is not None:
+        if query_token is not None and query_token != handshake_token:
+            # Conflicting credentials across channels — refuse to guess.
+            return None
+        token = handshake_token
+    else:
+        token = query_token
+
     if token is None:
         return None
 
@@ -253,7 +284,19 @@ async def ws_events_endpoint(ws: WebSocket) -> None:
     unauthenticated connection.
     """
     # 1) Pre-accept auth — reject bad/missing tokens at the HTTP layer.
-    auth = _validate_session_token(ws)
+    try:
+        auth = _validate_session_token(ws)
+    except AmbiguousSubprotocolError:
+        ws_metrics.metrics.counter(
+            "sev_ws_auth_failures_total", tags={"reason": "ambiguous_subprotocol"}
+        )
+        logger.warning("ws_events.ambiguous_subprotocol")
+        with contextlib.suppress(Exception):
+            await ws.close(
+                code=WS_CLOSE_AUTH_INVALID, reason="ambiguous subprotocol handshake"
+            )
+        return
+
     if auth is None:
         ws_metrics.metrics.counter("sev_ws_auth_failures_total", tags={"reason": "events_invalid"})
         logger.warning("ws_events.auth_rejected")
@@ -267,7 +310,9 @@ async def ws_events_endpoint(ws: WebSocket) -> None:
             await ws.close(code=WS_CLOSE_SERVER_ERROR, reason="server not ready")
         return
 
-    await ws.accept()
+    # Echo a constant, credential-free subprotocol — never the raw
+    # ``bearer.<token>`` — so the token is not reflected in the response.
+    await ws.accept(subprotocol=select_echo_subprotocol(ws))
 
     connection_id = await _state.manager.register(
         ws,

@@ -29,6 +29,75 @@ _TRUSTED_PROXIES: frozenset[str] = frozenset(
     os.environ.get("TRUSTED_PROXIES", "").split(",") if os.environ.get("TRUSTED_PROXIES") else []
 )
 
+#: Prefix of the bearer-token subprotocol offered by the client in the
+#: WebSocket handshake (``Sec-WebSocket-Protocol: bearer.<token>``).
+_BEARER_SUBPROTOCOL_PREFIX = "bearer."
+
+#: Constant subprotocol the server echoes back in its handshake response.
+#:
+#: Per RFC 6455 the server may only acknowledge a subprotocol the client
+#: offered, so a client MUST include this value alongside
+#: ``bearer.<token>``. We echo this stable, credential-free name instead of
+#: ``bearer.<token>`` so the raw token is never reflected in the HTTP
+#: response headers — which are routinely logged by reverse proxies, load
+#: balancers and APM tooling.
+WS_AUTH_SUBPROTOCOL = "auth.v1"
+
+
+class AmbiguousSubprotocolError(Exception):
+    """More than one ``bearer.*`` subprotocol was offered in a handshake.
+
+    A handshake carrying two or more bearer candidates is ambiguous: the
+    server has no non-arbitrary way to pick the "real" token. Rather than
+    silently choosing one (and potentially authenticating as the wrong
+    principal), the handshake must be rejected outright.
+    """
+
+
+def _extract_token_from_handshake(subprotocols) -> str | None:
+    """Resolve a single bearer token from offered WebSocket subprotocols.
+
+    The client offers credentials as a ``bearer.<token>`` subprotocol.
+    Exactly one such value is accepted:
+
+    * **no bearer subprotocol** → returns ``None`` (no credential via
+      this channel; the caller may fall back to another auth path).
+    * **exactly one bearer subprotocol** → returns the stripped token.
+    * **more than one bearer subprotocol** → raises
+      :class:`AmbiguousSubprotocolError` so the caller rejects the
+      handshake instead of guessing.
+
+    A bare ``bearer.`` with nothing after the dot carries no usable secret
+    and is ignored (treated as "no credential") rather than counted as a
+    candidate, so it can never single-handedly trigger the ambiguous case.
+
+    ``subprotocols`` may be a list/tuple of strings, a single string (a
+    raw header value, split on ``,``), or ``None``.
+    """
+    if subprotocols is None:
+        return None
+    if isinstance(subprotocols, str):
+        # A raw Sec-WebSocket-Protocol header value is comma-separated.
+        subprotocols = [s.strip() for s in subprotocols.split(",") if s.strip()]
+
+    bearers: list[str] = []
+    for sp in subprotocols:
+        if not isinstance(sp, str):
+            continue
+        if sp.lower().startswith(_BEARER_SUBPROTOCOL_PREFIX):
+            candidate = sp[len(_BEARER_SUBPROTOCOL_PREFIX):].strip()
+            if candidate:  # ignore empty ``bearer.`` placeholders
+                bearers.append(candidate)
+
+    if not bearers:
+        return None
+    if len(bearers) > 1:
+        raise AmbiguousSubprotocolError(
+            "ambiguous handshake: multiple bearer subprotocols offered"
+        )
+    return bearers[0]
+
+
 
 @dataclass
 class AuthResult:
@@ -174,6 +243,36 @@ async def authenticate_websocket(
     )
 
     return AuthResult(user_id=sub, scopes=scopes, token_data=token_data)
+
+
+def _offered_subprotocols(ws: WebSocket) -> list[str]:
+    """Return the WebSocket subprotocols offered by the client handshake.
+
+    Reads the ``subprotocols`` key from the ASGI connection scope (the
+    canonical location per the ASGI / RFC 6455 spec). Non-dict scopes
+    (e.g. test doubles) are tolerated and yield an empty list.
+    """
+    scope = getattr(ws, "scope", None)
+    if not isinstance(scope, dict):
+        return []
+    raw = scope.get("subprotocols")
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        return [s.strip() for s in raw.split(",") if s.strip()]
+    return [s for s in raw if isinstance(s, str)]
+
+
+def select_echo_subprotocol(ws: WebSocket) -> str | None:
+    """Choose the subprotocol to echo back on ``ws.accept()``.
+
+    Always returns :data:`WS_AUTH_SUBPROTOCOL` when the client offered it
+    — and *never* the raw ``bearer.<token>`` value, so the credential is
+    not reflected back in the HTTP response headers. Returns ``None`` when
+    the client did not offer the constant (e.g. query-param-auth clients),
+    in which case ``accept()`` is called with no subprotocol.
+    """
+    return WS_AUTH_SUBPROTOCOL if WS_AUTH_SUBPROTOCOL in _offered_subprotocols(ws) else None
 
 
 def validate_refresh_token(token) -> AuthResult | None:

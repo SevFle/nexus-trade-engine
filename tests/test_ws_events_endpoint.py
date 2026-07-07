@@ -39,8 +39,18 @@ class _FakeHost:
 class _FakeWebSocket:
     """Minimal WebSocket stand-in that records accept/close ordering."""
 
-    def __init__(self, *, query_params: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        query_params: dict[str, str] | None = None,
+        subprotocols: list[str] | None = None,
+    ) -> None:
         self.query_params = query_params or {}
+        #: ASGI connection scope — the canonical home of offered
+        #: subprotocols (mirrors real Starlette sockets).
+        self.scope: dict[str, Any] = {}
+        if subprotocols is not None:
+            self.scope["subprotocols"] = list(subprotocols)
         self.client = _FakeHost()
         self.headers: dict[str, str] = {}
         #: ``side_effect`` may be a single value, an Exception, or a list
@@ -48,10 +58,12 @@ class _FakeWebSocket:
         self._receive_side_effect: Any = None
         self.sent: list[dict] = []
         self.accepted = False
+        self.accepted_subprotocol: str | None = None
         self.closed: list[tuple[int, str]] = []
 
-    async def accept(self) -> None:
+    async def accept(self, subprotocol: str | None = None) -> None:
         self.accepted = True
+        self.accepted_subprotocol = subprotocol
 
     async def receive_json(self):
         se = self._receive_side_effect
@@ -199,6 +211,159 @@ class TestAuthRejectionBeforeAccept:
         assert ws.closed
         # Server-error close (1011), not an auth close.
         assert ws.closed[0][0] == 1011
+
+
+# ---------------------------------------------------------------------------
+# 1b. Subprotocol-based handshake auth (bearer.<token>)
+# ---------------------------------------------------------------------------
+
+
+class TestSubprotocolHandshakeAuth:
+    """Auth via the ``bearer.<token>`` WebSocket subprotocol.
+
+    These tests verify the security constraints added to the handshake:
+    a single bearer subprotocol authenticates, an ambiguous multi-bearer
+    handshake is rejected before ``ws.accept()``, and the echoed
+    subprotocol is always the constant ``auth.v1`` (never the raw token).
+    """
+
+    @patch("engine.api.ws.events.decode_token")
+    async def test_single_bearer_subprotocol_authenticates(self, mock_decode, manager):
+        mock_decode.return_value = _make_token_data(sub="handshake-user", role="admin")
+        ws_events.init_ws_events(manager)
+        ws = _FakeWebSocket(subprotocols=["bearer.jwt-from-subprotocol", "auth.v1"])
+        ws.feed(WebSocketDisconnect())
+
+        await ws_events.ws_events_endpoint(ws)
+        assert ws.accepted is True
+        # The token was decoded from the subprotocol (no query param given).
+        assert mock_decode.call_args.args[0] == "jwt-from-subprotocol"
+
+    @patch("engine.api.ws.events.decode_token")
+    async def test_handshake_token_takes_precedence_over_empty_query(self, mock_decode, manager):
+        mock_decode.return_value = _make_token_data(sub="u1")
+        ws_events.init_ws_events(manager)
+        # No query param, token arrives only via the subprotocol.
+        ws = _FakeWebSocket(
+            query_params={},
+            subprotocols=["bearer.subproto-token", "auth.v1"],
+        )
+        ws.feed(WebSocketDisconnect())
+        await ws_events.ws_events_endpoint(ws)
+        assert ws.accepted is True
+        assert mock_decode.call_args.args[0] == "subproto-token"
+
+    @patch("engine.api.ws.events.decode_token")
+    async def test_ambiguous_multi_bearer_rejected_before_accept(self, mock_decode, manager):
+        # Two bearer subprotocols => ambiguous => reject before accept.
+        mock_decode.return_value = _make_token_data(sub="u1")
+        ws_events.init_ws_events(manager)
+        ws = _FakeWebSocket(
+            subprotocols=["bearer.token-a", "bearer.token-b", "auth.v1"],
+        )
+        ws.feed(WebSocketDisconnect())
+
+        await ws_events.ws_events_endpoint(ws)
+        assert ws.accepted is False
+        assert ws.closed
+        assert ws.closed[0][0] == WS_CLOSE_AUTH_INVALID
+        # decode_token must never run on an ambiguous handshake.
+        assert not mock_decode.called
+
+    @patch("engine.api.ws.events.decode_token")
+    async def test_ambiguous_rejection_does_not_register(self, mock_decode, manager):
+        mock_decode.return_value = _make_token_data(sub="u1")
+        ws_events.init_ws_events(manager)
+        ws = _FakeWebSocket(subprotocols=["bearer.a", "bearer.b"])
+        ws.feed(WebSocketDisconnect())
+        await ws_events.ws_events_endpoint(ws)
+        assert manager.connection_count == 0
+
+    @patch("engine.api.ws.events.decode_token")
+    async def test_invalid_handshake_token_rejected_before_accept(self, mock_decode, manager):
+        mock_decode.return_value = None  # token fails to decode
+        ws_events.init_ws_events(manager)
+        ws = _FakeWebSocket(subprotocols=["bearer.not-a-real-jwt", "auth.v1"])
+        ws.feed(WebSocketDisconnect())
+
+        await ws_events.ws_events_endpoint(ws)
+        assert ws.accepted is False
+        assert ws.closed[0][0] == WS_CLOSE_AUTH_INVALID
+
+    @patch("engine.api.ws.events.decode_token")
+    async def test_conflicting_query_and_subprotocol_tokens_rejected(self, mock_decode, manager):
+        # Same principal decodes either way, but the two channels disagree
+        # on the *raw* token — refuse to guess.
+        mock_decode.return_value = _make_token_data(sub="u1")
+        ws_events.init_ws_events(manager)
+        ws = _FakeWebSocket(
+            query_params={"token": "query-token"},
+            subprotocols=["bearer.subproto-token", "auth.v1"],
+        )
+        ws.feed(WebSocketDisconnect())
+
+        await ws_events.ws_events_endpoint(ws)
+        assert ws.accepted is False
+        assert ws.closed[0][0] == WS_CLOSE_AUTH_INVALID
+
+    @patch("engine.api.ws.events.decode_token")
+    async def test_matching_query_and_subprotocol_tokens_accepted(self, mock_decode, manager):
+        mock_decode.return_value = _make_token_data(sub="u1")
+        ws_events.init_ws_events(manager)
+        shared = "same-token"
+        ws = _FakeWebSocket(
+            query_params={"token": shared},
+            subprotocols=[f"bearer.{shared}", "auth.v1"],
+        )
+        ws.feed(WebSocketDisconnect())
+
+        await ws_events.ws_events_endpoint(ws)
+        assert ws.accepted is True
+        assert ws.accepted_subprotocol == "auth.v1"
+
+
+class TestSubprotocolEcho:
+    """The server must echo a constant subprotocol, never the raw token."""
+
+    @patch("engine.api.ws.events.decode_token")
+    async def test_echoes_constant_auth_v1(self, mock_decode, manager):
+        mock_decode.return_value = _make_token_data(sub="u1")
+        ws_events.init_ws_events(manager)
+        ws = _FakeWebSocket(
+            query_params={"token": "jwt"},
+            subprotocols=["bearer.jwt", "auth.v1"],
+        )
+        ws.feed(WebSocketDisconnect())
+        await ws_events.ws_events_endpoint(ws)
+        assert ws.accepted_subprotocol == "auth.v1"
+
+    @patch("engine.api.ws.events.decode_token")
+    async def test_never_echoes_raw_bearer_token(self, mock_decode, manager):
+        secret = "super-secret-jwt-value"
+        mock_decode.return_value = _make_token_data(sub="u1")
+        ws_events.init_ws_events(manager)
+        ws = _FakeWebSocket(
+            query_params={"token": secret},
+            subprotocols=[f"bearer.{secret}", "auth.v1"],
+        )
+        ws.feed(WebSocketDisconnect())
+        await ws_events.ws_events_endpoint(ws)
+        assert ws.accepted is True
+        # The echoed subprotocol must not leak the credential.
+        echoed = ws.accepted_subprotocol or ""
+        assert secret not in echoed
+        assert not echoed.startswith("bearer.")
+
+    @patch("engine.api.ws.events.decode_token")
+    async def test_no_subprotocol_echo_when_constant_not_offered(self, mock_decode, manager):
+        # A query-param client that never offered auth.v1 gets no echo.
+        mock_decode.return_value = _make_token_data(sub="u1")
+        ws_events.init_ws_events(manager)
+        ws = _FakeWebSocket(query_params={"token": "jwt"})  # no subprotocols
+        ws.feed(WebSocketDisconnect())
+        await ws_events.ws_events_endpoint(ws)
+        assert ws.accepted is True
+        assert ws.accepted_subprotocol is None
 
 
 # ---------------------------------------------------------------------------
