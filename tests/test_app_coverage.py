@@ -243,6 +243,7 @@ class TestShutdownGuaranteesCloseSentry:
         ws_manager.close_all = AsyncMock()
         event_bus = MagicMock()
         event_bus.disconnect = AsyncMock()
+        ws_events_bridge = MagicMock()
         app = MagicMock()
         app.state.valkey.aclose = AsyncMock()
 
@@ -250,8 +251,9 @@ class TestShutdownGuaranteesCloseSentry:
             patch("engine.app.dispose_engine", new=AsyncMock()),
             patch("engine.app.close_sentry") as mock_close,
         ):
-            await _shutdown(app, ws_bridge, ws_manager, event_bus)
+            await _shutdown(app, ws_bridge, ws_manager, event_bus, ws_events_bridge)
 
+        ws_events_bridge.stop.assert_called_once()
         mock_close.assert_called_once()
 
     @pytest.mark.asyncio
@@ -264,6 +266,7 @@ class TestShutdownGuaranteesCloseSentry:
         ws_manager.close_all = AsyncMock()
         event_bus = MagicMock()
         event_bus.disconnect = AsyncMock()
+        ws_events_bridge = MagicMock()
         app = MagicMock()
         app.state.valkey.aclose = AsyncMock()
 
@@ -272,9 +275,11 @@ class TestShutdownGuaranteesCloseSentry:
             patch("engine.app.close_sentry") as mock_close,
         ):
             # Should NOT raise — the exception is caught per-step.
-            await _shutdown(app, ws_bridge, ws_manager, event_bus)
+            await _shutdown(app, ws_bridge, ws_manager, event_bus, ws_events_bridge)
 
         # Despite the exception, close_sentry must still have been called.
+        # The ws_events_bridge step (after the failing ws_bridge step) still runs.
+        ws_events_bridge.stop.assert_called_once()
         mock_close.assert_called_once()
 
     @pytest.mark.asyncio
@@ -288,6 +293,7 @@ class TestShutdownGuaranteesCloseSentry:
         ws_manager.close_all = AsyncMock()
         event_bus = MagicMock()
         event_bus.disconnect = AsyncMock()
+        ws_events_bridge = MagicMock()
         app = MagicMock()
         app.state.valkey.aclose = AsyncMock()
 
@@ -295,8 +301,9 @@ class TestShutdownGuaranteesCloseSentry:
             patch("engine.app.dispose_engine", new=AsyncMock()) as mock_dispose,
             patch("engine.app.close_sentry"),
         ):
-            await _shutdown(app, ws_bridge, ws_manager, event_bus)
+            await _shutdown(app, ws_bridge, ws_manager, event_bus, ws_events_bridge)
 
+        ws_events_bridge.stop.assert_called_once()
         ws_manager.close_all.assert_awaited_once()
         event_bus.disconnect.assert_awaited_once()
         app.state.valkey.aclose.assert_awaited_once()
@@ -312,6 +319,7 @@ class TestShutdownGuaranteesCloseSentry:
         ws_manager.close_all = AsyncMock(side_effect=RuntimeError("ws boom"))
         event_bus = MagicMock()
         event_bus.disconnect = AsyncMock()
+        ws_events_bridge = MagicMock()
         app = MagicMock()
         app.state.valkey.aclose = AsyncMock()
 
@@ -319,8 +327,9 @@ class TestShutdownGuaranteesCloseSentry:
             patch("engine.app.dispose_engine", new=AsyncMock()) as mock_dispose,
             patch("engine.app.close_sentry") as mock_close,
         ):
-            await _shutdown(app, ws_bridge, ws_manager, event_bus)
+            await _shutdown(app, ws_bridge, ws_manager, event_bus, ws_events_bridge)
 
+        ws_events_bridge.stop.assert_called_once()
         event_bus.disconnect.assert_awaited_once()
         app.state.valkey.aclose.assert_awaited_once()
         mock_dispose.assert_awaited_once()
@@ -336,6 +345,7 @@ class TestShutdownGuaranteesCloseSentry:
         ws_manager.close_all = AsyncMock()
         event_bus = MagicMock()
         event_bus.disconnect = AsyncMock()
+        ws_events_bridge = MagicMock()
         app = MagicMock()
         app.state.valkey.aclose = AsyncMock()
 
@@ -344,7 +354,9 @@ class TestShutdownGuaranteesCloseSentry:
             patch("engine.app.close_sentry", side_effect=RuntimeError("flush fail")),
         ):
             # Must NOT raise even though close_sentry blows up.
-            await _shutdown(app, ws_bridge, ws_manager, event_bus)
+            await _shutdown(app, ws_bridge, ws_manager, event_bus, ws_events_bridge)
+
+        ws_events_bridge.stop.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_all_steps_failed_close_sentry_still_called(self):
@@ -357,6 +369,8 @@ class TestShutdownGuaranteesCloseSentry:
         ws_manager.close_all = AsyncMock(side_effect=RuntimeError("b"))
         event_bus = MagicMock()
         event_bus.disconnect = AsyncMock(side_effect=RuntimeError("c"))
+        ws_events_bridge = MagicMock()
+        ws_events_bridge.stop.side_effect = RuntimeError("ws_events")
         app = MagicMock()
         app.state.valkey.aclose = AsyncMock(side_effect=RuntimeError("d"))
 
@@ -364,7 +378,7 @@ class TestShutdownGuaranteesCloseSentry:
             patch("engine.app.dispose_engine", new=AsyncMock(side_effect=RuntimeError("e"))),
             patch("engine.app.close_sentry") as mock_close,
         ):
-            await _shutdown(app, ws_bridge, ws_manager, event_bus)
+            await _shutdown(app, ws_bridge, ws_manager, event_bus, ws_events_bridge)
 
         mock_close.assert_called_once()
 

@@ -19,9 +19,13 @@ from engine.api.rate_limit import (
 )
 from engine.api.router import api_router
 from engine.api.routes.reference import get_search_index
+from engine.api.routes.ws_events import init_ws_events
 from engine.api.security_headers import (
     SecurityHeadersConfig,
     SecurityHeadersMiddleware,
+)
+from engine.api.websocket.manager import (
+    ConnectionManager as ChannelConnectionManager,
 )
 from engine.api.ws.auth import AuthRateLimiter
 from engine.api.ws.connection_manager import ConnectionManager
@@ -199,9 +203,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.ws_bridge = ws_bridge
     logger.info("ws.bridge_started")
 
+    # Minimal, unauthenticated /ws/events firehose (SEV-298 follow-up).
+    # Uses the channel-based manager; the bridge re-broadcasts every
+    # EventBus event to the ``events`` + namespace channels.
+    ws_events_manager = ChannelConnectionManager()
+    ws_events_bridge = init_ws_events(event_bus, ws_events_manager)
+    app.state.ws_events_manager = ws_events_manager
+    app.state.ws_events_bridge = ws_events_bridge
+    logger.info("ws_events.bridge_started")
+
     yield
 
-    await _shutdown(app, ws_bridge, ws_manager, event_bus)
+    await _shutdown(app, ws_bridge, ws_manager, event_bus, ws_events_bridge)
 
 
 async def _shutdown(
@@ -209,6 +222,7 @@ async def _shutdown(
     ws_bridge: EventBusBridge,
     ws_manager: ConnectionManager,
     event_bus: EventBus,
+    ws_events_bridge,
 ) -> None:
     """Run graceful teardown.
 
@@ -222,6 +236,9 @@ async def _shutdown(
 
     async def _stop_bridge() -> None:
         ws_bridge.stop()
+
+    async def _stop_ws_events_bridge() -> None:
+        ws_events_bridge.stop()
 
     async def _close_websockets() -> None:
         await ws_manager.close_all(code=1000, reason="server_shutdown")
@@ -237,6 +254,7 @@ async def _shutdown(
 
     cleanup_steps: list[tuple[str, Any]] = [
         ("ws_bridge.stop", _stop_bridge),
+        ("ws_events_bridge.stop", _stop_ws_events_bridge),
         ("ws_manager.close_all", _close_websockets),
         ("event_bus.disconnect", _disconnect_bus),
         ("valkey.aclose", _close_valkey),
