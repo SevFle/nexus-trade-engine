@@ -17,13 +17,22 @@ Enforcement is dual-layered:
 
 For backward compatibility ``BLOCKED_MODULES`` is still exported — it is a
 frozenset of *known-dangerous* names used by the test-suite to parametrise
-escape-vector regressions.  The actual enforcement, however, is purely
-allowlist-based: a module is blocked if it is **not** in the allowlist,
-regardless of whether it appears in ``BLOCKED_MODULES``.
+escape-vector regressions.  Enforcement is **allowlist-based with denylist
+defence-in-depth**: a module is permitted only if its root is in the allowlist
+**and** its root is not on the denylist (see
+:meth:`RestrictedImporter._is_allowed`).  The denylist always wins, so a
+future too-permissive allowlist edit can never silently un-block a
+known-dangerous module — this is the opposite of "purely allowlist-based".
+
+For *static* (parse-time) validation of strategy source — rejecting code that
+imports blocked modules or invokes code-execution builtins (``exec``, ``eval``,
+``compile``, ``__import__``, ``importlib.import_module``) before it is ever
+compiled/executed — see :class:`ImportValidator`.
 """
 
 from __future__ import annotations
 
+import ast
 import builtins
 import socket
 import sys
@@ -34,7 +43,7 @@ from urllib.parse import urlparse
 from engine.plugins.allowlist import DENYLIST_MODULES, FROZEN_ALLOWED_MODULES
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
     from importlib.machinery import ModuleSpec
 
 # Re-exported for backward compatibility with existing tests and callers.
@@ -482,9 +491,172 @@ class RestrictedImporter(MetaPathFinder):
             sys.modules.pop(name, None)
 
 
+class ImportValidator(ast.NodeVisitor):
+    """Static, parse-time validator for strategy source code (Layer 0).
+
+    Whereas :class:`RestrictedImporter` enforces the import policy at
+    *execution time* (via ``sys.meta_path`` and ``builtins.__import__``),
+    :class:`ImportValidator` walks the AST of a strategy's Python source
+    *before* it is ever compiled/executed and records violations for code
+    that:
+
+      * imports a module not permitted by the policy, or
+      * invokes a code-execution / dynamic-import builtin.
+
+    This is defence-in-depth that fails fast and side-effect free: a strategy
+    that smuggles ``exec(payload)`` or ``importlib.import_module('os')`` into
+    its source is rejected at validation time, before the runtime hooks ever
+    run and before any of the module body executes.
+
+    Module policy (:meth:`_module_is_blocked`)
+    ------------------------------------------
+    A module name is *blocked* when:
+
+      1. it **exactly** matches an entry in :attr:`blocked_imports` — the
+         allowlist **cannot** override an exact match.  This closes the
+         "allowlist shadows a blocked module" bypass (an ``os`` entry sneaking
+         into the allowlist is still rejected); **or**
+      2. it is a *proper submodule* of a blocked root (``os.path`` under a
+         blocked ``os``) — here the allowlist *may* permit the specific
+         submodule.  The allowlist therefore applies only to proper submodules
+         of a blocked root, never to the blocked root itself; **or**
+      3. it is not under any blocked root and its root is not in
+         :attr:`allowed` (the ordinary allowlist gate).
+
+    Detected call sites (:meth:`visit_Call`)
+    ----------------------------------------
+    Any call to ``__import__``, ``exec``, ``eval``, ``compile`` (a bare-``Name``
+    call) or ``importlib.import_module`` (a qualified attribute call) is
+    recorded as a violation.  These are the canonical code-execution /
+    dynamic-import escape vectors that bypass the static ``import`` statement
+    the runtime hook intercepts.
+    """
+
+    #: Bare-name builtins that execute arbitrary code or load modules.  Any
+    #: direct ``Name`` call of one of these is flagged by :meth:`visit_Call`.
+    _DANGEROUS_BUILTINS: frozenset[str] = frozenset(
+        {"__import__", "exec", "eval", "compile"}
+    )
+
+    def __init__(
+        self,
+        blocked_imports: Iterable[str],
+        *,
+        allowed: frozenset[str] | None = None,
+    ) -> None:
+        #: Explicitly-blocked module names.  An *exact* match here can never be
+        #: overridden by :attr:`allowed` (see :meth:`_module_is_blocked`).
+        self.blocked_imports: frozenset[str] = frozenset(blocked_imports)
+        #: The frozen allowlist; ``None`` defaults to :data:`ALLOWED_MODULES`.
+        self.allowed: frozenset[str] = (
+            allowed if allowed is not None else ALLOWED_MODULES
+        )
+        #: Violation messages accumulated during :meth:`visit`.  Reset on
+        #: every :meth:`validate` call.
+        self.violations: list[str] = []
+
+    # ── Module policy ──────────────────────────────────────────────────
+
+    def _module_is_blocked(self, fullname: str) -> bool:
+        """Return ``True`` iff *fullname* is blocked by the policy.
+
+        Precedence (a ``True`` result short-circuits to "blocked"):
+
+          1. **Exact match** in :attr:`blocked_imports` → blocked.  The
+             allowlist *cannot* override an exact match, which closes the
+             "allowlist shadows a blocked module" bypass.
+          2. **Proper submodule of a blocked root** (``os.path`` under a
+             blocked ``os``) → blocked *unless* ``fullname`` is explicitly in
+             :attr:`allowed`.  The allowlist therefore applies only to proper
+             submodules of a blocked root, never to the blocked root itself.
+          3. **Otherwise** → blocked iff the module's root is not in
+             :attr:`allowed` (the ordinary allowlist gate).
+        """
+        # 1. Exact match: allowlist can never override.
+        if fullname in self.blocked_imports:
+            return True
+        root = fullname.split(".", maxsplit=1)[0]
+        # 2. Proper submodule of a blocked root: allowlist may permit it.
+        if root in self.blocked_imports:
+            return fullname not in self.allowed
+        # 3. Not under any blocked root: standard allowlist check.
+        return root not in self.allowed
+
+    # ── AST visitors ───────────────────────────────────────────────────
+
+    def visit_Import(self, node: ast.Import) -> None:
+        """Flag ``import <blocked>`` statements (all aliases checked)."""
+        for alias in node.names:
+            if self._module_is_blocked(alias.name):
+                self.violations.append(
+                    f"line {node.lineno}: import of blocked module {alias.name!r}"
+                )
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Flag ``from <blocked> import ...`` statements.
+
+        Relative imports (``level > 0``) with no absolute module name are
+        skipped: they resolve within the strategy package and carry no
+        cross-package escape vector at this layer.
+        """
+        module = node.module or ""
+        if module and self._module_is_blocked(module):
+            self.violations.append(
+                f"line {node.lineno}: import of blocked module {module!r}"
+            )
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        """Flag any call to a code-execution / dynamic-import builtin.
+
+        Catches both bare-name calls (``exec(...)``, ``eval(...)``,
+        ``compile(...)``, ``__import__(...)``) and the qualified dynamic import
+        ``importlib.import_module(...)``.  These bypass the static ``import``
+        statement that the runtime :class:`RestrictedImporter` intercepts, so
+        they must be rejected statically.
+        """
+        func = node.func
+        # Bare-name call to a dangerous builtin: ``exec(...)``, ``eval(...)``,
+        # ``compile(...)`` or ``__import__(...)``.
+        if isinstance(func, ast.Name) and func.id in self._DANGEROUS_BUILTINS:
+            self.violations.append(
+                f"line {node.lineno}: call to forbidden builtin {func.id!r}"
+            )
+        # Qualified dynamic import: ``importlib.import_module(...)``.
+        elif (
+            isinstance(func, ast.Attribute)
+            and func.attr == "import_module"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "importlib"
+        ):
+            self.violations.append(
+                f"line {node.lineno}: call to 'importlib.import_module' is forbidden"
+            )
+        self.generic_visit(node)
+
+    # ── Public API ─────────────────────────────────────────────────────
+
+    def validate(self, source: str | bytes) -> list[str]:
+        """Parse *source* and return the list of policy violations.
+
+        Returns an empty list for clean code; a non-empty result means the
+        source must be rejected before compilation/execution.  ``source`` may
+        be ``str`` or ``bytes``.  A :class:`SyntaxError` from
+        :func:`ast.parse` propagates to the caller — malformed source is
+        itself a reason to reject, but surfacing/reporting it is the caller's
+        responsibility.
+        """
+        tree = ast.parse(source)
+        self.violations = []
+        self.visit(tree)
+        return self.violations
+
+
 __all__ = [
     "ALLOWED_MODULES",
     "BLOCKED_MODULES",
+    "ImportValidator",
     "RestrictedImporter",
     "extract_hostnames",
 ]
