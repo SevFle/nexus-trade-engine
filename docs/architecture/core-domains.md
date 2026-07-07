@@ -57,6 +57,98 @@ flowchart TD
     VER -.->|pinned code| ONE
 ```
 
+## Instruments & asset classes
+
+[`engine/core/instruments.py`](../../engine/core/instruments.py)
+(gf#1213) introduces a typed `Instrument` that replaces the legacy
+free-form `symbol` string plumbing. A strategy used to emit
+`Signal(symbol="AAPL")` and the engine guessed; now every signal also
+carries an `Instrument` that knows its asset class, exchange, currency,
+and asset-class-specific fields (option strike/expiration, crypto
+base/quote, forex pip size).
+
+> **Backward compatible.** Existing code that passes a bare `symbol`
+still works — `Signal` auto-derives `instrument` from `symbol` via
+`Instrument.from_string()` (which defaults to **equity**). Strategies
+that trade crypto/forex/options must use the explicit factories so the
+asset class is unambiguous; `from_string` deliberately does **not**
+classify `/`-containing strings as crypto, so `EUR/USD`, `BRK/B`, and
+`BTC/USDT` all coerce to equity rather than mis-route.
+
+### Two enums, one purpose
+
+The asset-class taxonomy is split across **two** `StrEnum`s on purpose:
+
+| Enum | Lives in | Values | Evolves with |
+|---|---|---|---|
+| `InstrumentAssetClass` | [`instruments.py`](../../engine/core/instruments.py) | `EQUITY`, `ETF`, `CRYPTO`, `CRYPTO_PERP`, `CRYPTO_FUTURE`, `FOREX`, `OPTION`, `FUTURE` | *what the engine models* (a typed instrument and its invariants) |
+| `AssetClass` | [`data/providers/base.py`](../../engine/data/providers/base.py) | `EQUITY`, `ETF`, `OPTIONS`, `FOREX`, `CRYPTO`, `FUTURES` | *which providers can serve a query* (data routing) |
+
+They move at different speeds: the data-routing taxonomy is coarser
+(one `CRYPTO` covers spot/perp/future, one `OPTIONS` plural) because a
+provider either speaks an asset class or it doesn't; the instrument
+taxonomy is finer because position accounting must keep a perpetual
+and a dated future on the same pair *distinct*. Bridge with
+`InstrumentAssetClass.to_provider_class()`, which raises
+`UnknownAssetClassError` (and emits a `WARNING`) for any member with no
+mapping — the exception **is** the failure signal, there is no silent
+fallback to a default class (gf#1227, gf#1229).
+
+### Factories
+
+`Instrument` is constructed via factories so the required fields for
+each class are enforced at construction time:
+
+| Factory | Invariants it sets |
+|---|---|
+| `equity()` / `etf()` | `symbol`, optional `exchange`, `currency` (default `USD`). |
+| `crypto(base, quote)` / `crypto_perp(...)` | requires both `base_asset` and `quote_asset`; symbol is `BASE/QUOTE` (`:PERP` suffix for perps). |
+| `forex(base, quote)` | requires base/quote; auto-sets `pip_size` (0.01 for JPY pairs, else 0.0001) and `lot_size=100_000`. |
+| `option(underlying, strike, expiration, option_type)` | requires all four; `multiplier` defaults to 100; symbol is `UND_yyyymmdd_C|P_strike`. |
+| `future(symbol, expiration)` | uppercases the symbol; raises `TypeError` (not opaque `AttributeError`) on non-str input. |
+| `from_string(raw)` / `coerce(value)` | conservative coercion to **equity**; `coerce` accepts `Instrument` or `str`. |
+
+A `model_validator(mode="after")` re-checks the per-class invariants
+(`_enforce_class_invariants`) so a hand-built `Instrument(...)` that
+omits a required field is rejected, not silently accepted. Two extra
+validators harden the model: `_symbol_no_whitespace` rejects
+leading/trailing/empty symbols, and `model_copy()` is overridden to
+**re-run every validator** on the merged field set — Pydantic's default
+`model_copy` splats `update` values straight into `__dict__` and would
+otherwise bypass those checks.
+
+### Identity — `uid`
+
+The `uid` property is the stable key for position aggregation: it is
+distinct per `(asset_class, identifying fields)` so a spot, perpetual,
+and dated future on the same pair **never** collapse onto one key
+(that would silently merge three positions). Shapes:
+
+| Class | `uid` |
+|---|---|
+| `OPTION` | `{underlying}_{yyyymmdd}_{C|P}_{strike:.2f}` |
+| `FUTURE` | `{symbol}_{yyyymmdd}` |
+| `CRYPTO` | `{base}/{quote}` |
+| `CRYPTO_PERP` | `{base}/{quote}:PERP` |
+| `CRYPTO_FUTURE` | `{base}/{quote}:{yyyymmdd \| FUT}` |
+| `FOREX` | `{base}/{quote}:FX` |
+| else (equity/etf) | `symbol` |
+
+`is_derivative` flags `OPTION`/`FUTURE`/`CRYPTO_PERP`/`CRYPTO_FUTURE`;
+`contract_value` returns option `strike × multiplier` (notional of one
+contract), `None` otherwise.
+
+### Wired vs. storage status
+
+The `Instrument` has landed at the **signal/domain layer** — `Signal`
+carries it, and the multi-strategy orchestrators propagate it. It has
+**not** propagated to storage yet: the `positions` and `orders` tables
+are still keyed on the string `symbol` column (see
+[`data-model.md`](../data-model.md)), and portfolio tax-lot accounting
+walks lots by symbol. So the typed instrument flows through decisions
+but not yet through the ledger. The honest status is tracked as a P2 in
+[`known-limitations.md`](../known-limitations.md).
+
 ## Multi-strategy orchestration
 
 Three orchestrators exist. They overlap in spirit but are deliberately

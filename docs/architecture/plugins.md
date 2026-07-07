@@ -47,6 +47,22 @@ directory. The [`StrategyManifest`](../../engine/plugins/manifest.py)
 schema is what `strategy.manifest.yaml` (the filename the bundled
 examples and the SDK use) is parsed against.
 
+The registry is the **single source of truth** for installed-strategy
+metadata. After discovery, callers read metadata through accessor
+methods rather than re-walking the directory or importing the plugin:
+
+| Method | Returns |
+|---|---|
+| `list_strategies()` | Installed strategy names. |
+| `get_manifest(name)` | Parsed `manifest.yaml` dict (version, description, symbols, parameters, …) — `None` if unknown. |
+| `get_module_path(name)` | On-disk path of `strategy.py` — `None` if unknown. |
+| `load_strategy(name)` | Instantiated `Strategy` instance (layer-0 validated; see [Sandboxing](#sandboxing)). |
+
+This consolidated surface (gf#1147) is what the MCP server and the
+strategies route lean on: describing a strategy no longer costs an
+import. It is also why `load_strategy_class` runs the layer-0 static
+check exactly once, at load time (see below).
+
 The HTTP surface in
 [`routes/strategies.py`](../../engine/api/routes/strategies.py) talks
 to `app.state.plugin_registry` (a richer registry exposing
@@ -62,23 +78,32 @@ config without re-deploying once the wiring is complete.
 ## Lifecycle
 
 ```
-discover  ──▶  validate manifest  ──▶  import entry point  ──▶  register
-                                                                    │
-                                                                    ▼
-                            domain code ◀───  registry.get(name) ───┤
-                                                                    │
-                                              shutdown ─────────────┤
-                                                                    ▼
-                                                     teardown / unregister
+discover  →  validate manifest  →  static AST check (layer 0)
+                                   on validated bytes only
+                                   │
+                                   ▼
+                              import  →  register
+                                              │
+                                              ▼
+        domain code  ←──  registry.get(name)
+                                              │
+        shutdown ─────────────────────────────┤
+                                              ▼
+                               teardown / unregister
 ```
 
 - **Discovery** is filesystem-walk based. No network calls; no
   arbitrary imports outside the plugin tree.
 - **Validation** fails fast on missing fields, version mismatches, or
   declared dependencies that aren't installed.
-- **Import** happens once at startup. If a plugin's import raises,
-  the engine logs the error and continues without registering it —
-  one bad plugin should not crash the service.
+- **Static AST check (layer 0)** runs in `load_strategy_class` *before*
+  the module body executes (see [Sandboxing](#sandboxing)). A plugin
+  that fails it is logged and skipped — one bad plugin should not crash
+  the service.
+- **Import** happens once at startup, on the **exact bytes** that passed
+  the static check (closing a TOCTOU window — see below). If a plugin's
+  import raises, the engine logs the error and continues without
+  registering it.
 - **Teardown** runs at shutdown so plugins with sockets / threads
   close cleanly.
 
@@ -127,31 +152,47 @@ examples):
 
 ## Sandboxing
 
-Strategies run inside a layered sandbox defined in
-[`engine/plugins/sandbox.py`](../../engine/plugins/sandbox.py). Four of
-five layers are implemented today; process isolation is the production
-target and is tracked as a follow-up.
+Strategies run inside a layered sandbox defined in the
+[`engine/plugins/sandbox/`](../../engine/plugins/sandbox/) package (a
+directory since gf#1235; the monolithic `sandbox.py` was refactored
+into `__init__.py`). A **layer-0 static check** plus layers 1–4 are
+implemented today; process isolation (layer 5) is the production target
+and is tracked as a follow-up.
 
-> **Important — threat model.** Layers 1–4 are **best-effort
-> defense-in-depth, not a security boundary**. They narrow the
-> accidental-bug surface and raise the bar for casual misuse, but they
-> all run **in-process**, share the engine's memory and DB session,
-> and can be defeated by a determined attacker with the full Python
-> runtime available. **Only layer 5 (process / container isolation) is
-> a real security boundary**, because it puts the strategy in a
-> separate address space with the kernel enforcing the limits. Treat
-> the four in-process layers accordingly — helpful guardrails, not
+> **Important — threat model.** Layer 0 and layers 1–4 are
+> **best-effort defense-in-depth, not a security boundary**. They
+> narrow the accidental-bug surface and raise the bar for casual misuse,
+> but they all run **in-process**, share the engine's memory and DB
+> session, and can be defeated by a determined attacker with the full
+> Python runtime available. **Only layer 5 (process / container
+> isolation) is a real security boundary**, because it puts the strategy
+> in a separate address space with the kernel enforcing the limits.
+> Treat the in-process layers accordingly — helpful guardrails, not
 > something to stake a customer's data on.
 
 | Layer | Kind | Status | Mechanism |
 |---|---|---|---|
+| 0. Static AST validation | best-effort in-process | **shipped** | [`ImportValidator`](../../engine/plugins/restricted_importer.py) walks the parsed AST of a strategy's source **before it is ever compiled/executed** and rejects code that imports a blocked module *or* calls a code-execution/dynamic-import builtin (`__import__`, `exec`, `eval`, `compile`, `importlib.import_module`). The module policy closes the “allowlist shadows a blocked module” bypass: an *exact* match on the denylist can **never** be overridden by the allowlist; the allowlist only loosens *proper submodules* of a blocked root (gf#1239). |
 | 1. Import restrictions | best-effort in-process | **shipped** | Default-deny **allowlist** (`FROZEN_ALLOWED_MODULES` in [`allowlist.py`](../../engine/plugins/allowlist.py)): a strategy may import a module only if its root name is in the frozen set. Enforced by [`RestrictedImporter`](../../engine/plugins/restricted_importer.py) at both `sys.meta_path` and `builtins.__import__`. The old denylist (`DENYLIST_MODULES`) is retained as defence-in-depth and as the test-suite's escape-vector oracle, but enforcement is purely allowlist-based. Adding a module requires a security review (see [ADR-0007](../adr/0007-strategy-sandbox-allowlist-imports.md)). |
 | 2. Network whitelist | best-effort in-process | **shipped** | `SandboxedHttpClient` proxies every outbound call through an allowlist declared in the manifest (`requires_network: true` + URL prefixes). |
 | 3. Resource limits | best-effort in-process | **shipped** | `resource.setrlimit` for memory / file descriptors on Linux. |
 | 4. Filesystem isolation | best-effort in-process | **shipped** | Each evaluation runs in a fresh `tempfile.TemporaryDirectory`; the strategy only sees its own declared artifacts (read-only). |
 | 5. Process isolation | **security boundary** | **planned** | Subprocess / container per strategy, communicated with via pipes (serialized `MarketState` in, `Signal[]` out). Killed on timeout / memory pressure. |
 
-Because layers 1–4 are in-process, a malicious strategy that finds a
+### TOCTOU-safe load
+
+Layer 0 only matters if the bytes that pass validation are the bytes
+that get executed. `load_strategy_class` in
+[`registry.py`](../../engine/plugins/registry.py) reads the file
+**once** as bytes, runs `ImportValidator` on them, then `compile()`s
+and `exec()`s the *exact same* bytes directly into the module
+namespace. It deliberately avoids `spec.loader.exec_module`, which
+re-reads the file from disk — an attacker who swapped the file between
+the validation read and the exec read could otherwise execute
+un-validated bytes (gf#1245). The compiled code object is bound to the
+module's `__file__` so tracebacks still point at `strategy.py`.
+
+Because layers 0–4 are in-process, a malicious strategy that finds a
 path past them can read environment variables, the database session,
 and the filesystem. Operators must therefore treat plugins as part of
 their trusted deployment surface today:
@@ -159,14 +200,15 @@ their trusted deployment surface today:
 - Pin plugin versions in your operator config; do not auto-update.
 - Plugins that come from third parties should be code-reviewed before
   install.
-- For untrusted strategies, **do not rely on layers 1–4**. Run them
+- For untrusted strategies, **do not rely on layers 0–4**. Run them
   in an external sandbox (container, VM) and call the engine through
   the SDK instead of loading them in-process.
 
-Layer 5 is the production architecture — see the module docstring in
-[`sandbox.py`](../../engine/plugins/sandbox.py). An ADR covering the
-final isolation choice (likely WASI for strategies, separate process
-for executors) is deferred until that work is sequenced.
+Layer 5 is the production architecture — see the package docstring in
+[`engine/plugins/sandbox/`](../../engine/plugins/sandbox/). An ADR
+covering the final isolation choice (likely WASI for strategies,
+separate process for executors) is deferred until that work is
+sequenced.
 
 ## Where the code lives
 
