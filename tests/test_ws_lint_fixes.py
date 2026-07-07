@@ -18,10 +18,10 @@ import pytest
 from engine.api.ws.auth import (
     AuthRateLimiter,
     AuthResult,
-    _extract_scopes,
     _get_remote_ip,
     _hash_subject,
     authenticate_websocket,
+    extract_scopes,
     validate_refresh_token,
 )
 from engine.api.ws.channels import ChannelResolver
@@ -405,51 +405,51 @@ class TestResolveRoomName:
 
 
 # ---------------------------------------------------------------------------
-# auth.py — _extract_scopes
+# auth.py — extract_scopes
 # ---------------------------------------------------------------------------
 
 
 class TestExtractScopes:
     def test_admin_gets_all_scopes(self):
-        scopes = _extract_scopes({"role": "admin"})
+        scopes = extract_scopes({"role": "admin"})
         assert "read:portfolio:all" in scopes
         assert "read:orders:all" in scopes
         assert "read:strategies:all" in scopes
 
     def test_portfolio_manager_gets_all_scopes(self):
-        scopes = _extract_scopes({"role": "portfolio_manager"})
+        scopes = extract_scopes({"role": "portfolio_manager"})
         assert "read:portfolio:all" in scopes
 
     def test_viewer_gets_base_scopes(self):
-        scopes = _extract_scopes({"role": "viewer"})
+        scopes = extract_scopes({"role": "viewer"})
         assert "read:portfolio" in scopes
         assert "read:portfolio:all" not in scopes
 
     def test_quant_dev_gets_base_scopes(self):
-        scopes = _extract_scopes({"role": "quant_dev"})
+        scopes = extract_scopes({"role": "quant_dev"})
         assert "read:portfolio" in scopes
         assert "read:portfolio:all" not in scopes
 
     def test_unknown_role_defaults_to_viewer(self):
-        scopes = _extract_scopes({"role": "hacker"})
-        assert scopes == _extract_scopes({"role": "viewer"})
+        scopes = extract_scopes({"role": "hacker"})
+        assert scopes == extract_scopes({"role": "viewer"})
 
     def test_missing_role_defaults_to_viewer(self):
-        scopes = _extract_scopes({})
-        assert scopes == _extract_scopes({"role": "viewer"})
+        scopes = extract_scopes({})
+        assert scopes == extract_scopes({"role": "viewer"})
 
     def test_retail_trader_scopes(self):
-        scopes = _extract_scopes({"role": "retail_trader"})
+        scopes = extract_scopes({"role": "retail_trader"})
         assert "read:portfolio" in scopes
         assert "read:portfolio:all" not in scopes
 
     def test_developer_scopes(self):
-        scopes = _extract_scopes({"role": "developer"})
+        scopes = extract_scopes({"role": "developer"})
         assert "read:orders" in scopes
         assert "read:orders:all" not in scopes
 
     def test_user_role_scopes(self):
-        scopes = _extract_scopes({"role": "user"})
+        scopes = extract_scopes({"role": "user"})
         assert "read:strategies" in scopes
         assert "read:strategies:all" not in scopes
 
