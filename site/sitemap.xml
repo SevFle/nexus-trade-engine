@@ -85,6 +85,10 @@
          <lastmod>2026-07-07</lastmod>
     </url>
     <url>
+         <loc>https://github.com/SevFle/nexus-trade-engine/adr/0010-static-ast-validation-toctou-loading/</loc>
+         <lastmod>2026-07-07</lastmod>
+    </url>
+    <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/adr/template/</loc>
          <lastmod>2026-07-07</lastmod>
     </url>

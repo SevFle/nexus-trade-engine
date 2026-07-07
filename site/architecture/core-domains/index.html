@@ -679,6 +679,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#instruments-multi-asset-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Instruments &amp; multi-asset model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#multi-strategy-orchestration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1354,6 +1365,8 @@
       
         
       
+        
+      
     
     
     
@@ -1649,6 +1662,34 @@
     
   
     0009 — Cross-replica WebSocket event bridge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0010-static-ast-validation-toctou-loading/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0010 — Static AST validation + TOCTOU-safe loading
   
 
     
@@ -2516,6 +2557,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#instruments-multi-asset-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Instruments &amp; multi-asset model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#multi-strategy-orchestration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2792,6 +2844,79 @@ and post-trade cost analysis.</p>
     VER["strategy_versioning&lt;br/&gt;content-addressed deploys"]
     GOV -.-&gt;|gates promotions| ONE
     VER -.-&gt;|pinned code| ONE</code></pre>
+<h2 id="instruments-multi-asset-model">Instruments &amp; multi-asset model<a class="headerlink" href="#instruments-multi-asset-model" title="Permanent link">&para;</a></h2>
+<p><a href="../../engine/core/instruments.py"><code>engine/core/instruments.py</code></a> replaces
+the legacy string-<code>symbol</code> plumbing with a typed <code>Instrument</code> Pydantic
+model that knows its asset class, venue, currency, and the
+asset-class-specific fields (option strike/expiration, crypto base/quote,
+forex pip/lot, futures multiplier). This is the engine-side identity
+layer — what the OMS keys positions and lots on, distinct from the
+<strong>data-routing</strong> taxonomy in
+<a href="../../engine/data/providers/base.py"><code>engine.data.providers.base.AssetClass</code></a>
+(which decides <em>which provider</em> can serve a query). The two evolve
+independently; bridge them with <code>InstrumentAssetClass.to_provider_class()</code>.</p>
+<p><code>InstrumentAssetClass</code> is an <code>StrEnum</code> with eight members: <code>EQUITY</code>,
+<code>ETF</code>, <code>CRYPTO</code>, <code>CRYPTO_PERP</code>, <code>CRYPTO_FUTURE</code>, <code>FOREX</code>, <code>OPTION</code>,
+<code>FUTURE</code>. The split between spot crypto, perpetuals, and dated crypto
+futures matters because they are <em>different products</em> on the same pair
+— see the <code>uid</code> invariant below.</p>
+<p><strong>Failure signal, not silent fallback.</strong>
+<code>InstrumentAssetClass.to_provider_class()</code> raises
+<code>UnknownAssetClassError</code> for any member with no provider mapping. The
+exception <em>is</em> the signal — there is no default asset class — and
+constructing it also emits a <code>WARNING</code> log so an unmapped value is
+visible even when the caller swallows the error (#1227). It is raised
+<strong>unconditionally, with no <code>__debug__</code> guard</strong>, so an optimized
+(<code>-O</code>) interpreter cannot silently turn a hard error into a no-op
+(#1229).</p>
+<p>Key invariants and behaviours, all enforced in the model:</p>
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Class-specific fields</td>
+<td><code>OPTION</code> requires <code>strike</code>/<code>expiration</code>/<code>option_type</code>/<code>underlying</code>; <code>CRYPTO*</code> and <code>FOREX</code> require <code>base_asset</code>+<code>quote_asset</code> (else <code>ValueError</code>).</td>
+</tr>
+<tr>
+<td><code>uid</code> (stable identity)</td>
+<td>Distinct per <code>(asset_class, identifying fields)</code>: <code>BTC/USD</code> (spot), <code>BTC/USD:PERP</code>, and <code>BTC/USD:&lt;yyyymmdd&gt;</code> (dated future) produce <strong>different</strong> uids, so positions in different products never collapse onto one key.</td>
+</tr>
+<tr>
+<td><code>model_copy(update=…)</code></td>
+<td>Rebuilds through <code>model_validate</code> so the symbol/whitespace validator and every class invariant run again — pydantic's default <code>model_copy</code> short-circuits validation and would let <code>update={"symbol":" x "}</code> bypass every check.</td>
+</tr>
+<tr>
+<td><code>from_string(raw)</code></td>
+<td><strong>Conservative</strong>: defaults to <code>EQUITY</code> and treats <code>EUR/USD</code> / <code>BRK/B</code> as equity to avoid silently misclassifying slash-bearing symbols as crypto. Crypto/forex callers must use the explicit factories.</td>
+</tr>
+<tr>
+<td>Legacy alias</td>
+<td><code>expiry_date</code> is folded into the canonical <code>expiration</code> field.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Integration with signals.</strong>
+<a href="../../engine/core/signal.py"><code>Signal.instrument</code></a> is a required, typed
+field. For backward compatibility it is auto-populated as
+<code>Instrument.from_string(symbol)</code> (i.e. equity by default) when a caller
+passes only a string <code>symbol</code> — so existing backtest code keeps working.
+A strategy that emits non-equity signals must construct the <code>Instrument</code>
+explicitly (e.g. <code>Instrument.crypto("BTC", "USDT")</code>) so the asset class
+is unambiguous.</p>
+<blockquote>
+<p><strong>Status.</strong> The model, the per-class invariants, the provider-class
+bridge, and the market-data route's symbol-shape <code>detect_asset_class</code>
+(see <a href="../../api-reference/#market-data"><code>api-reference.md</code></a>) are landed
+and unit-tested. Multi-asset support is still <strong>partial</strong>: not every
+cost model and tax jurisdiction path has been validated against every
+asset class, and live/paper execution for non-equity instruments is
+not wired (see <a href="../../known-limitations/"><code>known-limitations.md</code></a>).</p>
+</blockquote>
 <h2 id="multi-strategy-orchestration">Multi-strategy orchestration<a class="headerlink" href="#multi-strategy-orchestration" title="Permanent link">&para;</a></h2>
 <p>Three orchestrators exist. They overlap in spirit but are deliberately
 separate modules with different conflict-resolution semantics — and, in
