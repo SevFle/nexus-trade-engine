@@ -68,7 +68,7 @@ it and layer 5 (process isolation) remains the production target.
 - **Negative** — CPython bootstraps certain `_`-prefixed C-extension
   modules that cannot be purged from `sys.modules` without crashing the
   interpreter. These are enumerated in
-  `_ESSENTIAL_CPYTHON_MODULES` ([`restricted_importer.py:49`](../../engine/plugins/restricted_importer.py#L49))
+  `_ESSENTIAL_CPYTHON_MODULES` ([`restricted_importer.py:134`](../../engine/plugins/restricted_importer.py))
   and kept reachable; they are harmless C-extensions that cannot be
   used as escape vectors on their own.
 
@@ -100,13 +100,14 @@ The previous sandbox gated filesystem access on a `ContextVar`
 attacker code could clear by importing `contextvars` and resetting it.
 The fix was two-fold: `contextvars` is now **denied by the allowlist**
 itself, and the gate was replaced with a process-level flag
-([`sandbox.py:35`](../../engine/plugins/sandbox.py)) that is itself
-unreachable because importing `engine.plugins.sandbox` is blocked via
-`_DENIED_SUBMODULES`.
+(`_ProcessSandboxFlag`,
+[`sandbox/__init__.py:113`](../../engine/plugins/sandbox/__init__.py))
+that is itself unreachable because importing `engine.plugins.sandbox`
+is blocked via `_DENIED_SUBMODULES`.
 
 ### Builtins curation
 
-Source: [`allowlist.py:227`](../../engine/plugins/allowlist.py#L227).
+Source: [`allowlist.py:333`](../../engine/plugins/allowlist.py) (`CURATED_BUILTINS`).
 
 `CURATED_BUILTINS` exposes a subset of `builtins` to sandboxed code.
 Removed: `open`, `eval`, `exec`, `compile`, `__import__`, `globals`,
@@ -161,5 +162,9 @@ find a dangerous type" escape vector (gh#912).
 - Restricted `getattr`: gh#914, gh#916
 - Source: [`engine/plugins/allowlist.py`](../../engine/plugins/allowlist.py),
   [`engine/plugins/restricted_importer.py`](../../engine/plugins/restricted_importer.py),
-  [`engine/plugins/sandbox.py`](../../engine/plugins/sandbox.py)
+  [`engine/plugins/sandbox/__init__.py`](../../engine/plugins/sandbox/__init__.py)
+- Complemented by: [ADR-0010 — Static AST validation + TOCTOU-safe
+  strategy loading](0010-static-ast-validation-toctou-loading.md) — the
+  parse-time validator and validate-then-exec loader that run *before*
+  the runtime hooks in this ADR ever fire
 - Related: [`docs/architecture/plugins.md`](../architecture/plugins.md)

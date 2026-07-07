@@ -57,6 +57,62 @@ flowchart TD
     VER -.->|pinned code| ONE
 ```
 
+## Instruments & multi-asset model
+
+[`engine/core/instruments.py`](../../engine/core/instruments.py) replaces
+the legacy string-`symbol` plumbing with a typed `Instrument` Pydantic
+model that knows its asset class, venue, currency, and the
+asset-class-specific fields (option strike/expiration, crypto base/quote,
+forex pip/lot, futures multiplier). This is the engine-side identity
+layer — what the OMS keys positions and lots on, distinct from the
+**data-routing** taxonomy in
+[`engine.data.providers.base.AssetClass`](../../engine/data/providers/base.py)
+(which decides *which provider* can serve a query). The two evolve
+independently; bridge them with `InstrumentAssetClass.to_provider_class()`.
+
+`InstrumentAssetClass` is an `StrEnum` with eight members: `EQUITY`,
+`ETF`, `CRYPTO`, `CRYPTO_PERP`, `CRYPTO_FUTURE`, `FOREX`, `OPTION`,
+`FUTURE`. The split between spot crypto, perpetuals, and dated crypto
+futures matters because they are *different products* on the same pair
+— see the `uid` invariant below.
+
+**Failure signal, not silent fallback.**
+`InstrumentAssetClass.to_provider_class()` raises
+`UnknownAssetClassError` for any member with no provider mapping. The
+exception *is* the signal — there is no default asset class — and
+constructing it also emits a `WARNING` log so an unmapped value is
+visible even when the caller swallows the error (#1227). It is raised
+**unconditionally, with no `__debug__` guard**, so an optimized
+(`-O`) interpreter cannot silently turn a hard error into a no-op
+(#1229).
+
+Key invariants and behaviours, all enforced in the model:
+
+| Concern | Rule |
+|---|---|
+| Class-specific fields | `OPTION` requires `strike`/`expiration`/`option_type`/`underlying`; `CRYPTO*` and `FOREX` require `base_asset`+`quote_asset` (else `ValueError`). |
+| `uid` (stable identity) | Distinct per `(asset_class, identifying fields)`: `BTC/USD` (spot), `BTC/USD:PERP`, and `BTC/USD:<yyyymmdd>` (dated future) produce **different** uids, so positions in different products never collapse onto one key. |
+| `model_copy(update=…)` | Rebuilds through `model_validate` so the symbol/whitespace validator and every class invariant run again — pydantic's default `model_copy` short-circuits validation and would let `update={"symbol":" x "}` bypass every check. |
+| `from_string(raw)` | **Conservative**: defaults to `EQUITY` and treats `EUR/USD` / `BRK/B` as equity to avoid silently misclassifying slash-bearing symbols as crypto. Crypto/forex callers must use the explicit factories. |
+| Legacy alias | `expiry_date` is folded into the canonical `expiration` field. |
+
+**Integration with signals.**
+[`Signal.instrument`](../../engine/core/signal.py) is a required, typed
+field. For backward compatibility it is auto-populated as
+`Instrument.from_string(symbol)` (i.e. equity by default) when a caller
+passes only a string `symbol` — so existing backtest code keeps working.
+A strategy that emits non-equity signals must construct the `Instrument`
+explicitly (e.g. `Instrument.crypto("BTC", "USDT")`) so the asset class
+is unambiguous.
+
+> **Status.** The model, the per-class invariants, the provider-class
+> bridge, and the market-data route's symbol-shape `detect_asset_class`
+> (see [`api-reference.md`](../api-reference.md#market-data)) are landed
+> and unit-tested. Multi-asset support is still **partial**: not every
+> cost model and tax jurisdiction path has been validated against every
+> asset class, and live/paper execution for non-equity instruments is
+> not wired (see [`known-limitations.md`](../known-limitations.md)).
+
 ## Multi-strategy orchestration
 
 Three orchestrators exist. They overlap in spirit but are deliberately

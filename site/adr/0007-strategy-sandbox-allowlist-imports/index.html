@@ -1090,6 +1090,8 @@
       
         
       
+        
+      
     
     
     
@@ -1627,6 +1629,34 @@
     
   
     0009 — Cross-replica WebSocket event bridge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0010-static-ast-validation-toctou-loading/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0010 — Static AST validation + TOCTOU-safe loading
   
 
     
@@ -2761,7 +2791,7 @@ it and layer 5 (process isolation) remains the production target.</p>
 <li><strong>Negative</strong> — CPython bootstraps certain <code>_</code>-prefixed C-extension
   modules that cannot be purged from <code>sys.modules</code> without crashing the
   interpreter. These are enumerated in
-  <code>_ESSENTIAL_CPYTHON_MODULES</code> (<a href="../../engine/plugins/restricted_importer.py#L49"><code>restricted_importer.py:49</code></a>)
+  <code>_ESSENTIAL_CPYTHON_MODULES</code> (<a href="../../engine/plugins/restricted_importer.py"><code>restricted_importer.py:134</code></a>)
   and kept reachable; they are harmless C-extensions that cannot be
   used as escape vectors on their own.</li>
 </ul>
@@ -2788,11 +2818,12 @@ so the cache itself is clean.</p>
 attacker code could clear by importing <code>contextvars</code> and resetting it.
 The fix was two-fold: <code>contextvars</code> is now <strong>denied by the allowlist</strong>
 itself, and the gate was replaced with a process-level flag
-(<a href="../../engine/plugins/sandbox.py"><code>sandbox.py:35</code></a>) that is itself
-unreachable because importing <code>engine.plugins.sandbox</code> is blocked via
-<code>_DENIED_SUBMODULES</code>.</p>
+(<code>_ProcessSandboxFlag</code>,
+<a href="../../engine/plugins/sandbox/__init__.py"><code>sandbox/__init__.py:113</code></a>)
+that is itself unreachable because importing <code>engine.plugins.sandbox</code>
+is blocked via <code>_DENIED_SUBMODULES</code>.</p>
 <h3 id="builtins-curation">Builtins curation<a class="headerlink" href="#builtins-curation" title="Permanent link">&para;</a></h3>
-<p>Source: <a href="../../engine/plugins/allowlist.py#L227"><code>allowlist.py:227</code></a>.</p>
+<p>Source: <a href="../../engine/plugins/allowlist.py"><code>allowlist.py:333</code></a> (<code>CURATED_BUILTINS</code>).</p>
 <p><code>CURATED_BUILTINS</code> exposes a subset of <code>builtins</code> to sandboxed code.
 Removed: <code>open</code>, <code>eval</code>, <code>exec</code>, <code>compile</code>, <code>__import__</code>, <code>globals</code>,
 <code>locals</code>, <code>vars</code>, <code>dir</code>, <code>getattr</code> (replaced by a safe wrapper),
@@ -2842,7 +2873,11 @@ find a dangerous type" escape vector (gh#912).</p>
 <li>Restricted <code>getattr</code>: gh#914, gh#916</li>
 <li>Source: <a href="../../engine/plugins/allowlist.py"><code>engine/plugins/allowlist.py</code></a>,
   <a href="../../engine/plugins/restricted_importer.py"><code>engine/plugins/restricted_importer.py</code></a>,
-  <a href="../../engine/plugins/sandbox.py"><code>engine/plugins/sandbox.py</code></a></li>
+  <a href="../../engine/plugins/sandbox/__init__.py"><code>engine/plugins/sandbox/__init__.py</code></a></li>
+<li>Complemented by: <a href="../0010-static-ast-validation-toctou-loading/">ADR-0010 — Static AST validation + TOCTOU-safe
+  strategy loading</a> — the
+  parse-time validator and validate-then-exec loader that run <em>before</em>
+  the runtime hooks in this ADR ever fire</li>
 <li>Related: <a href="../../architecture/plugins/"><code>docs/architecture/plugins.md</code></a></li>
 </ul>
 

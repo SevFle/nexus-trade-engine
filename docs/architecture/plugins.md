@@ -128,11 +128,11 @@ examples):
 ## Sandboxing
 
 Strategies run inside a layered sandbox defined in
-[`engine/plugins/sandbox.py`](../../engine/plugins/sandbox.py). Four of
-five layers are implemented today; process isolation is the production
-target and is tracked as a follow-up.
+[`engine/plugins/sandbox/__init__.py`](../../engine/plugins/sandbox/__init__.py).
+Four of five layers are implemented today; process isolation is the
+production target and is tracked as a follow-up.
 
-> **Important — threat model.** Layers 1–4 are **best-effort
+> **Important — threat model.** Layers 0–4 are **best-effort
 > defense-in-depth, not a security boundary**. They narrow the
 > accidental-bug surface and raise the bar for casual misuse, but they
 > all run **in-process**, share the engine's memory and DB session,
@@ -140,18 +140,19 @@ target and is tracked as a follow-up.
 > runtime available. **Only layer 5 (process / container isolation) is
 > a real security boundary**, because it puts the strategy in a
 > separate address space with the kernel enforcing the limits. Treat
-> the four in-process layers accordingly — helpful guardrails, not
+> the in-process layers accordingly — helpful guardrails, not
 > something to stake a customer's data on.
 
 | Layer | Kind | Status | Mechanism |
 |---|---|---|---|
+| 0. Static source validation | best-effort in-process | **shipped** | [`ImportValidator`](../../engine/plugins/restricted_importer.py) walks the strategy's AST **before** compile/exec and rejects `import` of a blocked module, plus bare calls to `__import__`/`exec`/`eval`/`compile` and `importlib.import_module(…)`. An exact match in the blocked set can never be overridden by the allowlist. See [ADR-0010](../adr/0010-static-ast-validation-toctou-loading.md). |
 | 1. Import restrictions | best-effort in-process | **shipped** | Default-deny **allowlist** (`FROZEN_ALLOWED_MODULES` in [`allowlist.py`](../../engine/plugins/allowlist.py)): a strategy may import a module only if its root name is in the frozen set. Enforced by [`RestrictedImporter`](../../engine/plugins/restricted_importer.py) at both `sys.meta_path` and `builtins.__import__`. The old denylist (`DENYLIST_MODULES`) is retained as defence-in-depth and as the test-suite's escape-vector oracle, but enforcement is purely allowlist-based. Adding a module requires a security review (see [ADR-0007](../adr/0007-strategy-sandbox-allowlist-imports.md)). |
 | 2. Network whitelist | best-effort in-process | **shipped** | `SandboxedHttpClient` proxies every outbound call through an allowlist declared in the manifest (`requires_network: true` + URL prefixes). |
 | 3. Resource limits | best-effort in-process | **shipped** | `resource.setrlimit` for memory / file descriptors on Linux. |
 | 4. Filesystem isolation | best-effort in-process | **shipped** | Each evaluation runs in a fresh `tempfile.TemporaryDirectory`; the strategy only sees its own declared artifacts (read-only). |
 | 5. Process isolation | **security boundary** | **planned** | Subprocess / container per strategy, communicated with via pipes (serialized `MarketState` in, `Signal[]` out). Killed on timeout / memory pressure. |
 
-Because layers 1–4 are in-process, a malicious strategy that finds a
+Because layers 0–4 are in-process, a malicious strategy that finds a
 path past them can read environment variables, the database session,
 and the filesystem. Operators must therefore treat plugins as part of
 their trusted deployment surface today:
@@ -159,13 +160,15 @@ their trusted deployment surface today:
 - Pin plugin versions in your operator config; do not auto-update.
 - Plugins that come from third parties should be code-reviewed before
   install.
-- For untrusted strategies, **do not rely on layers 1–4**. Run them
+- For untrusted strategies, **do not rely on layers 0–4**. Run them
   in an external sandbox (container, VM) and call the engine through
   the SDK instead of loading them in-process.
 
 Layer 5 is the production architecture — see the module docstring in
-[`sandbox.py`](../../engine/plugins/sandbox.py). An ADR covering the
-final isolation choice (likely WASI for strategies, separate process
+[`sandbox/__init__.py`](../../engine/plugins/sandbox/__init__.py).
+[ADR-0010](../adr/0010-static-ast-validation-toctou-loading.md) covers
+the static-AST Layer 0 + the validate-then-exec loader; an ADR covering
+the final isolation choice (likely WASI for strategies, separate process
 for executors) is deferred until that work is sequenced.
 
 ## Where the code lives
@@ -177,9 +180,9 @@ for executors) is deferred until that work is sequenced.
 | [`engine/plugins/manifest.py`](../../engine/plugins/manifest.py) | `StrategyManifest` / `ResourceLimits` / `NetworkConfig` Pydantic schema + validation. |
 | [`engine/plugins/sdk.py`](../../engine/plugins/sdk.py) | Legacy `BaseStrategy` ABC (`on_bar` loop). |
 | [`sdk/nexus_sdk/strategy.py`](../../sdk/nexus_sdk/strategy.py) | Public `IStrategy` ABC (`evaluate` → `Signal[]`), `MarketState`, `StrategyConfig`. |
-| [`engine/plugins/sandbox.py`](../../engine/plugins/sandbox.py) | Layered strategy sandbox (see below). |
-| [`engine/plugins/restricted_importer.py`](../../engine/plugins/restricted_importer.py) | Allowlist import hook (layer 1). |
-| [`engine/plugins/allowlist.py`](../../engine/plugins/allowlist.py) | The import allowlist itself. |
+| [`engine/plugins/sandbox/__init__.py`](../../engine/plugins/sandbox/__init__.py) | Layered strategy sandbox (see below). |
+| [`engine/plugins/restricted_importer.py`](../../engine/plugins/restricted_importer.py) | Allowlist import hook (layer 1) + static `ImportValidator` AST checker (layer 0). |
+| [`engine/plugins/allowlist.py`](../../engine/plugins/allowlist.py) | The import allowlist + denylist. |
 | [`engine/plugins/sandboxed_http.py`](../../engine/plugins/sandboxed_http.py) | Network-whitelist HTTP proxy (layer 2). |
 | [`engine/plugins/scoring_executor.py`](../../engine/plugins/scoring_executor.py) | Runs `IScoringStrategy` plugins for the scoring routes. |
 | [`tests/`](../../tests/)                    | Loader + manifest tests live alongside the rest of the suite (e.g. `test_plugin_registry.py`, `test_strategies_coverage.py`). |

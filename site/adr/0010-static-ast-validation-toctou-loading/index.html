@@ -10,25 +10,31 @@
       
       
       
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/adr/0010-static-ast-validation-toctou-loading/">
       
+      
+        <link rel="prev" href="../0009-cross-replica-eventbus-bridge/">
+      
+      
+        <link rel="next" href="../template/">
       
       
         
       
       
-      <link rel="icon" href="/SevFle/nexus-trade-engine/assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Nexus Trade Engine</title>
+        <title>0010 — Static AST validation + TOCTOU-safe loading - Nexus Trade Engine</title>
       
     
     
-      <link rel="stylesheet" href="/SevFle/nexus-trade-engine/assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="/SevFle/nexus-trade-engine/assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -47,7 +53,7 @@
       
     
     
-    <script>__md_scope=new URL("/SevFle/nexus-trade-engine/",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -71,6 +77,11 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
+        
+        <a href="#adr-0010-static-ast-validation-toctou-safe-strategy-loading" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -81,7 +92,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="/SevFle/nexus-trade-engine/." title="Nexus Trade Engine" class="md-header__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
+    <a href="../.." title="Nexus Trade Engine" class="md-header__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m3.5 18.5 6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17z"/></svg>
@@ -101,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              
+              0010 — Static AST validation + TOCTOU-safe loading
             
           </span>
         </div>
@@ -219,7 +230,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="/SevFle/nexus-trade-engine/." class="md-tabs__link">
+      <a href="../.." class="md-tabs__link">
         
   
   
@@ -240,7 +251,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="/SevFle/nexus-trade-engine/architecture/" class="md-tabs__link">
+        <a href="../../architecture/" class="md-tabs__link">
           
   
   
@@ -262,7 +273,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="/SevFle/nexus-trade-engine/api-reference/" class="md-tabs__link">
+        <a href="../../api-reference/" class="md-tabs__link">
           
   
   
@@ -284,7 +295,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="/SevFle/nexus-trade-engine/development/" class="md-tabs__link">
+        <a href="../../development/" class="md-tabs__link">
           
   
   
@@ -302,11 +313,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="/SevFle/nexus-trade-engine/adr/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -328,7 +341,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="/SevFle/nexus-trade-engine/operations/slos/" class="md-tabs__link">
+        <a href="../../operations/slos/" class="md-tabs__link">
           
   
   
@@ -350,7 +363,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="/SevFle/nexus-trade-engine/observability/logging/" class="md-tabs__link">
+        <a href="../../observability/logging/" class="md-tabs__link">
           
   
   
@@ -372,7 +385,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="/SevFle/nexus-trade-engine/legal/processors/" class="md-tabs__link">
+        <a href="../../legal/processors/" class="md-tabs__link">
           
   
   
@@ -394,7 +407,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="/SevFle/nexus-trade-engine/known-limitations/" class="md-tabs__link">
+        <a href="../../known-limitations/" class="md-tabs__link">
           
   
   
@@ -430,7 +443,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="/SevFle/nexus-trade-engine/." title="Nexus Trade Engine" class="md-nav__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
+    <a href="../.." title="Nexus Trade Engine" class="md-nav__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m3.5 18.5 6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17z"/></svg>
@@ -460,7 +473,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -520,7 +533,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="/SevFle/nexus-trade-engine/architecture/" class="md-nav__link ">
+            <a href="../../architecture/" class="md-nav__link ">
               
   
   
@@ -564,7 +577,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/architecture/overview/" class="md-nav__link">
+      <a href="../../architecture/overview/" class="md-nav__link">
         
   
   
@@ -592,7 +605,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/architecture/core-domains/" class="md-nav__link">
+      <a href="../../architecture/core-domains/" class="md-nav__link">
         
   
   
@@ -620,7 +633,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/architecture/database/" class="md-nav__link">
+      <a href="../../architecture/database/" class="md-nav__link">
         
   
   
@@ -648,7 +661,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/architecture/plugins/" class="md-nav__link">
+      <a href="../../architecture/plugins/" class="md-nav__link">
         
   
   
@@ -745,7 +758,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/api-reference/" class="md-nav__link">
+      <a href="../../api-reference/" class="md-nav__link">
         
   
   
@@ -773,7 +786,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/mcp-server/" class="md-nav__link">
+      <a href="../../mcp-server/" class="md-nav__link">
         
   
   
@@ -801,7 +814,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/data-model/" class="md-nav__link">
+      <a href="../../data-model/" class="md-nav__link">
         
   
   
@@ -902,7 +915,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/development/" class="md-nav__link">
+      <a href="../../development/" class="md-nav__link">
         
   
   
@@ -930,7 +943,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/deployment/" class="md-nav__link">
+      <a href="../../deployment/" class="md-nav__link">
         
   
   
@@ -958,7 +971,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/RELEASING/" class="md-nav__link">
+      <a href="../../RELEASING/" class="md-nav__link">
         
   
   
@@ -986,7 +999,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/PLUGIN_DEV_GUIDE/" class="md-nav__link">
+      <a href="../../PLUGIN_DEV_GUIDE/" class="md-nav__link">
         
   
   
@@ -1014,7 +1027,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/contributors/" class="md-nav__link">
+      <a href="../../contributors/" class="md-nav__link">
         
   
   
@@ -1046,6 +1059,8 @@
       
   
   
+    
+  
   
   
     
@@ -1081,22 +1096,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="/SevFle/nexus-trade-engine/adr/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -1114,13 +1130,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1140,7 +1156,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/adr/0001-scaffold-tech-choices/" class="md-nav__link">
+      <a href="../0001-scaffold-tech-choices/" class="md-nav__link">
         
   
   
@@ -1168,7 +1184,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/adr/0002-auth-rbac/" class="md-nav__link">
+      <a href="../0002-auth-rbac/" class="md-nav__link">
         
   
   
@@ -1196,7 +1212,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/adr/0003-mobile-app-strategy/" class="md-nav__link">
+      <a href="../0003-mobile-app-strategy/" class="md-nav__link">
         
   
   
@@ -1224,7 +1240,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/adr/0004-task-queue-taskiq/" class="md-nav__link">
+      <a href="../0004-task-queue-taskiq/" class="md-nav__link">
         
   
   
@@ -1252,7 +1268,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/adr/0005-valkey-over-redis/" class="md-nav__link">
+      <a href="../0005-valkey-over-redis/" class="md-nav__link">
         
   
   
@@ -1280,7 +1296,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/adr/0006-bcrypt-fernet/" class="md-nav__link">
+      <a href="../0006-bcrypt-fernet/" class="md-nav__link">
         
   
   
@@ -1308,7 +1324,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/adr/0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
+      <a href="../0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
         
   
   
@@ -1336,7 +1352,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/adr/0008-pluggable-metrics-backend/" class="md-nav__link">
+      <a href="../0008-pluggable-metrics-backend/" class="md-nav__link">
         
   
   
@@ -1364,7 +1380,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/adr/0009-cross-replica-eventbus-bridge/" class="md-nav__link">
+      <a href="../0009-cross-replica-eventbus-bridge/" class="md-nav__link">
         
   
   
@@ -1389,10 +1405,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/adr/0010-static-ast-validation-toctou-loading/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0010 — Static AST validation + TOCTOU-safe loading
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1408,6 +1451,209 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#context-and-problem-statement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context and Problem Statement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-drivers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Drivers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#considered-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Considered Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-outcome" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Outcome
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision Outcome">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Details
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-validator-importvalidatorastnodevisitor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The validator — ImportValidator(ast.NodeVisitor)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-loader-validate-then-exec-the-exact-bytes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The loader — validate-then-exec the exact bytes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#relationship-to-the-runtime-hooks-adr-0007" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relationship to the runtime hooks (ADR-0007)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pros and Cons of the Options
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pros and Cons of the Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-1-runtime-only-monkeypatch-of-execevalcompile__import__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 1 — Runtime-only monkeypatch of exec/eval/compile/__import__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-2-static-validation-standard-loader" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 2 — Static validation + standard loader
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-3-static-validation-validate-then-exec-chosen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 3 — Static validation + validate-then-exec (chosen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-4-separate-process-loader" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 4 — Separate-process loader
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Links
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1420,7 +1666,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/adr/template/" class="md-nav__link">
+      <a href="../template/" class="md-nav__link">
         
   
   
@@ -1490,7 +1736,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="/SevFle/nexus-trade-engine/operations/runbooks/" class="md-nav__link ">
+            <a href="../../operations/runbooks/" class="md-nav__link ">
               
   
   
@@ -1532,7 +1778,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/operations/slos/" class="md-nav__link">
+      <a href="../../operations/slos/" class="md-nav__link">
         
   
   
@@ -1560,7 +1806,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/operations/backup-and-recovery/" class="md-nav__link">
+      <a href="../../operations/backup-and-recovery/" class="md-nav__link">
         
   
   
@@ -1588,7 +1834,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/operations/dr-drill-checklist/" class="md-nav__link">
+      <a href="../../operations/dr-drill-checklist/" class="md-nav__link">
         
   
   
@@ -1616,7 +1862,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/operations/load-testing/" class="md-nav__link">
+      <a href="../../operations/load-testing/" class="md-nav__link">
         
   
   
@@ -1716,7 +1962,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/operations/runbooks/api-availability/" class="md-nav__link">
+      <a href="../../operations/runbooks/api-availability/" class="md-nav__link">
         
   
   
@@ -1744,7 +1990,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/operations/runbooks/api-latency/" class="md-nav__link">
+      <a href="../../operations/runbooks/api-latency/" class="md-nav__link">
         
   
   
@@ -1772,7 +2018,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/operations/runbooks/auth-mfa/" class="md-nav__link">
+      <a href="../../operations/runbooks/auth-mfa/" class="md-nav__link">
         
   
   
@@ -1800,7 +2046,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/operations/runbooks/backtest-submit/" class="md-nav__link">
+      <a href="../../operations/runbooks/backtest-submit/" class="md-nav__link">
         
   
   
@@ -1828,7 +2074,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/operations/runbooks/webhook-delivery/" class="md-nav__link">
+      <a href="../../operations/runbooks/webhook-delivery/" class="md-nav__link">
         
   
   
@@ -1856,7 +2102,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/operations/runbooks/task-pipeline/" class="md-nav__link">
+      <a href="../../operations/runbooks/task-pipeline/" class="md-nav__link">
         
   
   
@@ -1884,7 +2130,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/operations/runbooks/common-issues/" class="md-nav__link">
+      <a href="../../operations/runbooks/common-issues/" class="md-nav__link">
         
   
   
@@ -1985,7 +2231,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/observability/logging/" class="md-nav__link">
+      <a href="../../observability/logging/" class="md-nav__link">
         
   
   
@@ -2078,7 +2324,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/legal/processors/" class="md-nav__link">
+      <a href="../../legal/processors/" class="md-nav__link">
         
   
   
@@ -2173,7 +2419,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/known-limitations/" class="md-nav__link">
+      <a href="../../known-limitations/" class="md-nav__link">
         
   
   
@@ -2201,7 +2447,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/SevFle/nexus-trade-engine/LAST_AUDIT/" class="md-nav__link">
+      <a href="../../LAST_AUDIT/" class="md-nav__link">
         
   
   
@@ -2246,6 +2492,199 @@
   
   
   
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#context-and-problem-statement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context and Problem Statement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-drivers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Drivers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#considered-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Considered Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-outcome" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Outcome
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision Outcome">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Details
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-validator-importvalidatorastnodevisitor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The validator — ImportValidator(ast.NodeVisitor)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-loader-validate-then-exec-the-exact-bytes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The loader — validate-then-exec the exact bytes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#relationship-to-the-runtime-hooks-adr-0007" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relationship to the runtime hooks (ADR-0007)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pros and Cons of the Options
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pros and Cons of the Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-1-runtime-only-monkeypatch-of-execevalcompile__import__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 1 — Runtime-only monkeypatch of exec/eval/compile/__import__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-2-static-validation-standard-loader" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 2 — Static validation + standard loader
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-3-static-validation-validate-then-exec-chosen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 3 — Static validation + validate-then-exec (chosen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-4-separate-process-loader" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 4 — Separate-process loader
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Links
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
   
 </nav>
                   </div>
@@ -2258,8 +2697,251 @@
               
               <article class="md-content__inner md-typeset">
                 
-  <h1>404 - Not found</h1>
+                  
 
+
+  
+  
+
+
+<h1 id="adr-0010-static-ast-validation-toctou-safe-strategy-loading">ADR-0010: Static AST validation + TOCTOU-safe strategy loading<a class="headerlink" href="#adr-0010-static-ast-validation-toctou-safe-strategy-loading" title="Permanent link">&para;</a></h1>
+<ul>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-07-07</li>
+<li><strong>Deciders</strong>: Lead maintainer + security reviewer</li>
+<li><strong>Tags</strong>: security, plugins, sandbox</li>
+</ul>
+<h2 id="context-and-problem-statement">Context and Problem Statement<a class="headerlink" href="#context-and-problem-statement" title="Permanent link">&para;</a></h2>
+<p><a href="../0007-strategy-sandbox-allowlist-imports/">ADR-0007</a> locked the import
+policy down to a default-deny <strong>allowlist</strong> enforced at <em>runtime</em> via two
+hooks (<code>sys.meta_path</code> + <code>builtins.__import__</code>). That closes the static
+<code>import</code> statement, but it leaves two residual escape classes that the
+runtime hooks alone cannot address:</p>
+<ol>
+<li>
+<p><strong>Code-execution / dynamic-import builtins.</strong> A strategy can write
+   <code>exec(payload)</code>, <code>eval(x)</code>, <code>compile(...)</code>, <code>__import__("os")</code>, or
+   <code>importlib.import_module("os")</code>. None of these go through the static
+   <code>import</code> statement the runtime hooks intercept — they construct and
+   run code objects directly, so the allowlist never sees the module
+   name being loaded. Catching them requires either intercepting the
+   builtin at runtime (fragile, easy to miss new spellings) or rejecting
+   the <em>call site</em> before the module body ever executes.</p>
+</li>
+<li>
+<p><strong>Time-of-check / time-of-use (TOCTOU) in the loader.</strong> The classic
+   <code>importlib</code> path is <em>validate, then load</em> — but
+   <code>spec.loader.exec_module(module)</code> <strong>re-reads the file from disk</strong>. An
+   attacker who can swap <code>strategy.py</code> between the validation read and
+   the exec read can get un-validated bytes executed: the validator saw
+   a clean file, the loader ran a malicious one. For untrusted plugins
+   dropped onto a shared filesystem this is a real window, however
+   narrow.</p>
+</li>
+</ol>
+<p>Both gaps were surfaced and fixed together (gh#1239, gh#1245). This ADR
+records <em>why</em> we chose static AST validation + validate-then-exec over
+the alternatives, because the mechanism is non-obvious and the two
+commits look like unrelated hardening when they are in fact one
+defense-in-depth decision.</p>
+<h2 id="decision-drivers">Decision Drivers<a class="headerlink" href="#decision-drivers" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Defence in depth, fail fast.</strong> The runtime hooks are the last line;
+  rejecting a bad strategy at <em>parse</em> time, before any of its body runs,
+  is strictly safer and has no side effects to roll back.</li>
+<li><strong>No new runtime overhead on the hot path.</strong> Validation runs once per
+  load (startup), not per <code>evaluate()</code> call.</li>
+<li><strong>Don't reinvent execution.</strong> We still want ordinary <code>importlib</code>
+  semantics for the <em>namespace</em> (<code>__file__</code>, <code>__loader__</code>, tracebacks
+  pointing at <code>strategy.py</code>); only the <em>byte-source</em> must be pinned.</li>
+</ul>
+<h2 id="considered-options">Considered Options<a class="headerlink" href="#considered-options" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Runtime-only: monkeypatch <code>exec</code>/<code>eval</code>/<code>compile</code>/<code>__import__</code>.</strong></li>
+<li><strong>Static AST validation before compile, keep the standard loader.</strong></li>
+<li><strong>Static AST validation <em>and</em> validate-then-exec the exact validated
+   bytes</strong> (compile the bytes ourselves, skip <code>exec_module</code>'s re-read).</li>
+<li><strong>Switch to a separate-process loader now</strong> (run each strategy in a
+   subprocess that reads the file).</li>
+</ol>
+<h2 id="decision-outcome">Decision Outcome<a class="headerlink" href="#decision-outcome" title="Permanent link">&para;</a></h2>
+<p>Chosen option: <strong>Option 3 — static AST validation + validate-then-exec
+the exact bytes</strong>, because it closes <em>both</em> residual classes without
+introducing process-isolation complexity (still deferred to layer 5,
+ADR-0007).</p>
+<h3 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Positive</strong> — a strategy smuggling <code>exec(payload)</code> or
+  <code>importlib.import_module('os')</code> is rejected at load time with a
+  precise <code>line N: call to forbidden builtin …</code> message, before the
+  runtime hooks fire and before the module body executes.</li>
+<li><strong>Positive</strong> — the TOCTOU window between validation and execution is
+  eliminated: the loader reads the file <strong>once</strong> (as bytes), validates
+  those bytes, then <code>compile()</code>s and <code>exec()</code>s the <em>same</em> bytes into the
+  module namespace. There is no second disk read.</li>
+<li><strong>Positive</strong> — the allowlist can never be defeated by a blocked module
+  sneaking into it: an <em>exact</em> match in the blocked set short-circuits
+  to "blocked" before the allowlist is consulted (the allowlist may only
+  permit a <em>proper submodule</em> of a blocked root, never the root itself).</li>
+<li><strong>Negative</strong> — a strategy that legitimately uses <code>eval</code> for, e.g., a
+  small expression DSL is rejected. This is intentional (request a
+  review / precompute), but it is real friction.</li>
+<li><strong>Neutral</strong> — <code>SyntaxError</code> from <code>ast.parse</code> propagates to the caller
+  rather than being swallowed; malformed source is itself a rejection,
+  and reporting it is the loader's job, not the validator's.</li>
+</ul>
+<h2 id="details">Details<a class="headerlink" href="#details" title="Permanent link">&para;</a></h2>
+<h3 id="the-validator-importvalidatorastnodevisitor">The validator — <code>ImportValidator(ast.NodeVisitor)</code><a class="headerlink" href="#the-validator-importvalidatorastnodevisitor" title="Permanent link">&para;</a></h3>
+<p>Source: <a href="../../engine/plugins/restricted_importer.py"><code>engine/plugins/restricted_importer.py</code></a>
+(<code>class ImportValidator</code>, <code>validate(source)</code>).</p>
+<p><code>ImportValidator</code> walks the parsed AST of a strategy's source <strong>before</strong>
+it is compiled/executed and records violations for code that:</p>
+<ul>
+<li>imports a module not permitted by the policy (<code>visit_Import</code>,
+  <code>visit_ImportFrom</code>); or</li>
+<li>invokes a code-execution / dynamic-import builtin (<code>visit_Call</code>).</li>
+</ul>
+<p>Module policy (<code>_module_is_blocked</code>) precedence — a <code>True</code> result
+short-circuits to "blocked":</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Case</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Exact match in the blocked set</td>
+<td><strong>Blocked.</strong> The allowlist <em>cannot</em> override an exact match — this closes the "allowlist shadows a blocked module" bypass (an <code>os</code> entry sneaking into the allowlist is still rejected).</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Proper submodule of a blocked root (<code>os.path</code> under a blocked <code>os</code>)</td>
+<td>Blocked <strong>unless</strong> the full name is explicitly in the allowlist. The allowlist therefore applies only to proper submodules of a blocked root, never to the root itself.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Otherwise</td>
+<td>Blocked iff the module's root is not in the allowlist (the ordinary allowlist gate from ADR-0007).</td>
+</tr>
+</tbody>
+</table>
+<p>Detected call sites (<code>visit_Call</code>): any bare-<code>Name</code> call to
+<code>__import__</code>, <code>exec</code>, <code>eval</code>, or <code>compile</code>, and the qualified dynamic
+import <code>importlib.import_module(...)</code>. Relative imports (<code>level &gt; 0</code>
+with no absolute module) are skipped — they resolve within the strategy
+package and carry no cross-package escape vector at this layer.</p>
+<p>The validator is <strong>stateless across runs</strong> — <code>violations</code> is reset on
+every <code>validate()</code> call — so a single instance is safe to reuse.</p>
+<h3 id="the-loader-validate-then-exec-the-exact-bytes">The loader — validate-then-exec the exact bytes<a class="headerlink" href="#the-loader-validate-then-exec-the-exact-bytes" title="Permanent link">&para;</a></h3>
+<p>Source: <a href="../../engine/plugins/registry.py"><code>engine/plugins/registry.py</code></a>
+(<code>load_strategy_class</code>).</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">module_path</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">source_bytes</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>                      <span class="c1"># single read</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">violations</span> <span class="o">=</span> <span class="n">ImportValidator</span><span class="p">(</span><span class="n">DENYLIST_MODULES</span><span class="p">)</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">source_bytes</span><span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">if</span> <span class="n">violations</span><span class="p">:</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;... rejected by import validator: </span><span class="si">{</span><span class="n">joined</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">module_from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>   <span class="c1"># populates __file__/__loader__/__spec__</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">code</span> <span class="o">=</span> <span class="nb">compile</span><span class="p">(</span><span class="n">source_bytes</span><span class="p">,</span> <span class="n">module_path</span><span class="p">,</span> <span class="s2">&quot;exec&quot;</span><span class="p">)</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">exec</span><span class="p">(</span><span class="n">code</span><span class="p">,</span> <span class="n">module</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>                      <span class="c1"># the exact validated bytes</span>
+</span></code></pre></div>
+<p><code>spec.loader.exec_module(module)</code> is <strong>deliberately avoided</strong>: it
+re-reads the file from disk, which would re-open the TOCTOU window.
+Instead the validated bytes are compiled into a code object bound to the
+module's file path (so tracebacks still point at <code>strategy.py</code>) and
+<code>exec</code>'d straight into the module's namespace. The <code>module_from_spec</code>
+call has already populated <code>__file__</code> / <code>__loader__</code> / <code>__spec__</code>, so
+the module looks identical to one loaded the standard way — only the
+byte-source is pinned.</p>
+<p>This is a deliberate, audited <code>exec</code> call site (<code># noqa: S102</code>); the
+<code>S102</code> (flake8-bandit "use of exec") suppression is documented inline
+precisely because removing the <code>exec</code> would require <code>exec_module</code>, which
+re-opens the gap this code closes.</p>
+<h3 id="relationship-to-the-runtime-hooks-adr-0007">Relationship to the runtime hooks (ADR-0007)<a class="headerlink" href="#relationship-to-the-runtime-hooks-adr-0007" title="Permanent link">&para;</a></h3>
+<p>Layering, earliest to latest:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>strategy.py on disk
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>   │
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>   ▼  read bytes ONCE
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>ImportValidator.validate(bytes)   ←── ADR-0010 (this): fail fast, side-effect free
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>   │  (rejected here ⇒ ImportError, module body never runs)
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>   ▼  compile + exec the SAME bytes into the module namespace
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>module body executes
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>   │
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>   ▼  every `import X` / `__import__(X)`
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>RestrictedImporter (meta_path + builtins.__import__)  ←── ADR-0007: runtime allowlist
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>   │  (rejected here ⇒ ImportError at the import site)
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>   ▼
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>strategy.evaluate(...) runs under layers 2–4 (network/fs/resource)
+</span></code></pre></div>
+<p>The static validator is the outer ring; the runtime hooks are the
+inner ring. A strategy must pass <strong>both</strong> to run. Neither replaces
+layer 5 (process/container isolation), which remains the only true
+security boundary — see the threat-model note in
+<a href="../../architecture/plugins/#sandboxing"><code>architecture/plugins.md</code></a>.</p>
+<h2 id="pros-and-cons-of-the-options">Pros and Cons of the Options<a class="headerlink" href="#pros-and-cons-of-the-options" title="Permanent link">&para;</a></h2>
+<h3 id="option-1-runtime-only-monkeypatch-of-execevalcompile__import__">Option 1 — Runtime-only monkeypatch of <code>exec</code>/<code>eval</code>/<code>compile</code>/<code>__import__</code><a class="headerlink" href="#option-1-runtime-only-monkeypatch-of-execevalcompile__import__" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Catches dynamically-constructed code at the moment of
+  execution.</li>
+<li><strong>Cons:</strong> Fragile — every new spelling (<code>types.FunctionType(code, …)</code>,
+  <code>pickle</code>, <code>marshal</code>) needs a fresh patch; the module body still runs
+  up to the dangerous call, so side effects before the call are not
+  prevented; high runtime overhead on the hot path.</li>
+</ul>
+<h3 id="option-2-static-validation-standard-loader">Option 2 — Static validation + standard loader<a class="headerlink" href="#option-2-static-validation-standard-loader" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Fails fast on the call-site class; no TOCTOU concern for
+  the <em>validator</em>, which has already parsed its input.</li>
+<li><strong>Cons:</strong> Leaves the loader TOCTOU gap — the validated file is not the
+  file that gets executed, because <code>exec_module</code> re-reads.</li>
+</ul>
+<h3 id="option-3-static-validation-validate-then-exec-chosen">Option 3 — Static validation + validate-then-exec (chosen)<a class="headerlink" href="#option-3-static-validation-validate-then-exec-chosen" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Closes both the call-site class and the loader TOCTOU gap;
+  zero hot-path overhead; module namespace looks standard.</li>
+<li><strong>Cons:</strong> Requires the deliberate <code>exec</code> (suppressed with an inline
+  justification); strategy authors lose <code>eval</code>/<code>exec</code>/<code>compile</code>/dynamic
+  import as legitimate tools.</li>
+</ul>
+<h3 id="option-4-separate-process-loader">Option 4 — Separate-process loader<a class="headerlink" href="#option-4-separate-process-loader" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Strongest; the host never imports the strategy at all, so
+  the gap is structurally absent.</li>
+<li><strong>Cons:</strong> Premature — layer 5 (ADR-0007) is the production target and
+  is not yet built. Building a loader subprocess now would duplicate
+  that boundary and be thrown away.</li>
+</ul>
+<h2 id="links">Links<a class="headerlink" href="#links" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Block unsafe AST nodes + fix import bypass: gh#1239</li>
+<li>Close TOCTOU race in plugin loading: gh#1245</li>
+<li>Source:
+  <a href="../../engine/plugins/restricted_importer.py"><code>engine/plugins/restricted_importer.py</code></a>
+  (<code>ImportValidator</code>),
+  <a href="../../engine/plugins/registry.py"><code>engine/plugins/registry.py</code></a>
+  (<code>load_strategy_class</code>)</li>
+<li>Supersedes/extends: <a href="../0007-strategy-sandbox-allowlist-imports/">ADR-0007</a>
+  (runtime allowlist) — ADR-0007 remains Accepted; this ADR is the
+  complementary outer ring.</li>
+<li>Related: <a href="../../architecture/plugins/"><code>docs/architecture/plugins.md</code></a></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
               </article>
             </div>
           
@@ -2279,6 +2961,44 @@
       
         <footer class="md-footer">
   
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../0009-cross-replica-eventbus-bridge/" class="md-footer__link md-footer__link--prev" aria-label="Previous: 0009 — Cross-replica WebSocket event bridge">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                0009 — Cross-replica WebSocket event bridge
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../template/" class="md-footer__link md-footer__link--next" aria-label="Next: ADR template">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                ADR template
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
     
   
   <div class="md-footer-meta md-typeset">
@@ -2324,10 +3044,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "/SevFle/nexus-trade-engine/", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "/SevFle/nexus-trade-engine/assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="/SevFle/nexus-trade-engine/assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>

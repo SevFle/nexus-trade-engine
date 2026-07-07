@@ -1204,6 +1204,8 @@
       
         
       
+        
+      
     
     
     
@@ -1499,6 +1501,34 @@
     
   
     0009 — Cross-replica WebSocket event bridge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0010-static-ast-validation-toctou-loading/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0010 — Static AST validation + TOCTOU-safe loading
   
 
     
@@ -2583,11 +2613,11 @@ examples):</p>
 </ol>
 <h2 id="sandboxing">Sandboxing<a class="headerlink" href="#sandboxing" title="Permanent link">&para;</a></h2>
 <p>Strategies run inside a layered sandbox defined in
-<a href="../../engine/plugins/sandbox.py"><code>engine/plugins/sandbox.py</code></a>. Four of
-five layers are implemented today; process isolation is the production
-target and is tracked as a follow-up.</p>
+<a href="../../engine/plugins/sandbox/__init__.py"><code>engine/plugins/sandbox/__init__.py</code></a>.
+Four of five layers are implemented today; process isolation is the
+production target and is tracked as a follow-up.</p>
 <blockquote>
-<p><strong>Important — threat model.</strong> Layers 1–4 are <strong>best-effort
+<p><strong>Important — threat model.</strong> Layers 0–4 are <strong>best-effort
 defense-in-depth, not a security boundary</strong>. They narrow the
 accidental-bug surface and raise the bar for casual misuse, but they
 all run <strong>in-process</strong>, share the engine's memory and DB session,
@@ -2595,7 +2625,7 @@ and can be defeated by a determined attacker with the full Python
 runtime available. <strong>Only layer 5 (process / container isolation) is
 a real security boundary</strong>, because it puts the strategy in a
 separate address space with the kernel enforcing the limits. Treat
-the four in-process layers accordingly — helpful guardrails, not
+the in-process layers accordingly — helpful guardrails, not
 something to stake a customer's data on.</p>
 </blockquote>
 <table>
@@ -2608,6 +2638,12 @@ something to stake a customer's data on.</p>
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>0. Static source validation</td>
+<td>best-effort in-process</td>
+<td><strong>shipped</strong></td>
+<td><a href="../../engine/plugins/restricted_importer.py"><code>ImportValidator</code></a> walks the strategy's AST <strong>before</strong> compile/exec and rejects <code>import</code> of a blocked module, plus bare calls to <code>__import__</code>/<code>exec</code>/<code>eval</code>/<code>compile</code> and <code>importlib.import_module(…)</code>. An exact match in the blocked set can never be overridden by the allowlist. See <a href="../../adr/0010-static-ast-validation-toctou-loading/">ADR-0010</a>.</td>
+</tr>
 <tr>
 <td>1. Import restrictions</td>
 <td>best-effort in-process</td>
@@ -2640,7 +2676,7 @@ something to stake a customer's data on.</p>
 </tr>
 </tbody>
 </table>
-<p>Because layers 1–4 are in-process, a malicious strategy that finds a
+<p>Because layers 0–4 are in-process, a malicious strategy that finds a
 path past them can read environment variables, the database session,
 and the filesystem. Operators must therefore treat plugins as part of
 their trusted deployment surface today:</p>
@@ -2648,13 +2684,15 @@ their trusted deployment surface today:</p>
 <li>Pin plugin versions in your operator config; do not auto-update.</li>
 <li>Plugins that come from third parties should be code-reviewed before
   install.</li>
-<li>For untrusted strategies, <strong>do not rely on layers 1–4</strong>. Run them
+<li>For untrusted strategies, <strong>do not rely on layers 0–4</strong>. Run them
   in an external sandbox (container, VM) and call the engine through
   the SDK instead of loading them in-process.</li>
 </ul>
 <p>Layer 5 is the production architecture — see the module docstring in
-<a href="../../engine/plugins/sandbox.py"><code>sandbox.py</code></a>. An ADR covering the
-final isolation choice (likely WASI for strategies, separate process
+<a href="../../engine/plugins/sandbox/__init__.py"><code>sandbox/__init__.py</code></a>.
+<a href="../../adr/0010-static-ast-validation-toctou-loading/">ADR-0010</a> covers
+the static-AST Layer 0 + the validate-then-exec loader; an ADR covering
+the final isolation choice (likely WASI for strategies, separate process
 for executors) is deferred until that work is sequenced.</p>
 <h2 id="where-the-code-lives">Where the code lives<a class="headerlink" href="#where-the-code-lives" title="Permanent link">&para;</a></h2>
 <table>
@@ -2686,16 +2724,16 @@ for executors) is deferred until that work is sequenced.</p>
 <td>Public <code>IStrategy</code> ABC (<code>evaluate</code> → <code>Signal[]</code>), <code>MarketState</code>, <code>StrategyConfig</code>.</td>
 </tr>
 <tr>
-<td><a href="../../engine/plugins/sandbox.py"><code>engine/plugins/sandbox.py</code></a></td>
+<td><a href="../../engine/plugins/sandbox/__init__.py"><code>engine/plugins/sandbox/__init__.py</code></a></td>
 <td>Layered strategy sandbox (see below).</td>
 </tr>
 <tr>
 <td><a href="../../engine/plugins/restricted_importer.py"><code>engine/plugins/restricted_importer.py</code></a></td>
-<td>Allowlist import hook (layer 1).</td>
+<td>Allowlist import hook (layer 1) + static <code>ImportValidator</code> AST checker (layer 0).</td>
 </tr>
 <tr>
 <td><a href="../../engine/plugins/allowlist.py"><code>engine/plugins/allowlist.py</code></a></td>
-<td>The import allowlist itself.</td>
+<td>The import allowlist + denylist.</td>
 </tr>
 <tr>
 <td><a href="../../engine/plugins/sandboxed_http.py"><code>engine/plugins/sandboxed_http.py</code></a></td>
