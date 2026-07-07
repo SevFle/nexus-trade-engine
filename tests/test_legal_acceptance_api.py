@@ -7,6 +7,7 @@ store so there is zero cross-test state and no DB dependency.
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import uuid
 from collections.abc import AsyncIterator
@@ -207,7 +208,9 @@ class TestAcceptEndpoint:
         parsed = datetime.fromisoformat(acceptance["accepted_at"])
         assert parsed.tzinfo is not None
         # The store actually holds the record for this user.
-        assert store.get(str(user.id)).document_version == DEFAULT_VERSION
+        stored = await store.get(str(user.id))
+        assert stored is not None
+        assert stored.document_version == DEFAULT_VERSION
 
     async def test_rejects_mismatched_version(
         self, store: InMemoryAcceptanceStore, client_factory, user: User
@@ -302,61 +305,60 @@ class TestStatusEndpoint:
 
 
 class TestInMemoryAcceptanceStore:
-    def test_record_and_get(self, store: InMemoryAcceptanceStore) -> None:
-        acceptance = store.record("user-1", "1.0.0")
+    async def test_record_and_get(self, store: InMemoryAcceptanceStore) -> None:
+        acceptance = await store.record("user-1", "1.0.0")
         assert acceptance.user_id == "user-1"
         assert acceptance.document_version == "1.0.0"
-        got = store.get("user-1")
+        got = await store.get("user-1")
         assert got is not None
         assert got.document_version == "1.0.0"
 
-    def test_get_missing_returns_none(self, store: InMemoryAcceptanceStore) -> None:
-        assert store.get("nobody") is None
+    async def test_get_missing_returns_none(self, store: InMemoryAcceptanceStore) -> None:
+        assert await store.get("nobody") is None
 
-    def test_get_returns_defensive_copy(self, store: InMemoryAcceptanceStore) -> None:
-        store.record("user-1", "1.0.0")
-        got = store.get("user-1")
+    async def test_get_returns_defensive_copy(self, store: InMemoryAcceptanceStore) -> None:
+        await store.record("user-1", "1.0.0")
+        got = await store.get("user-1")
         assert got is not None
         got.document_version = "tampered"
         # Internal state is untouched.
-        again = store.get("user-1")
+        again = await store.get("user-1")
         assert again is not None
         assert again.document_version == "1.0.0"
 
-    def test_record_overwrites_latest(self, store: InMemoryAcceptanceStore) -> None:
-        store.record("user-1", "1.0.0")
-        store.record("user-1", "2.0.0")
-        got = store.get("user-1")
+    async def test_record_overwrites_latest(self, store: InMemoryAcceptanceStore) -> None:
+        await store.record("user-1", "1.0.0")
+        await store.record("user-1", "2.0.0")
+        got = await store.get("user-1")
         assert got is not None
         assert got.document_version == "2.0.0"
 
-    def test_clear(self, store: InMemoryAcceptanceStore) -> None:
-        store.record("user-1", "1.0.0")
-        store.clear("user-1")
-        assert store.get("user-1") is None
+    async def test_clear(self, store: InMemoryAcceptanceStore) -> None:
+        await store.record("user-1", "1.0.0")
+        await store.clear("user-1")
+        assert await store.get("user-1") is None
         # Clearing a missing user is a no-op.
-        store.clear("never-existed")
+        await store.clear("never-existed")
 
-    def test_reset(self, store: InMemoryAcceptanceStore) -> None:
-        store.record("user-1", "1.0.0")
-        store.record("user-2", "1.0.0")
-        store.reset()
-        assert store.get("user-1") is None
-        assert store.get("user-2") is None
+    async def test_reset(self, store: InMemoryAcceptanceStore) -> None:
+        await store.record("user-1", "1.0.0")
+        await store.record("user-2", "1.0.0")
+        await store.reset()
+        assert await store.get("user-1") is None
+        assert await store.get("user-2") is None
 
-    def test_thread_safe_concurrent_records(self, store: InMemoryAcceptanceStore) -> None:
-        import threading
+    async def test_concurrent_records_are_serialised(
+        self, store: InMemoryAcceptanceStore
+    ) -> None:
+        # The store is guarded by an ``asyncio.Lock``; many concurrent
+        # coroutines recording distinct users must all land safely without
+        # dropping or corrupting entries.
+        async def _write(uid: int) -> None:
+            await store.record(f"user-{uid}", "1.0.0")
 
-        def _write(uid: int) -> None:
-            store.record(f"user-{uid}", "1.0.0")
-
-        threads = [threading.Thread(target=_write, args=(i,)) for i in range(50)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
+        await asyncio.gather(*(_write(i) for i in range(50)))
         for i in range(50):
-            assert store.get(f"user-{i}") is not None
+            assert await store.get(f"user-{i}") is not None
 
 
 class TestLegalAcceptanceModel:

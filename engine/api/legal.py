@@ -23,7 +23,7 @@ in a store that satisfies :class:`AcceptanceStore` and override the
 
 from __future__ import annotations
 
-import threading
+import asyncio
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol
 
@@ -110,53 +110,58 @@ class AcceptanceStore(Protocol):
     everything in process memory. A SQLAlchemy-backed store can implement this
     protocol and be returned from :func:`get_acceptance_store` without
     changing any route or dependency code.
+
+    All methods are coroutines so the store can use an :class:`asyncio.Lock`
+    for safe serialisation within the request-handling event loop.
     """
 
-    def record(self, user_id: str, document_version: str) -> LegalAcceptance: ...
+    async def record(self, user_id: str, document_version: str) -> LegalAcceptance: ...
 
-    def get(self, user_id: str) -> LegalAcceptance | None: ...
+    async def get(self, user_id: str) -> LegalAcceptance | None: ...
 
-    def clear(self, user_id: str) -> None: ...
+    async def clear(self, user_id: str) -> None: ...
 
-    def reset(self) -> None: ...
+    async def reset(self) -> None: ...
 
 
 class InMemoryAcceptanceStore:
-    """Thread-safe dict-backed acceptance store.
+    """Async-safe dict-backed acceptance store.
 
     Keyed by ``user_id``; only the latest acceptance per user is retained,
     which mirrors the semantics of the dependency (only the latest version
-    matters for gating).
+    matters for gating). All mutations and reads are serialised through an
+    :class:`asyncio.Lock` so the store is safe to use from concurrent
+    coroutine request handlers sharing one event loop.
     """
 
     def __init__(self) -> None:
         self._data: dict[str, LegalAcceptance] = {}
-        self._lock = threading.Lock()
+        self._lock = asyncio.Lock()
 
-    def record(self, user_id: str, document_version: str) -> LegalAcceptance:
+    async def record(self, user_id: str, document_version: str) -> LegalAcceptance:
         acceptance = LegalAcceptance(
             user_id=user_id,
             document_version=document_version,
             accepted_at=_now(),
         )
-        with self._lock:
+        async with self._lock:
             self._data[user_id] = acceptance
         return acceptance
 
-    def get(self, user_id: str) -> LegalAcceptance | None:
-        with self._lock:
+    async def get(self, user_id: str) -> LegalAcceptance | None:
+        async with self._lock:
             # Return a defensive copy so callers cannot mutate internal state.
             stored = self._data.get(user_id)
             if stored is None:
                 return None
             return stored.model_copy(deep=True)
 
-    def clear(self, user_id: str) -> None:
-        with self._lock:
+    async def clear(self, user_id: str) -> None:
+        async with self._lock:
             self._data.pop(user_id, None)
 
-    def reset(self) -> None:
-        with self._lock:
+    async def reset(self) -> None:
+        async with self._lock:
             self._data.clear()
 
 
@@ -201,7 +206,7 @@ async def require_legal_acceptance(
     routes can inspect the accepted version without re-querying the store.
     """
     current_version = current_legal_version()
-    latest = store.get(str(user.id))
+    latest = await store.get(str(user.id))
 
     if _is_currently_accepted(latest, current_version):
         # ``_is_currently_accepted`` guarantees ``latest`` is not None here.
@@ -255,7 +260,7 @@ async def accept_legal_document(
             },
         )
 
-    acceptance = store.record(str(user.id), body.document_version)
+    acceptance = await store.record(str(user.id), body.document_version)
     logger.info(
         "legal.acceptance_recorded",
         user_id=str(user.id),
@@ -276,7 +281,7 @@ async def get_legal_status(
     ``needs_acceptance=True``.
     """
     current_version = current_legal_version()
-    latest = store.get(str(user.id))
+    latest = await store.get(str(user.id))
     accepted = _is_currently_accepted(latest, current_version)
     return AcceptStatusResponse(
         accepted=accepted,
