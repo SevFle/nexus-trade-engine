@@ -88,3 +88,35 @@ def setup_logging() -> None:
     root_logger.handlers.clear()
     root_logger.addHandler(handler)
     root_logger.setLevel(settings.log_level)
+
+
+def configure_logging() -> None:
+    """Configure structlog-based structured logging.
+
+    This is the canonical public entry point referenced by the app
+    startup wiring (see ``engine.app``). It configures structlog with:
+
+      * a JSON renderer in production / when ``log_format == "json"``
+        (a human-readable ``ConsoleRenderer`` otherwise),
+      * an ISO-8601 UTC timestamper (``timestamp`` key),
+      * a correlation-id / request-id / span-id merge processor that pulls
+        from the per-request :mod:`contextvars` context, so every record
+        emitted inside a request is automatically correlated,
+      * service metadata (``service`` / ``env`` / ``version``),
+      * secret redaction, and
+      * a log level read from the ``NEXUS_LOG_LEVEL`` env var.
+
+    Idempotent and safe to call on every app startup.
+    """
+    setup_logging()
+
+
+def get_logger(name: str | None = None):
+    """Return a structlog logger bound to the current correlation context.
+
+    Prefer this over ``structlog.get_logger()`` so there is a single import
+    site for observability. The returned logger automatically includes the
+    correlation / request / span ids when emitted within a request handled
+    by :class:`CorrelationIdMiddleware`.
+    """
+    return structlog.get_logger(name) if name else structlog.get_logger()
