@@ -10,6 +10,12 @@ from engine.portfolio.multi_strategy import (
     PortfolioEvaluation,
     SignalMergeMode,
 )
+from engine.portfolio.rebalancer import (
+    PortfolioRebalancer,
+    PortfolioRebalancerError,
+    RebalanceAction,
+    RebalanceOrder,
+)
 
 __all__ = [
     "CapitalAllocation",
@@ -17,5 +23,9 @@ __all__ = [
     "MultiStrategyPortfolio",
     "MultiStrategyPortfolioError",
     "PortfolioEvaluation",
+    "PortfolioRebalancer",
+    "PortfolioRebalancerError",
+    "RebalanceAction",
+    "RebalanceOrder",
     "SignalMergeMode",
 ]
