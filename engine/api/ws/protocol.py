@@ -103,6 +103,10 @@ WS_CLOSE_SERVER_ERROR = 1011
 WS_CLOSE_AUTH_INVALID = 4401
 WS_CLOSE_AUTH_TIMEOUT = 4402
 WS_CLOSE_TOKEN_EXPIRED = 4403
+# Mirrors HTTP 403 — token decoded but lacks required scope.
+WS_CLOSE_AUTH_FORBIDDEN = 4404
+# Mirrors HTTP 451 — pending legal re-acceptance blocks the session.
+WS_CLOSE_LEGAL_REACCEPT = 4451
 
 
 def parse_inbound(raw) -> tuple:
