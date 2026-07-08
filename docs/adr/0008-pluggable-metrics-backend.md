@@ -67,7 +67,7 @@ class MetricsBackend(Protocol):
   costs nothing.
 - `set_metrics(backend)` swaps the singleton under a lock. The app
   lifespan calls `set_metrics(PrometheusBackend())`
-  ([`app.py:145`](../../engine/app.py#L145)); tests call
+  ([`app.py:156`](../../engine/app.py#L156)); tests call
   `set_metrics(RecordingBackend())` in a fixture.
 - Call sites resolve lazily: `get_metrics().counter("foo", tags=…)`.
   Lazy resolution matters because the `EventBus` is constructed before
@@ -155,7 +155,7 @@ Design choices in the renderer:
 - Original issue: gh#34
 - Source: [`engine/observability/metrics.py`](../../engine/observability/metrics.py),
   [`engine/observability/prometheus.py`](../../engine/observability/prometheus.py)
-- Wiring: [`engine/app.py:145`](../../engine/app.py) (`set_metrics(PrometheusBackend())`)
+- Wiring: [`engine/app.py:156`](../../engine/app.py) (`set_metrics(PrometheusBackend())`)
 - Related: [`docs/operations/slos.md`](../operations/slos.md),
   [`docs/observability/logging.md`](../observability/logging.md)
 - Known gap: [`docs/known-limitations.md`](../known-limitations.md)
