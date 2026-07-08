@@ -39,6 +39,16 @@ from jwt.exceptions import (
     InvalidTokenError as PyJWTInvalidTokenError,
 )
 
+from engine.auth.base import (
+    InvalidTokenError as _InvalidTokenErrorBase,
+)
+from engine.auth.base import (
+    OAuthError,
+)
+from engine.auth.base import (
+    TokenExchangeError as _TokenExchangeErrorBase,
+)
+
 logger = structlog.get_logger()
 
 # --- Public endpoints -------------------------------------------------------
@@ -66,18 +76,42 @@ _REQUIRED_ID_TOKEN_CLAIMS = ("iss", "aud", "exp", "sub")
 
 
 # --- Exceptions -------------------------------------------------------------
-class GoogleOAuthError(Exception):
-    """Base class for every error raised by the Google OAuth2 provider."""
+class GoogleOAuthError(OAuthError):
+    """Base class for every error raised by the Google OAuth2 provider.
+
+    Subclasses :class:`engine.auth.base.OAuthError` so a single
+    ``except OAuthError`` catches Google-specific failures too.
+    """
 
 
-class InvalidTokenError(GoogleOAuthError):
+class InvalidTokenError(GoogleOAuthError, _InvalidTokenErrorBase):
     """Raised when an ID token fails verification (signature, issuer,
-    audience, expiry, ``alg=none``, ...)."""
+    audience, expiry, ``alg=none``, ...).
+
+    Also subclasses the shared :class:`engine.auth.base.InvalidTokenError` so
+    callers can catch the base to handle invalid tokens from *any* provider.
+    Exported as :class:`GoogleInvalidTokenError` from
+    :mod:`engine.auth` for callers that need the Google-specific type.
+    """
 
 
-class TokenExchangeError(GoogleOAuthError):
+# Provider-specific alias used by the package-level registry/exports so the
+# Google variant stays distinguishable from the GitHub one.
+GoogleInvalidTokenError = InvalidTokenError
+
+
+class TokenExchangeError(GoogleOAuthError, _TokenExchangeErrorBase):
     """Raised when the authorization-code -> token exchange fails (network
-    error or non-2xx response from the token endpoint)."""
+    error or non-2xx response from the token endpoint).
+
+    Also subclasses the shared :class:`engine.auth.base.TokenExchangeError` so
+    callers can catch the base to handle exchange failures from *any*
+    provider.
+    """
+
+
+# Provider-specific alias used by the package-level registry/exports.
+GoogleTokenExchangeError = TokenExchangeError
 
 
 # --- Data classes -----------------------------------------------------------
