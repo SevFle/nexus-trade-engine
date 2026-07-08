@@ -74,6 +74,17 @@ class RebalanceAction(StrEnum):
 # book without suppressing a real sub-cent adjustment.
 _ORDER_EPSILON = 1e-9
 
+# Tolerance applied at the drift threshold boundary in
+# :meth:`needs_rebalance`. Drift is computed from differences of
+# IEEE-754 doubles, so a value that is mathematically *equal* to the
+# threshold (e.g. ``0.55 - 0.50 == 0.05``) can surface as
+# ``0.05000000000000004`` and spuriously trip a rebalance. Absorbing this
+# dust — using the same epsilon family as :data:`_ORDER_EPSILON` — keeps
+# the strict ``>`` semantics (a drift genuinely beyond the threshold still
+# trips) while honouring the "exactly-on-threshold is within tolerance"
+# contract documented on :meth:`needs_rebalance`.
+_DRIFT_EPSILON = 1e-9
+
 # Default drift threshold (5%). A strategy whose |current - target| weight
 # exceeds this trips :meth:`needs_rebalance`.
 _DEFAULT_THRESHOLD = 0.05
@@ -141,10 +152,16 @@ def _clean_weights(raw: dict[str, Any], label: str) -> dict[str, float]:
     for sid, w in raw.items():
         if not isinstance(sid, str) or not sid.strip():
             raise PortfolioRebalancerError(f"{label} keys must be non-empty strings, got {sid!r}")
-        cleaned[sid] = _finite(w, f"{label}[{sid!r}]")
-        if cleaned[sid] < 0.0:
+        # Normalise the key so leading/trailing whitespace (e.g. " a ") is
+        # not silently retained — an unstripped key would defeat downstream
+        # lookups, which query by the bare id. A separate local keeps the
+        # original ``sid`` untouched (PLW2901) while still stripping it for
+        # the stored key and error messages.
+        key = sid.strip()
+        cleaned[key] = _finite(w, f"{label}[{key!r}]")
+        if cleaned[key] < 0.0:
             raise PortfolioRebalancerError(
-                f"{label}[{sid!r}] must be non-negative, got {cleaned[sid]}"
+                f"{label}[{key!r}] must be non-negative, got {cleaned[key]}"
             )
     return cleaned
 
@@ -333,7 +350,11 @@ class PortfolioRebalancer:
         """
         if self._total_capital <= 0.0:
             return False
-        return self.max_drift() > self._threshold
+        # Strict ``>`` (an exactly-on-threshold portfolio does not trip),
+        # widened by :data:`_DRIFT_EPSILON` so float dust in the computed
+        # drift cannot turn an at-threshold state into a perpetual
+        # rebalance. See :data:`_DRIFT_EPSILON` for the rationale.
+        return self.max_drift() > self._threshold + _DRIFT_EPSILON
 
     # -- order generation ---------------------------------------------
 

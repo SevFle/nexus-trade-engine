@@ -455,6 +455,71 @@ class TestExtractScopes:
 
 
 # ---------------------------------------------------------------------------
+# events.py import contract — regression guard for the conftest ImportError
+# ---------------------------------------------------------------------------
+
+
+class TestEventsScopeImportContract:
+    """Pin the import path that ``engine.api.ws.events`` relies on.
+
+    The events endpoint derives scopes via ``extract_scopes`` from
+    :mod:`engine.api.ws.auth`. A previous revision imported a non-existent
+    ``_extract_scopes``, which made ``conftest`` (and therefore the whole
+    suite) uncollectable. These tests fail fast at import time should the
+    symbol be renamed/removed again.
+    """
+
+    def test_extract_scopes_is_importable_from_auth(self):
+        from engine.api.ws import auth
+
+        assert hasattr(auth, "extract_scopes")
+        assert callable(auth.extract_scopes)
+        # The stale private alias must NOT have crept back.
+        assert not hasattr(auth, "_extract_scopes")
+
+    def test_events_module_imports_cleanly(self):
+        # Importing the events module exercises the auth import line; if the
+        # symbol path regresses this raises ImportError (collection failure).
+        from engine.api.ws import events  # noqa: F401
+
+    def test_events_module_uses_extract_scopes(self):
+        import inspect
+
+        from engine.api.ws import events
+
+        # The events module must reference the public ``extract_scopes``
+        # symbol (not the old private ``_extract_scopes``) in source.
+        source = inspect.getsource(events)
+        assert "extract_scopes" in source
+        assert "_extract_scopes" not in source
+
+    def test_validate_session_token_derives_scopes(self):
+        # End-to-end check: a decoded token with a role flows through to the
+        # AuthResult.scopes produced by ``_validate_session_token``.
+        from engine.api.ws import events
+
+        token_data = {"sub": "u1", "role": "admin", "type": "access"}
+        with patch("engine.api.ws.events.decode_token", return_value=token_data):
+            # The fake websocket only needs ``query_params`` for token reading.
+            ws = _FakeWSForScope(token="jwt")
+            result = events._validate_session_token(ws)
+        assert result is not None
+        assert result.user_id == "u1"
+        assert "read:portfolio:all" in result.scopes
+
+
+@dataclass
+class _FakeWSForScope:
+    """Minimal WS double exposing only ``query_params`` for token reading."""
+
+    token: str
+
+    @property
+    def query_params(self) -> dict[str, str]:
+        return {"token": self.token}
+
+
+# ---------------------------------------------------------------------------
 # auth.py — _hash_subject
 # ---------------------------------------------------------------------------
 
