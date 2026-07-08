@@ -254,10 +254,14 @@ Requires legal acceptance.
 ## Reference
 
 `/api/v1/reference/*`. Source: [`routes/reference.py`](../engine/api/routes/reference.py).
+Neither route is DB-backed; both are intentionally cheap so the k6
+baseline load test (`tests/load/api-baseline.js`) and the frontend venue
+picker stay well inside the latency budget.
 
-| Method | Path | Notes |
-|---|---|---|
-| GET | `/api/v1/reference/suggest?q=&limit=&asset_class=` | Typeahead. Tries the local `SearchIndex` first (seeded at startup), then falls through to the Yahoo Finance search API. Caps `limit` at 50; rejects empty / oversize `q`. |
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/v1/reference/suggest?q=&limit=&asset_class=` | any | Typeahead. Tries the local `SearchIndex` first (seeded at startup), then falls through to the Yahoo Finance search API. Caps `limit` at 50; rejects empty / oversize `q`. |
+| GET | `/api/v1/reference/exchanges` | any | Static, fully-cached list of supported trading venues (`{mic, name, country, currency}`). Never touches the DB or network. Powers the frontend venue picker and the k6 baseline load test. |
 
 ## Market data
 
@@ -421,6 +425,31 @@ the `EventBus` itself publishes over Redis/Valkey pub/sub, events
 published on **any** replica reach local WebSocket connections on
 **every** replica. The `ConnectionManager` (the live socket objects) is
 still per-process, but event distribution is cross-replica.
+
+### `/ws/events` — pre-authenticated event stream
+
+A **second** WebSocket endpoint, `WS /api/v1/ws/events`
+([`ws/events.py`](../engine/api/ws/events.py), the SEV-275 follow-up),
+is router-mounted but differs from `/ws` in one important way: it
+validates the JWT **before** `ws.accept()`, so a bad or missing token
+rejects the HTTP upgrade itself rather than tearing down an open
+socket. The token is read from the `token` (or `session_token`) query
+param — there is no in-band `auth` message window here.
+
+| Close code | Meaning |
+|---|---|
+| `4401` | token missing / invalid / expired — handshake rejected before upgrade. |
+| `1011` | endpoint reached before its subsystem was initialised ("server not ready"). |
+
+> ⚠️ **Not yet wired in production.** `init_ws_events` is invoked only
+> by the test suite ([`tests/test_ws_events_endpoint.py`](../tests/test_ws_events_endpoint.py));
+> it is **not** called from the [`create_app`](../engine/app.py) lifespan
+> (only `init_ws` for `/ws` is). In a running server every `/ws/events`
+> connection is therefore closed with code `1011` ("server not ready").
+> See [known-limitations.md](known-limitations.md#wsevents-not-wired). The
+> wire protocol (subscribe / unsubscribe / ping, the channels table, and
+> the role→scope mapping above) is identical to `/ws`, so once the init
+> call is added the surface works unchanged.
 
 ## Errors
 

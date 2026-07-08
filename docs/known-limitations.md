@@ -229,6 +229,49 @@ read-only file.
 
 ---
 
+<a id="wsevents-not-wired"></a>
+## P1 — `/ws/events` endpoint is mounted but not wired
+
+**Where**: [`engine/api/ws/events.py`](../engine/api/ws/events.py)
+(`init_ws_events`) vs the [`create_app` lifespan](../engine/app.py).
+
+A second WebSocket entrypoint — `WS /api/v1/ws/events`, the SEV-275
+follow-up — is registered in [`engine/api/router.py`](../engine/api/router.py)
+alongside `/ws`. Unlike `/ws`, it authenticates the JWT **before**
+`ws.accept()` (token from a `?token=` / `?session_token=` query param),
+so a bad token rejects the HTTP upgrade with close code `4401` instead of
+tearing down an open socket.
+
+The catch: `init_ws_events(manager, …)` — which installs the
+`ConnectionManager` / `ChannelResolver` / `EventBusBridge` the endpoint
+needs and captures the running loop — is **never called from the
+`create_app` lifespan**; only `init_ws(ws_manager, …)` (for `/ws`) is.
+So the `/ws/events` handler hits its `if _state.manager is None …` guard
+on every connection and closes with code `1011` ("server not ready").
+The feature is exercised end-to-end *only* by the test suite
+([`tests/test_ws_events_endpoint.py`](../tests/test_ws_events_endpoint.py)),
+including a case that deliberately omits `init_ws_events` to assert that
+exact rejection path.
+
+**Impact**: the route is reachable (so it appears in the WS surface
+and looks like it should work) but cannot serve any client in a running
+server — clients get a clean, logged `1011` close, no crash, no leak,
+but no events.
+
+**Workaround today**: use `WS /api/v1/ws`, which *is* wired and supports
+the same subscribe/unsubscribe/ping protocol and channels. Treat
+`/ws/events` as unshipped.
+
+**Fix path**: add `init_ws_events(ws_manager, bridge=ws_bridge)` to the
+[`create_app` lifespan](../engine/app.py), after `init_ws(…)` and
+`ws_bridge.start()`. Decide whether `/ws/events` reuses the lifespan-owned
+`ws_manager`/`ws_bridge` (simplest — both endpoints share one connection
+registry) or owns its own (cleaner separation, a second `EventBus` bridge
+subscription). Either way, extend `_shutdown` so the events subsystem
+tears down alongside `/ws`.
+
+---
+
 ## P2 — WebSocket connection registry is process-local (events are cross-replica)
 
 **Where**: [`engine/api/ws/connection_manager.py`](../engine/api/ws/connection_manager.py).

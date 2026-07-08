@@ -10,7 +10,7 @@ theme. We picked it over the alternatives for concrete reasons:
 * Plain Markdown in /docs (the previous approach) renders on GitHub but
   gives no full-text search, no collapsible/versioned navigation, and no
   reliable Mermaid rendering. For a codebase this size (19 DB tables,
-  10 ADRs, a 452-line API reference, 7 runbooks) those matter.
+  10 ADRs, a 481-line API reference, 7 runbooks) those matter.
 * MkDocs Material consumes the existing Markdown verbatim, so the files
   stay first-class on GitHub AND get a navigable, searchable, themed
   site. Config lives in /mkdocs.yml; deps in the `docs` extra of
@@ -133,7 +133,7 @@ docs/
 - **Linking**: relative paths only (`../architecture/overview.md`), so
   links work both on GitHub and in any local Markdown viewer.
 - **Per-file length cap**: 500 lines. Split a file rather than letting
-  it accrete. (`api-reference.md` is the largest at ~450 lines and is
+  it accrete. (`api-reference.md` is the largest at ~480 lines and is
   split by domain; everything else is well under.)
 - **No marketing copy.** The README at the repo root is the public
   face; everything under `docs/` is engineering-grade.
