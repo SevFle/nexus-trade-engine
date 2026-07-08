@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from engine.api.cors import normalize_origin_allowlist
 
 
 class Settings(BaseSettings):
@@ -16,6 +18,22 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"  # noqa: S104
     app_port: int = 8000
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+
+    @field_validator("cors_origins", mode="after")
+    @classmethod
+    def _normalize_cors_origins(cls, value: list[str]) -> list[str]:
+        """Pre-normalise the CORS allowlist at config load.
+
+        Each entry is canonicalised via
+        :func:`~engine.api.cors.normalize_origin` (scheme + host lower-cased,
+        trailing slash / path stripped, duplicates removed) so that the
+        Starlette ``CORSMiddleware`` — which compares the browser ``Origin``
+        header by exact equality — receives a canonical list.  This closes
+        the trailing-slash / upper-case-scheme / mixed-case-host bypass and
+        fail-closed-misconfiguration vectors at the source rather than at
+        every match site.
+        """
+        return normalize_origin_allowlist(value)
 
     # Database
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"

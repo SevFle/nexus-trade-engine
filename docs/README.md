@@ -9,8 +9,8 @@ theme. We picked it over the alternatives for concrete reasons:
   into a Python-only repo would cross-contaminate concerns and bloat CI.
 * Plain Markdown in /docs (the previous approach) renders on GitHub but
   gives no full-text search, no collapsible/versioned navigation, and no
-  reliable Mermaid rendering. For a codebase this size (18 DB tables,
-  9 ADRs, a 452-line API reference, 7 runbooks) those matter.
+  reliable Mermaid rendering. For a codebase this size (19 DB tables,
+  10 ADRs, a 452-line API reference, 7 runbooks) those matter.
 * MkDocs Material consumes the existing Markdown verbatim, so the files
   stay first-class on GitHub AND get a navigable, searchable, themed
   site. Config lives in /mkdocs.yml; deps in the `docs` extra of
@@ -98,7 +98,8 @@ docs/
 │   ├── 0006-bcrypt-fernet.md
 │   ├── 0007-strategy-sandbox-allowlist-imports.md
 │   ├── 0008-pluggable-metrics-backend.md
-│   └── 0009-cross-replica-eventbus-bridge.md
+│   ├── 0009-cross-replica-eventbus-bridge.md
+│   └── 0010-static-ast-validation-toctou-loading.md
 ├── api-reference.md                ← every HTTP/WS route, auth, schemas
 ├── mcp-server.md                   ← MCP tools/resources/auth (LLM agent surface)
 ├── data-model.md                   ← entities, relationships, invariants
