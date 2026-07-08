@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import urlparse
 
-from pydantic import Field
+import structlog
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +18,19 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"  # noqa: S104
     app_port: int = 8000
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    #: Origin allowlist enforced on the ``/ws/events`` (and other WS)
+    #: handshake before the socket is upgraded. A missing or unlisted
+    #: ``Origin`` header rejects the upgrade with ``HTTP 403``. Defaults
+    #: to the common local-dev origins; override via
+    #: ``NEXUS_ALLOWED_ORIGINS`` in production.
+    allowed_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173",
+        ]
+    )
 
     # Database
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
@@ -172,6 +187,47 @@ class Settings(BaseSettings):
                 continue
             out[role] = (per_min, burst)
         return out
+
+    @model_validator(mode="after")
+    def _warn_if_local_only_origins_in_non_dev(self) -> Settings:
+        """Warn when a non-dev env only allows localhost/loopback origins.
+
+        ``allowed_origins`` defaults to local-dev origins. In any
+        environment other than ``development`` whose allowlist still
+        contains *only* ``localhost``/``127.0.0.1`` entries, the operator
+        has almost certainly forgotten to set ``NEXUS_ALLOWED_ORIGINS``.
+        This is a *warning* — the config still loads so a mis-flagged env
+        var cannot take the process down — but it is surfaced loudly so
+        the WebSocket origin allowlist isn't silently mis-secured.
+        """
+        if self.app_env == "development" or not self.allowed_origins:
+            return self
+
+        def _host(origin: str) -> str:
+            try:
+                return (urlparse(origin).hostname or "").lower()
+            except (TypeError, ValueError):
+                return ""
+
+        all_local = all(
+            _host(origin) in {"localhost", "127.0.0.1"} for origin in self.allowed_origins
+        )
+        if all_local:
+            # Use a fresh logger per call rather than the module-level one.
+            # ``setup_logging`` reconfigures structlog on app startup (and may
+            # be invoked more than once across the process lifetime, e.g. in
+            # tests). Each ``configure()`` reassigns the default processor
+            # chain to a *new* list object; a module-level logger cached with
+            # ``cache_logger_on_first_use`` would keep a reference to the stale
+            # list, so ``structlog.testing.capture_logs`` (which mutates the
+            # *current* list in place) would never observe this warning.
+            # Fetching a new lazy proxy here binds to the live chain each time.
+            structlog.get_logger(__name__).warning(
+                "config.allowed_origins_local_only",
+                app_env=self.app_env,
+                allowed_origins=list(self.allowed_origins),
+            )
+        return self
 
 
 settings = Settings()

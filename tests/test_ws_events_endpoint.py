@@ -20,11 +20,13 @@ from unittest.mock import patch
 
 import pytest
 from fastapi import WebSocketDisconnect
+from starlette.exceptions import WebSocketException
 
 from engine.api.ws import events as ws_events
 from engine.api.ws.connection_manager import ConnectionManager
 from engine.api.ws.event_bridge import EventBusBridge
 from engine.api.ws.protocol import WS_CLOSE_AUTH_INVALID
+from engine.config import Settings
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -39,10 +41,19 @@ class _FakeHost:
 class _FakeWebSocket:
     """Minimal WebSocket stand-in that records accept/close ordering."""
 
-    def __init__(self, *, query_params: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        query_params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.query_params = query_params or {}
+        # Default to an allowed Origin so the pre-existing tests (which
+        # don't exercise origin validation) keep passing now that the
+        # endpoint enforces an origin allowlist. Tests that *do* care can
+        # pass an explicit ``headers`` mapping (e.g. ``{}`` for "missing").
+        self.headers = {"origin": "http://localhost:3000"} if headers is None else dict(headers)
         self.client = _FakeHost()
-        self.headers: dict[str, str] = {}
         #: ``side_effect`` may be a single value, an Exception, or a list
         #: consumed in order (mirrors ``unittest.mock`` semantics).
         self._receive_side_effect: Any = None
@@ -313,3 +324,198 @@ class TestCleanReinit:
         ws_events.init_ws_events(manager2)
         assert ws_events._state.resolver is not first_resolver
         assert ws_events._state.manager is manager2
+
+
+# ---------------------------------------------------------------------------
+# 4. Origin allowlist — CSWSH protection (validated before ws.accept())
+# ---------------------------------------------------------------------------
+
+
+class TestOriginAllowlist:
+    """The ``Origin`` header must be present and on the allowlist.
+
+    A missing or disallowed origin rejects the handshake at the HTTP
+    layer with ``403`` *before* the socket is accepted (and before auth).
+    """
+
+    async def test_rejects_missing_origin(self, manager):
+        ws_events.init_ws_events(manager)
+        ws = _FakeWebSocket(query_params={"token": "jwt"}, headers={})
+        ws.feed(WebSocketDisconnect())
+        with patch("engine.api.ws.events.decode_token") as mock_decode:
+            mock_decode.return_value = _make_token_data(sub="u1")
+            with pytest.raises(WebSocketException) as exc_info:
+                await ws_events.ws_events_endpoint(ws)
+        # Rejected before upgrade with WS close code 1008 (policy violation).
+        assert exc_info.value.code == 1008
+        # Nothing was accepted or registered.
+        assert ws.accepted is False
+        assert not ws.closed
+        assert manager.connection_count == 0
+
+    async def test_rejects_disallowed_origin(self, manager):
+        ws_events.init_ws_events(manager)
+        ws = _FakeWebSocket(
+            query_params={"token": "jwt"},
+            headers={"origin": "https://evil.example.com"},
+        )
+        ws.feed(WebSocketDisconnect())
+        with patch("engine.api.ws.events.decode_token") as mock_decode:
+            # Even a *valid* token must not rescue a bad origin.
+            mock_decode.return_value = _make_token_data(sub="u1", role="admin")
+            with pytest.raises(WebSocketException) as exc_info:
+                await ws_events.ws_events_endpoint(ws)
+        assert exc_info.value.code == 1008
+        assert ws.accepted is False
+        assert not ws.closed
+        assert manager.connection_count == 0
+
+    @patch("engine.api.ws.events.decode_token")
+    async def test_accepts_allowed_origin(self, mock_decode, manager):
+        # Every default dev origin must be accepted.
+        from engine.config import settings
+
+        mock_decode.return_value = _make_token_data(sub="u1", role="admin")
+        ws_events.init_ws_events(manager)
+        for origin in settings.allowed_origins:
+            ws = _FakeWebSocket(
+                query_params={"token": "jwt"},
+                headers={"origin": origin},
+            )
+            ws.feed(WebSocketDisconnect())
+            await ws_events.ws_events_endpoint(ws)
+            # Origin was on the allowlist, so the handshake proceeded.
+            assert ws.accepted is True
+            assert ws.sent[0]["type"] == "ack"
+        # Each connection was cleaned up on disconnect.
+        assert manager.connection_count == 0
+
+
+# ---------------------------------------------------------------------------
+# 5. _validate_origin — direct unit tests (WebSocketException, code 1008)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateOriginUnit:
+    """Direct unit tests for the origin allowlist check.
+
+    Locks in the post-fix behaviour: the handshake is rejected with a
+    :class:`starlette.exceptions.WebSocketException` (close code ``1008``,
+    policy violation) rather than an ``HTTPException``. ``HTTPException``
+    is the wrong tool for a WebSocket route — Starlette's WS exception
+    handler does not match it, so it would surface as an unhandled
+    ``1011`` server-error close instead of a clean rejection.
+    """
+
+    def test_disallowed_origin_raises_websocket_exception(self):
+        ws = _FakeWebSocket(headers={"origin": "https://evil.example.com"})
+        with pytest.raises(WebSocketException) as exc_info:
+            ws_events._validate_origin(ws)
+        assert exc_info.value.code == 1008
+        assert exc_info.value.reason == "origin not allowed"
+
+    def test_missing_origin_raises_websocket_exception(self):
+        ws = _FakeWebSocket(headers={})
+        with pytest.raises(WebSocketException) as exc_info:
+            ws_events._validate_origin(ws)
+        assert exc_info.value.code == 1008
+        assert exc_info.value.reason == "origin not allowed"
+
+    def test_allowed_origin_does_not_raise(self):
+        ws = _FakeWebSocket(headers={"origin": "http://localhost:3000"})
+        # Returns None and raises nothing for an allowlisted origin.
+        assert ws_events._validate_origin(ws) is None
+
+    def test_origin_case_variants_accepted(self):
+        # The lookup covers both common header casings used by the fake WS.
+        for header_name in ("origin", "Origin"):
+            ws = _FakeWebSocket(headers={header_name: "http://localhost:3000"})
+            assert ws_events._validate_origin(ws) is None
+
+    def test_raises_websocket_exception_not_http_exception(self):
+        # Regression guard: must be WebSocketException, NOT HTTPException
+        # (Starlette's WS handler ignores HTTPException → unhandled 1011).
+        from fastapi import HTTPException
+
+        ws = _FakeWebSocket(headers={})
+        with pytest.raises(WebSocketException) as exc_info:
+            ws_events._validate_origin(ws)
+        assert not isinstance(exc_info.value, HTTPException)
+
+
+# ---------------------------------------------------------------------------
+# 6. Settings — allowed_origins misconfig warning in non-dev envs
+# ---------------------------------------------------------------------------
+
+
+class TestConfigAllowedOriginsValidator:
+    """The pydantic ``model_validator`` must warn (not fail) when a
+    non-``development`` env only lists localhost/loopback origins.
+
+    ``allowed_origins`` defaults to local-dev origins; forgetting to set
+    ``NEXUS_ALLOWED_ORIGINS`` in prod would silently leave the WebSocket
+    origin allowlist pointed at localhost. The validator surfaces that
+    via a structlog warning without rejecting the config.
+    """
+
+    @staticmethod
+    def _http_origins(*hosts: str) -> list[str]:
+        return [f"http://{h}:3000" for h in hosts]
+
+    def test_warns_when_non_dev_and_only_localhost(self):
+        from structlog.testing import capture_logs
+
+        with capture_logs() as logs:
+            Settings(
+                app_env="production",
+                allowed_origins=self._http_origins("localhost", "127.0.0.1"),
+            )
+        assert any(e["event"] == "config.allowed_origins_local_only" for e in logs)
+
+    def test_warns_when_non_dev_and_only_loopback(self):
+        from structlog.testing import capture_logs
+
+        with capture_logs() as logs:
+            Settings(
+                app_env="staging",
+                allowed_origins=["http://127.0.0.1:5173"],
+            )
+        assert any(e["event"] == "config.allowed_origins_local_only" for e in logs)
+
+    def test_no_warning_when_dev_env_even_if_local_only(self):
+        from structlog.testing import capture_logs
+
+        with capture_logs() as logs:
+            Settings(
+                app_env="development",
+                allowed_origins=self._http_origins("localhost"),
+            )
+        assert not any(e["event"] == "config.allowed_origins_local_only" for e in logs)
+
+    def test_no_warning_when_non_dev_but_real_origin_present(self):
+        from structlog.testing import capture_logs
+
+        with capture_logs() as logs:
+            Settings(
+                app_env="production",
+                allowed_origins=self._http_origins("localhost", "app.example.com"),
+            )
+        assert not any(e["event"] == "config.allowed_origins_local_only" for e in logs)
+
+    def test_no_warning_when_non_dev_and_empty_origins(self):
+        from structlog.testing import capture_logs
+
+        with capture_logs() as logs:
+            Settings(app_env="production", allowed_origins=[])
+        assert not any(e["event"] == "config.allowed_origins_local_only" for e in logs)
+
+    def test_warning_includes_env_and_origins(self):
+        from structlog.testing import capture_logs
+
+        origins = self._http_origins("localhost")
+        with capture_logs() as logs:
+            Settings(app_env="production", allowed_origins=origins)
+        matches = [e for e in logs if e["event"] == "config.allowed_origins_local_only"]
+        assert matches
+        assert matches[0]["app_env"] == "production"
+        assert matches[0]["allowed_origins"] == origins

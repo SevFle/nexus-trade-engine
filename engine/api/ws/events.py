@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from starlette.exceptions import WebSocketException
 
 from engine.api.auth.jwt import decode_token
 from engine.api.ws.auth import AuthResult, _extract_scopes
@@ -36,6 +37,7 @@ from engine.api.ws.protocol import (
     PongMessage,
     parse_inbound,
 )
+from engine.config import settings
 
 if TYPE_CHECKING:
     from engine.api.ws.channels import ChannelResolver
@@ -239,6 +241,33 @@ def _validate_session_token(ws: WebSocket) -> AuthResult | None:
 
 
 # ---------------------------------------------------------------------------
+# Origin allowlist — CSWSH protection (validated before ws.accept())
+# ---------------------------------------------------------------------------
+
+
+def _validate_origin(ws: WebSocket) -> None:
+    """Reject the handshake unless ``Origin`` is on the allowlist.
+
+    Browsers always attach an ``Origin`` header to a WebSocket handshake.
+    A missing or unlisted origin is treated as Cross-Site WebSocket
+    Hijacking (CSWSH) and rejected *before* the socket is accepted and
+    before any auth runs. Raising
+    :class:`starlette.exceptions.WebSocketException` here — ahead of
+    ``ws.accept()`` — lets Starlette reject the handshake cleanly with
+    close code ``1008`` (policy violation) and the server never upgrades
+    the connection. ``HTTPException`` is the wrong tool for a WebSocket
+    route: Starlette's WS exception handler does not match it, so it would
+    surface as an unhandled ``1011`` server-error close instead.
+    """
+    headers = getattr(ws, "headers", None) or {}
+    # Starlette ``Headers`` is case-insensitive; the unit-test double uses
+    # a plain ``dict``, so cover the common casings explicitly.
+    origin = headers.get("origin") or headers.get("Origin")
+    if origin not in settings.allowed_origins:
+        raise WebSocketException(code=1008, reason="origin not allowed")
+
+
+# ---------------------------------------------------------------------------
 # Route
 # ---------------------------------------------------------------------------
 
@@ -252,6 +281,10 @@ async def ws_events_endpoint(ws: WebSocket) -> None:
     token rejects the upgrade with ``4401`` so the server never accepts an
     unauthenticated connection.
     """
+    # 0) Origin allowlist — reject CSWSH at the HTTP layer before anything
+    #    else (no accept, no auth, no state mutation).
+    _validate_origin(ws)
+
     # 1) Pre-accept auth — reject bad/missing tokens at the HTTP layer.
     auth = _validate_session_token(ws)
     if auth is None:
@@ -355,9 +388,7 @@ async def _dispatch_message(
         return
 
     if msg.type == "unsubscribe":
-        result = await _state.resolver.handle_unsubscribe(
-            connection_id, msg, session.user_id
-        )
+        result = await _state.resolver.handle_unsubscribe(connection_id, msg, session.user_id)
         await _safe_send(
             ws,
             AckMessage(
