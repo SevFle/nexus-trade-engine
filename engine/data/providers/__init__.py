@@ -42,7 +42,7 @@ from engine.data.providers.registry import (
     get_registry,
     reset_registry_for_tests,
 )
-from engine.data.providers.yahoo import YahooDataProvider
+from engine.data.providers.yahoo import YahooDataProvider, YahooFinanceProvider
 
 __all__ = [
     "AlpacaDataProvider",
@@ -65,6 +65,7 @@ __all__ = [
     "RateLimit",
     "TransientProviderError",
     "YahooDataProvider",
+    "YahooFinanceProvider",
     "build_provider",
     "configure_from_file",
     "configure_registry",
