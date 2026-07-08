@@ -22,6 +22,7 @@ import pytest
 from fastapi import WebSocketDisconnect
 
 from engine.api.ws import events as ws_events
+from engine.api.ws.auth import AuthResult, extract_scopes
 from engine.api.ws.connection_manager import ConnectionManager
 from engine.api.ws.event_bridge import EventBusBridge
 from engine.api.ws.protocol import WS_CLOSE_AUTH_INVALID
@@ -199,6 +200,73 @@ class TestAuthRejectionBeforeAccept:
         assert ws.closed
         # Server-error close (1011), not an auth close.
         assert ws.closed[0][0] == 1011
+
+
+# ---------------------------------------------------------------------------
+# 1b. Scope-extraction wiring (regression for the import-name drift bug)
+# ---------------------------------------------------------------------------
+
+
+class TestScopeExtractionWiring:
+    """Guard against the events/auth import name drifting out of sync.
+
+    ``engine.api.ws.events._validate_session_token`` derives scopes from the
+    decoded JWT via the shared ``engine.api.ws.auth.extract_scopes`` helper.
+    An earlier revision referenced a non-existent ``_extract_scopes`` and
+    broke ``conftest`` collection. These tests pin the wiring down.
+    """
+
+    def test_extract_scopes_is_importable_from_auth(self):
+        # The public name events.py depends on must exist on the auth module.
+        import engine.api.ws.auth as auth_mod
+
+        assert hasattr(auth_mod, "extract_scopes")
+        assert callable(auth_mod.extract_scopes)
+
+    def test_events_module_does_not_reference_private_extract_scopes(self):
+        # The import that originally broke collection must not resurface.
+        import engine.api.ws.auth as auth_mod
+
+        assert not hasattr(auth_mod, "_extract_scopes"), (
+            "events.py imports extract_scopes from engine.api.ws.auth; "
+            "a private _extract_scopes must not exist there"
+        )
+
+    @patch("engine.api.ws.events.decode_token")
+    async def test_validate_session_token_uses_shared_extract_scopes(
+        self, mock_decode, manager
+    ):
+        # An admin token fans out to the full admin scope set via the shared
+        # helper — proving the events module is wired to extract_scopes.
+        mock_decode.return_value = _make_token_data(sub="u1", role="admin")
+        ws_events.init_ws_events(manager)
+        ws = _FakeWebSocket(query_params={"token": "jwt"})
+        ws.feed(WebSocketDisconnect())
+
+        await ws_events.ws_events_endpoint(ws)
+
+        # Registered with the admin scopes that extract_scopes() yields.
+        assert ws.accepted is True
+        assert manager.connection_count == 0
+        # extract_scopes for role=admin returns the :all read scopes.
+        assert set(extract_scopes({"role": "admin"})) == {
+            "read:portfolio",
+            "read:portfolio:all",
+            "read:orders",
+            "read:orders:all",
+            "read:strategies",
+            "read:strategies:all",
+        }
+
+    def test_authresult_dataclass_round_trips(self):
+        # The other symbol events.py imports alongside extract_scopes.
+        result = AuthResult(
+            user_id="u1",
+            scopes=extract_scopes({"role": "viewer"}),
+            token_data={"sub": "u1", "role": "viewer"},
+        )
+        assert result.user_id == "u1"
+        assert "read:portfolio" in result.scopes
 
 
 # ---------------------------------------------------------------------------

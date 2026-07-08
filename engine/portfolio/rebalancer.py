@@ -130,43 +130,60 @@ def _finite(value: Any, label: str, *, allow_zero: bool = True) -> float:
     return num
 
 
-def _strip_keys(raw: dict[str, Any], label: str) -> list[str]:
-    """Normalise a mapping's keys by stripping surrounding whitespace.
+def _strip_keys(raw: dict[str, Any], label: str) -> dict[str, Any]:
+    """Return ``raw`` with each key's surrounding whitespace stripped,
+    raising :class:`PortfolioRebalancerError` on a non-string key, a key
+    that is empty or only whitespace, or a *whitespace collision*: two
+    distinct raw keys that reduce to the same stripped id.
 
-    Each key must be a non-empty (after stripping) string. Two raw keys
-    that collapse to the same stripped form — e.g. ``"a "`` and ``" a"``
-    both becoming ``"a"`` — would silently clobber one another when
-    inserted into a downstream dict, so such a collision is rejected with a
-    descriptive :class:`PortfolioRebalancerError`. The stripped keys are
-    returned in insertion order to preserve caller intent.
+    Surrounding whitespace on a strategy id is almost always a typo
+    (``"a "`` vs ``" a"``). Silently keeping both would let the rebalancer
+    hold a phantom position it can never reference by name, so the keys are
+    normalised and a collision — which makes the intended mapping ambiguous
+    — is rejected outright. A key that is empty or only whitespace names no
+    strategy and is rejected for the same reason.
+
+    Deduplication is dict-based: the accumulator is keyed by the stripped
+    form, so a second key that reduces to a form already present is caught
+    at the point of collision. The stripped key keeps its original value,
+    preserving the correct key/value correspondence.
     """
-    seen: dict[str, None] = {}
-    stripped: list[str] = []
-    for sid in raw:
-        if not isinstance(sid, str) or not sid.strip():
+    stripped: dict[str, Any] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str):
             raise PortfolioRebalancerError(
-                f"{label} keys must be non-empty strings, got {sid!r}"
+                f"{label} keys must be strings, got {key!r}"
             )
-        key = sid.strip()
-        if key in seen:
+        norm = key.strip()
+        if not norm:
             raise PortfolioRebalancerError(
-                f"{label} keys collide after stripping whitespace: {key!r}"
+                f"{label} keys must be non-empty strings, got {key!r}"
             )
-        seen[key] = None
-        stripped.append(key)
+        if norm in stripped:
+            raise PortfolioRebalancerError(
+                f"{label} has whitespace-colliding keys: {key!r} shadows "
+                f"another key that also reduces to {norm!r}"
+            )
+        stripped[norm] = value
     return stripped
 
 
 def _clean_weights(raw: dict[str, Any], label: str) -> dict[str, float]:
     """Validate a ``{strategy_id: weight}`` mapping into a plain
-    ``dict[str, float]`` of finite, non-negative values keyed by the
-    *stripped*, non-empty string ids. Returns a *copy* so callers cannot
-    mutate the rebalancer's internal map."""
+    ``dict[str, float]`` of finite, non-negative values keyed by non-empty,
+    whitespace-stripped string ids.
+
+    Keys are whitespace-stripped via :func:`_strip_keys` first, so
+    ``{" a ": 1}`` is treated as ``{"a": 1.0}`` and a whitespace collision
+    (e.g. ``{"a ": 1, " a": 2}``) raises before it can create a phantom
+    strategy. The stripped key keeps its original value, preserving the
+    correct key/value correspondence. Returns a *copy* so callers cannot
+    mutate the rebalancer's internal map.
+    """
     if not isinstance(raw, dict):
         raise PortfolioRebalancerError(f"{label} must be a dict, got {type(raw).__name__}")
-    keys = _strip_keys(raw, label)
     cleaned: dict[str, float] = {}
-    for sid, w in zip(keys, raw.values(), strict=True):
+    for sid, w in _strip_keys(raw, label).items():
         cleaned[sid] = _finite(w, f"{label}[{sid!r}]")
         if cleaned[sid] < 0.0:
             raise PortfolioRebalancerError(

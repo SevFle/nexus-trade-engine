@@ -338,6 +338,57 @@ documented above:
 | [`capital_allocation.py`](../../engine/core/capital_allocation.py) | **Largest-remainder (Hamilton) apportionment** of total capital across strategies proportional to weights, computed in fixed-point `Decimal` so the result is exact to the cent. Floors each raw share, then distributes the leftover cents to the largest fractional remainders. |
 | [`portfolio/allocation.py`](../../engine/portfolio/allocation.py) | `CapitalAllocation` — the **immutable value object** recording the split. Weights sum to exactly 1.0 (ε-tolerant), are non-negative, and the strategy count is capped by `max_strategies`. In-place mutation is blocked (gh#1042). |
 | [`portfolio/multi_strategy.py`](../../engine/portfolio/multi_strategy.py) | `MultiStrategyPortfolio` — the **capital-aware runtime** that consumes an allocation, evaluates every strategy, and merges signals risk-adjusted. See the [Multi-strategy orchestration](#engineportfoliomulti_strategypy-multistrategyportfolio) section above for the full contract. |
+| [`portfolio/rebalancer.py`](../../engine/portfolio/rebalancer.py) | `PortfolioRebalancer` — the **drift detector** that compares a portfolio's *target* policy weights against its *current* dollar allocation and emits advisory `RebalanceOrder` signals. Companion to `MultiStrategyPortfolio` (which decides *what to trade*); the rebalancer decides *how to get back to target*. See [Drift-driven rebalancing](#drift-driven-rebalancing-portfoliorebalancer) below. |
+
+<a id="drift-driven-rebalancing-portfoliorebalancer"></a>
+### Drift-driven rebalancing — `PortfolioRebalancer`
+
+`MultiStrategyPortfolio` answers *"given a capital split, what should we
+trade this cycle?"* `PortfolioRebalancer` answers the slower, periodic
+question: *"the strategies' dollar values have drifted away from the
+policy weights — by how much, and what capital transfers would restore
+them?"* It is the closing half of the allocation story and lives in the
+same `engine/portfolio/` package (which, by design, owns **no
+execution**).
+
+Construct once with the *target* policy weights, the *current* dollar
+value per strategy, and a drift `threshold` (default `0.05` = 5%); then
+query three things:
+
+| Method | Returns |
+|---|---|
+| `compute_drift()` | Signed `current_weight − target_weight` per strategy (positive = **overweight**, negative = **underweight**). |
+| `needs_rebalance()` | `True` when `max(|drift|)` strictly exceeds `threshold`. Zero total capital is a hard `False` (nothing can move). |
+| `generate_rebalance_orders()` | One `RebalanceOrder` per strategy whose current dollar value differs from target (beyond a `1e-9` float-dust floor), sorted by id for determinism. |
+
+A `RebalanceOrder` is an **advisory signal**, not a trade: `action` is
+`RebalanceAction.BUY` (underweight → add `|delta|` dollars) or `SELL`
+(overweight → withdraw `|delta|`), with full provenance (`current/target
+weight`, signed `drift`) so an audit trail never re-derives *why* an
+order was emitted. A portfolio already on target yields an empty list.
+
+**Design contract.** The class is **pure / no I/O** — synchronous and
+effectively stateless over its construction inputs (no network, broker,
+or DB call), which keeps it inside `engine.portfolio`'s "no execution"
+boundary and makes it trivially unit-testable. Targets are **relative**
+(normalised internally, so `{"a":1,"b":1}` ≡ `{"a":0.5,"b":0.5}`,
+matching `MultiStrategyPortfolio`; an all-zero set falls back to equal
+shares). Every numeric input funnels through `_finite`, which rejects
+`bool` (a sneaky `int` subclass), numeric strings, `None`, and
+non-finite values — `math.isfinite` is the gate because bare `w < 0`
+silently admits `NaN`. Finally, `needs_rebalance` is a strict `>`
+against the threshold but wraps the comparison in `math.isclose` so a
+drift sitting *exactly* on the boundary is treated as within tolerance
+(float noise can neither spuriously trip nor suppress a rebalance);
+this edge is pinned by tests.
+
+> **Status — two caveats.** (1) Like `MultiStrategyPortfolio`, the
+> rebalancer is **library-only**: no route drives it and no execution
+> layer consumes its `RebalanceOrder`s yet. (2) The file currently carries
+> an **uncommitted merge conflict** that makes the whole `engine.portfolio`
+> package fail to import from a working tree — see the [P0 in
+> `known-limitations.md`](../known-limitations.md#rebalancer-merge-conflict).
+> The committed `HEAD` copy is clean.
 
 Tax reporting lives in [`engine/core/tax/`](../../engine/core/tax/):
 FIFO/LIFO lot matching, US wash-sale detection (`wash_sale.py`), and
