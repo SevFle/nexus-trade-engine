@@ -26,7 +26,7 @@ import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from engine.api.auth.jwt import decode_token
-from engine.api.ws.auth import AuthResult, _extract_scopes
+from engine.api.ws.auth import AuthResult, extract_scopes
 from engine.api.ws.metrics import ws_metrics
 from engine.api.ws.protocol import (
     WS_CLOSE_AUTH_INVALID,
@@ -216,7 +216,7 @@ def _validate_session_token(ws: WebSocket) -> AuthResult | None:
     can't run the full HTTP dependency (it reads headers / a DB session), so
     we replicate the token-validation half: decode the JWT and require a
     ``sub`` claim, then derive scopes with the shared
-    :func:`engine.api.ws.auth._extract_scopes`.
+    :func:`engine.api.ws.auth.extract_scopes`.
 
     Returns an :class:`AuthResult` on success or ``None`` when the token is
     missing, malformed, expired or lacks a subject. Callers must reject the
@@ -234,7 +234,7 @@ def _validate_session_token(ws: WebSocket) -> AuthResult | None:
     if not isinstance(sub, str) or not sub:
         return None
 
-    scopes = _extract_scopes(token_data)
+    scopes = extract_scopes(token_data)
     return AuthResult(user_id=sub, scopes=scopes, token_data=token_data)
 
 

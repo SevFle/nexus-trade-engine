@@ -130,17 +130,43 @@ def _finite(value: Any, label: str, *, allow_zero: bool = True) -> float:
     return num
 
 
+def _strip_keys(raw: dict[str, Any], label: str) -> list[str]:
+    """Normalise a mapping's keys by stripping surrounding whitespace.
+
+    Each key must be a non-empty (after stripping) string. Two raw keys
+    that collapse to the same stripped form — e.g. ``"a "`` and ``" a"``
+    both becoming ``"a"`` — would silently clobber one another when
+    inserted into a downstream dict, so such a collision is rejected with a
+    descriptive :class:`PortfolioRebalancerError`. The stripped keys are
+    returned in insertion order to preserve caller intent.
+    """
+    seen: dict[str, None] = {}
+    stripped: list[str] = []
+    for sid in raw:
+        if not isinstance(sid, str) or not sid.strip():
+            raise PortfolioRebalancerError(
+                f"{label} keys must be non-empty strings, got {sid!r}"
+            )
+        key = sid.strip()
+        if key in seen:
+            raise PortfolioRebalancerError(
+                f"{label} keys collide after stripping whitespace: {key!r}"
+            )
+        seen[key] = None
+        stripped.append(key)
+    return stripped
+
+
 def _clean_weights(raw: dict[str, Any], label: str) -> dict[str, float]:
     """Validate a ``{strategy_id: weight}`` mapping into a plain
-    ``dict[str, float]`` of finite, non-negative values keyed by non-empty
-    string ids. Returns a *copy* so callers cannot mutate the rebalancer's
-    internal map."""
+    ``dict[str, float]`` of finite, non-negative values keyed by the
+    *stripped*, non-empty string ids. Returns a *copy* so callers cannot
+    mutate the rebalancer's internal map."""
     if not isinstance(raw, dict):
         raise PortfolioRebalancerError(f"{label} must be a dict, got {type(raw).__name__}")
+    keys = _strip_keys(raw, label)
     cleaned: dict[str, float] = {}
-    for sid, w in raw.items():
-        if not isinstance(sid, str) or not sid.strip():
-            raise PortfolioRebalancerError(f"{label} keys must be non-empty strings, got {sid!r}")
+    for sid, w in zip(keys, raw.values(), strict=True):
         cleaned[sid] = _finite(w, f"{label}[{sid!r}]")
         if cleaned[sid] < 0.0:
             raise PortfolioRebalancerError(
@@ -324,16 +350,25 @@ class PortfolioRebalancer:
 
         The comparison is strict (``drift > threshold``): a strategy
         sitting *exactly* on the threshold is considered within tolerance
-        and does not trip a rebalance. This boundary is deliberate and
-        pinned by tests — flip to ``>=`` only with care, as it would turn
-        an exactly-at-threshold portfolio into a perpetual rebalance.
+        and does not trip a rebalance. Because floating-point rounding can
+        render an exactly-at-threshold drift as ``threshold + ε`` (which a
+        naive ``>`` would spuriously trip) or ``threshold - ε`` (which it
+        would spuriously suppress), values that are *close* to the
+        threshold (per :func:`math.isclose` with tight tolerances) are
+        treated as being on it and therefore not triggering. Only a drift
+        that is genuinely — not just noisily — larger trips a rebalance.
+        This boundary is deliberate and pinned by tests; loosen the
+        tolerances only with care.
 
         Zero total capital never needs rebalancing (nothing can move), so
         this returns ``False`` regardless of the computed drifts.
         """
         if self._total_capital <= 0.0:
             return False
-        return self.max_drift() > self._threshold
+        drift = self.max_drift()
+        if math.isclose(drift, self._threshold, rel_tol=1e-9, abs_tol=1e-12):
+            return False
+        return drift > self._threshold
 
     # -- order generation ---------------------------------------------
 
