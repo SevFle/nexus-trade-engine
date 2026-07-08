@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/observability/logging/">
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/adr/0011-async-native-locking/">
       
       
-        <link rel="prev" href="../../operations/runbooks/common-issues/">
+        <link rel="prev" href="../0010-static-ast-validation-toctou-loading/">
       
       
-        <link rel="next" href="../../legal/processors/">
+        <link rel="next" href="../template/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Logging schema & redaction - Nexus Trade Engine</title>
+        <title>0011 — Async-native locking (asyncio.Lock) - Nexus Trade Engine</title>
       
     
     
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#structured-logging-correlation-ids" class="md-skip">
+        <a href="#adr-0011-async-native-locking-asynciolock-never-threadinglock" class="md-skip">
           Skip to content
         </a>
       
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Logging schema & redaction
+              0011 — Async-native locking (asyncio.Lock)
             
           </span>
         </div>
@@ -313,11 +313,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../adr/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -357,13 +359,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="./" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../observability/logging/" class="md-tabs__link">
           
   
   
@@ -1059,6 +1059,8 @@
       
   
   
+    
+  
   
   
     
@@ -1096,22 +1098,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../adr/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -1129,13 +1132,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1155,7 +1158,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0001-scaffold-tech-choices/" class="md-nav__link">
+      <a href="../0001-scaffold-tech-choices/" class="md-nav__link">
         
   
   
@@ -1183,7 +1186,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0002-auth-rbac/" class="md-nav__link">
+      <a href="../0002-auth-rbac/" class="md-nav__link">
         
   
   
@@ -1211,7 +1214,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0003-mobile-app-strategy/" class="md-nav__link">
+      <a href="../0003-mobile-app-strategy/" class="md-nav__link">
         
   
   
@@ -1239,7 +1242,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0004-task-queue-taskiq/" class="md-nav__link">
+      <a href="../0004-task-queue-taskiq/" class="md-nav__link">
         
   
   
@@ -1267,7 +1270,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0005-valkey-over-redis/" class="md-nav__link">
+      <a href="../0005-valkey-over-redis/" class="md-nav__link">
         
   
   
@@ -1295,7 +1298,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0006-bcrypt-fernet/" class="md-nav__link">
+      <a href="../0006-bcrypt-fernet/" class="md-nav__link">
         
   
   
@@ -1323,7 +1326,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
+      <a href="../0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
         
   
   
@@ -1351,7 +1354,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0008-pluggable-metrics-backend/" class="md-nav__link">
+      <a href="../0008-pluggable-metrics-backend/" class="md-nav__link">
         
   
   
@@ -1379,7 +1382,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0009-cross-replica-eventbus-bridge/" class="md-nav__link">
+      <a href="../0009-cross-replica-eventbus-bridge/" class="md-nav__link">
         
   
   
@@ -1407,7 +1410,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0010-static-ast-validation-toctou-loading/" class="md-nav__link">
+      <a href="../0010-static-ast-validation-toctou-loading/" class="md-nav__link">
         
   
   
@@ -1432,10 +1435,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../adr/0011-async-native-locking/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0011 — Async-native locking (asyncio.Lock)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1451,6 +1481,209 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#context-and-problem-statement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context and Problem Statement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-drivers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Drivers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#considered-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Considered Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-outcome" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Outcome
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision Outcome">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Details
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#three-live-call-sites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Three live call sites
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lazy-construction-no-lock-at-import-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lazy construction (no lock at import time)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#where-cross-process-coordination-goes-instead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where cross-process coordination goes instead
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pros and Cons of the Options
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pros and Cons of the Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-1-threadinglock-everywhere" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 1 — threading.Lock everywhere
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-2-asynciolock-per-process-valkey-cross-process-chosen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 2 — asyncio.Lock per-process + Valkey cross-process (chosen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-3-no-locks-rely-on-the-gil" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 3 — No locks (rely on the GIL)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-4-fine-grained-per-resource-locking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 4 — Fine-grained per-resource locking
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Links
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1463,7 +1696,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/template/" class="md-nav__link">
+      <a href="../template/" class="md-nav__link">
         
   
   
@@ -1967,10 +2200,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -1980,22 +2211,21 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
-          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
             
   
   
@@ -2013,7 +2243,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2028,37 +2258,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Logging schema & redaction
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../observability/logging/" class="md-nav__link">
         
   
   
@@ -2074,114 +2277,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#wire-format" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Wire format
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#correlation-chain" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Correlation chain
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#level-policy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Level policy
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#redaction" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Redaction
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#sampling" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Sampling
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#sinks" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Sinks
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#how-to-find-logs" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        How to find logs
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#adding-context-to-your-code" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Adding context to your code
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -2437,10 +2532,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#wire-format" class="md-nav__link">
+  <a href="#context-and-problem-statement" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Wire format
+        Context and Problem Statement
       
     </span>
   </a>
@@ -2448,10 +2543,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#correlation-chain" class="md-nav__link">
+  <a href="#decision-drivers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Correlation chain
+        Decision Drivers
       
     </span>
   </a>
@@ -2459,10 +2554,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#level-policy" class="md-nav__link">
+  <a href="#considered-options" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Level policy
+        Considered Options
       
     </span>
   </a>
@@ -2470,54 +2565,149 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#redaction" class="md-nav__link">
+  <a href="#decision-outcome" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Redaction
+        Decision Outcome
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision Outcome">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#sampling" class="md-nav__link">
+  <a href="#details" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Sampling
+        Details
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#three-live-call-sites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Three live call sites
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#sinks" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#lazy-construction-no-lock-at-import-time" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Sinks
+        Lazy construction (no lock at import time)
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#how-to-find-logs" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#where-cross-process-coordination-goes-instead" class="md-nav__link">
     <span class="md-ellipsis">
       
-        How to find logs
+        Where cross-process coordination goes instead
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#adding-context-to-your-code" class="md-nav__link">
+  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Adding context to your code
+        Pros and Cons of the Options
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pros and Cons of the Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-1-threadinglock-everywhere" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 1 — threading.Lock everywhere
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-2-asynciolock-per-process-valkey-cross-process-chosen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 2 — asyncio.Lock per-process + Valkey cross-process (chosen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-3-no-locks-rely-on-the-gil" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 3 — No locks (rely on the GIL)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-4-fine-grained-per-resource-locking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 4 — Fine-grained per-resource locking
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Links
       
     </span>
   </a>
@@ -2544,214 +2734,198 @@
   
 
 
-<h1 id="structured-logging-correlation-ids">Structured logging &amp; correlation IDs<a class="headerlink" href="#structured-logging-correlation-ids" title="Permanent link">&para;</a></h1>
-<p>This page is the contract for log records emitted by every Nexus service.
-It covers the wire format, the correlation chain, the level policy, the
-redaction list, sampling, and sink selection.</p>
-<blockquote>
-<p><strong>Code:</strong> <code>engine/observability/{logging,context,processors,redact,middleware,taskiq_middleware,http_client}.py</code>
-<strong>Issue:</strong> <a href="https://github.com/SevFle/nexus-trade-engine/issues/145">#145</a></p>
-</blockquote>
-<h2 id="wire-format">Wire format<a class="headerlink" href="#wire-format" title="Permanent link">&para;</a></h2>
-<p>Every record is one JSON object per line, UTF-8, written to stdout (default)
-or a file. Required fields:</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Origin</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>timestamp</code></td>
-<td><code>structlog.processors.TimeStamper</code></td>
-<td>ISO 8601, UTC</td>
-</tr>
-<tr>
-<td><code>level</code></td>
-<td><code>structlog.stdlib.add_log_level</code></td>
-<td><code>debug</code>/<code>info</code>/<code>warning</code>/<code>error</code>/<code>critical</code></td>
-</tr>
-<tr>
-<td><code>logger</code></td>
-<td><code>structlog.stdlib.add_logger_name</code></td>
-<td>Dotted module path</td>
-</tr>
-<tr>
-<td><code>event</code></td>
-<td>First positional arg of <code>log.&lt;level&gt;(...)</code></td>
-<td>Stable event name, snake_case</td>
-</tr>
-<tr>
-<td><code>service</code></td>
-<td><code>add_service_metadata</code></td>
-<td><code>settings.app_name</code></td>
-</tr>
-<tr>
-<td><code>env</code></td>
-<td><code>add_service_metadata</code></td>
-<td><code>settings.app_env</code></td>
-</tr>
-<tr>
-<td><code>version</code></td>
-<td><code>add_service_metadata</code></td>
-<td><code>settings.app_version</code></td>
-</tr>
-</tbody>
-</table>
-<p>Context fields, attached when bound:</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Bound by</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>correlation_id</code></td>
-<td>HTTP middleware / taskiq middleware / <code>ensure_correlation_id</code></td>
-</tr>
-<tr>
-<td><code>request_id</code></td>
-<td>HTTP middleware (per request)</td>
-</tr>
-<tr>
-<td><code>span_id</code></td>
-<td>HTTP middleware / taskiq middleware (per task)</td>
-</tr>
-<tr>
-<td><code>user_id</code>, <code>role</code></td>
-<td><code>ctx.bind_user_context(...)</code></td>
-</tr>
-<tr>
-<td><code>portfolio_id</code>, <code>strategy_id</code>, <code>broker</code>, <code>order_id</code>, <code>tool</code></td>
-<td><code>ctx.bind_domain_context(...)</code></td>
-</tr>
-</tbody>
-</table>
-<h2 id="correlation-chain">Correlation chain<a class="headerlink" href="#correlation-chain" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>HTTP client                           HTTP server                              Worker / outbound
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>─────────────                         ──────────────────────                   ─────────────────────────
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>X-Correlation-Id: c1   ─────────►    CorrelationIdMiddleware       ─────►     CorrelationMiddleware
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>                                     binds ctx.correlation_id=c1               (taskiq) reads label,
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>                                                                               binds ctx.correlation_id=c1
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>                                     log records get correlation_id            log records share c1
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>                                     correlated_async_client       ─────►     downstream service
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>                                     forwards X-Correlation-Id: c1
-</span></code></pre></div>
-<p>Where it gets bound:</p>
+<h1 id="adr-0011-async-native-locking-asynciolock-never-threadinglock">ADR-0011: Async-native locking (<code>asyncio.Lock</code>, never <code>threading.Lock</code>)<a class="headerlink" href="#adr-0011-async-native-locking-asynciolock-never-threadinglock" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>HTTP entry</strong> — <code>engine/observability/middleware.py::CorrelationIdMiddleware</code> reads <code>X-Correlation-Id</code> or generates a UUID4 per request, then binds <code>correlation_id</code>, <code>request_id</code>, <code>span_id</code>. Cleared after the response.</li>
-<li><strong>taskiq workers</strong> — <code>engine/observability/taskiq_middleware.py::CorrelationMiddleware</code> copies the bound id into <code>message.labels</code> on <code>pre_send</code>, restores it from labels on <code>pre_execute</code>, clears on <code>post_execute</code>.</li>
-<li><strong>Outbound HTTP</strong> — use <code>correlated_async_client(...)</code> from <code>engine/observability/http_client.py</code>. It registers a request hook that injects <code>X-Correlation-Id</code> from <code>ctx.get_correlation_id()</code> if the header is unset.</li>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-07-07</li>
+<li><strong>Deciders</strong>: Lead maintainer + API reviewer</li>
+<li><strong>Tags</strong>: concurrency, async, api, websocket</li>
 </ul>
-<h2 id="level-policy">Level policy<a class="headerlink" href="#level-policy" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Level</th>
-<th>Use for</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>debug</code></td>
-<td>Verbose traces, intermediate values. Off in prod.</td>
-</tr>
-<tr>
-<td><code>info</code></td>
-<td>Lifecycle: session start/stop, order submitted, strategy activated.</td>
-</tr>
-<tr>
-<td><code>warning</code></td>
-<td>Recoverable: retry triggered, provider fallback, degraded mode.</td>
-</tr>
-<tr>
-<td><code>error</code></td>
-<td>User-facing failure: exception bubbled to API, failed order.</td>
-</tr>
-<tr>
-<td><code>critical</code></td>
-<td>On-call wake-up: kill-switch fired, auth totally failing, data corruption detected.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="redaction">Redaction<a class="headerlink" href="#redaction" title="Permanent link">&para;</a></h2>
-<p>The <code>redact_processor</code> strips secrets before any record leaves the process.
-Banned keys (case-insensitive, dashes normalized to underscores):</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>password, passwd, token, secret, api_key, authorization, credit_card,
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>card_number, ssn, access_token, refresh_token, client_secret,
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>private_key, session_token, cookie, set_cookie
-</span></code></pre></div>
-<p>Banned <strong>value</strong> patterns:</p>
+<h2 id="context-and-problem-statement">Context and Problem Statement<a class="headerlink" href="#context-and-problem-statement" title="Permanent link">&para;</a></h2>
+<p>The engine is an asyncio application: one uvicorn worker runs one event
+loop, and every request, WebSocket, and background task is a coroutine
+scheduled on that loop. A mutex in this world has a sharp footgun that is
+not obvious from the threading playbook:</p>
+<p>A <code>threading.Lock</code> (or <code>threading.RLock</code>) blocks the <strong>OS thread</strong> that
+calls <code>.acquire()</code>. In a single-loop asyncio process, the loop <em>is</em> that
+thread — so a contended <code>threading.Lock</code> freezes <strong>every</strong> coroutine on
+the loop, not just the one waiting for the lock. Throughput collapses to
+"one request at a time", and a deadlock manifests as a total stall with
+no traceback (the loop thread is parked in <code>futex</code>, not raising).</p>
+<p>This is not hypothetical: gh#1235 (<code>fix(api): replace threading.Lock
+with asyncio.Lock</code>) landed precisely because a <code>threading.Lock</code> had been
+dropped into an async hot path. The mistake is easy to make — <code>import
+threading; lock = threading.Lock()</code> looks correct to anyone trained on
+sync Python — so we make the <em>rule</em> explicit rather than relying on
+review to catch the next instance.</p>
+<h2 id="decision-drivers">Decision Drivers<a class="headerlink" href="#decision-drivers" title="Permanent link">&para;</a></h2>
 <ul>
-<li><code>Bearer &lt;anything&gt;</code> — bearer tokens</li>
-<li>3-segment dot-separated base64-ish strings ≥ 8 chars per segment — JWTs</li>
-<li>13–19 digit blocks (with optional spaces / dashes) — card numbers</li>
-<li>Prefixed secrets: <code>sk*</code>, <code>xoxb*</code>, <code>xoxp*</code>, <code>ghp*</code>, <code>ghs*</code>, <code>AKIA*</code></li>
+<li><strong>Never block the event loop.</strong> A mutex must yield control back to the
+  loop while it waits, so unrelated coroutines keep making progress.</li>
+<li><strong>Correctness under real concurrency.</strong> The WebSocket
+  <code>ConnectionManager</code> is sized for <code>NEXUS_WS_MAX_CONNECTIONS=5000</code> and is
+  mutated from <code>register</code> / <code>disconnect</code> / <code>subscribe</code> / <code>broadcast</code> /
+  <code>close_all</code> concurrently — compound dict mutations are not atomic even
+  under the GIL once an <code>await</code> splits them.</li>
+<li><strong>Import must not require a running loop.</strong> Test harnesses and tooling
+  import <code>engine.*</code> modules without an event loop, so a lock must not be
+  constructed at module top-level (an <code>asyncio.Lock()</code> created with no
+  running loop raises <code>RuntimeError</code> on some interpreters / binding
+  variants).</li>
+<li><strong>Per-process state is the common case.</strong> Live socket objects, the
+  in-process <code>EventBus</code> singleton, and the per-IP WS auth buckets are all
+  per-process. Cross-process coordination already has a home: Valkey.</li>
 </ul>
-<p>CI gate: <code>tests/observability/test_log_redaction_e2e.py</code> drives structlog
-through the full processor chain and asserts no banned values reach the
-wire. Add new patterns by editing <code>engine/observability/redact.py</code> and
-extending the test fixtures.</p>
-<h2 id="sampling">Sampling<a class="headerlink" href="#sampling" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Level</th>
-<th>Rate setting</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>warning</code>/<code>error</code>/<code>critical</code></td>
-<td>always 100%</td>
-<td>—</td>
-</tr>
-<tr>
-<td><code>info</code></td>
-<td><code>settings.log_sampling_info</code></td>
-<td><code>1.0</code></td>
-</tr>
-<tr>
-<td><code>debug</code></td>
-<td><code>settings.log_sampling_debug</code></td>
-<td><code>0.01</code></td>
-</tr>
-</tbody>
-</table>
-<p>Set via env: <code>NEXUS_LOG_SAMPLING_INFO=0.1</code> etc. Implemented in
-<code>processors.sampling_filter</code> using <code>structlog.DropEvent</code>.</p>
-<h2 id="sinks">Sinks<a class="headerlink" href="#sinks" title="Permanent link">&para;</a></h2>
-<p><code>NEXUS_LOG_SINK</code> selects the backend:</p>
-<ul>
-<li><code>stdout</code> (default) — <code>logging.StreamHandler(sys.stdout)</code></li>
-<li><code>file</code> — <code>WatchedFileHandler</code> at <code>NEXUS_LOG_FILE_PATH</code> (default <code>logs/engine.log</code>)</li>
-<li><code>otlp</code> — currently falls back to stdout until the OTel logs SDK is wired in.</li>
-</ul>
-<h2 id="how-to-find-logs">How to find logs<a class="headerlink" href="#how-to-find-logs" title="Permanent link">&para;</a></h2>
+<h2 id="considered-options">Considered Options<a class="headerlink" href="#considered-options" title="Permanent link">&para;</a></h2>
 <ol>
-<li>Identify the <code>correlation_id</code> in the user-visible error or HTTP response (<code>X-Correlation-Id</code> header).</li>
-<li>Query the log sink for that id — every related record across HTTP, worker, and downstream calls carries it.</li>
-<li>Cross-reference with <code>request_id</code> to scope to the specific HTTP request.</li>
+<li><strong><code>threading.Lock</code> everywhere</strong> — the sync default.</li>
+<li><strong><code>asyncio.Lock</code> per-process + Valkey for anything cross-process</strong>.</li>
+<li><strong>No locks — rely on the GIL.</strong></li>
+<li><strong>Per-resource fine-grained locking</strong> (one lock per connection / room).</li>
 </ol>
-<h2 id="adding-context-to-your-code">Adding context to your code<a class="headerlink" href="#adding-context-to-your-code" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">structlog</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.observability</span><span class="w"> </span><span class="kn">import</span> <span class="n">context</span> <span class="k">as</span> <span class="n">ctx</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">logger</span> <span class="o">=</span> <span class="n">structlog</span><span class="o">.</span><span class="n">get_logger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">place_order</span><span class="p">(</span><span class="n">portfolio_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">strategy_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">):</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="n">ctx</span><span class="o">.</span><span class="n">bind_domain_context</span><span class="p">(</span><span class="n">portfolio_id</span><span class="o">=</span><span class="n">portfolio_id</span><span class="p">,</span> <span class="n">strategy_id</span><span class="o">=</span><span class="n">strategy_id</span><span class="p">)</span>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;order.submitted&quot;</span><span class="p">,</span> <span class="n">broker</span><span class="o">=</span><span class="s2">&quot;alpaca&quot;</span><span class="p">,</span> <span class="n">quantity</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<h2 id="decision-outcome">Decision Outcome<a class="headerlink" href="#decision-outcome" title="Permanent link">&para;</a></h2>
+<p>Chosen option: <strong>Option 2 — <code>asyncio.Lock</code> for every in-process mutex,
+Valkey for cross-process coordination.</strong> Any code that needs to serialise
+coroutine access to shared mutable state uses <code>asyncio.Lock</code> (or the
+related <code>asyncio.Semaphore</code> / <code>asyncio.Event</code>). <code>threading.Lock</code> /
+<code>multiprocessing.Lock</code> are <strong>not</strong> used in the async hot path.</p>
+<h3 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Positive</strong> — a contended lock yields back to the loop; unrelated
+  coroutines (other HTTP requests, other WS connections, the heartbeat
+  task) keep running. This is the whole point.</li>
+<li><strong>Positive</strong> — the rule is mechanical to enforce in review ("does this
+  module touch shared state from a coroutine? then <code>asyncio.Lock</code>") and
+  pairs with the existing <code>async with lock:</code> idiom that basedpyright can
+  sanity-check.</li>
+<li><strong>Positive</strong> — lazy lock construction (see Details) keeps <code>import
+  engine.events.bus</code> loop-free, so unit tests and <code>python -c</code> probes
+  don't trip a <code>RuntimeError</code>.</li>
+<li><strong>Negative</strong> — <code>asyncio.Lock</code> requires a running loop at <em>use</em> time,
+  so it can't protect genuinely synchronous code or be acquired at import
+  time. We accept this because <strong>every engine hot path is async</strong> — sync
+  code paths are explicitly a non-goal (see <code>known-limitations.md</code>).</li>
+<li><strong>Negative</strong> — <code>asyncio.Lock</code> is per-process only. For state that must
+  be consistent <em>across</em> replicas we already rely on Valkey (the rate
+  limiter's <code>ValkeyBucketBackend</code>, the <code>EventBus</code> pub/sub bridge), so this
+  is not a new limitation — it just means <code>asyncio.Lock</code> is the wrong
+  tool for cross-replica problems.</li>
+<li><strong>Neutral</strong> — the acquire site must use <code>async with lock:</code> and the
+  guard method must be <code>async def</code>. Forgetting either compiles but does
+  the wrong thing silently (<code>with lock:</code> on an <code>asyncio.Lock</code> returns a
+  coroutine and never actually acquires). Review + type-checking catch
+  this; there is no runtime assertion today.</li>
+</ul>
+<h2 id="details">Details<a class="headerlink" href="#details" title="Permanent link">&para;</a></h2>
+<h3 id="three-live-call-sites">Three live call sites<a class="headerlink" href="#three-live-call-sites" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Site</th>
+<th>Source</th>
+<th>What it guards</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Process-wide <code>EventBus</code> singleton</td>
+<td><a href="../../engine/events/bus.py"><code>engine/events/bus.py:get_event_bus</code></a></td>
+<td>The lazy "build + connect the bus exactly once" path. Double-checked locking: a fast <code>if _state.bus is not None</code> return avoids the lock on the hot path; the re-check inside <code>async with lock:</code> closes the race where two tasks both saw <code>None</code>.</td>
+</tr>
+<tr>
+<td>WebSocket connection registry</td>
+<td><a href="../../engine/api/ws/connection_manager.py"><code>engine/api/ws/connection_manager.py:ConnectionManager._lock</code></a></td>
+<td>The <code>_connections</code> / <code>_rooms</code> / <code>_seq_counters</code> dicts and the <code>_shutting_down</code> flag, mutated from <code>register</code>, <code>disconnect</code>, <code>subscribe</code>, <code>broadcast</code>, <code>close_all</code>. Every mutation runs under one <code>asyncio.Lock</code> — coarse by design (see Option 4).</td>
+</tr>
+<tr>
+<td>Per-IP WS auth rate limiter</td>
+<td><a href="../../engine/api/ws/auth.py"><code>engine/api/ws/auth.py:AuthRateLimiter._lock</code></a></td>
+<td>The <code>ip → bucket</code> map mutated on every auth attempt.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="lazy-construction-no-lock-at-import-time">Lazy construction (no lock at import time)<a class="headerlink" href="#lazy-construction-no-lock-at-import-time" title="Permanent link">&para;</a></h3>
+<p><code>asyncio.Lock()</code> binds to the running loop at construction. The
+<code>EventBus</code> singleton therefore does <strong>not</strong> build its lock at module
+top-level; it lazy-creates it on first use from inside an async context
+(<a href="../../engine/events/bus.py"><code>_get_event_bus_lock</code></a>):</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">_state</span><span class="o">.</span><span class="n">lock</span> <span class="o">=</span> <span class="kc">None</span>            <span class="c1"># module level — no loop needed to import</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">_get_event_bus_lock</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Lock</span><span class="p">:</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="k">if</span> <span class="n">_state</span><span class="o">.</span><span class="n">lock</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="n">_state</span><span class="o">.</span><span class="n">lock</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>   <span class="c1"># created lazily, inside an async caller</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="k">return</span> <span class="n">_state</span><span class="o">.</span><span class="n">lock</span>
 </span></code></pre></div>
-<p>The fields bound via <code>bind_domain_context</code> attach to every subsequent log
-record in this asyncio task — no need to repeat them on each call.</p>
+<p><code>ConnectionManager</code> and <code>AuthRateLimiter</code> build their lock in <code>__init__</code>,
+which is fine because both are constructed from <code>lifespan(...)</code> — an
+async context where a loop is guaranteed.</p>
+<h3 id="where-cross-process-coordination-goes-instead">Where cross-process coordination goes instead<a class="headerlink" href="#where-cross-process-coordination-goes-instead" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>Mechanism</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Global rate-limit buckets (multi-replica)</td>
+<td><code>ValkeyBucketBackend</code> (<a href="../../engine/api/rate_limit.py"><code>engine/api/rate_limit.py</code></a>), enabled by <code>NEXUS_RATE_LIMIT_VALKEY_ENABLED=true</code></td>
+</tr>
+<tr>
+<td>Cross-replica WebSocket event delivery</td>
+<td><code>EventBus</code> → Valkey pub/sub → <code>EventBusBridge</code> on every replica (ADR-0009)</td>
+</tr>
+<tr>
+<td>MCP per-principal rate limiting</td>
+<td>in-memory only today (single-process stdio transport) — see <a href="../../mcp-server/#rate-limiting"><code>mcp-server.md</code></a></td>
+</tr>
+</tbody>
+</table>
+<p><code>asyncio.Lock</code> is deliberately <strong>not</strong> the tool for any of these; it is
+correct only for state that lives in a single process.</p>
+<h2 id="pros-and-cons-of-the-options">Pros and Cons of the Options<a class="headerlink" href="#pros-and-cons-of-the-options" title="Permanent link">&para;</a></h2>
+<h3 id="option-1-threadinglock-everywhere">Option 1 — <code>threading.Lock</code> everywhere<a class="headerlink" href="#option-1-threadinglock-everywhere" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Familiar; works in sync code.</li>
+<li><strong>Cons:</strong> Blocks the loop thread on contention → every other coroutine
+  stalls; deadlock presents as a silent hang. This is exactly the bug
+  gh#1235 fixed.</li>
+</ul>
+<h3 id="option-2-asynciolock-per-process-valkey-cross-process-chosen">Option 2 — <code>asyncio.Lock</code> per-process + Valkey cross-process (chosen)<a class="headerlink" href="#option-2-asynciolock-per-process-valkey-cross-process-chosen" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Never blocks the loop; per-process correctness for free;
+  cross-process problems already have a Valkey path.</li>
+<li><strong>Cons:</strong> Requires a running loop at use time; per-process only;
+  acquire site must remember <code>async with</code> / <code>async def</code>.</li>
+</ul>
+<h3 id="option-3-no-locks-rely-on-the-gil">Option 3 — No locks (rely on the GIL)<a class="headerlink" href="#option-3-no-locks-rely-on-the-gil" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Nothing to acquire.</li>
+<li><strong>Cons:</strong> The GIL makes individual bytecode ops atomic, not
+  <em>compound</em> operations across an <code>await</code>. <code>register()</code> does a
+  capacity check, an insert into <code>_connections</code>, and a join into
+  <code>_rooms</code>; two coroutines interleaving between those steps corrupt the
+  dicts. Not viable past one connection.</li>
+</ul>
+<h3 id="option-4-fine-grained-per-resource-locking">Option 4 — Fine-grained per-resource locking<a class="headerlink" href="#option-4-fine-grained-per-resource-locking" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Maximises concurrency within the manager.</li>
+<li><strong>Cons:</strong> Over-engineering at current scale — the registry mutations
+  are fast and the lock is held for microseconds, not across I/O. One
+  coarse <code>asyncio.Lock</code> is simpler to reason about and deadlocks are
+  easier to avoid. Revisit only if profiling shows contention.</li>
+</ul>
+<h2 id="links">Links<a class="headerlink" href="#links" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Trigger fix: <code>dfaa318 fix(api): replace threading.Lock with asyncio.Lock</code> (gh#1235)</li>
+<li>Connection-lifecycle hardening: <code>7feec33 security(ws): add token auth and fix connection lifecycle</code> (gh#1271)</li>
+<li>Source: <a href="../../engine/events/bus.py"><code>engine/events/bus.py</code></a>,
+  <a href="../../engine/api/ws/connection_manager.py"><code>engine/api/ws/connection_manager.py</code></a>,
+  <a href="../../engine/api/ws/auth.py"><code>engine/api/ws/auth.py</code></a></li>
+<li>Related: <a href="../0009-cross-replica-eventbus-bridge/">ADR-0009</a> (cross-replica
+  state lives in Valkey, not in an in-process lock)</li>
+</ul>
 
 
 
@@ -2789,7 +2963,7 @@ record in this asyncio task — no need to repeat them on each call.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../../operations/runbooks/common-issues/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Common issues">
+          <a href="../0010-static-ast-validation-toctou-loading/" class="md-footer__link md-footer__link--prev" aria-label="Previous: 0010 — Static AST validation + TOCTOU-safe loading">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -2799,20 +2973,20 @@ record in this asyncio task — no need to repeat them on each call.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Common issues
+                0010 — Static AST validation + TOCTOU-safe loading
               </div>
             </div>
           </a>
         
         
           
-          <a href="../../legal/processors/" class="md-footer__link md-footer__link--next" aria-label="Next: Legal data processors">
+          <a href="../template/" class="md-footer__link md-footer__link--next" aria-label="Next: ADR template">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Legal data processors
+                ADR template
               </div>
             </div>
             <div class="md-footer__button md-icon">

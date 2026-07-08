@@ -194,6 +194,7 @@ nav:
       - "0008 — Pluggable MetricsBackend Protocol": adr/0008-pluggable-metrics-backend.md
       - "0009 — Cross-replica WebSocket event bridge": adr/0009-cross-replica-eventbus-bridge.md
       - "0010 — Static AST validation + TOCTOU-safe loading": adr/0010-static-ast-validation-toctou-loading.md
+      - "0011 — Async-native locking (asyncio.Lock)": adr/0011-async-native-locking.md
       - ADR template: adr/template.md
   - Operations:
       - SLOs: operations/slos.md

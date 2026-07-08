@@ -5,9 +5,11 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from fastapi import WebSocketDisconnect
 
 from engine.api.websocket.manager import (
     VALID_TOPICS,
+    ConnectionManager,
     Topic,
     UserTopicManager,
     get_manager,
@@ -160,3 +162,106 @@ class TestSingleton:
         a = get_manager()
         b = get_manager()
         assert a is b
+
+
+class _ChannelWS:
+    """Minimal WebSocket stand-in for the channel-based ConnectionManager.
+
+    ``sent`` records every successful ``send_json`` payload. ``mode``
+    selects success (``"ok"``), a hard disconnect (``"disconnect"``) or
+    a generic send error (``"error"``) so we can exercise every branch
+    of ``ConnectionManager._safe_send``.
+    """
+
+    def __init__(self, mode: str = "ok") -> None:
+        self.sent: list[dict] = []
+        self.mode = mode
+
+    async def send_json(self, payload: dict) -> None:
+        if self.mode == "disconnect":
+            raise WebSocketDisconnect
+        if self.mode == "error":
+            raise RuntimeError("simulated send failure")
+        self.sent.append(payload)
+
+
+class TestChannelConnectionManagerBroadcast:
+    """Regression coverage for the channel-based ``ConnectionManager``.
+
+    ``broadcast`` / ``send`` fan out through ``_safe_send``, which must
+    report ``True`` on a successful send. An earlier build omitted that
+    ``return True`` so every successful delivery read back as a failure:
+    ``_fanout`` routed the connection into ``_cleanup_failed`` and
+    detached it. These tests pin the success contract and the cleanup
+    contract so the bug cannot silently return.
+    """
+
+    @pytest.fixture
+    def cm(self) -> ConnectionManager:
+        return ConnectionManager()
+
+    async def test_broadcast_delivers_and_keeps_connections(self, cm):
+        """A successful broadcast must deliver to every recipient and
+        leave every connection registered and subscribed."""
+        good_a = _ChannelWS("ok")
+        good_b = _ChannelWS("ok")
+        await cm.connect("conn-a", good_a, user_id="alice")
+        await cm.connect("conn-b", good_b, user_id="bob")
+        assert await cm.subscribe("conn-a", "portfolio")
+        assert await cm.subscribe("conn-b", "portfolio")
+
+        sent = await cm.broadcast("portfolio", {"v": 1})
+
+        # Both recipients counted as delivered (this was the bug: returned 0).
+        assert sent == 2
+        assert good_a.sent == [{"v": 1}]
+        assert good_b.sent == [{"v": 1}]
+        # And neither was cleaned up as a failure.
+        assert cm.connection_count == 2
+        assert cm.is_connected("conn-a")
+        assert cm.is_connected("conn-b")
+        assert cm.channel_count == 1
+
+    async def test_send_single_returns_true_on_success(self, cm):
+        """``send`` reports ``True`` only when the delivery succeeded."""
+        ws = _ChannelWS("ok")
+        await cm.connect("conn-1", ws, user_id="alice")
+
+        ok = await cm.send("conn-1", {"v": 9})
+
+        assert ok is True
+        assert ws.sent == [{"v": 9}]
+        assert cm.is_connected("conn-1")
+
+    async def test_broadcast_cleans_up_only_failed_connections(self, cm):
+        """A failing send is detached; a concurrent successful send is not."""
+        good = _ChannelWS("ok")
+        bad = _ChannelWS("error")
+        await cm.connect("conn-good", good, user_id="alice")
+        await cm.connect("conn-bad", bad, user_id="bob")
+        await cm.subscribe("conn-good", "portfolio")
+        await cm.subscribe("conn-bad", "portfolio")
+
+        sent = await cm.broadcast("portfolio", {"v": 2})
+
+        assert sent == 1
+        assert good.sent == [{"v": 2}]
+        # The failed connection was pruned; the good one survived.
+        assert cm.is_connected("conn-good")
+        assert not cm.is_connected("conn-bad")
+        assert cm.connection_count == 1
+
+    async def test_broadcast_cleans_up_disconnected_connection(self, cm):
+        """``WebSocketDisconnect`` is treated as a dead connection too."""
+        good = _ChannelWS("ok")
+        dead = _ChannelWS("disconnect")
+        await cm.connect("conn-good", good, user_id="alice")
+        await cm.connect("conn-dead", dead, user_id="bob")
+        await cm.subscribe("conn-good", "portfolio")
+        await cm.subscribe("conn-dead", "portfolio")
+
+        sent = await cm.broadcast("portfolio", {"v": 3})
+
+        assert sent == 1
+        assert cm.is_connected("conn-good")
+        assert not cm.is_connected("conn-dead")

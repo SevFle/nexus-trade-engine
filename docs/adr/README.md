@@ -23,6 +23,7 @@ We follow the [MADR](https://adr.github.io/madr/) format. See
 | 0008   | Accepted | [Pluggable MetricsBackend Protocol (over hard-coded Prometheus)](0008-pluggable-metrics-backend.md) |
 | 0009   | Accepted | [Cross-replica WebSocket event delivery via Redis pub/sub bridge](0009-cross-replica-eventbus-bridge.md) |
 | 0010   | Accepted | [Static AST validation + TOCTOU-safe strategy loading](0010-static-ast-validation-toctou-loading.md) |
+| 0011   | Accepted | [Async-native locking (`asyncio.Lock`, never `threading.Lock`)](0011-async-native-locking.md) |
 
 When you accept a new ADR, add a row to this table in the same PR.
 

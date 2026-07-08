@@ -1190,6 +1190,8 @@
       
         
       
+        
+      
     
     
     
@@ -1513,6 +1515,34 @@
     
   
     0010 — Static AST validation + TOCTOU-safe loading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="adr/0011-async-native-locking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0011 — Async-native locking (asyncio.Lock)
   
 
     
@@ -2454,8 +2484,8 @@ theme. We picked it over the alternatives for concrete reasons:
   into a Python-only repo would cross-contaminate concerns and bloat CI.
 * Plain Markdown in /docs (the previous approach) renders on GitHub but
   gives no full-text search, no collapsible/versioned navigation, and no
-  reliable Mermaid rendering. For a codebase this size (18 DB tables,
-  9 ADRs, a 452-line API reference, 7 runbooks) those matter.
+  reliable Mermaid rendering. For a codebase this size (20+ DB tables,
+  11 ADRs, a 452-line API reference, 7 runbooks) those matter.
 * MkDocs Material consumes the existing Markdown verbatim, so the files
   stay first-class on GitHub AND get a navigable, searchable, themed
   site. Config lives in /mkdocs.yml; deps in the `docs` extra of
@@ -2579,27 +2609,29 @@ we explain <em>why</em>, not <em>what</em>.</p>
 </span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>│   ├── 0006-bcrypt-fernet.md
 </span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>│   ├── 0007-strategy-sandbox-allowlist-imports.md
 </span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>│   ├── 0008-pluggable-metrics-backend.md
-</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>│   └── 0009-cross-replica-eventbus-bridge.md
-</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>├── api-reference.md                ← every HTTP/WS route, auth, schemas
-</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>├── mcp-server.md                   ← MCP tools/resources/auth (LLM agent surface)
-</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>├── data-model.md                   ← entities, relationships, invariants
-</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>├── deployment.md                   ← infra requirements, env, rollout
-</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>├── development.md                  ← local setup, test suite, lint loop
-</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>├── known-limitations.md            ← tech debt, ranked
-</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>├── RELEASING.md                    ← release engineering
-</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>├── PLUGIN_DEV_GUIDE.md             ← writing strategies
-</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>├── contributors.md                 ← contributor onboarding
-</span><span id="__span-1-29"><a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>├── observability/
-</span><span id="__span-1-30"><a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>│   └── logging.md                  ← structlog schema, redaction rules
-</span><span id="__span-1-31"><a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>├── operations/                     ← how we run it in prod
-</span><span id="__span-1-32"><a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>│   ├── slos.md
-</span><span id="__span-1-33"><a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a>│   ├── backup-and-recovery.md
-</span><span id="__span-1-34"><a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a>│   ├── dr-drill-checklist.md
-</span><span id="__span-1-35"><a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a>│   ├── load-testing.md
-</span><span id="__span-1-36"><a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a>│   └── runbooks/                   ← per-SLO + common debug runbooks
-</span><span id="__span-1-37"><a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a>├── legal/
-</span><span id="__span-1-38"><a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>│   └── processors.md               ← GDPR data-processor inventory
-</span><span id="__span-1-39"><a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a>└── LAST_AUDIT.md                   ← most recent code/security audit summary
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>│   ├── 0009-cross-replica-eventbus-bridge.md
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>│   ├── 0010-static-ast-validation-toctou-loading.md
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>│   └── 0011-async-native-locking.md
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>├── api-reference.md                ← every HTTP/WS route, auth, schemas
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>├── mcp-server.md                   ← MCP tools/resources/auth (LLM agent surface)
+</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>├── data-model.md                   ← entities, relationships, invariants
+</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>├── deployment.md                   ← infra requirements, env, rollout
+</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>├── development.md                  ← local setup, test suite, lint loop
+</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>├── known-limitations.md            ← tech debt, ranked
+</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>├── RELEASING.md                    ← release engineering
+</span><span id="__span-1-29"><a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>├── PLUGIN_DEV_GUIDE.md             ← writing strategies
+</span><span id="__span-1-30"><a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>├── contributors.md                 ← contributor onboarding
+</span><span id="__span-1-31"><a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>├── observability/
+</span><span id="__span-1-32"><a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>│   └── logging.md                  ← structlog schema, redaction rules
+</span><span id="__span-1-33"><a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a>├── operations/                     ← how we run it in prod
+</span><span id="__span-1-34"><a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a>│   ├── slos.md
+</span><span id="__span-1-35"><a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a>│   ├── backup-and-recovery.md
+</span><span id="__span-1-36"><a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a>│   ├── dr-drill-checklist.md
+</span><span id="__span-1-37"><a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a>│   ├── load-testing.md
+</span><span id="__span-1-38"><a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>│   └── runbooks/                   ← per-SLO + common debug runbooks
+</span><span id="__span-1-39"><a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a>├── legal/
+</span><span id="__span-1-40"><a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a>│   └── processors.md               ← GDPR data-processor inventory
+</span><span id="__span-1-41"><a id="__codelineno-1-41" name="__codelineno-1-41" href="#__codelineno-1-41"></a>└── LAST_AUDIT.md                   ← most recent code/security audit summary
 </span></code></pre></div>
 <h2 id="conventions">Conventions<a class="headerlink" href="#conventions" title="Permanent link">&para;</a></h2>
 <ul>
