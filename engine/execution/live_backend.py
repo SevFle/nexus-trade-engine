@@ -3,11 +3,12 @@
 :class:`LiveExecutionBackend` is the concrete live-trading adapter that
 implements the :class:`~engine.core.execution.base.ExecutionBackend` ABC.
 It routes orders to a real broker over an Alpaca-compatible REST API using
-an :class:`httpx.AsyncClient`, and exposes three broker-direct async helpers:
+an :class:`httpx.AsyncClient`, and exposes four broker-direct async helpers:
 
 - :meth:`submit_order`   — ``POST /v2/orders``
 - :meth:`cancel_order`   — ``DELETE /v2/orders/{order_id}``
 - :meth:`get_order_status` — ``GET /v2/orders/{order_id}``
+- :meth:`get_position`  — ``GET /v2/positions/{symbol}``
 
 Design notes
 ------------
@@ -328,6 +329,23 @@ class LiveExecutionBackend(ExecutionBackend):
         resp = await self._request("GET", path)
         return resp.json()
 
+    async def get_position(self, symbol: str) -> dict[str, Any]:
+        """Fetch a single held position via ``GET /v2/positions/{symbol}``.
+
+        Reuses the request pipeline (auth headers, retry, typed error
+        mapping) so failures surface with the same
+        :class:`~engine.core.brokers.base.BrokerError` vocabulary as order
+        submission. Returns the parsed position JSON (``qty``, ``side``,
+        ``avg_entry_price``, ``market_value``, ``unrealized_pl``, …). A 404
+        (no open position for ``symbol``) is mapped to a
+        :class:`~engine.core.brokers.base.BrokerRejectError` carrying the
+        broker's numeric ``code`` so callers can distinguish "no position"
+        from a genuine transport failure.
+        """
+        path = f"/v2/positions/{symbol}"
+        resp = await self._request("GET", path)
+        return resp.json()
+
     # ------------------------------------------------------------------
     # ExecutionBackend ABC implementation
     # ------------------------------------------------------------------
@@ -428,8 +446,20 @@ def _format_qty(qty: Any) -> str:
 
 
 def _format_price(price: Any) -> str:
+    """Serialise a price to a clean decimal string for the order body.
+
+    Decimal inputs have insignificant trailing zeros stripped
+    (``Decimal("330.50") -> "330.5"``) so the wire representation matches
+    Alpaca's canonical form and stays consistent with the ``float`` path
+    (``str(330.50) == "330.5"``). ``normalize()`` is applied through the
+    ``"f"`` format specifier so it never degrades to scientific notation
+    (e.g. ``Decimal("1000000") -> "1000000"``, not ``1E+6``). ``float`` /
+    ``int`` inputs are passed through ``str()`` directly to avoid the
+    floating-point representation artifacts that a ``Decimal(float)``
+    conversion would introduce.
+    """
     if isinstance(price, Decimal):
-        return format(price, "f")
+        return format(price.normalize(), "f")
     return str(price)
 
 
