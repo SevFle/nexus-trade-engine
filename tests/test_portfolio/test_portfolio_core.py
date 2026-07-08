@@ -1,6 +1,10 @@
-"""
-Comprehensive tests for Portfolio — position tracking, P&L calculation,
+"""Comprehensive tests for Portfolio — position tracking, P&L calculation,
 tax lot consumption, error paths, and snapshot methods.
+
+Moved here from ``tests/test_portfolio.py`` to resolve an import collision
+with the ``tests/test_portfolio`` package (both resolved to the same
+``tests.test_portfolio`` module name). The module keeps its original test
+surface intact.
 """
 
 from __future__ import annotations
