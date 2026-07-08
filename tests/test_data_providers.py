@@ -716,10 +716,81 @@ def test_validate_symbol_rejects_url_like_strings():
         validate_symbol("../../etc/passwd")
     with pytest.raises(FatalProviderError):
         validate_symbol("AAPL\nattack")
-    # legitimate symbols pass
+    # legitimate symbols pass (forex slash forms are the caller's job to
+    # pre-normalise — see OANDA's ``/``->``_`` rewrite — so ``/`` is rejected
+    # by the path-segment validator rather than silently interpolated).
     assert validate_symbol("AAPL") == "AAPL"
     assert validate_symbol("BRK.B") == "BRK.B"
-    assert validate_symbol("EUR/USD") == "EUR/USD"
+    assert validate_symbol("EUR_USD") == "EUR_USD"
+    assert validate_symbol("EURUSD=X") == "EURUSD=X"
+    # ``/`` is now part of the rejected security invariant.
+    with pytest.raises(FatalProviderError):
+        validate_symbol("EUR/USD")
+
+
+@pytest.mark.parametrize(
+    "malicious",
+    [
+        "A/B",  # path separator inside a symbol
+        "..\\",  # traversal sequence (backslash form)
+        "...//",  # traversal + separator blend
+        "%2e%2e",  # URL-encoded ".." — must be rejected before any decoding
+        "%2e%2e/",
+        "%2f",
+        "../",
+        "..%2f",
+        "AAPL/B",
+        "./",
+        "/etc/passwd",
+    ],
+)
+def test_validate_symbol_rejects_path_traversal_and_separators(malicious: str):
+    """Security invariant: reject ``..`` and ``/`` before any cosmetic rewrite."""
+    from engine.data.providers._http import validate_symbol
+
+    with pytest.raises(FatalProviderError):
+        validate_symbol(malicious)
+
+
+@pytest.mark.parametrize(
+    "malicious",
+    [
+        "A/B",
+        "..\\",
+        "...//",
+        "%2e%2e",
+        "../../etc/passwd",
+    ],
+)
+def test_encode_path_segment_rejects_path_traversal_inputs(malicious: str):
+    """encode_path_segment must validate, never blindly percent-encode, the input."""
+    from engine.data.providers._http import encode_path_segment
+
+    with pytest.raises(FatalProviderError):
+        encode_path_segment(malicious)
+
+
+@pytest.mark.asyncio
+async def test_yahoo_get_ohlcv_rejects_path_traversal_symbol():
+    """A hostile symbol must never reach the Yahoo chart path."""
+    cache = _make_cache()
+    provider = YahooDataProvider(
+        client=_mock_transport(lambda r: httpx.Response(200, json={})), cache=cache
+    )
+    with pytest.raises(FatalProviderError):
+        await provider.get_ohlcv("A/B", period="1mo", interval="1d")
+    with pytest.raises(FatalProviderError):
+        await provider.get_ohlcv("..\\", period="1mo", interval="1d")
+
+
+@pytest.mark.asyncio
+async def test_yahoo_get_multiple_prices_rejects_path_traversal_symbol():
+    cache = _make_cache()
+    provider = YahooDataProvider(
+        client=_mock_transport(lambda r: httpx.Response(200, json={})), cache=cache
+    )
+    with pytest.raises(FatalProviderError):
+        await provider.get_multiple_prices(["AAPL", "%2e%2e"])
 
 
 def test_redact_secrets_strips_obvious_credentials():
