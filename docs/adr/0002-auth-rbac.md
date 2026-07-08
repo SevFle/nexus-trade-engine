@@ -1,6 +1,6 @@
 # ADR-0002: Authentication & Role-Based Access Control
 
-**Status:** Proposed
+**Status:** Accepted — implemented 2026-04 → 2026-07, **diverging from the proposal below** in naming, package layout, and scope (OIDC/LDAP/MFA/API-keys all shipped instead of being deferred). See [Evolution — how this actually landed](#evolution--how-this-actually-landed) at the end of this ADR for the as-built record; the original proposal is preserved verbatim above it as decision history.
 **Date:** 2026-04-17
 **Tracks:** SEV-233 (gh#86), SEV-273 (gh#9) — closed as duplicate of this ADR
 **Owner:** TBD
@@ -93,3 +93,73 @@ These each get their own ADR when they land.
 - Do we need per-portfolio ACLs in v1, or is per-user RBAC sufficient until multi-tenant lands?
 - Should the JWT include scope claims, or look them up per request? (Trade-off: token size vs. dynamic permission updates.)
 - API key auth (long-lived, scoped) for SDK clients — v1 or follow-up?
+
+---
+
+<a id="evolution--how-this-actually-landed"></a>
+## Evolution — how this actually landed
+
+The decision above was **accepted in spirit** but the implementation,
+landed across SEV-233 / SEV-273 and the subsequent auth PRs (most recently
+Google OAuth #1281, WS token auth #1271), took a **different concrete
+shape**. This section is the as-built record so the proposal and the code
+agree. The original decision text is left intact above as history.
+
+### What changed from the proposal
+
+| Proposal (above) | As-built (code) |
+|---|---|
+| `engine/auth/backend.py` defines an `AuthBackend` `Protocol` | [`engine/api/auth/registry.py`](../../engine/api/auth/registry.py) defines `AuthProviderRegistry`; providers implement the **ABC** `IAuthProvider` in [`engine/api/auth/base.py`](../../engine/api/auth/base.py) (not a runtime `Protocol`). |
+| Backends live under `engine.auth.backends.*` | Providers live under [`engine/api/auth/`](../../engine/api/auth/): `local.py`, `google.py`, `github_oauth.py`, `oidc.py`, `ldap.py`. (`engine/auth/providers/` also exists but holds a legacy/alternate Google provider — the active set is in `api/auth/`.) |
+| Selected via single `NEXUS_AUTH_BACKEND` env var | Selected via **`NEXUS_AUTH_PROVIDERS`** — a comma-separated list, so multiple providers coexist. Built by `create_app()._build_auth_registry()` ([`engine/app.py`](../../engine/app.py)), which `match`-loads each provider lazily. |
+| v1 ships **only** JWT-on-Postgres; OAuth2/OIDC/LDAP explicitly **out of scope** | **All five providers shipped**: `local`, `google`, `github`, `oidc`, `ldap` are all importable and wired by `_build_auth_registry`. Their config knobs (`google_client_id`, `github_client_*`, `oidc_discovery_url`, `ldap_server_url`, …) are all in [`engine/config.py`](../../engine/config.py). (Feature status is still *partial* — see [`known-limitations.md`](../known-limitations.md).) |
+| MFA **out of scope for v1** ("added in a follow-up") | **Shipped** — [`engine/api/auth/mfa.py`](../../engine/api/auth/mfa.py) + [`mfa_service.py`](../../engine/api/auth/mfa_service.py): TOTP with Fernet-encrypted secrets at rest, challenge TTL, and bcrypt-hashed backup codes. At-rest model is ADR-0006. |
+| API keys listed as an **open question** | **Shipped** — [`engine/api/auth/api_keys.py`](../../engine/api/auth/api_keys.py) + the `api_keys` table (migration 011). `nxs_*` tokens work on the REST `get_current_user` path. **Note:** they do **not** yet open WebSocket connections — see [`known-limitations.md`](../known-limitations.md) ("WebSocket does not accept API keys"). |
+| 3 roles: `viewer` / `trader` / `admin` via a `user_roles` join table | **7-role hierarchy** in `IAuthProvider.map_roles` (`_ROLE_PRIORITY`): `viewer(0)` < `user(1)` < `retail_trader(2)` < `quant_dev(3)` < `developer(4)` < `portfolio_manager(5)` < `admin(6)`. Stored as a **single** `users.role` column (not a join); the REST layer enforces a separate `ROLE_HIERARCHY`. External IdP roles are sanitized via `_sanitize_role` (NFKC + control-char strip + allowlist) so a hostile IdP cannot inject a spoofed `admin`. |
+| `auth_tokens` table (hashed, revocable) | Named **`refresh_tokens`** in the as-built schema ([`engine/db/models.py`](../../engine/db/models.py)). Revocation is via refresh-token rows; access tokens are stateless HS256 JWTs. |
+| Password hashing: **Argon2id** | **bcrypt** (`hashed_password` on `users` — see [`data-model.md`](../data-model.md) and ADR-0006). |
+| JWT: HS256 now, RS256 "a one-line config change later" | Still HS256; the RS256 swap remains a TODO, not yet a config knob. |
+
+### What held
+
+- The **two-layer shape** (pluggable provider in front, RBAC enforcement
+  behind, default to a JWT-on-Postgres backend) is exactly what shipped —
+  only the names moved (`AuthBackend`→`IAuthProvider`, `engine/auth/`→
+  `engine/api/auth/`).
+- **JWT-on-Postgres** remains the default (`local` provider, HS256,
+  refresh tokens in the DB).
+- **RBAC via FastAPI dependency** (`require_role` / `get_current_user`)
+  is the enforcement model actually in use.
+- The **alternatives considered** (session-only, external OAuth2 proxy,
+  hosted Auth0/Clerk) were all rejected for the reasons recorded above.
+
+### Why the divergence
+
+The provider ABC + registry landed simpler to extend than a single-backend
+`Protocol` + `NEXUS_AUTH_BACKEND` switch: each provider is a self-contained
+module behind a uniform `IAuthProvider.authenticate(**kwargs)` surface,
+and `NEXUS_AUTH_PROVIDERS` lets operators enable several at once (e.g.
+`local,google`) without a code change. Deferring OIDC/LDAP proved
+unnecessary once `IAuthProvider` made each one a ~one-file job, so they
+were pulled forward rather than cut. MFA and API keys were pulled forward
+for the same reason and because the MCP + WS surfaces (#1271) needed
+token-bearing non-interactive clients.
+
+### Open follow-ups still true
+
+- Unify the **two Alpaca-style adapters** concern (here, the **two auth
+  provider roots**): `engine/api/auth/providers/` vs `engine/auth/providers/`
+  both exist. `create_app()` wires the `api/auth/` set; the `engine/auth/`
+  tree is the legacy/SDK-facing one. Consolidate before more providers land.
+- The per-portfolio ACL vs per-user RBAC open question is still open —
+  RBAC alone is in force.
+- **Two parallel provider roots.** There are genuinely **two independent**
+  Google OAuth implementations: `engine/api/auth/google.py`
+  (`GoogleAuthProvider`, the `IAuthProvider` adapter `create_app` actually
+  registers) and `engine/auth/providers/google.py`
+  (`GoogleOAuthProvider` + `IDTokenClaims`, a standalone protocol-step
+  decomposition its docstring says "complements" `api/auth` for independent
+  unit testing). The latter is **not imported by** the former and **not
+  wired** into the runtime registry. Consolidate the pair before more
+  providers land, or formally designate `engine/auth/providers/` as a
+  reusable protocol library that the `api/auth` adapters consume.
