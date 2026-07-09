@@ -42,7 +42,7 @@ from engine.observability.logging import setup_logging
 from engine.observability.metrics import set_metrics
 from engine.observability.middleware import CorrelationIdMiddleware
 from engine.observability.prometheus import PrometheusBackend
-from engine.observability.sentry import close_sentry, setup_sentry
+from engine.observability.sentry import close_sentry, init_sentry
 from engine.observability.tracing import setup_tracing
 from engine.reference.seed import seed_index
 
@@ -145,9 +145,9 @@ async def _init_observability(app: FastAPI) -> None:
     except Exception:
         logger.warning("nexus.tracing.sqlalchemy_instrument_failed")
     try:
-        setup_sentry()
+        init_sentry()
     except Exception:
-        logger.warning("nexus.sentry_setup_failed")
+        logger.warning("nexus.sentry_init_failed")
     # Switch the process-wide metrics singleton to a recording backend so
     # the /metrics route exposes real counters/gauges/histograms. Operators
     # who want a different exporter (OTel, StatsD, etc.) call set_metrics()

@@ -7,6 +7,8 @@ expose lightweight probes over that subsystem.
 
 from __future__ import annotations
 
+import asyncio
+
 import structlog
 from fastapi import APIRouter, Request
 
@@ -44,16 +46,19 @@ async def _broker_is_running(broker: object | None) -> bool:
     its broker process.
 
     The PING is issued through a throwaway ``redis.asyncio.Redis`` client
-    bound to the broker's pool via ``async with Redis(connection_pool=pool)``.
-    Closing that client on context exit does **not** disconnect the broker's
-    shared pool: redis-py (>=5.0.1) sets ``auto_close_connection_pool =
-    False`` whenever a ``connection_pool`` is passed explicitly to
-    ``Redis()``, so ``aclose()`` only releases the connection the probe
-    borrowed and never calls ``pool.disconnect()``. The probe therefore
-    cannot sever or perturb the pool the app's task dispatch depends on. A
-    ping failure is treated as "not running" (and logged) rather than
-    propagated, because a liveness probe must never turn a broker outage
-    into an API 500.
+    bound to the broker's pool. Critically, that client is **never closed**
+    (no ``async with`` / ``aclose()``): it is structurally impossible for
+    the probe to invoke ``pool.disconnect()`` on the broker's shared pool,
+    so the probe can never sever or perturb the pool the app's task
+    dispatch depends on. (redis-py *would* leave ``auto_close_connection_pool``
+    ``False`` because the pool is passed explicitly, but relying on that
+    internal flag is fragile across versions — not closing the client at
+    all removes the failure mode entirely.)
+
+    The PING is bounded by an ``asyncio.wait_for(..., timeout=1.0)`` so a
+    hung broker can never wedge the probe; a timeout is treated as "not
+    running" (and logged) rather than propagated, because a liveness probe
+    must never turn a broker outage into an API 500.
     """
     if broker is None:
         return False
@@ -69,21 +74,30 @@ async def _broker_is_running(broker: object | None) -> bool:
     # Fallback for taskiq versions without ``is_started``: probe the
     # Redis/Valkey the broker points at by binding a throwaway client to the
     # broker's ``connection_pool``. Imported lazily so tests can patch
-    # ``redis.asyncio.Redis`` at call time.
+    # ``redis.asyncio.Redis`` at call time. The import lives inside the try
+    # so a missing redis dependency is reported as "not running" instead of
+    # crashing the probe.
     pool = getattr(broker, "connection_pool", None)
     if pool is None:
         return False
-    from redis.asyncio import Redis
 
     try:
-        # ``Redis(connection_pool=pool)`` reuses the broker's shared pool.
-        # Because the pool is passed explicitly redis-py leaves
-        # ``auto_close_connection_pool`` ``False``, so the ``async with``
-        # exit (which calls ``aclose()``) only releases the connection this
-        # probe borrowed — it never disconnects/severs the broker's pool.
-        async with Redis(connection_pool=pool) as client:
-            return bool(await client.ping())
-    except Exception as exc:
+        from redis.asyncio import Redis
+
+        # Bind a throwaway client to the broker's shared ``connection_pool``
+        # but deliberately do NOT close it (no ``async with`` / ``aclose()``).
+        # That makes it structurally impossible for the probe to call
+        # ``pool.disconnect()`` — the pool the app's task dispatch depends on
+        # can never be severed or perturbed by a liveness probe.
+        client = Redis(connection_pool=pool)
+        return bool(await asyncio.wait_for(client.ping(), timeout=1.0))
+    except TimeoutError as exc:
+        # ``wait_for()`` elapsed: broker reachable but unresponsive. Caught
+        # separately from connection errors so the log distinguishes a hang
+        # from a hard refusal.
+        logger.warning("tasks.status.broker_ping_timeout", error=str(exc))
+        return False
+    except (ConnectionError, OSError, ImportError) as exc:
         logger.warning("tasks.status.broker_ping_failed", error=str(exc))
         return False
 
