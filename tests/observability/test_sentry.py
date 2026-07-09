@@ -10,6 +10,8 @@ import pytest
 from engine.observability.redact import REDACTED
 from engine.observability.sentry import (
     _before_send,
+    _redact_query_string,
+    _scrub_request,
     close_sentry,
     init_sentry,
     setup_sentry,
@@ -391,3 +393,307 @@ class TestBeforeSendIntegrationWithScrubDict:
         event = {"contexts": {"block": {key: "leak"}}}
         result = _before_send(event, {})
         assert result["contexts"]["block"][key] == REDACTED
+
+
+class TestRedactQueryString:
+    r"""``_redact_query_string`` parses a query string parameter by parameter.
+
+    The generic ``_scrub_string`` treats the whole string as one value and
+    its inline ``key=value`` rule uses a greedy ``\S+`` that lets one
+    parameter swallow its siblings across ``&`` (e.g.
+    ``token=secret&page=1`` -> ``token=***REDACTED***``, losing
+    ``page=1``). The dedicated helper avoids that by splitting first.
+    """
+
+    def test_banned_key_value_redacted(self):
+        assert _redact_query_string("token=topsecret") == f"token={REDACTED}"
+
+    def test_password_value_redacted(self):
+        assert _redact_query_string("password=hunter2") == f"password={REDACTED}"
+
+    def test_non_sensitive_param_preserved(self):
+        # `page` and `keep` are not banned key names, so they survive.
+        result = _redact_query_string("page=2&keep=ok")
+        assert result == "page=2&keep=ok"
+
+    def test_mixed_sensitive_and_non_sensitive(self):
+        qs = "token=topsecret&page=2&refresh_token=rt1&keep=ok"
+        result = _redact_query_string(qs)
+        assert "topsecret" not in result
+        assert "rt1" not in result
+        # Non-sensitive params survive intact (not absorbed/mangled).
+        assert "page=2" in result
+        assert "keep=ok" in result
+        assert result.count(REDACTED) == 2
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "access_token",
+            "refresh_token",
+            "api_key",
+            "apikey",
+            "authorization",
+            "client_secret",
+            "session_id",
+            "ssn",
+        ],
+    )
+    def test_each_banned_query_param_redacted(self, key: str):
+        assert _redact_query_string(f"{key}=leak") == f"{key}={REDACTED}"
+
+    def test_hyphenated_banned_key_redacted(self):
+        # Header-style hyphenated names are normalized (``-`` -> ``_``).
+        assert _redact_query_string("set-cookie=leak") == f"set-cookie={REDACTED}"
+        assert _redact_query_string("x-api-key=leak") == f"x-api-key={REDACTED}"
+        assert (
+            _redact_query_string("x-auth-token=leak") == f"x-auth-token={REDACTED}"
+        )
+
+    def test_url_encoded_banned_key_redacted(self):
+        # ``access%5Ftoken`` URL-decodes to ``access_token`` (banned).
+        result = _redact_query_string("access%5Ftoken=leak&page=1")
+        assert "leak" not in result
+        assert "page=1" in result
+
+    def test_value_level_pattern_redacted_on_non_banned_key(self):
+        # The key is benign, but the value carries a prefixed secret.
+        result = _redact_query_string("note=sk_live_abcdefghijklmnop&page=1")
+        assert "sk_live_abcdefghijklmnop" not in result
+        assert "page=1" in result
+
+    def test_value_level_credit_card_redacted(self):
+        result = _redact_query_string("card=4242 4242 4242 4242")
+        assert "4242 4242 4242 4242" not in result
+
+    def test_empty_string(self):
+        assert _redact_query_string("") == ""
+
+    def test_flag_style_parameter_preserved(self):
+        # A param without ``=`` (a bare flag) is left alone.
+        assert _redact_query_string("enabled&page=1") == "enabled&page=1"
+
+    def test_trailing_amp_preserved(self):
+        assert _redact_query_string("token=leak&") == f"token={REDACTED}&"
+
+    def test_does_not_mutate_input(self):
+        qs = "token=leak&page=1"
+        _redact_query_string(qs)
+        assert qs == "token=leak&page=1"
+
+    def test_more_precise_than_scrub_string(self):
+        # Regression guard: ``_scrub_string`` would eat ``page=1`` here
+        # (greedy value), the dedicated helper must not.
+        from engine.observability.redact import _scrub_string
+
+        assert "page=1" not in _scrub_string("token=secret&page=1")
+        assert "page=1" in _redact_query_string("token=secret&page=1")
+
+
+class TestScrubRequest:
+    """``_scrub_request`` strips secrets from a Sentry request payload.
+
+    Covers the three sensitive fields (``query_string``, ``headers``,
+    ``data``) and proves the remaining fields (``url``, ``method``,
+    ``env`` ...) are preserved untouched.
+    """
+
+    def test_other_request_fields_preserved(self):
+        """Non-sensitive request fields pass through verbatim.
+
+        Note: ``query_string`` is *redacted* by ``_scrub_request`` -- this
+        test deliberately uses a query string with NO secrets so the field
+        survives unchanged, and never asserts that a secret-bearing query
+        string would leak through (that would be a bug).
+        """
+        request = {
+            "url": "https://app.example/dash",
+            "method": "POST",
+            "query_string": "page=2",
+            "headers": {"content-type": "application/json"},
+            "data": {"message": "ok"},
+            "env": {"SERVER_NAME": "app.example"},
+            "fragment": "section",
+        }
+        result = _scrub_request(request)
+        assert result["url"] == "https://app.example/dash"
+        assert result["method"] == "POST"
+        assert result["env"]["SERVER_NAME"] == "app.example"
+        assert result["fragment"] == "section"
+        # Benign query / header / data are preserved (nothing wrongly censored).
+        assert result["query_string"] == "page=2"
+        assert result["headers"]["content-type"] == "application/json"
+        assert result["data"]["message"] == "ok"
+        # Input is not mutated.
+        assert request["query_string"] == "page=2"
+        assert request["headers"]["content-type"] == "application/json"
+
+    def test_query_string_redacted(self):
+        request = {"query_string": "token=topsecret&page=2&refresh_token=rt1&keep=ok"}
+        result = _scrub_request(request)
+        assert "topsecret" not in result["query_string"]
+        assert "rt1" not in result["query_string"]
+        assert "page=2" in result["query_string"]
+        assert "keep=ok" in result["query_string"]
+        # The raw secret-bearing query string must NOT leak verbatim.
+        assert result["query_string"] != request["query_string"]
+
+    def test_query_string_non_string_left_alone(self):
+        # Sentry may attach a non-string query_string in some integrations.
+        request = {"query_string": None}
+        result = _scrub_request(request)
+        assert result["query_string"] is None
+
+    @pytest.mark.parametrize(
+        ("header", "value"),
+        [
+            ("Authorization", "Bearer abc123def456"),
+            ("authorization", "Basic dXNlcjpwYXNz"),
+            ("Cookie", "session=xyz"),
+            ("Set-Cookie", "csrf=abc; Path=/"),
+            ("X-API-Key", "leak"),
+            ("x-api-key", "leak"),
+            ("X-Auth-Token", "leak2"),
+            ("Proxy-Authorization", "Basic dXNlcjpwYXNz"),
+            ("proxy-authorization", "Bearer xyz"),
+        ],
+    )
+    def test_headers_scrubbed(self, header: str, value: str):
+        result = _scrub_request({"headers": {header: value}})
+        assert result["headers"][header] == REDACTED
+
+    def test_headers_non_sensitive_preserved(self):
+        result = _scrub_request(
+            {
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "User-Agent": "pytest/1.0",
+                }
+            }
+        )
+        assert result["headers"]["Content-Type"] == "application/json"
+        assert result["headers"]["Accept"] == "application/json"
+        assert result["headers"]["User-Agent"] == "pytest/1.0"
+
+    def test_headers_non_dict_left_alone(self):
+        result = _scrub_request({"headers": "not-a-dict"})
+        assert result["headers"] == "not-a-dict"
+
+    def test_headers_input_not_mutated(self):
+        request = {"headers": {"Authorization": "Bearer abc123def456"}}
+        _scrub_request(request)
+        assert request["headers"]["Authorization"] == "Bearer abc123def456"
+
+    def test_request_data_scrubbed_dict(self):
+        request = {
+            "data": {
+                "username": "alice",
+                "password": "hunter2",
+                "nested": {"api_key": "leak"},
+                "items": [{"token": "t1"}, {"name": "n"}],
+                "note": "card 4242 4242 4242 4242",
+            }
+        }
+        result = _scrub_request(request)
+        data = result["data"]
+        assert data["username"] == "alice"
+        assert data["password"] == REDACTED
+        assert data["nested"]["api_key"] == REDACTED
+        assert data["items"][0]["token"] == REDACTED
+        assert data["items"][1]["name"] == "n"
+        assert "4242 4242 4242 4242" not in str(data["note"])
+
+    def test_request_data_scrubbed_string(self):
+        result = _scrub_request({"data": "password=hunter2&keep=ok"})
+        assert "hunter2" not in result["data"]
+        assert "keep=ok" in result["data"]
+
+    def test_request_data_scrubbed_list(self):
+        result = _scrub_request({"data": [{"token": "t"}, {"id": 1}]})
+        assert result["data"][0]["token"] == REDACTED
+        assert result["data"][1]["id"] == 1
+
+    def test_request_data_scrubbed_bytes(self):
+        result = _scrub_request({"data": b"password=hunter2"})
+        assert b"hunter2" not in result["data"]
+
+    def test_request_data_none_preserved(self):
+        # ``data`` absent -> key not added; ``data: None`` -> stays None.
+        r1 = _scrub_request({"url": "https://x"})
+        assert "data" not in r1
+        r2 = _scrub_request({"url": "https://x", "data": None})
+        assert r2["data"] is None
+
+    def test_request_data_input_not_mutated(self):
+        body = {"password": "hunter2", "name": "alice"}
+        request = {"data": body}
+        _scrub_request(request)
+        assert request["data"]["password"] == "hunter2"
+        assert request["data"] is body
+
+    def test_full_request_payload_scrubbed_together(self):
+        request = {
+            "url": "https://app.example/api",
+            "method": "POST",
+            "query_string": "token=secret&page=1",
+            "headers": {
+                "Authorization": "Bearer abc123def456",
+                "Content-Type": "application/json",
+            },
+            "data": {"password": "p", "user": "alice"},
+        }
+        result = _scrub_request(request)
+        assert result["url"] == "https://app.example/api"
+        assert result["method"] == "POST"
+        assert "secret" not in result["query_string"]
+        assert result["headers"]["Authorization"] == REDACTED
+        assert result["headers"]["Content-Type"] == "application/json"
+        assert result["data"]["password"] == REDACTED
+        assert result["data"]["user"] == "alice"
+
+
+class TestBeforeSendRequestScrubbing:
+    """``_before_send`` must scrub the ``request`` payload it attaches.
+
+    Integration layer on top of :class:`TestScrubRequest`: proves the
+    wiring inside the ``before_send`` hook catches the request payload
+    Sentry SDK attaches to outbound events.
+    """
+
+    def test_before_send_scrubs_request(self):
+        event = {
+            "request": {
+                "url": "https://app.example/api",
+                "query_string": "token=secret&page=1",
+                "headers": {"Authorization": "Bearer xyz"},
+                "data": {"password": "p"},
+            }
+        }
+        result = _before_send(event, {})
+        req = result["request"]
+        assert req["url"] == "https://app.example/api"
+        assert "secret" not in req["query_string"]
+        assert req["query_string"] != "token=secret&page=1"
+        assert req["headers"]["Authorization"] == REDACTED
+        assert req["data"]["password"] == REDACTED
+
+    def test_before_send_no_request_key(self):
+        event = {"message": "x"}
+        result = _before_send(event, {})
+        assert "request" not in result
+
+    def test_before_send_request_non_dict_passthrough(self):
+        event = {"request": "not-a-dict"}
+        result = _before_send(event, {})
+        assert result["request"] == "not-a-dict"
+
+    def test_before_send_scrubs_contexts_and_request_together(self):
+        """contexts scrubbing and the new request scrubbing coexist."""
+        event = {
+            "contexts": {"user": {"token": "ctx-leak"}},
+            "request": {"headers": {"Authorization": "Bearer abc123def456"}},
+        }
+        result = _before_send(event, {})
+        assert result["contexts"]["user"]["token"] == REDACTED
+        assert result["request"]["headers"]["Authorization"] == REDACTED

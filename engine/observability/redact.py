@@ -53,6 +53,7 @@ _BANNED_KEYS_LOWER = frozenset(
         "credentials",
         # auth payloads
         "authorization",
+        "proxy_authorization",
         "auth",
         "bearer",
         "cookie",
@@ -121,7 +122,7 @@ _KV_KEYS = (
     r"id[_-]?token|jwt|csrf[_-]?token|otp|mfa[_-]?code|"
     r"verification[_-]?code|private[_-]?key|ssh[_-]?key|signing[_-]?key|"
     r"encryption[_-]?key|mfa[_-]?encryption[_-]?key|x[_-]?api[_-]?key|"
-    r"x[_-]?auth[_-]?token|credentials|authorization|auth|bearer|cookie|"
+    r"x[_-]?auth[_-]?token|credentials|authorization|proxy[_-]?authorization|auth|bearer|cookie|"
     r"set[_-]?cookie|session[_-]?id|credit[_-]?card|card[_-]?number|cvv|ssn|"
     r"iban|swift[_-]?code|routing[_-]?number|bank[_-]?account|"
     r"account[_-]?number"
