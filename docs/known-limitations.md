@@ -15,51 +15,23 @@ Priority legend:
 ---
 
 <a id="rebalancer-merge-conflict"></a>
-## P0 — `engine/portfolio/rebalancer.py` has an unmerged Git conflict in the working tree
+## ✅ Resolved — `engine/portfolio/rebalancer.py` merge conflict (b132e00)
 
-**Where**: [`engine/portfolio/rebalancer.py`](../engine/portfolio/rebalancer.py)
-lines 133–220 (`git status` reports the path as `UU` — *both modified*).
-
-The working-tree copy contains three `<<<<<<< Updated upstream` /
-`=======` / `>>>>>>> Stashed changes` blocks inside `_strip_keys` and
-`_clean_weights`. The conflicted text leaves an unterminated string
-literal at line 207, so the module raises `SyntaxError` on import.
-Because [`engine/portfolio/__init__.py`](../engine/portfolio/__init__.py)
-runs `from engine.portfolio.rebalancer import (...)` at the top level,
-the **entire `engine.portfolio` package fails to import** — taking
-`MultiStrategyPortfolio`, `CapitalAllocation`, and the rebalancer down
-with it.
+Commit **b132e00** ("fix(rebalancer): resolve syntax error and pass
+quality gate", #1292) merged the `Stashed changes` branch — the variant
+of `_strip_keys` that returns the full `{key: value}` mapping with
+whitespace-collision detection — and the module now imports cleanly:
 
 ```bash
-.venv/bin/python -c "import engine.portfolio"
-# SyntaxError: unterminated string literal (detected at line 207)
+.venv/bin/python -c "import engine.portfolio"   # OK — no SyntaxError
 ```
 
-**Why `main` still ships green**: the markers are **uncommitted** —
-`HEAD` (the committed copy, 424 lines) contains **zero** conflict markers
-and imports cleanly, and CI runs against `HEAD`. The hazard is narrow but
-real: a careless `git add` + commit would land the broken file on `main`,
-and every web + worker process would `SyntaxError` at startup (the import
-runs at `engine.api.router` graph-build time, so the app would not boot).
-
-**Impact**: in the working tree, anything importing `engine.portfolio` is
-unreachable — not merely "library-only" (the status in
-[`core-domains.md`](architecture/core-domains.md)) but *un-loadable*. The
-rebalancer (#1283) and the capital-aware orchestrator cannot be exercised
-from a REPL until resolved.
-
-**Fix path**: both sides reimplement `_strip_keys` with **conflicting
-return types** (`list[str]` vs `dict[str, Any]`) and `_clean_weights`
-calls it accordingly — pick one signature and align every caller. The
-`Stashed changes` variant (returns the full stripped `{key: value}` mapping
-with explicit whitespace-collision detection) matches the docstrings
-("Deduplication is set-based", rejects "whitespace-colliding keys"), so
-prefer it, delete the `Updated upstream` branch, and `git add` to clear
-the `UU` state. Add a CI guard so markers can never land silently:
-
-```bash
-grep -rnE '^(<<<<<<< |=======|>>>>>>> )' engine/ && exit 1 || exit 0
-```
+This entry is kept as an audit breadcrumb because inbound links from
+[`architecture/core-domains.md`](architecture/core-domains.md) still
+target `#rebalancer-merge-conflict`. The preventive CI guard suggested
+in the original finding (reject conflict markers on `main` before they
+land) is still worth landing alongside the adjacent
+["No Alembic check in CI" P2](#no-alembic-check).
 
 ---
 
@@ -162,7 +134,15 @@ but neither is wired to a public run route:
   [`engine/core/brokers/alpaca/`](../engine/core/brokers/alpaca/)
   (gh#136) — targets the `BrokerClient` Protocol (clock / account /
   positions) rather than the `ExecutionBackend` the order manager
-  calls. The two adapters are not yet unified.
+  calls. It is not wired to a route.
+- [`engine/brokers/alpaca.py`](../engine/brokers/alpaca.py) (#1298)
+  adds a thin `AlpacaBrokerAdapter` that sits **on top of**
+  `LiveExecutionBackend` and exposes the broker-direct REST surface
+  (`submit_order` / `cancel_order` / `get_order_status` /
+  `get_position`), delegating every HTTP/auth/retry/error-mapping
+  concern to that one backend. This is the unified Alpaca entry point
+  a live route would call — but, like the pieces above, it is **not
+  yet registered in the execution factory or mounted by any route**.
 - [`engine/core/live/`](../engine/core/live/) (`loop.py`,
   `kill_switch.py`) is scaffolded; the live loop has no route entry,
   no worker task, and no LB / health integration.
@@ -424,7 +404,16 @@ runs `alembic upgrade head`, then asserts each model table exists
 (reflect over `Base.metadata.sorted_tables` and query
 `information_schema.tables`). ~30 lines of bash. This single job
 would have caught both the `processing_restricted` regression and
-the two-table drift this cycle surfaced.
+the two-table drift this cycle surfaced. In the same job, reject any
+conflict markers so an unmerged file can never land on `main`:
+
+```bash
+grep -rnE '^(<<<<<<< |=======|>>>>>>> )' engine/ && exit 1 || exit 0
+```
+
+(The rebalancer conflict [resolved above](#rebalancer-merge-conflict)
+shipped as an *uncommitted* hazard precisely because no such guard
+existed.)
 
 ---
 

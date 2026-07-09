@@ -299,11 +299,18 @@ A second concrete Alpaca trading client lives in
 `AlpacaTradingClient` (gh#136) implements the `BrokerClient` Protocol
 from [`engine/core/brokers/models.py`](../../engine/core/brokers/models.py)
 and goes direct to Alpaca's REST API over an injectable `httpx.AsyncClient`
-(no `alpaca-py` dependency). The two adapters are **not** unified yet:
-the `brokers/` package targets the broker Protocol surface (clock,
-account, positions), while `engine/execution/` targets the
-`ExecutionBackend` surface the order manager calls. Pick by which
-interface you hold.
+(no `alpaca-py` dependency). It targets the broker Protocol surface
+(clock / account / positions).
+
+A thin, unifying [`AlpacaBrokerAdapter`](../../engine/brokers/alpaca.py)
+in [`engine/brokers/`](../../engine/brokers/) (#1298) delegates every
+transport concern (auth headers, retry, typed error mapping) to
+`LiveExecutionBackend` and exposes the broker-direct REST surface
+(`submit_order` / `cancel_order` / `get_order_status` / `get_position`)
+the engine wants from a broker integration. This is the single Alpaca
+entry point a live route would call; `AlpacaTradingClient` remains the
+lower-level Protocol implementation. None of these is wired to a route
+yet — see the status note below.
 
 Both concrete adapters share the typed error vocabulary from
 [`engine/core/brokers/base.py`](../../engine/core/brokers/base.py):
@@ -382,13 +389,12 @@ drift sitting *exactly* on the boundary is treated as within tolerance
 (float noise can neither spuriously trip nor suppress a rebalance);
 this edge is pinned by tests.
 
-> **Status — two caveats.** (1) Like `MultiStrategyPortfolio`, the
-> rebalancer is **library-only**: no route drives it and no execution
-> layer consumes its `RebalanceOrder`s yet. (2) The file currently carries
-> an **uncommitted merge conflict** that makes the whole `engine.portfolio`
-> package fail to import from a working tree — see the [P0 in
-> `known-limitations.md`](../known-limitations.md#rebalancer-merge-conflict).
-> The committed `HEAD` copy is clean.
+> **Status — library-only.** Like `MultiStrategyPortfolio`, the
+> rebalancer has no route driving it and no execution layer consuming
+> its `RebalanceOrder`s yet. (The uncommitted merge-conflict import
+> failure that previously made the package un-loadable was resolved in
+> b132e00 — see the [resolved note in
+> `known-limitations.md`](../known-limitations.md#rebalancer-merge-conflict).)
 
 Tax reporting lives in [`engine/core/tax/`](../../engine/core/tax/):
 FIFO/LIFO lot matching, US wash-sale detection (`wash_sale.py`), and
