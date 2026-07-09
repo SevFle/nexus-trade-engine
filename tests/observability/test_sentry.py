@@ -8,7 +8,123 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from engine.observability.redact import REDACTED
-from engine.observability.sentry import _before_send, close_sentry, setup_sentry
+from engine.observability.sentry import (
+    _before_send,
+    close_sentry,
+    init_sentry,
+    setup_sentry,
+)
+
+
+class TestInitSentry:
+    """``init_sentry`` is the canonical Sentry bootstrap entry point.
+
+    It reads ``sentry_dsn`` / ``sentry_traces_sample_rate`` / ``app_env``
+    from the pydantic-settings instance and calls ``sentry_sdk.init``.
+    The legacy ``setup_sentry`` name is kept as a backward-compatible
+    alias, so these cases are parametrized over both callables to prove
+    there is no behaviour drift. ``sentry_sdk.init`` is mocked throughout
+    so no real network call is ever made.
+    """
+
+    @pytest.mark.parametrize("init_fn", [init_sentry, setup_sentry], ids=["init_sentry", "setup_sentry_alias"])
+    def test_skipped_when_dsn_empty(self, init_fn):
+        """No ``sentry_sdk.init`` call when the DSN is empty (graceful no-op)."""
+        with (
+            patch("engine.observability.sentry.settings") as mock_settings,
+            patch("sentry_sdk.init") as mock_init,
+        ):
+            mock_settings.sentry_dsn = ""
+            mock_settings.sentry_traces_sample_rate = 0.5
+            init_fn()
+
+        mock_init.assert_not_called()
+
+    @pytest.mark.parametrize("init_fn", [init_sentry, setup_sentry], ids=["init_sentry", "setup_sentry_alias"])
+    def test_calls_sentry_init_with_correct_params_when_dsn_set(self, init_fn):
+        """``sentry_sdk.init`` receives the configured DSN, sample rate,
+        environment, release, PII flag and ``before_send`` hook."""
+        with (
+            patch("engine.observability.sentry.settings") as mock_settings,
+            patch("sentry_sdk.init") as mock_init,
+        ):
+            mock_settings.sentry_dsn = "https://example@sentry.io/1"
+            mock_settings.sentry_traces_sample_rate = 0.25
+            mock_settings.app_version = "2.0.0"
+            mock_settings.app_env = "production"
+            init_fn()
+
+        mock_init.assert_called_once_with(
+            dsn="https://example@sentry.io/1",
+            release="2.0.0",
+            environment="production",
+            traces_sample_rate=0.25,
+            send_default_pii=False,
+            before_send=_before_send,
+        )
+
+    def test_dsn_read_from_settings(self):
+        """The DSN passed to ``sentry_sdk.init`` comes straight from settings."""
+        with (
+            patch("engine.observability.sentry.settings") as mock_settings,
+            patch("sentry_sdk.init") as mock_init,
+        ):
+            mock_settings.sentry_dsn = "https://key@sentry.example/42"
+            mock_settings.sentry_traces_sample_rate = 1.0
+            mock_settings.app_version = "0.0.0"
+            mock_settings.app_env = "test"
+            init_sentry()
+
+        assert mock_init.call_args.kwargs["dsn"] == "https://key@sentry.example/42"
+
+    def test_traces_sample_rate_read_from_settings(self):
+        """``traces_sample_rate`` flows from settings into ``sentry_sdk.init``."""
+        with (
+            patch("engine.observability.sentry.settings") as mock_settings,
+            patch("sentry_sdk.init") as mock_init,
+        ):
+            mock_settings.sentry_dsn = "https://example@sentry.io/1"
+            mock_settings.sentry_traces_sample_rate = 0.3
+            mock_settings.app_version = "1.0.0"
+            mock_settings.app_env = "staging"
+            init_sentry()
+
+        assert mock_init.call_args.kwargs["traces_sample_rate"] == 0.3
+
+    def test_environment_read_from_settings(self):
+        """``environment`` is read from ``settings.app_env``."""
+        with (
+            patch("engine.observability.sentry.settings") as mock_settings,
+            patch("sentry_sdk.init") as mock_init,
+        ):
+            mock_settings.sentry_dsn = "https://example@sentry.io/1"
+            mock_settings.sentry_traces_sample_rate = 0.0
+            mock_settings.app_version = "1.0.0"
+            mock_settings.app_env = "production"
+            init_sentry()
+
+        assert mock_init.call_args.kwargs["environment"] == "production"
+
+    def test_setup_sentry_delegates_to_init_sentry(self):
+        """Invoking the legacy alias must trigger exactly one init call too."""
+        with (
+            patch("engine.observability.sentry.settings") as mock_settings,
+            patch("sentry_sdk.init") as mock_init,
+        ):
+            mock_settings.sentry_dsn = "https://example@sentry.io/1"
+            mock_settings.sentry_traces_sample_rate = 0.1
+            mock_settings.app_version = "1.0.0"
+            mock_settings.app_env = "test"
+            setup_sentry()
+
+        mock_init.assert_called_once_with(
+            dsn="https://example@sentry.io/1",
+            release="1.0.0",
+            environment="test",
+            traces_sample_rate=0.1,
+            send_default_pii=False,
+            before_send=_before_send,
+        )
 
 
 class TestSetupSentry:

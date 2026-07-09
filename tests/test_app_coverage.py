@@ -369,15 +369,15 @@ class TestShutdownGuaranteesCloseSentry:
         mock_close.assert_called_once()
 
 
-class TestSetupSentryGuard:
-    """``setup_sentry()`` in the lifespan startup must be wrapped in a
+class TestInitSentryGuard:
+    """``init_sentry()`` in the lifespan startup must be wrapped in a
     ``try/except`` so that a failure during initialisation does not abort
     the entire application startup — it should log a warning instead.
     """
 
     @pytest.mark.asyncio
-    async def test_setup_sentry_failure_logs_warning_and_continues(self):
-        """When setup_sentry raises, a warning is logged and the lifespan
+    async def test_init_sentry_failure_logs_warning_and_continues(self):
+        """When init_sentry raises, a warning is logged and the lifespan
         proceeds to the next step (``set_metrics``)."""
         from engine.app import lifespan
 
@@ -405,7 +405,7 @@ class TestSetupSentryGuard:
         with (
             patch("engine.app.setup_logging"),
             patch("engine.app.setup_tracing"),
-            patch("engine.app.setup_sentry", side_effect=RuntimeError("dsn bad")),
+            patch("engine.app.init_sentry", side_effect=RuntimeError("dsn bad")),
             patch("engine.app.set_metrics") as mock_set_metrics,
             patch("engine.app.Valkey.from_url", return_value=mock_valkey),
             patch("engine.app._build_auth_registry"),
@@ -424,13 +424,13 @@ class TestSetupSentryGuard:
             async with lifespan(mock_app):
                 pass
 
-        # set_metrics is called AFTER setup_sentry — if the guard works,
+        # set_metrics is called AFTER init_sentry — if the guard works,
         # this must have been called despite the RuntimeError.
         mock_set_metrics.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_setup_sentry_success_does_not_log_warning(self):
-        """When setup_sentry succeeds no warning is emitted."""
+    async def test_init_sentry_success_does_not_log_warning(self):
+        """When init_sentry succeeds no warning is emitted."""
         from engine.app import lifespan
 
         mock_valkey = MagicMock()
@@ -457,7 +457,7 @@ class TestSetupSentryGuard:
         with (
             patch("engine.app.setup_logging"),
             patch("engine.app.setup_tracing"),
-            patch("engine.app.setup_sentry"),
+            patch("engine.app.init_sentry"),
             patch("engine.app.set_metrics"),
             patch("engine.app.Valkey.from_url", return_value=mock_valkey),
             patch("engine.app._build_auth_registry"),

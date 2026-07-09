@@ -32,11 +32,21 @@ def _before_send(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any]
     return event
 
 
-def setup_sentry() -> None:
+def init_sentry() -> None:
     """Initialise the Sentry SDK when a DSN is configured.
 
+    Reads the Sentry ``dsn``, ``traces_sample_rate`` and ``environment``
+    (plus the app ``release`` version) from the application settings
+    (pydantic-settings — see :class:`engine.config.Settings`) and hands
+    them to :func:`sentry_sdk.init`. A ``before_send`` hook
+    (:func:`_before_send`) is wired in to redact secrets / PII from every
+    outbound event.
+
+    This is the canonical entry point, invoked from the FastAPI lifespan
+    startup (``engine.app``).
+
     When ``NEXUS_SENTRY_DSN`` is empty (the default in dev/test) this is a
-    no-op, allowing the process to start without a Sentry backend.
+    graceful no-op, allowing the process to start without a Sentry backend.
     """
     if not settings.sentry_dsn:
         return
@@ -49,6 +59,16 @@ def setup_sentry() -> None:
         send_default_pii=False,
         before_send=_before_send,
     )
+
+
+def setup_sentry() -> None:
+    """Backward-compatible alias for :func:`init_sentry`.
+
+    .. deprecated::
+        Prefer :func:`init_sentry`. This alias is kept so existing call
+        sites and tests continue to work unchanged.
+    """
+    init_sentry()
 
 
 def close_sentry() -> None:
@@ -74,4 +94,4 @@ def close_sentry() -> None:
     client.close()
 
 
-__all__ = ["_before_send", "close_sentry", "setup_sentry"]
+__all__ = ["_before_send", "close_sentry", "init_sentry", "setup_sentry"]
