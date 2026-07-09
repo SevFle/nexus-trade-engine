@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     # Rate limit (global default; per-route overrides live in code)
     rate_limit_per_minute: int = 600
     rate_limit_burst: int = 60
-    rate_limit_exempt_paths: str = "/health,/metrics"
+    rate_limit_exempt_paths: str = "/health,/healthz,/readyz,/metrics"
     # When True, the API uses a Valkey-backed token-bucket backend so
     # the configured limits are enforced globally across every pod
     # sharing the same Valkey. When False (default), each pod keeps a
