@@ -66,14 +66,33 @@ def validate_symbol(symbol: str) -> str:
     Without validation an adversarial symbol like ``"http://attacker"`` would
     redirect httpx off our base_url and exfiltrate auth headers (SSRF).
     Path-traversal sequences like ``..`` are also rejected.
+
+    The security invariant — no path separator (``/``) and no traversal
+    sequence (``..``) — is enforced *before* any cosmetic rewriting (and
+    before the canonical allow-list) as a single explicit pass. This means a
+    hostile value such as ``%2e%2e`` or ``A/B`` can never reach the URL
+    encoder in a shape it might not neutralise. The canonical symbol set used
+    for path interpolation therefore excludes ``/`` and ``..``.
     """
-    if not isinstance(symbol, str) or not _SYMBOL_RE.fullmatch(symbol) or ".." in symbol:
+    if not isinstance(symbol, str):
+        raise FatalProviderError(f"invalid symbol: {symbol!r}")
+    # Security invariant, first and in one pass: a path segment must never
+    # contain a directory separator (``/``) or a traversal sequence (``..``).
+    # Both are rejected up front so a later cosmetic rewrite — or a caller
+    # that forgets to pre-normalise a slash form — cannot smuggle them in.
+    if "/" in symbol or ".." in symbol:
+        raise FatalProviderError(f"invalid symbol: {symbol!r}")
+    if not _SYMBOL_RE.fullmatch(symbol):
         raise FatalProviderError(f"invalid symbol: {symbol!r}")
     return symbol
 
 
 def encode_path_segment(symbol: str) -> str:
-    """URL-encode a validated symbol for safe interpolation into a path."""
+    """URL-encode a validated symbol for safe interpolation into a path.
+
+    :func:`validate_symbol` is the single source of truth, so callers that
+    already validated need not re-run checks — there is no double pass here.
+    """
     return quote(validate_symbol(symbol), safe="")
 
 
