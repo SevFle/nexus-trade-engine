@@ -2249,6 +2249,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#resolved-engineportfoliorebalancerpy-merge-conflict-was-p0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resolved — engine/portfolio/rebalancer.py merge conflict (was P0)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#p0-backtest-results-are-not-persisted" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2517,6 +2528,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#resolved-engineportfoliorebalancerpy-merge-conflict-was-p0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resolved — engine/portfolio/rebalancer.py merge conflict (was P0)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#p0-backtest-results-are-not-persisted" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2747,6 +2769,33 @@ about it today.</p>
 <li><strong>P2</strong> — ergonomics / polish. Fix when next touching the area.</li>
 </ul>
 <hr />
+<p><a id="rebalancer-status"></a></p>
+<h2 id="resolved-engineportfoliorebalancerpy-merge-conflict-was-p0">Resolved — <code>engine/portfolio/rebalancer.py</code> merge conflict (was P0)<a class="headerlink" href="#resolved-engineportfoliorebalancerpy-merge-conflict-was-p0" title="Permanent link">&para;</a></h2>
+<p><strong>Status: fixed.</strong> Commits <code>e7f2833</code> (medium-severity review findings) and
+<code>b132e00</code> (resolve syntax error, pass quality gate) landed the conflict
+resolution: the <code>_strip_keys</code> / <code>_clean_weights</code> divergence is gone, the
+module imports cleanly, and the whole <code>engine.portfolio</code> package
+(<code>PortfolioRebalancer</code>, <code>MultiStrategyPortfolio</code>, <code>CapitalAllocation</code>) is
+loadable from the working tree again:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>.venv/bin/python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import engine.portfolio&quot;</span><span class="w">   </span><span class="c1"># OK — no SyntaxError</span>
+</span></code></pre></div>
+<p>A repo-wide <code>grep</code> for conflict markers across <code>engine/</code> now returns
+nothing, so the working-tree import hazard described in earlier revisions
+of this section no longer applies — <code>HEAD</code> and the working tree agree.</p>
+<p><strong>Carry-over recommendation.</strong> The CI guard proposed while this was open
+is still worth adding: conflict markers landing on <code>main</code> would
+<code>SyntaxError</code> every web + worker process at <code>engine.api.router</code>
+graph-build time (the app would not boot). Add it so the failure mode can
+never recur:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>grep<span class="w"> </span>-rnE<span class="w"> </span><span class="s1">&#39;^(&lt;&lt;&lt;&lt;&lt;&lt;&lt; |=======|&gt;&gt;&gt;&gt;&gt;&gt;&gt; )&#39;</span><span class="w"> </span>engine/<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">exit</span><span class="w"> </span><span class="m">0</span>
+</span></code></pre></div>
+<p><strong>Remaining limitation — downgraded to P1 (library-only).</strong> The
+rebalancer is fully importable and unit-tested, but it is <strong>not wired to
+any route or execution layer</strong>: its <code>RebalanceOrder</code> signals are advisory
+and no consumer exists. That is the same "library-only" status the other
+portfolio components carry — see
+<a href="../architecture/core-domains/#drift-driven-rebalancing-portfoliorebalancer"><code>core-domains.md</code></a>.</p>
+<hr />
 <h2 id="p0-backtest-results-are-not-persisted">P0 — Backtest results are not persisted<a class="headerlink" href="#p0-backtest-results-are-not-persisted" title="Permanent link">&para;</a></h2>
 <p><strong>Where</strong>: <a href="../engine/api/routes/backtest.py#L22"><code>engine/api/routes/backtest.py:22</code></a></p>
 <p>The <code>POST /api/v1/backtest/run</code> route stores results in an
@@ -2791,14 +2840,14 @@ why it has gone unnoticed.</p>
 <p><strong>Workaround today</strong>: after <code>alembic upgrade head</code>, materialize both
 tables from the ORM metadata once against the prod DSN (idempotent,
 adds only the missing tables):</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.db.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Base</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.db.session</span><span class="w"> </span><span class="kn">import</span> <span class="n">engine</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="k">async</span> <span class="k">with</span> <span class="n">engine</span><span class="o">.</span><span class="n">begin</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="n">Base</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">create_all</span><span class="p">)</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.db.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Base</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.db.session</span><span class="w"> </span><span class="kn">import</span> <span class="n">engine</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="k">async</span> <span class="k">with</span> <span class="n">engine</span><span class="o">.</span><span class="n">begin</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="n">Base</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">create_all</span><span class="p">)</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
 </span></code></pre></div>
 <p><strong>Fix path</strong>: add <code>014_consent_and_deletion_tables.py</code> that
 <code>create_table</code>s both with their indexes

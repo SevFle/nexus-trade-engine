@@ -893,6 +893,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#task-queue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task queue
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#client-errors" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1102,6 +1113,17 @@
     <span class="md-ellipsis">
       
         Event delivery
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#authenticated-events-endpoint-ws-apiv1wsevents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authenticated events endpoint (WS /api/v1/ws/events)
       
     </span>
   </a>
@@ -2706,6 +2728,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#task-queue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task queue
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#client-errors" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2921,6 +2954,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#authenticated-events-endpoint-ws-apiv1wsevents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authenticated events endpoint (WS /api/v1/ws/events)
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3127,6 +3171,43 @@ calls <code>/reference/suggest</code> to render attributions).</p>
 </tbody>
 </table>
 <p>Source: <a href="../engine/api/routes/system.py"><code>routes/system.py</code></a>.</p>
+<h2 id="task-queue">Task queue<a class="headerlink" href="#task-queue" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/tasks/*</code> — probes the TaskIQ broker the worker process consumes.
+The broker is opened/closed in the FastAPI lifespan
+(<a href="../engine/app.py"><code>engine/app.py:_init_taskiq_broker</code></a>) and stashed on
+<code>app.state.taskiq_broker</code>; this route reports the broker's <strong>real</strong>
+readiness so deploy/rollout probes can't green-light a dead queue. Source:
+<a href="../engine/api/routes/tasks.py"><code>routes/tasks.py</code></a>.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Auth</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/tasks/status</code></td>
+<td><strong>none</strong> (infra probe)</td>
+<td><code>200 {status:"ok", broker:"running"\|"stopped", broker_online:&lt;bool&gt;}</code>. Always <code>200</code> — the API is up regardless of the broker; callers branch on <code>broker_online</code> rather than the HTTP code, so a broker outage never trips an orchestrator restart.</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>broker</code> field is derived from the broker's actual state, <strong>not</strong> a
+constant: it prefers TaskIQ's own <code>is_started</code> flag (newer releases) and,
+on older TaskIQ builds lacking that flag, falls back to a bounded
+(1 s) <code>PING</code> against the broker's Redis/Valkey connection pool. The probe
+deliberately <strong>never closes</strong> that throwaway pool client, so a liveness
+check cannot perturb the shared pool task dispatch depends on.</p>
+<blockquote>
+<p>A green <code>/api/v1/tasks/status</code> means the <em>worker</em> is reachable. It does
+<strong>not</strong> mean backtests are dispatching to it — <code>POST /api/v1/backtest/run</code>
+still runs work in the FastAPI <code>BackgroundTasks</code> pool (see
+<a href="../known-limitations/">known-limitations.md</a>).</p>
+</blockquote>
 <h2 id="client-errors">Client errors<a class="headerlink" href="#client-errors" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/client/*</code> — browser-side error ingest. Source:
 <a href="../engine/api/routes/client_errors.py"><code>routes/client_errors.py</code></a>.</p>
@@ -3875,6 +3956,22 @@ the <code>EventBus</code> itself publishes over Redis/Valkey pub/sub, events
 published on <strong>any</strong> replica reach local WebSocket connections on
 <strong>every</strong> replica. The <code>ConnectionManager</code> (the live socket objects) is
 still per-process, but event distribution is cross-replica.</p>
+<h3 id="authenticated-events-endpoint-ws-apiv1wsevents">Authenticated events endpoint (<code>WS /api/v1/ws/events</code>)<a class="headerlink" href="#authenticated-events-endpoint-ws-apiv1wsevents" title="Permanent link">&para;</a></h3>
+<p>A <strong>second</strong> WebSocket entrypoint (<a href="../engine/api/ws/events.py"><code>ws/events.py</code></a>)
+streams the same engine events as <code>/ws</code>, but authenticates the session
+token <strong>before</strong> <code>ws.accept()</code>: the token is supplied as a <code>token</code> (or
+<code>session_token</code>) query param, and a bad/missing token rejects the upgrade
+at the HTTP layer with close code <strong><code>4401</code></strong>, so the server never upgrades
+an unauthenticated socket (SEV-275 follow-up). Auth is JWT-only via the
+same <code>decode_token</code> as REST, scopes derive from the JWT <code>role</code> identically
+to <code>/ws</code>, and the wire protocol is the shared <a href="../engine/api/ws/protocol.py"><code>ws/protocol.py</code></a>
+message set. The subsystem is a module-level singleton; <code>init_ws_events(...)</code>
+is re-entrant and disconnects every existing client before installing a
+new manager/bridge, so it is safe to call on config reload.</p>
+<p>Prefer <code>/ws/events</code> when the client can put the token in the handshake
+URL and wants a hard fail on expiry; prefer <code>/ws</code> when the first-message
+<code>auth</code> form fits better (e.g. headless tooling that keeps the token out
+of logs and reverse-proxy access logs).</p>
 <h2 id="errors">Errors<a class="headerlink" href="#errors" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Auth</strong>: <code>401</code> for missing/invalid/expired credentials; <code>403</code> for

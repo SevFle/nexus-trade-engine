@@ -104,6 +104,31 @@ Unauthenticated probes for load balancers and Prometheus.
 
 Source: [`routes/system.py`](../engine/api/routes/system.py).
 
+## Task queue
+
+`/api/v1/tasks/*` — probes the TaskIQ broker the worker process consumes.
+The broker is opened/closed in the FastAPI lifespan
+([`engine/app.py:_init_taskiq_broker`](../engine/app.py)) and stashed on
+`app.state.taskiq_broker`; this route reports the broker's **real**
+readiness so deploy/rollout probes can't green-light a dead queue. Source:
+[`routes/tasks.py`](../engine/api/routes/tasks.py).
+
+| Method | Path | Auth | Returns |
+|---|---|---|---|
+| GET | `/api/v1/tasks/status` | **none** (infra probe) | `200 {status:"ok", broker:"running"\|"stopped", broker_online:<bool>}`. Always `200` — the API is up regardless of the broker; callers branch on `broker_online` rather than the HTTP code, so a broker outage never trips an orchestrator restart. |
+
+The `broker` field is derived from the broker's actual state, **not** a
+constant: it prefers TaskIQ's own `is_started` flag (newer releases) and,
+on older TaskIQ builds lacking that flag, falls back to a bounded
+(1 s) `PING` against the broker's Redis/Valkey connection pool. The probe
+deliberately **never closes** that throwaway pool client, so a liveness
+check cannot perturb the shared pool task dispatch depends on.
+
+> A green `/api/v1/tasks/status` means the *worker* is reachable. It does
+> **not** mean backtests are dispatching to it — `POST /api/v1/backtest/run`
+> still runs work in the FastAPI `BackgroundTasks` pool (see
+> [known-limitations.md](known-limitations.md)).
+
 ## Client errors
 
 `/api/v1/client/*` — browser-side error ingest. Source:
@@ -421,6 +446,25 @@ the `EventBus` itself publishes over Redis/Valkey pub/sub, events
 published on **any** replica reach local WebSocket connections on
 **every** replica. The `ConnectionManager` (the live socket objects) is
 still per-process, but event distribution is cross-replica.
+
+### Authenticated events endpoint (`WS /api/v1/ws/events`)
+
+A **second** WebSocket entrypoint ([`ws/events.py`](../engine/api/ws/events.py))
+streams the same engine events as `/ws`, but authenticates the session
+token **before** `ws.accept()`: the token is supplied as a `token` (or
+`session_token`) query param, and a bad/missing token rejects the upgrade
+at the HTTP layer with close code **`4401`**, so the server never upgrades
+an unauthenticated socket (SEV-275 follow-up). Auth is JWT-only via the
+same `decode_token` as REST, scopes derive from the JWT `role` identically
+to `/ws`, and the wire protocol is the shared [`ws/protocol.py`](../engine/api/ws/protocol.py)
+message set. The subsystem is a module-level singleton; `init_ws_events(...)`
+is re-entrant and disconnects every existing client before installing a
+new manager/bridge, so it is safe to call on config reload.
+
+Prefer `/ws/events` when the client can put the token in the handshake
+URL and wants a hard fail on expiry; prefer `/ws` when the first-message
+`auth` form fits better (e.g. headless tooling that keeps the token out
+of logs and reverse-proxy access logs).
 
 ## Errors
 

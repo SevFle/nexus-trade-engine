@@ -14,52 +14,40 @@ Priority legend:
 
 ---
 
-<a id="rebalancer-merge-conflict"></a>
-## P0 — `engine/portfolio/rebalancer.py` has an unmerged Git conflict in the working tree
+<a id="rebalancer-status"></a>
+## Resolved — `engine/portfolio/rebalancer.py` merge conflict (was P0)
 
-**Where**: [`engine/portfolio/rebalancer.py`](../engine/portfolio/rebalancer.py)
-lines 133–220 (`git status` reports the path as `UU` — *both modified*).
-
-The working-tree copy contains three `<<<<<<< Updated upstream` /
-`=======` / `>>>>>>> Stashed changes` blocks inside `_strip_keys` and
-`_clean_weights`. The conflicted text leaves an unterminated string
-literal at line 207, so the module raises `SyntaxError` on import.
-Because [`engine/portfolio/__init__.py`](../engine/portfolio/__init__.py)
-runs `from engine.portfolio.rebalancer import (...)` at the top level,
-the **entire `engine.portfolio` package fails to import** — taking
-`MultiStrategyPortfolio`, `CapitalAllocation`, and the rebalancer down
-with it.
+**Status: fixed.** Commits `e7f2833` (medium-severity review findings) and
+`b132e00` (resolve syntax error, pass quality gate) landed the conflict
+resolution: the `_strip_keys` / `_clean_weights` divergence is gone, the
+module imports cleanly, and the whole `engine.portfolio` package
+(`PortfolioRebalancer`, `MultiStrategyPortfolio`, `CapitalAllocation`) is
+loadable from the working tree again:
 
 ```bash
-.venv/bin/python -c "import engine.portfolio"
-# SyntaxError: unterminated string literal (detected at line 207)
+.venv/bin/python -c "import engine.portfolio"   # OK — no SyntaxError
 ```
 
-**Why `main` still ships green**: the markers are **uncommitted** —
-`HEAD` (the committed copy, 424 lines) contains **zero** conflict markers
-and imports cleanly, and CI runs against `HEAD`. The hazard is narrow but
-real: a careless `git add` + commit would land the broken file on `main`,
-and every web + worker process would `SyntaxError` at startup (the import
-runs at `engine.api.router` graph-build time, so the app would not boot).
+A repo-wide `grep` for conflict markers across `engine/` now returns
+nothing, so the working-tree import hazard described in earlier revisions
+of this section no longer applies — `HEAD` and the working tree agree.
 
-**Impact**: in the working tree, anything importing `engine.portfolio` is
-unreachable — not merely "library-only" (the status in
-[`core-domains.md`](architecture/core-domains.md)) but *un-loadable*. The
-rebalancer (#1283) and the capital-aware orchestrator cannot be exercised
-from a REPL until resolved.
-
-**Fix path**: both sides reimplement `_strip_keys` with **conflicting
-return types** (`list[str]` vs `dict[str, Any]`) and `_clean_weights`
-calls it accordingly — pick one signature and align every caller. The
-`Stashed changes` variant (returns the full stripped `{key: value}` mapping
-with explicit whitespace-collision detection) matches the docstrings
-("Deduplication is set-based", rejects "whitespace-colliding keys"), so
-prefer it, delete the `Updated upstream` branch, and `git add` to clear
-the `UU` state. Add a CI guard so markers can never land silently:
+**Carry-over recommendation.** The CI guard proposed while this was open
+is still worth adding: conflict markers landing on `main` would
+`SyntaxError` every web + worker process at `engine.api.router`
+graph-build time (the app would not boot). Add it so the failure mode can
+never recur:
 
 ```bash
 grep -rnE '^(<<<<<<< |=======|>>>>>>> )' engine/ && exit 1 || exit 0
 ```
+
+**Remaining limitation — downgraded to P1 (library-only).** The
+rebalancer is fully importable and unit-tested, but it is **not wired to
+any route or execution layer**: its `RebalanceOrder` signals are advisory
+and no consumer exists. That is the same "library-only" status the other
+portfolio components carry — see
+[`core-domains.md`](architecture/core-domains.md#drift-driven-rebalancing-portfoliorebalancer).
 
 ---
 
