@@ -25,14 +25,21 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Annotated, Protocol
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.api.auth.dependency import get_current_user
 from engine.config import settings
+from engine.legal.disclaimers import (
+    DisclaimerCategory,
+    DisclaimerListResponse,
+    RiskDisclosureResponse,
+    build_disclaimer_list_response,
+    get_risk_disclosure,
+)
 
 if TYPE_CHECKING:
     from engine.db.models import User
@@ -289,3 +296,41 @@ async def get_legal_status(
         accepted_version=latest.document_version if latest is not None else None,
         needs_acceptance=not accepted,
     )
+
+
+@router.get("/api/legal/disclaimers", response_model=DisclaimerListResponse)
+async def list_disclaimers(
+    category: Annotated[
+        DisclaimerCategory | None,
+        Query(
+            description=(
+                "Optional filter narrowing the result to a single disclaimer "
+                "category (trading_risk, wash_sale, tax_implications, general)."
+            ),
+        ),
+    ] = None,
+) -> DisclaimerListResponse:
+    """Return all structured legal disclaimers, optionally filtered by category.
+
+    This endpoint is **public** (no authentication required) because legal
+    disclaimers and risk notices must be displayable before a user signs in or
+    accepts terms — e.g. on pre-login notice screens and during onboarding.
+
+    Without ``category`` every disclaimer is returned. With a valid category
+    only that category's disclaimers are returned; an unknown category value
+    is rejected with HTTP 422 by FastAPI's enum validation. ``categories`` in
+    the response reflects the categories present in the returned list.
+    """
+    return build_disclaimer_list_response(category=category)
+
+
+@router.get("/api/legal/risk-disclosures", response_model=RiskDisclosureResponse)
+async def get_risk_disclosures() -> RiskDisclosureResponse:
+    """Return detailed, structured risk-disclosure information.
+
+    Public endpoint (no authentication). Combines a plain-language overview,
+    a list of discrete risk factors, and the related structured disclaimers
+    that elaborate on the most loss-relevant risk areas, so a client can
+    render the full disclosure surface from a single request.
+    """
+    return get_risk_disclosure()
