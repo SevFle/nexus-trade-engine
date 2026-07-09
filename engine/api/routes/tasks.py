@@ -7,8 +7,11 @@ expose lightweight probes over that subsystem.
 
 from __future__ import annotations
 
+import asyncio
+
 import structlog
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 
 logger = structlog.get_logger()
 
@@ -55,15 +58,21 @@ async def _broker_is_running(broker: object | None) -> bool:
     try:
         from redis.asyncio import Redis
 
-        async with Redis(connection_pool=pool) as redis:
-            return bool(await redis.ping())
+        # Non-owning client: the broker's connection pool owns the
+        # underlying connections (and shares them with the rest of the
+        # API process), so we deliberately do NOT ``aclose``/``close``
+        # this client — tearing it down would drain a pool other code
+        # still depends on. The PING is bounded by a short timeout so a
+        # hung/unreachable broker can never stall the liveness probe.
+        redis = Redis(connection_pool=pool)
+        return bool(await asyncio.wait_for(redis.ping(), timeout=2.0))
     except Exception as exc:  # pragma: no cover - depends on live infra
         logger.warning("tasks.status.broker_ping_failed", error=str(exc))
         return False
 
 
 @router.get("/status")
-async def task_status(request: Request) -> dict[str, str]:
+async def task_status(request: Request) -> JSONResponse:
     """Report taskiq broker readiness.
 
     Deliberately **unauthenticated**: this is an infrastructure
@@ -75,12 +84,16 @@ async def task_status(request: Request) -> dict[str, str]:
     (``running`` / ``stopped``) via :func:`_broker_is_running`, rather than
     a hardcoded string, so a probe actually catches a broker outage
     instead of green-lining a dead queue. The overall endpoint ``status``
-    stays ``"ok"`` because the API itself is up regardless of the broker's
-    condition — the per-subsystem ``broker`` field carries the detail.
+    mirrors the broker's condition: ``"ok"`` (HTTP 200) when the broker is
+    running, and ``"degraded"`` (HTTP 503) when it is stopped, so
+    orchestrators reading the status code alone are steered away from an
+    instance that can't enqueue tasks.
     """
     broker = getattr(request.app.state, "taskiq_broker", None)
     running = await _broker_is_running(broker)
-    return {"status": "ok", "broker": "running" if running else "stopped"}
+    if running:
+        return JSONResponse({"status": "ok", "broker": "running"}, status_code=200)
+    return JSONResponse({"status": "degraded", "broker": "stopped"}, status_code=503)
 
 
 __all__ = ["router", "task_status"]

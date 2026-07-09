@@ -18,6 +18,12 @@ here is:
   as ``stopped``; we then inject brokers in known states to prove the
   field flips to ``running`` when the broker is live.
 
+* **Status mirrors broker condition** — the endpoint reports
+  ``status="degraded"`` with **HTTP 503** when the broker is stopped (so
+  orchestrators reading the status code alone are steered away from an
+  instance that can't enqueue tasks), and ``status="ok"`` with HTTP 200
+  when the broker is running.
+
 A companion concern — that the lifespan actually invokes
 ``broker.startup()`` / ``broker.shutdown()`` — is covered by
 ``tests/test_task_broker.py`` at the broker-construction layer; this
@@ -35,8 +41,8 @@ from engine.api.routes.tasks import _broker_is_running
 from engine.app import create_app
 
 
-def test_tasks_status_endpoint_unauthenticated_and_reports_stopped() -> None:
-    """No credentials required, and with no lifespan the broker is stopped."""
+def test_tasks_status_endpoint_unauthenticated_and_reports_degraded() -> None:
+    """No credentials required; with no lifespan the broker is stopped/degraded."""
     app = create_app()
     client = TestClient(app)
 
@@ -44,9 +50,11 @@ def test_tasks_status_endpoint_unauthenticated_and_reports_stopped() -> None:
     # orchestrators/load balancers during deploys.
     response = client.get("/api/v1/tasks/status")
 
-    assert response.status_code == 200
+    # A dead/stopped broker downgrades the probe so load balancers steer
+    # traffic away from an instance that can't enqueue tasks.
+    assert response.status_code == 503
     body = response.json()
-    assert body["status"] == "ok"
+    assert body["status"] == "degraded"
     # The lifespan was never entered, so app.state.taskiq_broker is unset
     # and the broker is reported by its real state (stopped), not a
     # hardcoded "running".
@@ -54,7 +62,7 @@ def test_tasks_status_endpoint_unauthenticated_and_reports_stopped() -> None:
 
 
 def test_tasks_status_endpoint_reports_running_when_started() -> None:
-    """A started broker (``is_started`` True) is reported as ``running``."""
+    """A started broker (``is_started`` True) is reported as ``running``/200."""
     app = create_app()
     # Mirror what the lifespan does on a successful startup(): stash the
     # live broker on app.state. Here we inject a stub that advertises the
@@ -68,16 +76,21 @@ def test_tasks_status_endpoint_reports_running_when_started() -> None:
     assert response.json() == {"status": "ok", "broker": "running"}
 
 
-def test_tasks_status_endpoint_reports_stopped_when_flag_false() -> None:
-    """A broker whose ``is_started`` is False is reported as ``stopped``."""
+def test_tasks_status_endpoint_reports_degraded_when_flag_false() -> None:
+    """A stopped broker (``is_started`` False) → HTTP 503 / ``degraded``.
+
+    This is the explicit degraded-path coverage: a broker that is wired up
+    on ``app.state`` but reports itself as not started yields a 503 with a
+    ``degraded`` status so orchestrators don't route traffic to it.
+    """
     app = create_app()
     app.state.taskiq_broker = SimpleNamespace(is_started=False)
 
     client = TestClient(app)
     response = client.get("/api/v1/tasks/status")
 
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok", "broker": "stopped"}
+    assert response.status_code == 503
+    assert response.json() == {"status": "degraded", "broker": "stopped"}
 
 
 async def test_broker_is_running_uses_ping_when_no_flag() -> None:
@@ -86,23 +99,57 @@ async def test_broker_is_running_uses_ping_when_no_flag() -> None:
     Covers the version-independent fallback path: a broker that exposes a
     ``connection_pool`` but no ``is_started`` flag is probed with a real
     ``PING``. ``redis.asyncio.Redis`` is patched so the test is hermetic.
+
+    The fallback uses a *non-owning* client (no ``aclose``/``close``) and
+    bounds the ping with ``asyncio.wait_for`` so a hung broker can't stall
+    the probe — both of which are asserted here.
     """
-    fake_redis = MagicMock()
-    fake_redis.__aenter__ = AsyncMock(return_value=fake_redis)
-    fake_redis.__aexit__ = AsyncMock(return_value=None)
+    fake_redis = MagicMock(name="fake_redis")
     fake_redis.ping = AsyncMock(return_value=True)
+    fake_redis.aclose = MagicMock(name="aclose")
+    fake_redis.close = MagicMock(name="close")
 
     broker = SimpleNamespace(connection_pool=MagicMock(name="pool"))
-    with patch("redis.asyncio.Redis", return_value=fake_redis):
+    with patch("redis.asyncio.Redis", return_value=fake_redis) as redis_cls:
         assert await _broker_is_running(broker) is True  # type: ignore[arg-type]
+
+    # The fallback builds the client from the broker's pool.
+    redis_cls.assert_called_once_with(connection_pool=broker.connection_pool)
+    # The ping was actually awaited inside ``asyncio.wait_for``.
     fake_redis.ping.assert_awaited_once()
+    # Non-owning client: the probe must never close it (the pool manages
+    # connections and is shared with the rest of the API process).
+    fake_redis.aclose.assert_not_called()
+    fake_redis.close.assert_not_called()
+
+
+async def test_broker_is_running_ping_timeout_reports_not_running() -> None:
+    """A PING that exceeds the probe timeout never stalls — it reports down.
+
+    Pins the ``asyncio.wait_for(..., timeout=2.0)`` bound: when the ping
+    blows the deadline the resulting ``TimeoutError`` is swallowed and the
+    broker is reported as not running (a liveness probe must never hang).
+    """
+    fake_redis = MagicMock(name="fake_redis")
+    fake_redis.ping = AsyncMock(return_value=True)
+
+    async def _hang_and_timeout(coro, timeout=None):
+        # ``wait_for`` receives the already-created ping coroutine; close
+        # it so it isn't left un-awaited (mirrors what a real timeout does).
+        coro.close()
+        raise TimeoutError
+
+    broker = SimpleNamespace(connection_pool=MagicMock(name="pool"))
+    with (
+        patch("redis.asyncio.Redis", return_value=fake_redis),
+        patch("asyncio.wait_for", new=_hang_and_timeout),
+    ):
+        assert await _broker_is_running(broker) is False  # type: ignore[arg-type]
 
 
 async def test_broker_is_running_ping_failure_reports_not_running() -> None:
     """A failed PING never raises — it reports the broker as not running."""
-    fake_redis = MagicMock()
-    fake_redis.__aenter__ = AsyncMock(return_value=fake_redis)
-    fake_redis.__aexit__ = AsyncMock(return_value=None)
+    fake_redis = MagicMock(name="fake_redis")
     fake_redis.ping = AsyncMock(side_effect=ConnectionError("broker down"))
 
     broker = SimpleNamespace(connection_pool=MagicMock(name="pool"))
