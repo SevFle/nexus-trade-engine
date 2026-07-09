@@ -2249,6 +2249,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#p2-no-ci-guard-against-committed-merge-conflict-markers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        P2 — No CI guard against committed merge-conflict markers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#p0-backtest-results-are-not-persisted" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2517,6 +2528,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#p2-no-ci-guard-against-committed-merge-conflict-markers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        P2 — No CI guard against committed merge-conflict markers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#p0-backtest-results-are-not-persisted" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2747,6 +2769,32 @@ about it today.</p>
 <li><strong>P2</strong> — ergonomics / polish. Fix when next touching the area.</li>
 </ul>
 <hr />
+<p><a id="rebalancer-merge-conflict"></a></p>
+<h2 id="p2-no-ci-guard-against-committed-merge-conflict-markers">P2 — No CI guard against committed merge-conflict markers<a class="headerlink" href="#p2-no-ci-guard-against-committed-merge-conflict-markers" title="Permanent link">&para;</a></h2>
+<p><strong>Background</strong>: an uncommitted merge conflict in
+<a href="../engine/portfolio/rebalancer.py"><code>engine/portfolio/rebalancer.py</code></a>
+once left an unterminated string literal that made the whole
+<code>engine.portfolio</code> package <code>SyntaxError</code> on import. The conflict was
+<strong>never committed</strong> — <code>HEAD</code> was clean and CI ran green — and the
+working tree has since been resolved (<code>engine.portfolio</code> now imports
+cleanly, the file is 441 lines, zero conflict markers). The incident
+is worth a durable guard because the failure mode is severe:
+<code>engine.api.router</code> imports <code>engine.portfolio</code> at app build time, so a
+single committed <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code> / <code>=======</code> / <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> block would
+<code>SyntaxError</code> every web <strong>and</strong> worker process at startup — the app
+would not boot, and CI would only catch it <em>after</em> the bad commit
+landed.</p>
+<p><strong>Fix path</strong>: add a one-line gate so merge markers can never ship on
+<code>main</code> silently — drop it into the lint stage of
+<code>.github/workflows/ci.yml</code>:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>grep<span class="w"> </span>-rnE<span class="w"> </span><span class="s1">&#39;^(&lt;&lt;&lt;&lt;&lt;&lt;&lt; |=======|&gt;&gt;&gt;&gt;&gt;&gt;&gt; )&#39;</span><span class="w"> </span>engine/<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">exit</span><span class="w"> </span><span class="m">0</span>
+</span></code></pre></div>
+<p>Zero false positives, and it would have caught the working-tree hazard
+before a careless <code>git add</code> could commit it. (This is the same class of
+"invisible until a fresh prod deploy" drift the <a href="#no-alembic-check">no-Alembic-check P2</a>
+below guards against — small CI jobs that assert reality against the
+source of truth.)</p>
+<hr />
 <h2 id="p0-backtest-results-are-not-persisted">P0 — Backtest results are not persisted<a class="headerlink" href="#p0-backtest-results-are-not-persisted" title="Permanent link">&para;</a></h2>
 <p><strong>Where</strong>: <a href="../engine/api/routes/backtest.py#L22"><code>engine/api/routes/backtest.py:22</code></a></p>
 <p>The <code>POST /api/v1/backtest/run</code> route stores results in an
@@ -2791,14 +2839,14 @@ why it has gone unnoticed.</p>
 <p><strong>Workaround today</strong>: after <code>alembic upgrade head</code>, materialize both
 tables from the ORM metadata once against the prod DSN (idempotent,
 adds only the missing tables):</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.db.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Base</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.db.session</span><span class="w"> </span><span class="kn">import</span> <span class="n">engine</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="k">async</span> <span class="k">with</span> <span class="n">engine</span><span class="o">.</span><span class="n">begin</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="n">Base</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">create_all</span><span class="p">)</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.db.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Base</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.db.session</span><span class="w"> </span><span class="kn">import</span> <span class="n">engine</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="k">async</span> <span class="k">with</span> <span class="n">engine</span><span class="o">.</span><span class="n">begin</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="n">Base</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">create_all</span><span class="p">)</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
 </span></code></pre></div>
 <p><strong>Fix path</strong>: add <code>014_consent_and_deletion_tables.py</code> that
 <code>create_table</code>s both with their indexes

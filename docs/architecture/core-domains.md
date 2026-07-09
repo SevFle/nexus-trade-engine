@@ -382,13 +382,11 @@ drift sitting *exactly* on the boundary is treated as within tolerance
 (float noise can neither spuriously trip nor suppress a rebalance);
 this edge is pinned by tests.
 
-> **Status — two caveats.** (1) Like `MultiStrategyPortfolio`, the
-> rebalancer is **library-only**: no route drives it and no execution
-> layer consumes its `RebalanceOrder`s yet. (2) The file currently carries
-> an **uncommitted merge conflict** that makes the whole `engine.portfolio`
-> package fail to import from a working tree — see the [P0 in
-> `known-limitations.md`](../known-limitations.md#rebalancer-merge-conflict).
-> The committed `HEAD` copy is clean.
+> **Status.** Like `MultiStrategyPortfolio`, the rebalancer is
+> **library-only**: no route drives it and no execution layer consumes
+> its `RebalanceOrder`s yet. The module imports cleanly (441 lines, no
+> outstanding conflicts); the open work is the live/paper run route that
+> would naturally consume it — see [`known-limitations.md`](../known-limitations.md).
 
 Tax reporting lives in [`engine/core/tax/`](../../engine/core/tax/):
 FIFO/LIFO lot matching, US wash-sale detection (`wash_sale.py`), and
