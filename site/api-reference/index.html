@@ -893,6 +893,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tasks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#client-errors" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1102,6 +1113,17 @@
     <span class="md-ellipsis">
       
         Event delivery
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#second-endpoint-ws-apiv1wsevents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Second endpoint — WS /api/v1/ws/events
       
     </span>
   </a>
@@ -2706,6 +2728,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tasks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#client-errors" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2921,6 +2954,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#second-endpoint-ws-apiv1wsevents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Second endpoint — WS /api/v1/ws/events
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3127,6 +3171,29 @@ calls <code>/reference/suggest</code> to render attributions).</p>
 </tbody>
 </table>
 <p>Source: <a href="../engine/api/routes/system.py"><code>routes/system.py</code></a>.</p>
+<h2 id="tasks">Tasks<a class="headerlink" href="#tasks" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/tasks/*</code> — TaskIQ broker health. Source:
+<a href="../engine/api/routes/tasks.py"><code>routes/tasks.py</code></a>. The broker itself is
+opened/closed in the app lifespan (<a href="../engine/app.py"><code>engine.app</code></a>) and
+stashed on <code>app.state.taskiq_broker</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Auth</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/tasks/status</code></td>
+<td>none</td>
+<td>Infrastructure liveness probe for the async pipeline (orchestrators / load balancers hit it during deploys, so it stays <strong>unauthenticated</strong>). <strong>Always returns HTTP 200</strong> — the API being up is independent of the broker, so a broker outage must never turn the probe into a restart loop; callers branch on the per-subsystem fields instead. Body <code>{status:"ok", broker:"running"\|"stopped", broker_online:bool}</code>. <code>broker</code> reflects the taskiq broker's <em>real</em> state (not a hardcoded constant): it prefers the broker's <code>is_started</code> flag on newer taskiq, and falls back to a 1 s-bounded <code>PING</code> against the broker's shared connection pool on older taskiq releases that lack the flag. The throwaway PING client is deliberately <strong>never closed</strong>, so the probe cannot <code>pool.disconnect()</code> — and thus cannot perturb — the pool the app's task dispatch depends on. A hung broker times out to <code>stopped</code> rather than 500.</td>
+</tr>
+</tbody>
+</table>
 <h2 id="client-errors">Client errors<a class="headerlink" href="#client-errors" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/client/*</code> — browser-side error ingest. Source:
 <a href="../engine/api/routes/client_errors.py"><code>routes/client_errors.py</code></a>.</p>
@@ -3875,6 +3942,42 @@ the <code>EventBus</code> itself publishes over Redis/Valkey pub/sub, events
 published on <strong>any</strong> replica reach local WebSocket connections on
 <strong>every</strong> replica. The <code>ConnectionManager</code> (the live socket objects) is
 still per-process, but event distribution is cross-replica.</p>
+<h3 id="second-endpoint-ws-apiv1wsevents">Second endpoint — <code>WS /api/v1/ws/events</code><a class="headerlink" href="#second-endpoint-ws-apiv1wsevents" title="Permanent link">&para;</a></h3>
+<p>A second streaming route, <code>WS /api/v1/ws/events</code> (source:
+<a href="../engine/api/ws/events.py"><code>ws/events.py</code></a>), shares the same
+<code>ConnectionManager</code>, <code>ChannelResolver</code>, <code>EventBusBridge</code>, and wire
+protocol as <code>/ws</code>, but authenticates <strong>more strictly</strong>: it validates
+the session token from a query param <strong>before</strong> <code>ws.accept()</code>, so a
+bad or missing token rejects the WebSocket handshake (close code
+<code>4401</code>, reason <code>invalid session token</code>) and the server never upgrades
+an unauthenticated socket. <code>/ws</code> deliberately relaxed this to permit
+an in-band first-message <code>auth</code>; <code>/ws/events</code> trades that flexibility
+for fail-closed auth at the handshake.</p>
+<ul>
+<li><strong>Token</strong>: <code>?token=&lt;jwt&gt;</code> (alias <code>?session_token=</code>), validated with
+  the same <code>decode_token</code> the REST dependency uses; scopes via the
+  shared <code>extract_scopes</code>. <strong>JWT-only</strong> — no <code>nxs_*</code> API keys, same
+  as <code>/ws</code>.</li>
+<li><strong>Server not ready</strong>: if hit before <code>init_ws_events</code>, the socket is
+  closed with code <code>1011</code> (<code>WS_CLOSE_SERVER_ERROR</code>, reason
+  <code>server not ready</code>).</li>
+<li><strong>Actionable inbound messages</strong>: <code>subscribe</code>, <code>unsubscribe</code>, <code>ping</code>
+  (parsed by the shared <code>parse_inbound</code>). Mid-session token refresh is
+  <strong>not</strong> supported here — the token is bound to the handshake, so a
+  new token requires a new connection (re-connect rather than re-auth).</li>
+<li><strong>Outbound</strong>: same <code>ack</code> / <code>error</code> / <code>event</code> / <code>pong</code> / <code>close</code> set
+  as <code>/ws</code>; the channels, room shapes, and per-role scope rules in the
+  tables above apply unchanged.</li>
+<li><strong>Wiring</strong>: <code>init_ws_events(manager, resolver?, bridge?)</code> runs on
+  startup and captures the running loop first; a re-init cleanly
+  disconnects every existing client and stops the previous bridge
+  before installing the new one, so a config reload leaks no
+  connections or double event-bus subscriptions.</li>
+</ul>
+<p>Prefer <code>/ws/events</code> when the client can put the token in the handshake
+query (fewer moving parts, fail-closed auth). Prefer <code>/ws</code> when the
+token can only be delivered after the socket opens (e.g. a browser
+that refreshes the token in-band).</p>
 <h2 id="errors">Errors<a class="headerlink" href="#errors" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Auth</strong>: <code>401</code> for missing/invalid/expired credentials; <code>403</code> for

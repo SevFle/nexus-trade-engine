@@ -104,6 +104,17 @@ Unauthenticated probes for load balancers and Prometheus.
 
 Source: [`routes/system.py`](../engine/api/routes/system.py).
 
+## Tasks
+
+`/api/v1/tasks/*` — TaskIQ broker health. Source:
+[`routes/tasks.py`](../engine/api/routes/tasks.py). The broker itself is
+opened/closed in the app lifespan ([`engine.app`](../engine/app.py)) and
+stashed on `app.state.taskiq_broker`.
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/v1/tasks/status` | none | Infrastructure liveness probe for the async pipeline (orchestrators / load balancers hit it during deploys, so it stays **unauthenticated**). **Always returns HTTP 200** — the API being up is independent of the broker, so a broker outage must never turn the probe into a restart loop; callers branch on the per-subsystem fields instead. Body `{status:"ok", broker:"running"\|"stopped", broker_online:bool}`. `broker` reflects the taskiq broker's *real* state (not a hardcoded constant): it prefers the broker's `is_started` flag on newer taskiq, and falls back to a 1 s-bounded `PING` against the broker's shared connection pool on older taskiq releases that lack the flag. The throwaway PING client is deliberately **never closed**, so the probe cannot `pool.disconnect()` — and thus cannot perturb — the pool the app's task dispatch depends on. A hung broker times out to `stopped` rather than 500. |
+
 ## Client errors
 
 `/api/v1/client/*` — browser-side error ingest. Source:
@@ -421,6 +432,44 @@ the `EventBus` itself publishes over Redis/Valkey pub/sub, events
 published on **any** replica reach local WebSocket connections on
 **every** replica. The `ConnectionManager` (the live socket objects) is
 still per-process, but event distribution is cross-replica.
+
+### Second endpoint — `WS /api/v1/ws/events`
+
+A second streaming route, `WS /api/v1/ws/events` (source:
+[`ws/events.py`](../engine/api/ws/events.py)), shares the same
+`ConnectionManager`, `ChannelResolver`, `EventBusBridge`, and wire
+protocol as `/ws`, but authenticates **more strictly**: it validates
+the session token from a query param **before** `ws.accept()`, so a
+bad or missing token rejects the WebSocket handshake (close code
+`4401`, reason `invalid session token`) and the server never upgrades
+an unauthenticated socket. `/ws` deliberately relaxed this to permit
+an in-band first-message `auth`; `/ws/events` trades that flexibility
+for fail-closed auth at the handshake.
+
+- **Token**: `?token=<jwt>` (alias `?session_token=`), validated with
+  the same `decode_token` the REST dependency uses; scopes via the
+  shared `extract_scopes`. **JWT-only** — no `nxs_*` API keys, same
+  as `/ws`.
+- **Server not ready**: if hit before `init_ws_events`, the socket is
+  closed with code `1011` (`WS_CLOSE_SERVER_ERROR`, reason
+  `server not ready`).
+- **Actionable inbound messages**: `subscribe`, `unsubscribe`, `ping`
+  (parsed by the shared `parse_inbound`). Mid-session token refresh is
+  **not** supported here — the token is bound to the handshake, so a
+  new token requires a new connection (re-connect rather than re-auth).
+- **Outbound**: same `ack` / `error` / `event` / `pong` / `close` set
+  as `/ws`; the channels, room shapes, and per-role scope rules in the
+  tables above apply unchanged.
+- **Wiring**: `init_ws_events(manager, resolver?, bridge?)` runs on
+  startup and captures the running loop first; a re-init cleanly
+  disconnects every existing client and stops the previous bridge
+  before installing the new one, so a config reload leaks no
+  connections or double event-bus subscriptions.
+
+Prefer `/ws/events` when the client can put the token in the handshake
+query (fewer moving parts, fail-closed auth). Prefer `/ws` when the
+token can only be delivered after the socket opens (e.g. a browser
+that refreshes the token in-band).
 
 ## Errors
 
