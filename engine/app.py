@@ -128,8 +128,7 @@ def _seed_reference_index() -> None:
     logger.info("reference.seed.complete", instruments=count)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def _init_observability(app: FastAPI) -> None:
     setup_logging()
     # Install the global OTel TracerProvider and grab instrumentation
     # hooks for FastAPI + SQLAlchemy. The provider is a graceful no-op
@@ -155,10 +154,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # again after create_app() returns.
     set_metrics(PrometheusBackend())
 
+
+def _check_secret_key() -> None:
     if not settings.is_test and not settings.secret_key:
         msg = "NEXUS_SECRET_KEY must be set outside the test environment"
         raise ValueError(msg)
 
+
+async def _init_app_state(app: FastAPI) -> None:
     app.state.valkey = Valkey.from_url(settings.valkey_url)
     app.state.auth_registry = _build_auth_registry()
     logger.info("auth.providers_loaded", providers=list(app.state.auth_registry.providers.keys()))
@@ -174,6 +177,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logger.exception("legal.sync_failed")
 
+
+async def _init_websockets_and_events(app: FastAPI) -> None:
     from engine.events.bus import EventBus
 
     ws_manager = ConnectionManager(
@@ -199,9 +204,43 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.ws_bridge = ws_bridge
     logger.info("ws.bridge_started")
 
+
+async def _init_taskiq_broker(app: FastAPI) -> None:
+    # Open the taskiq broker's Redis/Valkey connection pool so the API
+    # process can enqueue tasks (and read their results) in lock-step
+    # with the rest of the application lifecycle. Imported lazily to
+    # mirror the EventBus wiring above and keep ``engine.app`` import
+    # cost-free with respect to the broker module. Startup is guarded
+    # so a broker outage degrades task submission without taking the
+    # whole API down; the pool is torn down on shutdown via
+    # ``app.state.taskiq_broker``.
+    from engine.tasks.broker import broker as taskiq_broker
+
+    try:
+        await taskiq_broker.startup()
+        app.state.taskiq_broker = taskiq_broker
+        logger.info("tasks.broker.started")
+    except Exception:
+        logger.exception("tasks.broker.startup_failed")
+        app.state.taskiq_broker = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    await _init_observability(app)
+    _check_secret_key()
+    await _init_app_state(app)
+    await _init_websockets_and_events(app)
+    await _init_taskiq_broker(app)
+
     yield
 
-    await _shutdown(app, ws_bridge, ws_manager, event_bus)
+    await _shutdown(
+        app,
+        app.state.ws_bridge,
+        app.state.ws_manager,
+        app.state.event_bus,
+    )
 
 
 async def _shutdown(
@@ -235,10 +274,16 @@ async def _shutdown(
     async def _dispose_engine() -> None:
         await dispose_engine()
 
+    async def _shutdown_broker() -> None:
+        broker = getattr(app.state, "taskiq_broker", None)
+        if broker is not None:
+            await broker.shutdown()
+
     cleanup_steps: list[tuple[str, Any]] = [
         ("ws_bridge.stop", _stop_bridge),
         ("ws_manager.close_all", _close_websockets),
         ("event_bus.disconnect", _disconnect_bus),
+        ("taskiq_broker.shutdown", _shutdown_broker),
         ("valkey.aclose", _close_valkey),
         ("dispose_engine", _dispose_engine),
     ]
