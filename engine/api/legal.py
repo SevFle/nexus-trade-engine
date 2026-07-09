@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Protocol
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.api.auth.dependency import get_current_user
@@ -51,6 +51,12 @@ logger = structlog.get_logger()
 LEGAL_ACCEPTANCE_REQUIRED = "LEGAL_ACCEPTANCE_REQUIRED"
 # Submitted version does not match the current document version.
 LEGAL_VERSION_MISMATCH = "LEGAL_VERSION_MISMATCH"
+
+# Cache-Control applied to public, read-only legal-content endpoints. These
+# routes serve static editorial content with no per-user state, so a short,
+# shared cache lifetime both improves client latency and provides basic abuse
+# mitigation by letting caches / CDNs absorb repeated requests.
+PUBLIC_LEGAL_CACHE_CONTROL = "public, max-age=300"
 
 
 def _now() -> datetime:
@@ -298,8 +304,9 @@ async def get_legal_status(
     )
 
 
-@router.get("/api/legal/disclaimers", response_model=DisclaimerListResponse)
+@router.get("/api/v1/legal/disclaimers", response_model=DisclaimerListResponse)
 async def list_disclaimers(
+    response: Response,
     category: Annotated[
         DisclaimerCategory | None,
         Query(
@@ -320,17 +327,25 @@ async def list_disclaimers(
     only that category's disclaimers are returned; an unknown category value
     is rejected with HTTP 422 by FastAPI's enum validation. ``categories`` in
     the response reflects the categories present in the returned list.
+
+    A short ``Cache-Control`` header is set for basic abuse mitigation since
+    the content is static and shared across all callers.
     """
+    response.headers["Cache-Control"] = PUBLIC_LEGAL_CACHE_CONTROL
     return build_disclaimer_list_response(category=category)
 
 
-@router.get("/api/legal/risk-disclosures", response_model=RiskDisclosureResponse)
-async def get_risk_disclosures() -> RiskDisclosureResponse:
+@router.get("/api/v1/legal/risk-disclosures", response_model=RiskDisclosureResponse)
+async def get_risk_disclosures(response: Response) -> RiskDisclosureResponse:
     """Return detailed, structured risk-disclosure information.
 
     Public endpoint (no authentication). Combines a plain-language overview,
     a list of discrete risk factors, and the related structured disclaimers
     that elaborate on the most loss-relevant risk areas, so a client can
     render the full disclosure surface from a single request.
+
+    A short ``Cache-Control`` header is set for basic abuse mitigation since
+    the content is static and shared across all callers.
     """
+    response.headers["Cache-Control"] = PUBLIC_LEGAL_CACHE_CONTROL
     return get_risk_disclosure()

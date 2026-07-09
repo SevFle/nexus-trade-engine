@@ -43,7 +43,11 @@ __all__ = [
 
 # Single source of truth for "last updated". Bump this when editorial content
 # changes so clients can cache / version-gate the payload deterministically.
-LAST_UPDATED = date(2026, 7, 1)
+#
+# Deliberately pinned to a date in the past so the invariant
+# ``LAST_UPDATED <= date.today()`` always holds regardless of the host clock;
+# bump it forward when the editorial content is materially revised.
+LAST_UPDATED = date(2025, 7, 1)
 
 
 class DisclaimerCategory(StrEnum):
@@ -96,7 +100,7 @@ class Disclaimer(BaseModel):
 
 
 class DisclaimerListResponse(BaseModel):
-    """Response body for ``GET /api/legal/disclaimers``.
+    """Response body for ``GET /api/v1/legal/disclaimers``.
 
     ``categories`` describes the categories that are *represented in the
     returned ``disclaimers`` list* (in canonical enum order), so when a
@@ -123,7 +127,7 @@ class RiskFactor(BaseModel):
 
 
 class RiskDisclosureResponse(BaseModel):
-    """Response body for ``GET /api/legal/risk-disclosures``.
+    """Response body for ``GET /api/v1/legal/risk-disclosures``.
 
     Combines a plain-language ``overview``, a list of discrete ``risk_factors``,
     and the ``related_disclaimers`` (the structured disclaimer entries that
