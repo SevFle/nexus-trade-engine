@@ -391,3 +391,162 @@ class TestBeforeSendIntegrationWithScrubDict:
         event = {"contexts": {"block": {key: "leak"}}}
         result = _before_send(event, {})
         assert result["contexts"]["block"][key] == REDACTED
+
+
+class TestBeforeSendExtraFields:
+    """``_before_send`` must also scrub ``extra``, ``request``
+    (``headers`` / ``data``), ``user`` and ``tags``.
+
+    These are additional Sentry scopes beyond ``contexts`` / ``breadcrumbs``
+    where secrets / PII frequently leak (attached context, HTTP headers,
+    request bodies, the user scope and free-form tags).
+    """
+
+    # ------------------------------------------------------------------
+    # extra
+    # ------------------------------------------------------------------
+    def test_scrubs_banned_keys_in_extra(self):
+        event = {"extra": {"password": "leak", "debug": "keep"}}
+        result = _before_send(event, {})
+        assert result["extra"]["password"] == REDACTED
+        assert result["extra"]["debug"] == "keep"
+
+    def test_scrubs_pii_patterns_in_extra_values(self):
+        event = {"extra": {"note": "auth header Bearer supersecret.sig.here"}}
+        result = _before_send(event, {})
+        assert "supersecret" not in str(result["extra"]["note"])
+
+    def test_scrubs_credit_card_in_extra(self):
+        event = {"extra": {"billing": "card 4242 4242 4242 4242"}}
+        result = _before_send(event, {})
+        assert "4242 4242 4242 4242" not in str(result["extra"]["billing"])
+
+    # ------------------------------------------------------------------
+    # request.headers / request.data
+    # ------------------------------------------------------------------
+    def test_scrubs_request_headers_banned_keys(self):
+        event = {
+            "request": {
+                "method": "POST",
+                "url": "https://api.example/x",
+                "headers": {
+                    "authorization": "Bearer abc123",
+                    "content_type": "application/json",
+                },
+            }
+        }
+        result = _before_send(event, {})
+        assert result["request"]["headers"]["authorization"] == REDACTED
+        assert result["request"]["headers"]["content_type"] == "application/json"
+        # Non-sensitive request fields are preserved untouched.
+        assert result["request"]["method"] == "POST"
+        assert result["request"]["url"] == "https://api.example/x"
+
+    def test_scrubs_request_data_dict(self):
+        event = {"request": {"data": {"password": "p", "username": "alice"}}}
+        result = _before_send(event, {})
+        assert result["request"]["data"]["password"] == REDACTED
+        assert result["request"]["data"]["username"] == "alice"
+
+    def test_scrubs_request_data_string(self):
+        event = {"request": {"data": "token=leak-me"}}
+        result = _before_send(event, {})
+        assert "leak-me" not in str(result["request"]["data"])
+        assert REDACTED in str(result["request"]["data"])
+
+    def test_request_data_none_is_left_intact(self):
+        event = {"request": {"method": "GET", "data": None}}
+        result = _before_send(event, {})
+        assert result["request"]["data"] is None
+        assert result["request"]["method"] == "GET"
+
+    def test_request_without_headers_or_data_is_passthrough(self):
+        event = {"request": {"method": "GET", "url": "https://example/x"}}
+        result = _before_send(event, {})
+        assert result["request"] == {"method": "GET", "url": "https://example/x"}
+
+    def test_does_not_mutate_request_input(self):
+        """The caller's original header dict must survive unmodified."""
+        original_headers = {"authorization": "Bearer abc"}
+        original_data = {"password": "leak"}
+        event = {
+            "request": {
+                "headers": original_headers,
+                "data": original_data,
+            }
+        }
+        result = _before_send(event, {})
+        assert result["request"]["headers"]["authorization"] == REDACTED
+        assert result["request"]["data"]["password"] == REDACTED
+        assert original_headers["authorization"] == "Bearer abc"
+        assert original_data["password"] == "leak"
+
+    # ------------------------------------------------------------------
+    # user (preserve non-PII like ip_address)
+    # ------------------------------------------------------------------
+    def test_scrubs_user_banned_keys_while_preserving_ip_address(self):
+        event = {
+            "user": {
+                "id": "42",
+                "ip_address": "203.0.113.7",
+                "token": "leak",
+            }
+        }
+        result = _before_send(event, {})
+        assert result["user"]["token"] == REDACTED
+        # ip_address is not a banned key and an IP literal does not match any
+        # secret value pattern, so it must be preserved verbatim.
+        assert result["user"]["ip_address"] == "203.0.113.7"
+        assert result["user"]["id"] == "42"
+
+    def test_scrubs_pii_patterns_in_user_values(self):
+        event = {"user": {"note": "Bearer supersecret.token.here"}}
+        result = _before_send(event, {})
+        assert "supersecret" not in str(result["user"]["note"])
+
+    def test_user_missing_is_noop(self):
+        event = {"message": "no user"}
+        result = _before_send(event, {})
+        assert "user" not in result
+
+    # ------------------------------------------------------------------
+    # tags
+    # ------------------------------------------------------------------
+    def test_scrubs_tags_banned_keys(self):
+        event = {"tags": {"release": "1.0.0", "secret": "hush", "api_key": "k"}}
+        result = _before_send(event, {})
+        assert result["tags"]["secret"] == REDACTED
+        assert result["tags"]["api_key"] == REDACTED
+        assert result["tags"]["release"] == "1.0.0"
+
+    def test_scrubs_pii_patterns_in_tag_values(self):
+        event = {"tags": {"auth": "Bearer leaky-token.sig.here"}}
+        result = _before_send(event, {})
+        assert "leaky-token" not in str(result["tags"]["auth"])
+
+    # ------------------------------------------------------------------
+    # combined / robustness
+    # ------------------------------------------------------------------
+    def test_scrubs_all_new_fields_in_one_event(self):
+        event = {
+            "contexts": {"app": {"password": "p"}},
+            "extra": {"token": "t"},
+            "request": {"headers": {"authorization": "Bearer abc"}},
+            "user": {"ip_address": "1.2.3.4", "password": "pw"},
+            "tags": {"secret": "s"},
+        }
+        result = _before_send(event, {})
+        assert result["contexts"]["app"]["password"] == REDACTED
+        assert result["extra"]["token"] == REDACTED
+        assert result["request"]["headers"]["authorization"] == REDACTED
+        assert result["user"]["ip_address"] == "1.2.3.4"
+        assert result["user"]["password"] == REDACTED
+        assert result["tags"]["secret"] == REDACTED
+
+    def test_none_extra_user_request_tags_are_passthrough(self):
+        event = {"extra": None, "request": None, "user": None, "tags": None}
+        result = _before_send(event, {})
+        assert result["extra"] is None
+        assert result["request"] is None
+        assert result["user"] is None
+        assert result["tags"] is None

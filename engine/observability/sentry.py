@@ -15,7 +15,8 @@ def _before_send(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any]
     """Sentry ``before_send`` hook.
 
     Reuses the structlog redaction logic (``engine.observability.redact``) to
-    strip secrets / PII from the event's ``contexts`` and ``breadcrumbs``
+    strip secrets / PII from the event's ``contexts``, ``breadcrumbs``,
+    ``extra``, ``request`` (``headers`` / ``data``), ``user`` and ``tags``
     before it leaves the process.  Mirrors the guarantee the log redaction
     processor already provides for log records.
     """
@@ -28,6 +29,34 @@ def _before_send(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any]
         event["breadcrumbs"] = _scrub_dict(breadcrumbs)
     elif isinstance(breadcrumbs, list):
         event["breadcrumbs"] = _scrub_value(breadcrumbs)
+
+    extra = event.get("extra")
+    if isinstance(extra, dict):
+        event["extra"] = _scrub_dict(extra)
+
+    request = event.get("request")
+    if isinstance(request, dict):
+        # Shallow-copy so the caller's event/request dict is not mutated.
+        scrubbed_request = dict(request)
+        headers = scrubbed_request.get("headers")
+        if isinstance(headers, dict):
+            scrubbed_request["headers"] = _scrub_dict(headers)
+        data = scrubbed_request.get("data")
+        if data is not None:
+            scrubbed_request["data"] = _scrub_value(data)
+        event["request"] = scrubbed_request
+
+    user = event.get("user")
+    if isinstance(user, dict):
+        # ``_scrub_dict`` only redacts banned keys / secret value patterns,
+        # so non-PII fields such as ``ip_address``, ``id`` or ``username``
+        # are preserved while leaked secrets embedded in the user scope
+        # (e.g. ``token``, ``password``) are stripped.
+        event["user"] = _scrub_dict(user)
+
+    tags = event.get("tags")
+    if isinstance(tags, dict):
+        event["tags"] = _scrub_dict(tags)
 
     return event
 
