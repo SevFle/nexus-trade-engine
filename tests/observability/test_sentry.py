@@ -544,6 +544,25 @@ class TestScrubRequest:
         result = _scrub_request(request)
         assert result["query_string"] is None
 
+    def test_headers_redacted(self):
+        """Sensitive request headers are redacted via ``_scrub_dict``;
+        benign headers survive. Mirrors ``test_query_string_redacted`` for
+        the headers field.
+        """
+        request = {
+            "headers": {
+                "Authorization": "Bearer abc123def456",
+                "X-API-Key": "k_leak",
+                "Content-Type": "application/json",
+            }
+        }
+        result = _scrub_request(request)
+        assert result["headers"]["Authorization"] == REDACTED
+        assert result["headers"]["X-API-Key"] == REDACTED
+        assert result["headers"]["Content-Type"] == "application/json"
+        # No mutation of the caller's input.
+        assert request["headers"]["Authorization"] == "Bearer abc123def456"
+
     @pytest.mark.parametrize(
         ("header", "value"),
         [
@@ -584,6 +603,25 @@ class TestScrubRequest:
         request = {"headers": {"Authorization": "Bearer abc123def456"}}
         _scrub_request(request)
         assert request["headers"]["Authorization"] == "Bearer abc123def456"
+
+    def test_request_data_redacted(self):
+        """Sensitive request body fields are scrubbed recursively via
+        ``_scrub_value``; non-sensitive fields survive. Mirrors
+        ``test_query_string_redacted`` for the data field.
+        """
+        request = {
+            "data": {
+                "password": "hunter2",
+                "user": "alice",
+                "nested": {"api_key": "leak"},
+            }
+        }
+        result = _scrub_request(request)
+        assert result["data"]["password"] == REDACTED
+        assert result["data"]["user"] == "alice"
+        assert result["data"]["nested"]["api_key"] == REDACTED
+        # No mutation of the caller's input.
+        assert request["data"]["password"] == "hunter2"
 
     def test_request_data_scrubbed_dict(self):
         request = {
