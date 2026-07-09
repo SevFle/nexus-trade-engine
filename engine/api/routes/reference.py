@@ -199,9 +199,12 @@ async def suggest(
     yahoo_results = await _yahoo_search(q.strip(), capped_limit)
 
     if asset_class is not None:
-        yahoo_results = [
-            r for r in yahoo_results if r.get("record", {}).get("asset_class") == asset_class
-        ]
+        filtered: list[dict[str, object]] = []
+        for r in yahoo_results:
+            record = r.get("record")
+            if isinstance(record, dict) and record.get("asset_class") == asset_class:
+                filtered.append(r)
+        yahoo_results = filtered
 
     if yahoo_results:
         return {"suggestions": yahoo_results[:capped_limit]}

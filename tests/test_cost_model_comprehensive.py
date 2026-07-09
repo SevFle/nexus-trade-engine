@@ -430,6 +430,15 @@ class TestWashSaleBoundary:
         buy_history = [{"date": sell_date - timedelta(days=10)}]
         assert model.check_wash_sale("AAPL", sell_date, buy_history) is False
 
+    def test_adjustment_missing_date_key_raises(self):
+        model = DefaultCostModel()
+        sell_date = datetime.now(UTC)
+        buy_history = [{"symbol": "AAPL"}]
+        with pytest.raises(TypeError):
+            model.calculate_wash_sale_adjustment(
+                "AAPL", sell_date, -500.0, buy_history
+            )
+
 
 # ── Wash sale adjustment edge cases ──
 

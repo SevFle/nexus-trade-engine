@@ -399,6 +399,7 @@ class ConnectionManager:
                 error_message=str(exc)[:200],
             )
             return False
+        return True
 
     async def _cleanup_failed(self, connection_ids: list[str]) -> None:
         """Detach every id whose send failed and prune their memberships."""
