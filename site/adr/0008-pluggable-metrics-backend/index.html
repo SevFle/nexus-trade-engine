@@ -2709,7 +2709,7 @@ process-wide singleton resolved lazily by <code>get_metrics()</code>.</p>
   costs nothing.</li>
 <li><code>set_metrics(backend)</code> swaps the singleton under a lock. The app
   lifespan calls <code>set_metrics(PrometheusBackend())</code>
-  (<a href="../../engine/app.py#L145"><code>app.py:145</code></a>); tests call
+  (<a href="../../engine/app.py#L156"><code>app.py:156</code></a>); tests call
   <code>set_metrics(RecordingBackend())</code> in a fixture.</li>
 <li>Call sites resolve lazily: <code>get_metrics().counter("foo", tags=…)</code>.
   Lazy resolution matters because the <code>EventBus</code> is constructed before
@@ -2792,7 +2792,7 @@ returns it as <code>text/plain; version=0.0.4</code>.</p>
 <li>Original issue: gh#34</li>
 <li>Source: <a href="../../engine/observability/metrics.py"><code>engine/observability/metrics.py</code></a>,
   <a href="../../engine/observability/prometheus.py"><code>engine/observability/prometheus.py</code></a></li>
-<li>Wiring: <a href="../../engine/app.py"><code>engine/app.py:145</code></a> (<code>set_metrics(PrometheusBackend())</code>)</li>
+<li>Wiring: <a href="../../engine/app.py"><code>engine/app.py:156</code></a> (<code>set_metrics(PrometheusBackend())</code>)</li>
 <li>Related: <a href="../../operations/slos/"><code>docs/operations/slos.md</code></a>,
   <a href="../../observability/logging/"><code>docs/observability/logging.md</code></a></li>
 <li>Known gap: <a href="../../known-limitations/"><code>docs/known-limitations.md</code></a>

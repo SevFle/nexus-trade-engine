@@ -78,7 +78,7 @@ React app under `frontend/`.
 | [`engine/mcp/`](../../engine/mcp/)                  | Model Context Protocol server: exposes a read-only tool/resource surface to LLM agents over stdio or HTTP. Not mounted in the FastAPI app — it runs as a separate process. See [mcp-server.md](../mcp-server.md). |
 | [`engine/observability/`](../../engine/observability/) | Structlog wiring, lineage middleware, pluggable metrics backend (gh#34). |
 | [`engine/plugins/`](../../engine/plugins/)        | Plugin SDK and runtime registry. See [plugins.md](plugins.md). |
-| [`engine/tasks/`](../../engine/tasks/)            | TaskIQ worker definitions for async work (backtests, scheduled jobs). |
+| [`engine/tasks/`](../../engine/tasks/)            | Canonical TaskIQ broker (`broker.py`), the worker entrypoint, and task definitions. The broker is opened/closed in the FastAPI lifespan and surfaced by `GET /api/v1/tasks/status`; backtests do **not** yet enqueue here (see [known-limitations.md](../known-limitations.md)). |
 | [`engine/legal/`](../../engine/legal/)            | Legal-document acceptance (Terms / Privacy / etc.). |
 | [`engine/privacy/`](../../engine/privacy/)        | GDPR/CCPA surface: `deletion.py` (30-day grace + anonymize), `dsr.py` (request ledger), `export.py`. |
 | [`engine/reference/`](../../engine/reference/)    | Static reference data (instruments, exchanges). |
@@ -107,11 +107,20 @@ The full pinned set is in [`pyproject.toml`](../../pyproject.toml).
 A typical authenticated `POST /api/v1/backtest/run` does this:
 
 1. Reverse proxy forwards the request to uvicorn (`engine.app:create_app`).
-2. **CORS / security middleware** rejects disallowed origins.
-3. **Lineage middleware** ([`engine/observability/lineage.py`](../../engine/observability/lineage.py))
-   stamps a request id and propagates the OpenTelemetry context.
+2. **Outermost middleware** — `HttpMetricsMiddleware` times the whole
+   request and records Prometheus counters/histograms
+   ([`engine/observability/http_metrics.py`](../../engine/observability/http_metrics.py));
+   then `CorrelationIdMiddleware`
+   ([`engine/observability/middleware.py`](../../engine/observability/middleware.py))
+   stamps / propagates an `X-Request-ID` and binds it into the structlog
+   context (gh#1247). It is deliberately a raw-ASGI middleware, not a
+   `BaseHTTPMiddleware` subclass — see the assertion in `create_app`.
+3. **Body-size + CORS + security headers** — the 1 MiB body cap
+   ([`BodySizeLimitMiddleware`](../../engine/api/body_size_limit.py)),
+   CORS allowlist, and the security-header bundle (CSP, HSTS, …) run next.
 4. **Rate limiter** ([`engine/api/rate_limit.py`](../../engine/api/rate_limit.py))
-   short-circuits abusive clients.
+   short-circuits abusive clients (in-memory bucket, or a shared
+   Valkey bucket when `NEXUS_RATE_LIMIT_VALKEY_ENABLED=true`).
 5. **Auth dependency** ([`engine/api/auth/`](../../engine/api/auth/))
    resolves the bearer token to a `User`. If the user has MFA enabled
    the request must carry a valid challenge token from `/login`.

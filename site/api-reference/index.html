@@ -893,6 +893,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tasks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#client-errors" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1102,6 +1113,17 @@
     <span class="md-ellipsis">
       
         Event delivery
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#second-endpoint-ws-apiv1wsevents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Second endpoint: WS /api/v1/ws/events
       
     </span>
   </a>
@@ -2706,6 +2728,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tasks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#client-errors" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2921,6 +2954,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#second-endpoint-ws-apiv1wsevents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Second endpoint: WS /api/v1/ws/events
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3127,6 +3171,37 @@ calls <code>/reference/suggest</code> to render attributions).</p>
 </tbody>
 </table>
 <p>Source: <a href="../engine/api/routes/system.py"><code>routes/system.py</code></a>.</p>
+<h2 id="tasks">Tasks<a class="headerlink" href="#tasks" title="Permanent link">&para;</a></h2>
+<p><code>/api/v1/tasks/*</code> — probes over the TaskIQ broker subsystem. Source:
+<a href="../engine/api/routes/tasks.py"><code>routes/tasks.py</code></a>. The broker (a
+<code>taskiq_redis.ListQueueBroker</code> over the shared Valkey URL; the
+<code>valkey://</code> scheme is rewritten to <code>redis://</code> since <code>taskiq_redis</code> only
+accepts the latter) is opened/closed in the FastAPI lifespan by
+<a href="../engine/app.py"><code>_init_taskiq_broker</code></a> (gh#1310). Startup is guarded:
+an outage degrades task submission (logged <code>tasks.broker.startup_failed</code>)
+without taking the API down.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Auth</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/tasks/status</code></td>
+<td>none</td>
+<td>Liveness probe. Returns <code>{"status":"ok","broker":"running"}</code>. A process-readiness signal only — the broker starts synchronously in the lifespan, so a responding process implies a started broker. No queue-depth / result-backend readiness check exists yet.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Does <strong>not</strong> report in-flight/queued backtest jobs — backtests still run
+via FastAPI <code>BackgroundTasks</code>, not TaskIQ (<a href="../known-limitations/">known-limitations.md</a>).</p>
+</blockquote>
 <h2 id="client-errors">Client errors<a class="headerlink" href="#client-errors" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/client/*</code> — browser-side error ingest. Source:
 <a href="../engine/api/routes/client_errors.py"><code>routes/client_errors.py</code></a>.</p>
@@ -3875,6 +3950,53 @@ the <code>EventBus</code> itself publishes over Redis/Valkey pub/sub, events
 published on <strong>any</strong> replica reach local WebSocket connections on
 <strong>every</strong> replica. The <code>ConnectionManager</code> (the live socket objects) is
 still per-process, but event distribution is cross-replica.</p>
+<h3 id="second-endpoint-ws-apiv1wsevents">Second endpoint: <code>WS /api/v1/ws/events</code><a class="headerlink" href="#second-endpoint-ws-apiv1wsevents" title="Permanent link">&para;</a></h3>
+<p>A <strong>second</strong> WebSocket route, <code>WS /api/v1/ws/events</code>, lives in
+<a href="../engine/api/ws/events.py"><code>ws/events.py</code></a> (SEV-275 follow-up). It is
+mounted alongside <code>/ws</code> in <a href="../engine/api/router.py"><code>router.py</code></a> and
+reuses the same <code>ConnectionManager</code>, <code>ChannelResolver</code>, and
+<code>EventBusBridge</code>, so channels, rooms, and permission rules are identical.
+Message shapes (<code>auth</code>/<code>subscribe</code>/<code>unsubscribe</code>/<code>ping</code>,
+<code>ack</code>/<code>error</code>/<code>event</code>/<code>pong</code>) are the same too. The only difference is
+<strong>auth timing</strong>:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>WS /api/v1/ws</code> (generic)</th>
+<th><code>WS /api/v1/ws/events</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Token</td>
+<td><code>?token=</code> <strong>or</strong> first <code>auth</code> msg within 5 s</td>
+<td>query param <strong>only</strong> (<code>token</code>/<code>session_token</code>)</td>
+</tr>
+<tr>
+<td>When</td>
+<td>after <code>ws.accept()</code></td>
+<td><strong>before</strong> <code>ws.accept()</code>; bad/missing token closes with <code>4401</code></td>
+</tr>
+<tr>
+<td>Rate limit</td>
+<td>per-IP token bucket</td>
+<td>none (pre-accept reject is cheap)</td>
+</tr>
+</tbody>
+</table>
+<p>Prefer <code>/ws/events</code> when the client can put the token in the URL and you
+want unauthenticated sockets rejected before upgrade.</p>
+<blockquote>
+<p><strong>Current limitation:</strong> subsystem state is populated by
+<code>init_ws_events(...)</code>, which is <strong>never called</strong> in the
+<a href="../engine/app.py"><code>engine/app.py</code></a> lifespan (only <code>init_ws(...)</code> for
+<code>/ws</code> is). So <code>_state.manager</code> is <code>None</code> and the endpoint closes every
+connection with code <code>1011</code> (<code>WS_CLOSE_SERVER_ERROR</code>, "server not
+ready"). It is mounted and unit-tested but dormant until a lifespan
+call to <code>init_ws_events(manager, bridge=ws_bridge)</code> is added
+(<a href="../known-limitations/">known-limitations.md</a>).</p>
+</blockquote>
 <h2 id="errors">Errors<a class="headerlink" href="#errors" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Auth</strong>: <code>401</code> for missing/invalid/expired credentials; <code>403</code> for

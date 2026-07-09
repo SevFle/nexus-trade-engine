@@ -319,21 +319,66 @@ the API-key branch from the legacy endpoint into `ws/auth.py`.
 
 ---
 
+## P1 — `WS /api/v1/ws/events` is mounted but never initialized
+
+**Where**: [`engine/api/ws/events.py`](../engine/api/ws/events.py),
+[`engine/app.py`](../engine/app.py).
+
+The second WebSocket route (`ws_events_router` in
+[`router.py`](../engine/api/router.py)) is fully implemented and
+unit-tested, but its subsystem state is populated by
+`init_ws_events(...)`, which is **never called** in the app lifespan
+(`_init_websockets_and_events` calls `init_ws(...)` for `/ws` only). So
+`_state.manager` is `None` and every connection is closed at the HTTP
+layer with code `1011` (`WS_CLOSE_SERVER_ERROR`, "server not ready")
+right after the token validates. The route is effectively dead today
+(see [api-reference.md](api-reference.md)).
+
+**Fix**: add one line to the lifespan, after `ws_bridge.start()`:
+
+```python
+init_ws_events(ws_manager, bridge=ws_bridge)
+```
+
+The manager, resolver, and bridge are already built for `/ws` and are
+shared. Until that lands, use `WS /api/v1/ws` and treat `/ws/events` as
+absent.
+
+---
+
 ## P1 — TaskIQ plumbing incomplete
 
-`engine/tasks/worker.py` defines the broker; the compose file runs
-it. But:
+The canonical broker lives in
+[`engine/tasks/broker.py`](../engine/tasks/broker.py) (a
+`taskiq_redis.ListQueueBroker` wired to the shared Valkey URL);
+[`engine/tasks/worker.py`](../engine/tasks/worker.py) re-exports it and
+registers the legacy `run_backtest_task`. As of gh#1310 the broker is
+**opened and closed in the FastAPI app lifespan**
+([`_init_taskiq_broker`](../engine/app.py)), and a liveness probe is
+exposed at `GET /api/v1/tasks/status` (see
+[api-reference.md](api-reference.md#tasks)). So the *plumbing* is now
+present. What is **still** incomplete:
 
 - `POST /backtest/run` uses FastAPI `BackgroundTasks`, not TaskIQ —
   so backtests run in the *web* process, not the worker. A long
-  backtest stalls the uvicorn worker pool.
+  backtest stalls the uvicorn worker pool. `run_backtest_task` exists
+  on the broker but no route `.kiq()`s it.
+- `GET /api/v1/tasks/status` is a process-readiness signal only — it
+  does not report queue depth, in-flight count, or result-backend
+  health. There is no readiness check that pings the broker's result
+  backend.
 - The task-pipeline SLO in [`operations/slos.md`](operations/slos.md)
   is defined but has no emitter yet — `nexus.task.runs_total` is the
   intended metric name.
+- Broker startup failure is **swallowed** (logged at
+  `tasks.broker.startup_failed`, `app.state.taskiq_broker` set to
+  `None`) so the API keeps serving while task submission silently
+  fails. Operators should alert on that log event.
 
 **Workaround today**: run uvicorn with `--workers N` and tune
 `NEXUS_WORKER_CONCURRENCY` high enough to absorb long backtests. Do
-not depend on the worker process for backtest isolation today.
+not depend on the worker process for backtest isolation today. Alert
+on `tasks.broker.startup_failed` to catch a dead broker.
 
 ---
 

@@ -2633,7 +2633,7 @@ React app under <code>frontend/</code>.</p>
 </tr>
 <tr>
 <td><a href="../../engine/tasks/"><code>engine/tasks/</code></a></td>
-<td>TaskIQ worker definitions for async work (backtests, scheduled jobs).</td>
+<td>Canonical TaskIQ broker (<code>broker.py</code>), the worker entrypoint, and task definitions. The broker is opened/closed in the FastAPI lifespan and surfaced by <code>GET /api/v1/tasks/status</code>; backtests do <strong>not</strong> yet enqueue here (see <a href="../../known-limitations/">known-limitations.md</a>).</td>
 </tr>
 <tr>
 <td><a href="../../engine/legal/"><code>engine/legal/</code></a></td>
@@ -2713,11 +2713,20 @@ React app under <code>frontend/</code>.</p>
 <p>A typical authenticated <code>POST /api/v1/backtest/run</code> does this:</p>
 <ol>
 <li>Reverse proxy forwards the request to uvicorn (<code>engine.app:create_app</code>).</li>
-<li><strong>CORS / security middleware</strong> rejects disallowed origins.</li>
-<li><strong>Lineage middleware</strong> (<a href="../../engine/observability/lineage.py"><code>engine/observability/lineage.py</code></a>)
-   stamps a request id and propagates the OpenTelemetry context.</li>
+<li><strong>Outermost middleware</strong> — <code>HttpMetricsMiddleware</code> times the whole
+   request and records Prometheus counters/histograms
+   (<a href="../../engine/observability/http_metrics.py"><code>engine/observability/http_metrics.py</code></a>);
+   then <code>CorrelationIdMiddleware</code>
+   (<a href="../../engine/observability/middleware.py"><code>engine/observability/middleware.py</code></a>)
+   stamps / propagates an <code>X-Request-ID</code> and binds it into the structlog
+   context (gh#1247). It is deliberately a raw-ASGI middleware, not a
+   <code>BaseHTTPMiddleware</code> subclass — see the assertion in <code>create_app</code>.</li>
+<li><strong>Body-size + CORS + security headers</strong> — the 1 MiB body cap
+   (<a href="../../engine/api/body_size_limit.py"><code>BodySizeLimitMiddleware</code></a>),
+   CORS allowlist, and the security-header bundle (CSP, HSTS, …) run next.</li>
 <li><strong>Rate limiter</strong> (<a href="../../engine/api/rate_limit.py"><code>engine/api/rate_limit.py</code></a>)
-   short-circuits abusive clients.</li>
+   short-circuits abusive clients (in-memory bucket, or a shared
+   Valkey bucket when <code>NEXUS_RATE_LIMIT_VALKEY_ENABLED=true</code>).</li>
 <li><strong>Auth dependency</strong> (<a href="../../engine/api/auth/"><code>engine/api/auth/</code></a>)
    resolves the bearer token to a <code>User</code>. If the user has MFA enabled
    the request must carry a valid challenge token from <code>/login</code>.</li>

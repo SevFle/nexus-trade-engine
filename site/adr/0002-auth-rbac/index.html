@@ -1359,6 +1359,67 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#evolution-how-this-actually-landed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evolution — how this actually landed
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Evolution — how this actually landed">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-changed-from-the-proposal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What changed from the proposal
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-held" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What held
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-the-divergence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why the divergence
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#open-follow-ups-still-true" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open follow-ups still true
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2550,6 +2611,67 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#evolution-how-this-actually-landed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evolution — how this actually landed
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Evolution — how this actually landed">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-changed-from-the-proposal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What changed from the proposal
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-held" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What held
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-the-divergence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why the divergence
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#open-follow-ups-still-true" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open follow-ups still true
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2571,7 +2693,7 @@
 
 
 <h1 id="adr-0002-authentication-role-based-access-control">ADR-0002: Authentication &amp; Role-Based Access Control<a class="headerlink" href="#adr-0002-authentication-role-based-access-control" title="Permanent link">&para;</a></h1>
-<p><strong>Status:</strong> Proposed
+<p><strong>Status:</strong> Accepted — implemented 2026-04 → 2026-07, <strong>diverging from the proposal below</strong> in naming, package layout, and scope (OIDC/LDAP/MFA/API-keys all shipped instead of being deferred). See <a href="#evolution--how-this-actually-landed">Evolution — how this actually landed</a> at the end of this ADR for the as-built record; the original proposal is preserved verbatim above it as decision history.
 <strong>Date:</strong> 2026-04-17
 <strong>Tracks:</strong> SEV-233 (gh#86), SEV-273 (gh#9) — closed as duplicate of this ADR
 <strong>Owner:</strong> TBD</p>
@@ -2675,6 +2797,107 @@
 <li>Do we need per-portfolio ACLs in v1, or is per-user RBAC sufficient until multi-tenant lands?</li>
 <li>Should the JWT include scope claims, or look them up per request? (Trade-off: token size vs. dynamic permission updates.)</li>
 <li>API key auth (long-lived, scoped) for SDK clients — v1 or follow-up?</li>
+</ul>
+<hr />
+<p><a id="evolution--how-this-actually-landed"></a></p>
+<h2 id="evolution-how-this-actually-landed">Evolution — how this actually landed<a class="headerlink" href="#evolution-how-this-actually-landed" title="Permanent link">&para;</a></h2>
+<p>The decision above was <strong>accepted in spirit</strong> but the implementation,
+landed across SEV-233 / SEV-273 and the subsequent auth PRs (most recently
+Google OAuth #1281, WS token auth #1271), took a <strong>different concrete
+shape</strong>. This section is the as-built record so the proposal and the code
+agree. The original decision text is left intact above as history.</p>
+<h3 id="what-changed-from-the-proposal">What changed from the proposal<a class="headerlink" href="#what-changed-from-the-proposal" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Proposal (above)</th>
+<th>As-built (code)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>engine/auth/backend.py</code> defines an <code>AuthBackend</code> <code>Protocol</code></td>
+<td><a href="../../engine/api/auth/registry.py"><code>engine/api/auth/registry.py</code></a> defines <code>AuthProviderRegistry</code>; providers implement the <strong>ABC</strong> <code>IAuthProvider</code> in <a href="../../engine/api/auth/base.py"><code>engine/api/auth/base.py</code></a> (not a runtime <code>Protocol</code>).</td>
+</tr>
+<tr>
+<td>Backends live under <code>engine.auth.backends.*</code></td>
+<td>Providers live under <a href="../../engine/api/auth/"><code>engine/api/auth/</code></a>: <code>local.py</code>, <code>google.py</code>, <code>github_oauth.py</code>, <code>oidc.py</code>, <code>ldap.py</code>. (<code>engine/auth/providers/</code> also exists but holds a legacy/alternate Google provider — the active set is in <code>api/auth/</code>.)</td>
+</tr>
+<tr>
+<td>Selected via single <code>NEXUS_AUTH_BACKEND</code> env var</td>
+<td>Selected via <strong><code>NEXUS_AUTH_PROVIDERS</code></strong> — a comma-separated list, so multiple providers coexist. Built by <code>create_app()._build_auth_registry()</code> (<a href="../../engine/app.py"><code>engine/app.py</code></a>), which <code>match</code>-loads each provider lazily.</td>
+</tr>
+<tr>
+<td>v1 ships <strong>only</strong> JWT-on-Postgres; OAuth2/OIDC/LDAP explicitly <strong>out of scope</strong></td>
+<td><strong>All five providers shipped</strong>: <code>local</code>, <code>google</code>, <code>github</code>, <code>oidc</code>, <code>ldap</code> are all importable and wired by <code>_build_auth_registry</code>. Their config knobs (<code>google_client_id</code>, <code>github_client_*</code>, <code>oidc_discovery_url</code>, <code>ldap_server_url</code>, …) are all in <a href="../../engine/config.py"><code>engine/config.py</code></a>. (Feature status is still <em>partial</em> — see <a href="../../known-limitations/"><code>known-limitations.md</code></a>.)</td>
+</tr>
+<tr>
+<td>MFA <strong>out of scope for v1</strong> ("added in a follow-up")</td>
+<td><strong>Shipped</strong> — <a href="../../engine/api/auth/mfa.py"><code>engine/api/auth/mfa.py</code></a> + <a href="../../engine/api/auth/mfa_service.py"><code>mfa_service.py</code></a>: TOTP with Fernet-encrypted secrets at rest, challenge TTL, and bcrypt-hashed backup codes. At-rest model is ADR-0006.</td>
+</tr>
+<tr>
+<td>API keys listed as an <strong>open question</strong></td>
+<td><strong>Shipped</strong> — <a href="../../engine/api/auth/api_keys.py"><code>engine/api/auth/api_keys.py</code></a> + the <code>api_keys</code> table (migration 011). <code>nxs_*</code> tokens work on the REST <code>get_current_user</code> path. <strong>Note:</strong> they do <strong>not</strong> yet open WebSocket connections — see <a href="../../known-limitations/"><code>known-limitations.md</code></a> ("WebSocket does not accept API keys").</td>
+</tr>
+<tr>
+<td>3 roles: <code>viewer</code> / <code>trader</code> / <code>admin</code> via a <code>user_roles</code> join table</td>
+<td><strong>7-role hierarchy</strong> in <code>IAuthProvider.map_roles</code> (<code>_ROLE_PRIORITY</code>): <code>viewer(0)</code> &lt; <code>user(1)</code> &lt; <code>retail_trader(2)</code> &lt; <code>quant_dev(3)</code> &lt; <code>developer(4)</code> &lt; <code>portfolio_manager(5)</code> &lt; <code>admin(6)</code>. Stored as a <strong>single</strong> <code>users.role</code> column (not a join); the REST layer enforces a separate <code>ROLE_HIERARCHY</code>. External IdP roles are sanitized via <code>_sanitize_role</code> (NFKC + control-char strip + allowlist) so a hostile IdP cannot inject a spoofed <code>admin</code>.</td>
+</tr>
+<tr>
+<td><code>auth_tokens</code> table (hashed, revocable)</td>
+<td>Named <strong><code>refresh_tokens</code></strong> in the as-built schema (<a href="../../engine/db/models.py"><code>engine/db/models.py</code></a>). Revocation is via refresh-token rows; access tokens are stateless HS256 JWTs.</td>
+</tr>
+<tr>
+<td>Password hashing: <strong>Argon2id</strong></td>
+<td><strong>bcrypt</strong> (<code>hashed_password</code> on <code>users</code> — see <a href="../../data-model/"><code>data-model.md</code></a> and ADR-0006).</td>
+</tr>
+<tr>
+<td>JWT: HS256 now, RS256 "a one-line config change later"</td>
+<td>Still HS256; the RS256 swap remains a TODO, not yet a config knob.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="what-held">What held<a class="headerlink" href="#what-held" title="Permanent link">&para;</a></h3>
+<ul>
+<li>The <strong>two-layer shape</strong> (pluggable provider in front, RBAC enforcement
+  behind, default to a JWT-on-Postgres backend) is exactly what shipped —
+  only the names moved (<code>AuthBackend</code>→<code>IAuthProvider</code>, <code>engine/auth/</code>→
+  <code>engine/api/auth/</code>).</li>
+<li><strong>JWT-on-Postgres</strong> remains the default (<code>local</code> provider, HS256,
+  refresh tokens in the DB).</li>
+<li><strong>RBAC via FastAPI dependency</strong> (<code>require_role</code> / <code>get_current_user</code>)
+  is the enforcement model actually in use.</li>
+<li>The <strong>alternatives considered</strong> (session-only, external OAuth2 proxy,
+  hosted Auth0/Clerk) were all rejected for the reasons recorded above.</li>
+</ul>
+<h3 id="why-the-divergence">Why the divergence<a class="headerlink" href="#why-the-divergence" title="Permanent link">&para;</a></h3>
+<p>The provider ABC + registry landed simpler to extend than a single-backend
+<code>Protocol</code> + <code>NEXUS_AUTH_BACKEND</code> switch: each provider is a self-contained
+module behind a uniform <code>IAuthProvider.authenticate(**kwargs)</code> surface,
+and <code>NEXUS_AUTH_PROVIDERS</code> lets operators enable several at once (e.g.
+<code>local,google</code>) without a code change. Deferring OIDC/LDAP proved
+unnecessary once <code>IAuthProvider</code> made each one a ~one-file job, so they
+were pulled forward rather than cut. MFA and API keys were pulled forward
+for the same reason and because the MCP + WS surfaces (#1271) needed
+token-bearing non-interactive clients.</p>
+<h3 id="open-follow-ups-still-true">Open follow-ups still true<a class="headerlink" href="#open-follow-ups-still-true" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Unify the <strong>two Alpaca-style adapters</strong> concern (here, the <strong>two auth
+  provider roots</strong>): <code>engine/api/auth/providers/</code> vs <code>engine/auth/providers/</code>
+  both exist. <code>create_app()</code> wires the <code>api/auth/</code> set; the <code>engine/auth/</code>
+  tree is the legacy/SDK-facing one. Consolidate before more providers land.</li>
+<li>The per-portfolio ACL vs per-user RBAC open question is still open —
+  RBAC alone is in force.</li>
+<li><strong>Two parallel provider roots.</strong> There are genuinely <strong>two independent</strong>
+  Google OAuth implementations: <code>engine/api/auth/google.py</code>
+  (<code>GoogleAuthProvider</code>, the <code>IAuthProvider</code> adapter <code>create_app</code> actually
+  registers) and <code>engine/auth/providers/google.py</code>
+  (<code>GoogleOAuthProvider</code> + <code>IDTokenClaims</code>, a standalone protocol-step
+  decomposition its docstring says "complements" <code>api/auth</code> for independent
+  unit testing). The latter is <strong>not imported by</strong> the former and <strong>not
+  wired</strong> into the runtime registry. Consolidate the pair before more
+  providers land, or formally designate <code>engine/auth/providers/</code> as a
+  reusable protocol library that the <code>api/auth</code> adapters consume.</li>
 </ul>
 
 

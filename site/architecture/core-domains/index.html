@@ -770,6 +770,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Portfolio accounting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#drift-driven-rebalancing-portfoliorebalancer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drift-driven rebalancing — PortfolioRebalancer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2648,6 +2665,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Portfolio accounting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#drift-driven-rebalancing-portfoliorebalancer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drift-driven rebalancing — PortfolioRebalancer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3231,8 +3265,74 @@ documented above:</p>
 <td><a href="../../engine/portfolio/multi_strategy.py"><code>portfolio/multi_strategy.py</code></a></td>
 <td><code>MultiStrategyPortfolio</code> — the <strong>capital-aware runtime</strong> that consumes an allocation, evaluates every strategy, and merges signals risk-adjusted. See the <a href="#engineportfoliomulti_strategypy-multistrategyportfolio">Multi-strategy orchestration</a> section above for the full contract.</td>
 </tr>
+<tr>
+<td><a href="../../engine/portfolio/rebalancer.py"><code>portfolio/rebalancer.py</code></a></td>
+<td><code>PortfolioRebalancer</code> — the <strong>drift detector</strong> that compares a portfolio's <em>target</em> policy weights against its <em>current</em> dollar allocation and emits advisory <code>RebalanceOrder</code> signals. Companion to <code>MultiStrategyPortfolio</code> (which decides <em>what to trade</em>); the rebalancer decides <em>how to get back to target</em>. See <a href="#drift-driven-rebalancing-portfoliorebalancer">Drift-driven rebalancing</a> below.</td>
+</tr>
 </tbody>
 </table>
+<p><a id="drift-driven-rebalancing-portfoliorebalancer"></a></p>
+<h3 id="drift-driven-rebalancing-portfoliorebalancer">Drift-driven rebalancing — <code>PortfolioRebalancer</code><a class="headerlink" href="#drift-driven-rebalancing-portfoliorebalancer" title="Permanent link">&para;</a></h3>
+<p><code>MultiStrategyPortfolio</code> answers <em>"given a capital split, what should we
+trade this cycle?"</em> <code>PortfolioRebalancer</code> answers the slower, periodic
+question: <em>"the strategies' dollar values have drifted away from the
+policy weights — by how much, and what capital transfers would restore
+them?"</em> It is the closing half of the allocation story and lives in the
+same <code>engine/portfolio/</code> package (which, by design, owns <strong>no
+execution</strong>).</p>
+<p>Construct once with the <em>target</em> policy weights, the <em>current</em> dollar
+value per strategy, and a drift <code>threshold</code> (default <code>0.05</code> = 5%); then
+query three things:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>compute_drift()</code></td>
+<td>Signed <code>current_weight − target_weight</code> per strategy (positive = <strong>overweight</strong>, negative = <strong>underweight</strong>).</td>
+</tr>
+<tr>
+<td><code>needs_rebalance()</code></td>
+<td><code>True</code> when <code>max(|drift|)</code> strictly exceeds <code>threshold</code>. Zero total capital is a hard <code>False</code> (nothing can move).</td>
+</tr>
+<tr>
+<td><code>generate_rebalance_orders()</code></td>
+<td>One <code>RebalanceOrder</code> per strategy whose current dollar value differs from target (beyond a <code>1e-9</code> float-dust floor), sorted by id for determinism.</td>
+</tr>
+</tbody>
+</table>
+<p>A <code>RebalanceOrder</code> is an <strong>advisory signal</strong>, not a trade: <code>action</code> is
+<code>RebalanceAction.BUY</code> (underweight → add <code>|delta|</code> dollars) or <code>SELL</code>
+(overweight → withdraw <code>|delta|</code>), with full provenance (<code>current/target
+weight</code>, signed <code>drift</code>) so an audit trail never re-derives <em>why</em> an
+order was emitted. A portfolio already on target yields an empty list.</p>
+<p><strong>Design contract.</strong> The class is <strong>pure / no I/O</strong> — synchronous and
+effectively stateless over its construction inputs (no network, broker,
+or DB call), which keeps it inside <code>engine.portfolio</code>'s "no execution"
+boundary and makes it trivially unit-testable. Targets are <strong>relative</strong>
+(normalised internally, so <code>{"a":1,"b":1}</code> ≡ <code>{"a":0.5,"b":0.5}</code>,
+matching <code>MultiStrategyPortfolio</code>; an all-zero set falls back to equal
+shares). Every numeric input funnels through <code>_finite</code>, which rejects
+<code>bool</code> (a sneaky <code>int</code> subclass), numeric strings, <code>None</code>, and
+non-finite values — <code>math.isfinite</code> is the gate because bare <code>w &lt; 0</code>
+silently admits <code>NaN</code>. Finally, <code>needs_rebalance</code> is a strict <code>&gt;</code>
+against the threshold but wraps the comparison in <code>math.isclose</code> so a
+drift sitting <em>exactly</em> on the boundary is treated as within tolerance
+(float noise can neither spuriously trip nor suppress a rebalance);
+this edge is pinned by tests.</p>
+<blockquote>
+<p><strong>Status — two caveats.</strong> (1) Like <code>MultiStrategyPortfolio</code>, the
+rebalancer is <strong>library-only</strong>: no route drives it and no execution
+layer consumes its <code>RebalanceOrder</code>s yet. (2) The file currently carries
+an <strong>uncommitted merge conflict</strong> that makes the whole <code>engine.portfolio</code>
+package fail to import from a working tree — see the <a href="../../known-limitations/#rebalancer-merge-conflict">P0 in
+<code>known-limitations.md</code></a>.
+The committed <code>HEAD</code> copy is clean.</p>
+</blockquote>
 <p>Tax reporting lives in <a href="../../engine/core/tax/"><code>engine/core/tax/</code></a>:
 FIFO/LIFO lot matching, US wash-sale detection (<code>wash_sale.py</code>), and
 per-jurisdiction summarizers exposed by <code>POST /api/v1/tax/report/{code}</code>

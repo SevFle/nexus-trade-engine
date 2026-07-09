@@ -2249,6 +2249,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#p0-engineportfoliorebalancerpy-has-an-unmerged-git-conflict-in-the-working-tree" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        P0 — engine/portfolio/rebalancer.py has an unmerged Git conflict in the working tree
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#p0-backtest-results-are-not-persisted" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2330,6 +2341,17 @@
     <span class="md-ellipsis">
       
         P2 — WebSocket does not accept API keys
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#p1-ws-apiv1wsevents-is-mounted-but-never-initialized" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        P1 — WS /api/v1/ws/events is mounted but never initialized
       
     </span>
   </a>
@@ -2517,6 +2539,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#p0-engineportfoliorebalancerpy-has-an-unmerged-git-conflict-in-the-working-tree" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        P0 — engine/portfolio/rebalancer.py has an unmerged Git conflict in the working tree
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#p0-backtest-results-are-not-persisted" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2598,6 +2631,17 @@
     <span class="md-ellipsis">
       
         P2 — WebSocket does not accept API keys
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#p1-ws-apiv1wsevents-is-mounted-but-never-initialized" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        P1 — WS /api/v1/ws/events is mounted but never initialized
       
     </span>
   </a>
@@ -2747,6 +2791,44 @@ about it today.</p>
 <li><strong>P2</strong> — ergonomics / polish. Fix when next touching the area.</li>
 </ul>
 <hr />
+<p><a id="rebalancer-merge-conflict"></a></p>
+<h2 id="p0-engineportfoliorebalancerpy-has-an-unmerged-git-conflict-in-the-working-tree">P0 — <code>engine/portfolio/rebalancer.py</code> has an unmerged Git conflict in the working tree<a class="headerlink" href="#p0-engineportfoliorebalancerpy-has-an-unmerged-git-conflict-in-the-working-tree" title="Permanent link">&para;</a></h2>
+<p><strong>Where</strong>: <a href="../engine/portfolio/rebalancer.py"><code>engine/portfolio/rebalancer.py</code></a>
+lines 133–220 (<code>git status</code> reports the path as <code>UU</code> — <em>both modified</em>).</p>
+<p>The working-tree copy contains three <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; Updated upstream</code> /
+<code>=======</code> / <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt; Stashed changes</code> blocks inside <code>_strip_keys</code> and
+<code>_clean_weights</code>. The conflicted text leaves an unterminated string
+literal at line 207, so the module raises <code>SyntaxError</code> on import.
+Because <a href="../engine/portfolio/__init__.py"><code>engine/portfolio/__init__.py</code></a>
+runs <code>from engine.portfolio.rebalancer import (...)</code> at the top level,
+the <strong>entire <code>engine.portfolio</code> package fails to import</strong> — taking
+<code>MultiStrategyPortfolio</code>, <code>CapitalAllocation</code>, and the rebalancer down
+with it.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>.venv/bin/python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import engine.portfolio&quot;</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># SyntaxError: unterminated string literal (detected at line 207)</span>
+</span></code></pre></div>
+<p><strong>Why <code>main</code> still ships green</strong>: the markers are <strong>uncommitted</strong> —
+<code>HEAD</code> (the committed copy, 424 lines) contains <strong>zero</strong> conflict markers
+and imports cleanly, and CI runs against <code>HEAD</code>. The hazard is narrow but
+real: a careless <code>git add</code> + commit would land the broken file on <code>main</code>,
+and every web + worker process would <code>SyntaxError</code> at startup (the import
+runs at <code>engine.api.router</code> graph-build time, so the app would not boot).</p>
+<p><strong>Impact</strong>: in the working tree, anything importing <code>engine.portfolio</code> is
+unreachable — not merely "library-only" (the status in
+<a href="../architecture/core-domains/"><code>core-domains.md</code></a>) but <em>un-loadable</em>. The
+rebalancer (#1283) and the capital-aware orchestrator cannot be exercised
+from a REPL until resolved.</p>
+<p><strong>Fix path</strong>: both sides reimplement <code>_strip_keys</code> with <strong>conflicting
+return types</strong> (<code>list[str]</code> vs <code>dict[str, Any]</code>) and <code>_clean_weights</code>
+calls it accordingly — pick one signature and align every caller. The
+<code>Stashed changes</code> variant (returns the full stripped <code>{key: value}</code> mapping
+with explicit whitespace-collision detection) matches the docstrings
+("Deduplication is set-based", rejects "whitespace-colliding keys"), so
+prefer it, delete the <code>Updated upstream</code> branch, and <code>git add</code> to clear
+the <code>UU</code> state. Add a CI guard so markers can never land silently:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>grep<span class="w"> </span>-rnE<span class="w"> </span><span class="s1">&#39;^(&lt;&lt;&lt;&lt;&lt;&lt;&lt; |=======|&gt;&gt;&gt;&gt;&gt;&gt;&gt; )&#39;</span><span class="w"> </span>engine/<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">exit</span><span class="w"> </span><span class="m">0</span>
+</span></code></pre></div>
+<hr />
 <h2 id="p0-backtest-results-are-not-persisted">P0 — Backtest results are not persisted<a class="headerlink" href="#p0-backtest-results-are-not-persisted" title="Permanent link">&para;</a></h2>
 <p><strong>Where</strong>: <a href="../engine/api/routes/backtest.py#L22"><code>engine/api/routes/backtest.py:22</code></a></p>
 <p>The <code>POST /api/v1/backtest/run</code> route stores results in an
@@ -2791,14 +2873,14 @@ why it has gone unnoticed.</p>
 <p><strong>Workaround today</strong>: after <code>alembic upgrade head</code>, materialize both
 tables from the ORM metadata once against the prod DSN (idempotent,
 adds only the missing tables):</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.db.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Base</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.db.session</span><span class="w"> </span><span class="kn">import</span> <span class="n">engine</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="k">async</span> <span class="k">with</span> <span class="n">engine</span><span class="o">.</span><span class="n">begin</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="n">Base</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">create_all</span><span class="p">)</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.db.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Base</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.db.session</span><span class="w"> </span><span class="kn">import</span> <span class="n">engine</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="k">async</span> <span class="k">with</span> <span class="n">engine</span><span class="o">.</span><span class="n">begin</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="n">Base</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">create_all</span><span class="p">)</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
 </span></code></pre></div>
 <p><strong>Fix path</strong>: add <code>014_consent_and_deletion_tables.py</code> that
 <code>create_table</code>s both with their indexes
@@ -2953,20 +3035,57 @@ that code is no longer mounted.</p>
 use that for WS. If long-lived WS access for automation is needed, port
 the API-key branch from the legacy endpoint into <code>ws/auth.py</code>.</p>
 <hr />
+<h2 id="p1-ws-apiv1wsevents-is-mounted-but-never-initialized">P1 — <code>WS /api/v1/ws/events</code> is mounted but never initialized<a class="headerlink" href="#p1-ws-apiv1wsevents-is-mounted-but-never-initialized" title="Permanent link">&para;</a></h2>
+<p><strong>Where</strong>: <a href="../engine/api/ws/events.py"><code>engine/api/ws/events.py</code></a>,
+<a href="../engine/app.py"><code>engine/app.py</code></a>.</p>
+<p>The second WebSocket route (<code>ws_events_router</code> in
+<a href="../engine/api/router.py"><code>router.py</code></a>) is fully implemented and
+unit-tested, but its subsystem state is populated by
+<code>init_ws_events(...)</code>, which is <strong>never called</strong> in the app lifespan
+(<code>_init_websockets_and_events</code> calls <code>init_ws(...)</code> for <code>/ws</code> only). So
+<code>_state.manager</code> is <code>None</code> and every connection is closed at the HTTP
+layer with code <code>1011</code> (<code>WS_CLOSE_SERVER_ERROR</code>, "server not ready")
+right after the token validates. The route is effectively dead today
+(see <a href="../api-reference/">api-reference.md</a>).</p>
+<p><strong>Fix</strong>: add one line to the lifespan, after <code>ws_bridge.start()</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">init_ws_events</span><span class="p">(</span><span class="n">ws_manager</span><span class="p">,</span> <span class="n">bridge</span><span class="o">=</span><span class="n">ws_bridge</span><span class="p">)</span>
+</span></code></pre></div>
+<p>The manager, resolver, and bridge are already built for <code>/ws</code> and are
+shared. Until that lands, use <code>WS /api/v1/ws</code> and treat <code>/ws/events</code> as
+absent.</p>
+<hr />
 <h2 id="p1-taskiq-plumbing-incomplete">P1 — TaskIQ plumbing incomplete<a class="headerlink" href="#p1-taskiq-plumbing-incomplete" title="Permanent link">&para;</a></h2>
-<p><code>engine/tasks/worker.py</code> defines the broker; the compose file runs
-it. But:</p>
+<p>The canonical broker lives in
+<a href="../engine/tasks/broker.py"><code>engine/tasks/broker.py</code></a> (a
+<code>taskiq_redis.ListQueueBroker</code> wired to the shared Valkey URL);
+<a href="../engine/tasks/worker.py"><code>engine/tasks/worker.py</code></a> re-exports it and
+registers the legacy <code>run_backtest_task</code>. As of gh#1310 the broker is
+<strong>opened and closed in the FastAPI app lifespan</strong>
+(<a href="../engine/app.py"><code>_init_taskiq_broker</code></a>), and a liveness probe is
+exposed at <code>GET /api/v1/tasks/status</code> (see
+<a href="../api-reference/#tasks">api-reference.md</a>). So the <em>plumbing</em> is now
+present. What is <strong>still</strong> incomplete:</p>
 <ul>
 <li><code>POST /backtest/run</code> uses FastAPI <code>BackgroundTasks</code>, not TaskIQ —
   so backtests run in the <em>web</em> process, not the worker. A long
-  backtest stalls the uvicorn worker pool.</li>
+  backtest stalls the uvicorn worker pool. <code>run_backtest_task</code> exists
+  on the broker but no route <code>.kiq()</code>s it.</li>
+<li><code>GET /api/v1/tasks/status</code> is a process-readiness signal only — it
+  does not report queue depth, in-flight count, or result-backend
+  health. There is no readiness check that pings the broker's result
+  backend.</li>
 <li>The task-pipeline SLO in <a href="../operations/slos/"><code>operations/slos.md</code></a>
   is defined but has no emitter yet — <code>nexus.task.runs_total</code> is the
   intended metric name.</li>
+<li>Broker startup failure is <strong>swallowed</strong> (logged at
+  <code>tasks.broker.startup_failed</code>, <code>app.state.taskiq_broker</code> set to
+  <code>None</code>) so the API keeps serving while task submission silently
+  fails. Operators should alert on that log event.</li>
 </ul>
 <p><strong>Workaround today</strong>: run uvicorn with <code>--workers N</code> and tune
 <code>NEXUS_WORKER_CONCURRENCY</code> high enough to absorb long backtests. Do
-not depend on the worker process for backtest isolation today.</p>
+not depend on the worker process for backtest isolation today. Alert
+on <code>tasks.broker.startup_failed</code> to catch a dead broker.</p>
 <hr />
 <p><a id="mcp"></a></p>
 <h2 id="p1-mcp-server-is-a-library-not-a-runnable-process">P1 — MCP server is a library, not a runnable process<a class="headerlink" href="#p1-mcp-server-is-a-library-not-a-runnable-process" title="Permanent link">&para;</a></h2>

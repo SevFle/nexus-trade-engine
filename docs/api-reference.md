@@ -104,6 +104,24 @@ Unauthenticated probes for load balancers and Prometheus.
 
 Source: [`routes/system.py`](../engine/api/routes/system.py).
 
+## Tasks
+
+`/api/v1/tasks/*` — probes over the TaskIQ broker subsystem. Source:
+[`routes/tasks.py`](../engine/api/routes/tasks.py). The broker (a
+`taskiq_redis.ListQueueBroker` over the shared Valkey URL; the
+`valkey://` scheme is rewritten to `redis://` since `taskiq_redis` only
+accepts the latter) is opened/closed in the FastAPI lifespan by
+[`_init_taskiq_broker`](../engine/app.py) (gh#1310). Startup is guarded:
+an outage degrades task submission (logged `tasks.broker.startup_failed`)
+without taking the API down.
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/v1/tasks/status` | none | Liveness probe. Returns `{"status":"ok","broker":"running"}`. A process-readiness signal only — the broker starts synchronously in the lifespan, so a responding process implies a started broker. No queue-depth / result-backend readiness check exists yet. |
+
+> Does **not** report in-flight/queued backtest jobs — backtests still run
+> via FastAPI `BackgroundTasks`, not TaskIQ ([known-limitations.md](known-limitations.md)).
+
 ## Client errors
 
 `/api/v1/client/*` — browser-side error ingest. Source:
@@ -421,6 +439,35 @@ the `EventBus` itself publishes over Redis/Valkey pub/sub, events
 published on **any** replica reach local WebSocket connections on
 **every** replica. The `ConnectionManager` (the live socket objects) is
 still per-process, but event distribution is cross-replica.
+
+### Second endpoint: `WS /api/v1/ws/events`
+
+A **second** WebSocket route, `WS /api/v1/ws/events`, lives in
+[`ws/events.py`](../engine/api/ws/events.py) (SEV-275 follow-up). It is
+mounted alongside `/ws` in [`router.py`](../engine/api/router.py) and
+reuses the same `ConnectionManager`, `ChannelResolver`, and
+`EventBusBridge`, so channels, rooms, and permission rules are identical.
+Message shapes (`auth`/`subscribe`/`unsubscribe`/`ping`,
+`ack`/`error`/`event`/`pong`) are the same too. The only difference is
+**auth timing**:
+
+| | `WS /api/v1/ws` (generic) | `WS /api/v1/ws/events` |
+|---|---|---|
+| Token | `?token=` **or** first `auth` msg within 5 s | query param **only** (`token`/`session_token`) |
+| When | after `ws.accept()` | **before** `ws.accept()`; bad/missing token closes with `4401` |
+| Rate limit | per-IP token bucket | none (pre-accept reject is cheap) |
+
+Prefer `/ws/events` when the client can put the token in the URL and you
+want unauthenticated sockets rejected before upgrade.
+
+> **Current limitation:** subsystem state is populated by
+> `init_ws_events(...)`, which is **never called** in the
+> [`engine/app.py`](../engine/app.py) lifespan (only `init_ws(...)` for
+> `/ws` is). So `_state.manager` is `None` and the endpoint closes every
+> connection with code `1011` (`WS_CLOSE_SERVER_ERROR`, "server not
+> ready"). It is mounted and unit-tested but dormant until a lifespan
+> call to `init_ws_events(manager, bridge=ws_bridge)` is added
+> ([known-limitations.md](known-limitations.md)).
 
 ## Errors
 
