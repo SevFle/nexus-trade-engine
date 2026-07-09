@@ -9,7 +9,10 @@ import pytest
 
 from engine.observability.redact import REDACTED
 from engine.observability.sentry import (
+    SENSITIVE_QUERY_PARAMS,
     _before_send,
+    _redact_url,
+    _scrub_request,
     close_sentry,
     init_sentry,
     setup_sentry,
@@ -391,3 +394,193 @@ class TestBeforeSendIntegrationWithScrubDict:
         event = {"contexts": {"block": {key: "leak"}}}
         result = _before_send(event, {})
         assert result["contexts"]["block"][key] == REDACTED
+
+
+# ---------------------------------------------------------------------------
+# Request payload (URL / cookies / env) scrubbing
+# ---------------------------------------------------------------------------
+
+
+class TestRedactUrl:
+    """``_redact_url`` masks sensitive query-string parameter values."""
+
+    @pytest.mark.parametrize("param", sorted(SENSITIVE_QUERY_PARAMS))
+    def test_sensitive_param_value_masked(self, param: str):
+        url = f"https://x/y?{param}=leak"
+        redacted = _redact_url(url)
+        assert "leak" not in redacted
+        assert REDACTED in redacted
+
+    def test_regression_token_not_in_url(self):
+        """The headline regression: ``https://x/y?token=leak`` must no longer
+        carry the secret value after redaction."""
+        redacted = _redact_url("https://x/y?token=leak")
+        assert "leak" not in redacted
+        assert REDACTED in redacted
+        assert redacted.startswith("https://x/y?")
+
+    @pytest.mark.parametrize("param", sorted(SENSITIVE_QUERY_PARAMS))
+    def test_sensitive_param_case_insensitive(self, param: str):
+        redacted = _redact_url(f"https://x/y?{param.upper()}=leak")
+        assert "leak" not in redacted
+        assert REDACTED in redacted
+
+    def test_non_sensitive_param_preserved(self):
+        url = "https://x/y?page=3&sort=asc"
+        assert _redact_url(url) == url
+
+    def test_mixed_params_only_sensitive_masked(self):
+        url = "https://x/y?page=3&token=leak&sort=asc"
+        redacted = _redact_url(url)
+        assert "leak" not in redacted
+        assert REDACTED in redacted
+        assert "page=3" in redacted
+        assert "sort=asc" in redacted
+
+    def test_param_order_preserved(self):
+        url = "https://x/y?token=a&code=b&secret=c&page=1"
+        redacted = _redact_url(url)
+        # Order is retained; the three sensitive params keep their leading slots.
+        query = redacted.split("?", 1)[1]
+        names = [pair.split("=", 1)[0] for pair in query.split("&")]
+        assert names == ["token", "code", "secret", "page"]
+
+    def test_url_without_query_string_unchanged(self):
+        url = "https://x/y"
+        assert _redact_url(url) == url
+
+    def test_url_with_empty_query_unchanged(self):
+        url = "https://x/y?"
+        assert _redact_url(url) == url
+
+    def test_fragment_preserved(self):
+        url = "https://x/y?token=leak#section"
+        redacted = _redact_url(url)
+        assert "leak" not in redacted
+        assert redacted.endswith("#section")
+
+    def test_blank_value_sensitive_param_redacted(self):
+        redacted = _redact_url("https://x/y?token=")
+        assert f"token={REDACTED}" in redacted
+
+    @pytest.mark.parametrize("value", [None, 123, 4.2, [], {}, b"bytes"])
+    def test_non_string_input_returned_untouched(self, value):
+        assert _redact_url(value) is value
+
+
+class TestScrubRequest:
+    """``_scrub_request`` masks URL, cookies and env in the request payload."""
+
+    def test_url_redacted(self):
+        request = {"url": "https://x/y?token=leak"}
+        out = _scrub_request(request)
+        assert "leak" not in out["url"]
+        assert REDACTED in out["url"]
+
+    def test_cookies_redacted_by_scrub_value(self):
+        request = {"cookies": {"session_id": "abc123", "prefs": "dark"}}
+        out = _scrub_request(request)
+        assert out["cookies"]["session_id"] == REDACTED
+        assert out["cookies"]["prefs"] == "dark"
+
+    def test_cookies_value_patterns_redacted(self):
+        # Even a non-banned cookie name carrying a Bearer token is masked.
+        request = {"cookies": {"tracking": "Bearer supersecret"}}
+        out = _scrub_request(request)
+        assert "supersecret" not in str(out["cookies"]["tracking"])
+
+    def test_env_scrubbed_by_scrub_dict(self):
+        request = {"env": {"REMOTE_ADDR": "1.2.3.4", "api_key": "leak"}}
+        out = _scrub_request(request)
+        assert out["env"]["REMOTE_ADDR"] == "1.2.3.4"
+        assert out["env"]["api_key"] == REDACTED
+
+    def test_missing_env_left_untouched(self):
+        request = {"url": "https://x/y"}
+        out = _scrub_request(request)
+        assert "env" not in out
+
+    def test_non_dict_env_ignored(self):
+        request = {"env": "not-a-dict"}
+        out = _scrub_request(request)
+        assert out["env"] == "not-a-dict"
+
+    def test_does_not_mutate_input(self):
+        request = {"url": "https://x/y?token=leak", "cookies": {"token": "x"}}
+        _scrub_request(request)
+        assert request["url"] == "https://x/y?token=leak"
+        assert request["cookies"] == {"token": "x"}
+
+    def test_other_request_fields_preserved(self):
+        request = {
+            "method": "GET",
+            "url": "https://x/y?token=leak",
+            "headers": {"Host": "x"},
+            "query_string": "token=leak",
+        }
+        out = _scrub_request(request)
+        assert out["method"] == "GET"
+        assert out["headers"] == {"Host": "x"}
+        assert out["query_string"] == "token=leak"
+
+
+class TestBeforeSendRequestRegression:
+    """End-to-end regression tests for the ``request`` payload through
+    ``_before_send`` — mirrors the Sentry ASGI event shape."""
+
+    def test_url_query_param_not_leaked_in_payload(self):
+        """A URL like ``https://x/y?token=leak`` no longer contains ``leak``
+        anywhere in the Sentry payload after ``_before_send``."""
+        event = {"request": {"url": "https://x/y?token=leak"}}
+        result = _before_send(event, {})
+        assert "leak" not in str(result)
+        assert REDACTED in str(result["request"]["url"])
+
+    def test_cookies_redacted_in_payload(self):
+        event = {"request": {"cookies": {"session_id": "session-secret"}}}
+        result = _before_send(event, {})
+        assert result["request"]["cookies"]["session_id"] == REDACTED
+        assert "session-secret" not in str(result)
+
+    def test_env_scrubbed_in_payload(self):
+        event = {"request": {"env": {"REMOTE_ADDR": "9.9.9.9", "api_key": "k"}}}
+        result = _before_send(event, {})
+        assert result["request"]["env"]["REMOTE_ADDR"] == "9.9.9.9"
+        assert result["request"]["env"]["api_key"] == REDACTED
+
+    def test_all_sensitive_query_params_redacted(self):
+        """Every param in ``SENSITIVE_QUERY_PARAMS`` is masked in one URL."""
+        pairs = "&".join(f"{p}=leak-{p}" for p in sorted(SENSITIVE_QUERY_PARAMS))
+        url = f"https://x/y?{pairs}&page=2"
+        result = _before_send({"request": {"url": url}}, {})
+        for p in SENSITIVE_QUERY_PARAMS:
+            assert f"leak-{p}" not in str(result)
+        assert "page=2" in result["request"]["url"]
+
+    def test_full_event_contexts_breadcrumbs_and_request(self):
+        """Contexts, breadcrumbs and request are all scrubbed in one pass."""
+        event = {
+            "contexts": {"user": {"password": "p"}},
+            "breadcrumbs": {"values": [{"data": {"token": "t"}}]},
+            "request": {
+                "url": "https://x/y?token=leak",
+                "cookies": {"session_id": "s"},
+                "env": {"SECRET": "leak"},
+            },
+        }
+        result = _before_send(event, {})
+        assert "leak" not in str(result)
+        assert result["contexts"]["user"]["password"] == REDACTED
+        assert result["breadcrumbs"]["values"][0]["data"]["token"] == REDACTED
+        assert result["request"]["cookies"]["session_id"] == REDACTED
+        assert result["request"]["env"]["SECRET"] == REDACTED
+
+    def test_missing_request_field_handled(self):
+        event = {"event_id": "x", "message": "no request"}
+        result = _before_send(dict(event), {})
+        assert "request" not in result
+
+    def test_none_request_handled(self):
+        event = {"request": None}
+        result = _before_send(event, {})
+        assert result["request"] is None
