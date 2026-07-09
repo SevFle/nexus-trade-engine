@@ -14,10 +14,11 @@ For *why* we made specific structural choices, see
    repo before.
 2. **[core-domains.md](core-domains.md)** — the domain layer under
    `engine/core/` + `engine/orchestration/`: multi-strategy orchestration,
-   the 86-KPI analytics taxonomy, strategy scoring & governance,
-   optimization, and post-trade cost analysis. The companion to
-   `overview.md` (which is the *service* view; this is the *capability*
-   view).
+   cost & risk modeling, execution backends, and portfolio accounting.
+   The companion to `overview.md` (which is the *service* view; this is
+   the *capability* view). Its measurement/governance/tuning companion
+   is **[analytics-scoring.md](analytics-scoring.md)** (the 86-KPI
+   analytics taxonomy, strategy scoring & governance, optimization).
 3. **[database.md](database.md)** — table inventory, migration policy,
    data ownership.
 4. **[plugins.md](plugins.md)** — plugin SDK and the registry that
@@ -39,8 +40,8 @@ components in our docs site:
   the registry.
 
 The flat-markdown architecture docs (`overview.md`, `core-domains.md`,
-`database.md`, `plugins.md`) are the source of truth; the diagrams are a
-presentation layer on top.
+`analytics-scoring.md`, `database.md`, `plugins.md`) are the source of
+truth; the diagrams are a presentation layer on top.
 
 ## Conventions
 

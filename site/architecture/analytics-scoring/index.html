@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/architecture/overview/">
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/architecture/analytics-scoring/">
       
       
-        <link rel="prev" href="../">
+        <link rel="prev" href="../core-domains/">
       
       
-        <link rel="next" href="../core-domains/">
+        <link rel="next" href="../database/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>System overview - Nexus Trade Engine</title>
+        <title>Analytics, scoring & optimization - Nexus Trade Engine</title>
       
     
     
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#system-overview" class="md-skip">
+        <a href="#analytics-scoring-optimization" class="md-skip">
           Skip to content
         </a>
       
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              System overview
+              Analytics, scoring & optimization
             
           </span>
         </div>
@@ -579,37 +579,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    System overview
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../overview/" class="md-nav__link">
         
   
   
@@ -625,114 +598,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#components" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Components
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#top-level-layout" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Top-level layout
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#key-dependencies" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Key dependencies
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#request-lifecycle-http" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Request lifecycle (HTTP)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#event-flow" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Event flow
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Configuration
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#where-to-put-new-code" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Where to put new code
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#non-goals" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Non-goals
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -770,10 +635,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../analytics-scoring/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analytics, scoring & optimization
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -789,6 +681,137 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#performance-analytics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance analytics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance analytics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#metricsreport-live-used-today" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MetricsReport — live, used today
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performancereport-86-kpi-schema-not-yet-wired" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PerformanceReport — 86-KPI schema, not yet wired
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#companion-analytics-modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Companion analytics modules
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategy-scoring-governance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Strategy scoring &amp; governance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Strategy scoring &amp; governance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#composite-scoring-strategy_evaluatorpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Composite scoring — strategy_evaluator.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lifecycle-versioning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle &amp; versioning
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optimization-param_optimizerpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optimization — param_optimizer.py
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -2437,10 +2460,99 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#components" class="md-nav__link">
+  <a href="#performance-analytics" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Components
+        Performance analytics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance analytics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#metricsreport-live-used-today" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MetricsReport — live, used today
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performancereport-86-kpi-schema-not-yet-wired" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PerformanceReport — 86-KPI schema, not yet wired
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#companion-analytics-modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Companion analytics modules
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategy-scoring-governance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Strategy scoring &amp; governance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Strategy scoring &amp; governance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#composite-scoring-strategy_evaluatorpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Composite scoring — strategy_evaluator.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lifecycle-versioning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle &amp; versioning
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optimization-param_optimizerpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optimization — param_optimizer.py
       
     </span>
   </a>
@@ -2448,76 +2560,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#top-level-layout" class="md-nav__link">
+  <a href="#see-also" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Top-level layout
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#key-dependencies" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Key dependencies
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#request-lifecycle-http" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Request lifecycle (HTTP)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#event-flow" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Event flow
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Configuration
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#where-to-put-new-code" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Where to put new code
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#non-goals" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Non-goals
+        See also
       
     </span>
   </a>
@@ -2544,310 +2590,220 @@
   
 
 
-<h1 id="system-overview">System overview<a class="headerlink" href="#system-overview" title="Permanent link">&para;</a></h1>
-<p>Nexus Trade Engine is a Python service that backtests algorithmic
-trading strategies, runs them against live or paper broker
-connections, and exposes the results via a REST API and a React
-frontend. This document describes the moving pieces and how a request
-flows through them.</p>
-<h2 id="components">Components<a class="headerlink" href="#components" title="Permanent link">&para;</a></h2>
-<pre class="mermaid"><code>flowchart LR
-    FE["React frontend&lt;br/&gt;(frontend/)"] --&gt;|HTTPS · JSON · WS| API
-    AGENT["LLM agent&lt;br/&gt;(MCP client)"] -.-&gt;|JSON-RPC&lt;br/&gt;stdio / HTTP| MCP["engine/mcp/&lt;br/&gt;tools · resources"]
-    MCP -.-&gt;|backtest · cost model| CORE
-    subgraph engine["engine/ (FastAPI app)"]
-        API["api/&lt;br/&gt;routers · auth · WS"]
-        CORE["core/&lt;br/&gt;backtest · OMS · risk"]
-        EV["events/&lt;br/&gt;EventBus"]
-    end
-    API &lt;--&gt; CORE
-    CORE --&gt;|publish| EV
-    EV --&gt;|pub/sub&lt;br/&gt;(cross-replica)| WSB["ws/event_bridge"]
-    EV --&gt;|fan-out| WH["webhook dispatcher&lt;br/&gt;(HMAC)"]
-    WSB --&gt; WS["WS clients"]
-    WH --&gt; EXT["external endpoints"]
-    CORE -.-&gt;|enqueue| WORK["TaskIQ workers&lt;br/&gt;(engine/tasks)"]
-    WORK &lt;--&gt; PG[("Postgres&lt;br/&gt;+ TimescaleDB")]
-    API &lt;--&gt; PG
-    WORK &lt;--&gt; VK[("Valkey / Redis")]
-    API &lt;--&gt; VK
-    EV &lt;--&gt;|broker| VK</code></pre>
-<p>Plain-text fallback (same topology):</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌──────────────────┐        HTTPS         ┌──────────────────┐
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│   React frontend │ ───────────────────▶ │  FastAPI engine  │
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│   (frontend/)    │ ◀─────────────────── │  (engine/api)    │
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>└──────────────────┘    JSON / WebSocket  └────────┬─────────┘
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>                                                   │
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>                           enqueue / dispatch       │
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>                                                   ▼
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>                                           ┌──────────────────┐
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>                                           │  TaskIQ workers  │
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>                                           │  (engine/tasks)  │
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>                                           └────────┬─────────┘
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>                                                   │
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>                                           ┌────────┴─────────┐
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>                                           ▼                  ▼
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>                                   ┌────────────┐     ┌──────────────┐
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>                                   │  Postgres  │     │ Valkey/Redis │
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>                                   │ (asyncpg + │     │ (TaskIQ      │
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>                                   │  TimescaleDB)    │  broker, cache)│
-</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>                                   └────────────┘     └──────────────┘
-</span></code></pre></div>
-<p>The full service is one Python package (<code>engine/</code>) with sub-packages
-that line up with the boxes above. The frontend is a separate Vite +
-React app under <code>frontend/</code>.</p>
-<h2 id="top-level-layout">Top-level layout<a class="headerlink" href="#top-level-layout" title="Permanent link">&para;</a></h2>
+<h1 id="analytics-scoring-optimization">Analytics, scoring &amp; optimization<a class="headerlink" href="#analytics-scoring-optimization" title="Permanent link">&para;</a></h1>
+<p>The measurement, governance, and tuning layer of the core engine. This
+page was split out of <a href="../core-domains/"><code>core-domains.md</code></a> (which now
+covers instruments, orchestration, cost/risk, execution, and accounting)
+so each stays under the 500-line doc cap. Read <code>core-domains.md</code> first
+for the domain map; this page is the deep-dive on the numbers.</p>
+<h2 id="performance-analytics">Performance analytics<a class="headerlink" href="#performance-analytics" title="Permanent link">&para;</a></h2>
+<p>There are <strong>two</strong> analytics containers. Do not conflate them:</p>
+<h3 id="metricsreport-live-used-today"><code>MetricsReport</code> — live, used today<a class="headerlink" href="#metricsreport-live-used-today" title="Permanent link">&para;</a></h3>
+<p><a href="../../engine/core/metrics.py"><code>engine/core/metrics.py</code></a>. The container
+the backtest runner actually computes and that <code>GET /backtest/results/{id}</code>
+returns as <code>metrics</code>. ~25 scalar fields (total/annualized return, Sharpe,
+Sortino, Calmar, max drawdown + duration + recovery, volatility,
+win-rate, profit factor, avg winner/loser, streaks, total costs/taxes,
+cost-drag %, turnover, exposure %) plus three series (<code>equity_curve</code>,
+<code>drawdown_curve</code>, <code>rolling_metrics</code>).</p>
+<h3 id="performancereport-86-kpi-schema-not-yet-wired"><code>PerformanceReport</code> — 86-KPI schema, not yet wired<a class="headerlink" href="#performancereport-86-kpi-schema-not-yet-wired" title="Permanent link">&para;</a></h3>
+<p><a href="../../engine/core/analytics/"><code>engine/core/analytics/</code></a> is the
+<strong>86-KPI taxonomy</strong> (gh#97), split into eight section models:</p>
 <table>
 <thead>
 <tr>
-<th>Path</th>
+<th>Section (file)</th>
+<th>KPI range</th>
+<th>Covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>returns.py</code></td>
+<td>1–14</td>
+<td>Return ratios + <code>PeriodReturn</code> value object.</td>
+</tr>
+<tr>
+<td><code>risk_adjusted.py</code></td>
+<td>15–24</td>
+<td>Sharpe/Sortino/Omega/Calmar/Treynor/Information/Payoff/Profit-factor. Infinite/undefined ratios → <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>drawdown.py</code></td>
+<td>25–34</td>
+<td>Underwater series + duration/recovery.</td>
+</tr>
+<tr>
+<td><code>trades.py</code></td>
+<td>35–50</td>
+<td>Win/loss rates, streaks, holding periods, cadence.</td>
+</tr>
+<tr>
+<td><code>costs.py</code></td>
+<td>51–58</td>
+<td>Cost breakdown + slippage/IS in basis points.</td>
+</tr>
+<tr>
+<td><code>positions.py</code></td>
+<td>59–66</td>
+<td>Exposure, long/short, concentration, simultaneous positions.</td>
+</tr>
+<tr>
+<td><code>volatility.py</code></td>
+<td>67–76</td>
+<td>VaR/CVaR (positive magnitudes), capture ratios, tail ratio.</td>
+</tr>
+<tr>
+<td><code>time_analysis.py</code></td>
+<td>77–86</td>
+<td>Monthly heatmap, day-of-week/hour returns, rolling Sharpe/DD, dual equity curve.</td>
+</tr>
+<tr>
+<td><code>report.py</code></td>
+<td>envelope</td>
+<td><code>PerformanceReport</code> aggregates the eight; <code>metric_count</code> asserts all 86 present.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Status — accurate caveat.</strong> The section modules and the envelope
+are on disk, but the builder (<code>engine/core/analytics/analyzer.py</code>)
+referenced by their docstrings is <strong>not</strong>, and nothing under
+<code>engine/api/</code> or <code>engine/core/backtest_runner.py</code> imports the report.
+So <code>PerformanceReport</code> is a landed schema, not yet a live output: the
+API surface still serves <code>MetricsReport</code>. Treat the 86-KPI contract as
+the intended shape; a future PR wires an analyzer and a route.</p>
+</blockquote>
+<h3 id="companion-analytics-modules">Companion analytics modules<a class="headerlink" href="#companion-analytics-modules" title="Permanent link">&para;</a></h3>
+<p>These operate on an equity curve / trade log and are independently
+usable:</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Computes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../../engine/core/rolling_metrics.py"><code>rolling_metrics.py</code></a> / <a href="../../engine/core/rolling_correlation.py"><code>rolling_correlation.py</code></a> / <a href="../../engine/core/rolling_benchmark.py"><code>rolling_benchmark.py</code></a> / <a href="../../engine/core/rolling_trade_stats.py"><code>rolling_trade_stats.py</code></a></td>
+<td>Rolling-window Sharpe, correlation, benchmark-relative, and trade statistics.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/drawdown_analytics.py"><code>drawdown_analytics.py</code></a></td>
+<td>Drawdown depth/duration/recovery + excursion stats (<a href="../../engine/core/excursion_stats.py"><code>excursion_stats.py</code></a>).</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/distribution_metrics.py"><code>distribution_metrics.py</code></a></td>
+<td>VaR / CVaR / skew / kurtosis / tail ratio.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/benchmark_comparison.py"><code>benchmark_comparison.py</code></a></td>
+<td>Alpha/beta/R-squared, up/down capture, tracking error vs. a benchmark.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/cumulative_returns.py"><code>cumulative_returns.py</code></a></td>
+<td>Cumulative + <code>PeriodReturn</code> series (daily/weekly/monthly).</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/monte_carlo.py"><code>monte_carlo.py</code></a></td>
+<td>Robustness testing — <code>bootstrap_returns</code> (Efron i.i.d.) and <code>block_bootstrap</code> (Künsch, preserves autocorrelation). Pure numpy, deterministic given a <code>seed</code>.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/portfolio_aggregator.py"><code>portfolio_aggregator.py</code></a> / <a href="../../engine/core/portfolio_concentration.py"><code>portfolio_concentration.py</code></a></td>
+<td>Cross-portfolio rollups and concentration metrics.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="strategy-scoring-governance">Strategy scoring &amp; governance<a class="headerlink" href="#strategy-scoring-governance" title="Permanent link">&para;</a></h2>
+<h3 id="composite-scoring-strategy_evaluatorpy">Composite scoring — <a href="../../engine/core/strategy_evaluator.py"><code>strategy_evaluator.py</code></a><a class="headerlink" href="#composite-scoring-strategy_evaluatorpy" title="Permanent link">&para;</a></h3>
+<p>Turns a <code>MetricsReport</code> into one number in <code>[0, 100]</code> plus a
+per-dimension breakdown, a letter grade, and warnings. Used by the
+marketplace ranking, A/B comparison surfaces, and the backtest summary
+endpoint (so the UI doesn't re-derive it). <strong>Six dimensions</strong>, each
+normalized to <code>[0, 100]</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Inputs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RISK_ADJUSTED_RETURN</code></td>
+<td>Sharpe ratio, piecewise mapping.</td>
+</tr>
+<tr>
+<td><code>DRAWDOWN_CONTROL</code></td>
+<td>Max drawdown, piecewise mapping.</td>
+</tr>
+<tr>
+<td><code>CONSISTENCY</code></td>
+<td>Coefficient of variation of rolling-window Sharpe.</td>
+</tr>
+<tr>
+<td><code>COST_EFFICIENCY</code></td>
+<td>Exponential decay on <code>cost_drag_pct</code>.</td>
+</tr>
+<tr>
+<td><code>WIN_RATE_QUALITY</code></td>
+<td><code>win_rate × (avg_winner / |avg_loser|)</code>.</td>
+</tr>
+<tr>
+<td><code>STABILITY</code></td>
+<td>Annual volatility, piecewise mapping.</td>
+</tr>
+</tbody>
+</table>
+<p>Default weights mirror the spec and sum to 1.0 (risk-adjusted 0.30, …).
+Composite = <code>Σ(dimension × weight)</code>. The evaluator is <strong>stateless</strong> —
+construct one per weight configuration. (See also the persisted
+<code>scoring_snapshots</code> table, written by the scoring routes.)</p>
+<h3 id="lifecycle-versioning">Lifecycle &amp; versioning<a class="headerlink" href="#lifecycle-versioning" title="Permanent link">&para;</a></h3>
+<p>Two services govern <em>when</em> a strategy may run and <em>what code</em> runs:</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
 <th>Responsibility</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><a href="../../engine/app.py"><code>engine/app.py</code></a></td>
-<td>FastAPI app factory (<code>create_app</code>). Wires routers, middleware, lifespan hooks. <strong>This is the uvicorn entrypoint</strong> (<code>uvicorn engine.app:create_app --factory</code>).</td>
+<td><a href="../../engine/core/strategy_lifecycle.py"><code>strategy_lifecycle.py</code></a></td>
+<td>State machine <code>draft → backtest → paper → live</code>, with <code>retired</code> reachable from any non-draft stage. <strong>No skipping</strong> — you cannot jump draft→live. Each promotion is gated by a <code>LifecycleEvidence</code> payload: paper requires a backtest id + minimum Sharpe; live requires a paper window + minimum live-paper Sharpe.</td>
 </tr>
 <tr>
-<td><a href="../../engine/main.py"><code>engine/main.py</code></a></td>
-<td>Legacy minimal app module kept for <code>python -m engine.main</code>. It mounts only portfolio/strategies/backtest/marketplace and is <strong>not</strong> what <code>create_app()</code> produces — do not extend it; add routers to <a href="../../engine/api/router.py"><code>engine/api/router.py</code></a> instead.</td>
-</tr>
-<tr>
-<td><a href="../../engine/config.py"><code>engine/config.py</code></a></td>
-<td>Pydantic settings — every env var the engine reads lives here.</td>
-</tr>
-<tr>
-<td><a href="../../engine/api/"><code>engine/api/</code></a></td>
-<td>HTTP/WebSocket surface: routers, auth, rate limiting, error mapping.</td>
-</tr>
-<tr>
-<td><a href="../../engine/core/"><code>engine/core/</code></a></td>
-<td>Domain logic: backtest runner, OMS, cost/risk models, analytics. The <em>capability</em> map of this tree is <a href="../core-domains/"><code>core-domains.md</code></a>.</td>
-</tr>
-<tr>
-<td><a href="../../engine/execution/"><code>engine/execution/</code></a></td>
-<td>Concrete broker execution adapter: <code>LiveExecutionBackend</code> (SEV-223) — an Alpaca-compatible REST-backed <code>ExecutionBackend</code>. Sits <strong>on top of</strong> the <code>engine/core/execution/</code> ABC/factory rather than inside it; see <a href="../core-domains/#execution-backends"><code>core-domains.md</code></a>.</td>
-</tr>
-<tr>
-<td><a href="../../engine/orchestration/"><code>engine/orchestration/</code></a></td>
-<td>Multi-strategy <code>StrategyOrchestrator</code> (priority / net-position conflict resolution). See <a href="../core-domains/"><code>core-domains.md</code></a>.</td>
-</tr>
-<tr>
-<td><a href="../../engine/portfolio/"><code>engine/portfolio/</code></a></td>
-<td>Cross-strategy capital allocation (immutable <code>CapitalAllocation</code> value object).</td>
-</tr>
-<tr>
-<td><a href="../../engine/data/"><code>engine/data/</code></a></td>
-<td>Market data providers and the registry that picks one at runtime.</td>
-</tr>
-<tr>
-<td><a href="../../engine/db/"><code>engine/db/</code></a></td>
-<td>SQLAlchemy models, async session factory, Alembic migrations.</td>
-</tr>
-<tr>
-<td><a href="../../engine/events/"><code>engine/events/</code></a></td>
-<td>Event bus + outbound webhook dispatcher (gh#80).</td>
-</tr>
-<tr>
-<td><a href="../../engine/mcp/"><code>engine/mcp/</code></a></td>
-<td>Model Context Protocol server: exposes a read-only tool/resource surface to LLM agents over stdio or HTTP. Not mounted in the FastAPI app — it runs as a separate process. See <a href="../../mcp-server/">mcp-server.md</a>.</td>
-</tr>
-<tr>
-<td><a href="../../engine/observability/"><code>engine/observability/</code></a></td>
-<td>Structlog wiring, lineage middleware, pluggable metrics backend (gh#34).</td>
-</tr>
-<tr>
-<td><a href="../../engine/plugins/"><code>engine/plugins/</code></a></td>
-<td>Plugin SDK and runtime registry. See <a href="../plugins/">plugins.md</a>.</td>
-</tr>
-<tr>
-<td><a href="../../engine/tasks/"><code>engine/tasks/</code></a></td>
-<td>TaskIQ worker definitions for async work (backtests, scheduled jobs).</td>
-</tr>
-<tr>
-<td><a href="../../engine/legal/"><code>engine/legal/</code></a></td>
-<td>Legal-document acceptance (Terms / Privacy / etc.).</td>
-</tr>
-<tr>
-<td><a href="../../engine/privacy/"><code>engine/privacy/</code></a></td>
-<td>GDPR/CCPA surface: <code>deletion.py</code> (30-day grace + anonymize), <code>dsr.py</code> (request ledger), <code>export.py</code>.</td>
-</tr>
-<tr>
-<td><a href="../../engine/reference/"><code>engine/reference/</code></a></td>
-<td>Static reference data (instruments, exchanges).</td>
-</tr>
-<tr>
-<td><a href="../../frontend/"><code>frontend/</code></a></td>
-<td>React dashboard (Vite, React 18, Tailwind, react-query).</td>
+<td><a href="../../engine/core/strategy_versioning.py"><code>strategy_versioning.py</code></a></td>
+<td><strong>Content-addressed deploys.</strong> A <code>StrategyVersion</code> is a SHA-256 of the code blob + a hash of its canonical-JSON config, so the same code+config never creates two records (re-deploys are idempotent). <code>deploy</code> → new <code>DRAFT</code>; <code>activate</code> promotes to <code>ACTIVE</code> (demoting the prior); <code>rollback</code> returns to a previous <code>ACTIVE</code>.</td>
 </tr>
 </tbody>
 </table>
-<h2 id="key-dependencies">Key dependencies<a class="headerlink" href="#key-dependencies" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Concern</th>
-<th>Library</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Web framework</td>
-<td>FastAPI</td>
-</tr>
-<tr>
-<td>Validation / settings</td>
-<td>Pydantic v2 / Pydantic-Settings</td>
-</tr>
-<tr>
-<td>Async DB driver</td>
-<td><code>asyncpg</code> via SQLAlchemy 2 async</td>
-</tr>
-<tr>
-<td>Migrations</td>
-<td>Alembic</td>
-</tr>
-<tr>
-<td>Background tasks</td>
-<td>TaskIQ + <code>taskiq-fastapi</code> + <code>taskiq-redis</code></td>
-</tr>
-<tr>
-<td>Cache / broker</td>
-<td>Valkey (Redis-compatible) via the <code>valkey</code> client</td>
-</tr>
-<tr>
-<td>Time-series storage</td>
-<td>TimescaleDB extension on Postgres</td>
-</tr>
-<tr>
-<td>Logging</td>
-<td><code>structlog</code> (event = reserved kwarg — pass <code>event_type=</code>)</td>
-</tr>
-<tr>
-<td>Tracing / metrics</td>
-<td>OpenTelemetry SDK + a pluggable <code>MetricsBackend</code></td>
-</tr>
-<tr>
-<td>HTTP client (outbound)</td>
-<td><code>httpx</code> async client</td>
-</tr>
-<tr>
-<td>Crypto</td>
-<td><code>bcrypt</code>, <code>cryptography</code> (Fernet for MFA secrets)</td>
-</tr>
-</tbody>
-</table>
-<p>The full pinned set is in <a href="../../pyproject.toml"><code>pyproject.toml</code></a>.</p>
-<h2 id="request-lifecycle-http">Request lifecycle (HTTP)<a class="headerlink" href="#request-lifecycle-http" title="Permanent link">&para;</a></h2>
-<p>A typical authenticated <code>POST /api/v1/backtest/run</code> does this:</p>
-<ol>
-<li>Reverse proxy forwards the request to uvicorn (<code>engine.app:create_app</code>).</li>
-<li><strong>CORS / security middleware</strong> rejects disallowed origins.</li>
-<li><strong>Lineage middleware</strong> (<a href="../../engine/observability/lineage.py"><code>engine/observability/lineage.py</code></a>)
-   stamps a request id and propagates the OpenTelemetry context.</li>
-<li><strong>Rate limiter</strong> (<a href="../../engine/api/rate_limit.py"><code>engine/api/rate_limit.py</code></a>)
-   short-circuits abusive clients.</li>
-<li><strong>Auth dependency</strong> (<a href="../../engine/api/auth/"><code>engine/api/auth/</code></a>)
-   resolves the bearer token to a <code>User</code>. If the user has MFA enabled
-   the request must carry a valid challenge token from <code>/login</code>.</li>
-<li><strong>Route handler</strong> in <code>engine/api/routes/backtest.py</code> validates the
-   payload and runs the computation via FastAPI <code>BackgroundTasks</code>
-   (<strong>not</strong> TaskIQ — see <a href="../../known-limitations/">known-limitations.md</a>).
-   Results land in an in-process dict keyed by <code>backtest_id</code> with a
-   1-hour TTL; the <code>backtest_results</code> table exists but the REST route
-   does not yet write to it.</li>
-<li>The handler returns <code>202 Accepted</code> with the new id; the background
-   job runs the backtest through
-   <a href="../../engine/core/backtest_runner.py"><code>engine/core/backtest_runner.py</code></a>
-   and writes the composite score / breakdown back into the result.</li>
-<li>Listeners on <code>engine/events/bus.py</code> get notified. The
-   <a href="../../engine/api/ws/event_bridge.py"><code>EventBusBridge</code></a> fans events
-   out to WebSocket rooms, and the webhook dispatcher fans out to
-   every active webhook config that subscribed to the relevant event.</li>
-</ol>
-<p>Synchronous reads (<code>GET /api/v1/portfolio</code>, etc.) follow steps 1–5
-then return the result directly without enqueueing.</p>
-<h2 id="event-flow">Event flow<a class="headerlink" href="#event-flow" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>domain code  ──▶  EventBus.publish(event)
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>                  ├──▶  in-process async handlers  (awaited in sequence)
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>                  ├──▶  Redis/Valkey pub/sub         (cross-replica)
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>                  │       └──▶  EventBusBridge on every replica  ──▶  WS rooms
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>                  └──▶  WebhookDispatcher  (HMAC-signed outbound HTTP)
-</span></code></pre></div>
-<p>The <code>EventBus</code> (<a href="../../engine/events/bus.py"><code>engine/events/bus.py</code></a>)
-does two things per <code>publish()</code>: it <code>await</code>s every registered
-in-process handler in turn (the webhook dispatcher is one such handler),
-<strong>and</strong> it republishes the event onto a Redis/Valkey pub/sub channel
-(<code>nexus:&lt;event_type&gt;</code>) so consumers on other replicas see it. The
-<a href="../../engine/api/ws/event_bridge.py"><code>EventBusBridge</code></a> is the key
-cross-replica consumer: each replica's bridge re-delivers received
-events to its local WebSocket rooms, so a portfolio update emitted on
-replica A reaches WS clients connected to replica B. If Redis is
-unavailable the bus falls back to in-process-only delivery (logged at
-warning level).</p>
-<h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
-<p>Every operator-tunable lives in <a href="../../engine/config.py"><code>engine/config.py</code></a>
-as a Pydantic-Settings field. The convention is:</p>
+<p>Together: <code>StrategyVersionService</code> controls <em>what</em> code runs;
+<code>StrategyLifecycleService</code> controls <em>which stage</em> it's allowed to run at.</p>
+<h2 id="optimization-param_optimizerpy">Optimization — <a href="../../engine/core/param_optimizer.py"><code>param_optimizer.py</code></a><a class="headerlink" href="#optimization-param_optimizerpy" title="Permanent link">&para;</a></h2>
+<p>Pure-Python hyperparameter search against an objective function
+(typically a backtest's Sharpe or compound return).</p>
 <ul>
-<li>Field name = <code>nexus_&lt;area&gt;_&lt;knob&gt;</code> (lowercase snake-case).</li>
-<li>Env var = uppercase, e.g. <code>NEXUS_DATABASE_URL</code>, <code>NEXUS_VALKEY_URL</code>,
-  <code>NEXUS_MFA_ENCRYPTION_KEY</code>.</li>
-<li>Defaults are safe-for-dev. Production values come from the
-  operator's secrets vault.</li>
+<li><strong><code>ParameterSpace</code></strong> — typed search space (continuous / discrete /
+  categorical dimensions).</li>
+<li><strong><code>Optimizer</code></strong> — Protocol the algorithms implement.</li>
+<li><strong><code>optimize(...)</code></strong> — the dispatch entry point.</li>
 </ul>
-<p><code>.env.example</code> ships the full set so operators know what knobs exist
-without reading the source.</p>
-<h2 id="where-to-put-new-code">Where to put new code<a class="headerlink" href="#where-to-put-new-code" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Adding…</th>
-<th>Goes in</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>A new HTTP endpoint</td>
-<td><code>engine/api/routes/&lt;area&gt;.py</code>, registered in <code>engine/api/router.py</code></td>
-</tr>
-<tr>
-<td>A new MCP tool / resource</td>
-<td><code>engine/mcp/tool_definitions.py</code> (+ adapter in <code>engine/mcp/adapters/</code>); see <a href="../../mcp-server/">mcp-server.md</a></td>
-</tr>
-<tr>
-<td>A new background job</td>
-<td><code>engine/tasks/</code></td>
-</tr>
-<tr>
-<td>A new strategy / data provider / executor</td>
-<td>A strategy package under <a href="../../strategies/"><code>strategies/&lt;name&gt;/</code></a> (manifest + <code>strategy.py</code>); a data provider via <code>engine/data/providers/</code> + the YAML registry. See <a href="../plugins/">plugins.md</a>.</td>
-</tr>
-<tr>
-<td>A new outbound integration (webhook template)</td>
-<td>Extend <a href="../../engine/events/webhook_dispatcher.py"><code>engine/events/webhook_dispatcher.py:render_template</code></a> and the <code>_VALID_TEMPLATES</code> set in <code>routes/webhooks.py</code>.</td>
-</tr>
-<tr>
-<td>A new database table / column</td>
-<td>An Alembic revision in <code>engine/db/migrations/versions/</code>. See <a href="../database/">database.md</a>.</td>
-</tr>
-<tr>
-<td>A new metric</td>
-<td>Use <code>get_metrics()</code> from <code>engine/observability/metrics.py</code>. Add it to <a href="../../operations/slos/"><code>docs/operations/slos.md</code></a> <strong>only</strong> if it backs an SLO.</td>
-</tr>
-<tr>
-<td>A new SLO</td>
-<td><a href="../../operations/slos/"><code>docs/operations/slos.md</code></a> and <a href="../../observability/prometheus/slo-rules.yaml"><code>observability/prometheus/slo-rules.yaml</code></a> in the same PR.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="non-goals">Non-goals<a class="headerlink" href="#non-goals" title="Permanent link">&para;</a></h2>
+<p>Algorithms shipped (PR1): <code>GridSearchOptimizer</code>,
+<code>RandomSearchOptimizer</code>, <code>GeneticOptimizer</code>. Bayesian search and
+Hyperband are TODO and noted in the module docstring. Runs are
+deterministic given a seed; pair with <code>monte_carlo</code> to sanity-check that
+an "optimal" parameter set isn't an overfit artifact.</p>
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li>This is <strong>not</strong> a multi-tenant SaaS by design. Operators run their
-  own deployment; the codebase models a single tenant's data per
-  database.</li>
-<li>Live trading is intentionally optional. The engine works end-to-end
-  on backtests + paper trading without any broker credentials.</li>
+<li><a href="../core-domains/"><code>core-domains.md</code></a> — the rest of the core domain
+  layer (orchestration, cost/risk, execution, accounting) and the
+  "wired vs. schema-only" quick reference that spans both pages.</li>
+<li><a href="../../known-limitations/"><code>known-limitations.md</code></a> — including the
+  status of the 86-KPI <code>PerformanceReport</code> (schema landed, no analyzer
+  wired) and the live/paper execution story.</li>
 </ul>
 
 
@@ -2886,7 +2842,7 @@ without reading the source.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../" class="md-footer__link md-footer__link--prev" aria-label="Previous: Architecture">
+          <a href="../core-domains/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Core domains">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -2896,20 +2852,20 @@ without reading the source.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Architecture
+                Core domains
               </div>
             </div>
           </a>
         
         
           
-          <a href="../core-domains/" class="md-footer__link md-footer__link--next" aria-label="Next: Core domains">
+          <a href="../database/" class="md-footer__link md-footer__link--next" aria-label="Next: Database &amp; migrations">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Core domains
+                Database & migrations
               </div>
             </div>
             <div class="md-footer__button md-icon">

@@ -512,6 +512,8 @@
       
         
       
+        
+      
     
     
     
@@ -611,6 +613,34 @@
     
   
     Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/analytics-scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analytics, scoring & optimization
   
 
     
@@ -2224,6 +2254,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Last audit
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -2240,6 +2288,36 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#2026-07-09-pass-drift-fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2026-07-09 pass — drift fixed
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -2273,6 +2351,25 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#2026-07-09-pass-drift-fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2026-07-09 pass — drift fixed
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -2293,14 +2390,35 @@
 
 <h1 id="last-engineering-docs-audit">Last engineering-docs audit<a class="headerlink" href="#last-engineering-docs-audit" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>Timestamp:</strong> 2026-07-07T15:30:30Z</li>
-<li><strong>Cycle:</strong> 1614</li>
-<li><strong>Commit:</strong> <code>0b59b33</code></li>
-<li><strong>Target:</strong> reflect latest 1614 cycles of development</li>
+<li><strong>Timestamp:</strong> 2026-07-09T12:55:36Z</li>
+<li><strong>Commit:</strong> <code>8d1ac25</code></li>
+<li><strong>Target:</strong> reconcile docs against current <code>main</code></li>
 </ul>
-<p>This file is touched on every <code>do_engineering_docs</code> run by kaizen, so
-its mtime tells you when documentation was last reconciled with the
-codebase — even when the audit produced no diff.</p>
+<p>This file is touched on every docs reconciliation pass, so its mtime
+tells you when documentation was last verified against the codebase —
+even when the pass produced no diff.</p>
+<h2 id="2026-07-09-pass-drift-fixed">2026-07-09 pass — drift fixed<a class="headerlink" href="#2026-07-09-pass-drift-fixed" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Removed stale P0.</strong> The "rebalancer unmerged merge conflict" entry
+  in <a href="../known-limitations/"><code>known-limitations.md</code></a> and the matching
+  caveat in <a href="../architecture/core-domains/"><code>architecture/core-domains.md</code></a>
+  described an <em>uncommitted</em> working-tree state from an earlier cycle.
+  Verified against <code>main</code> @ <code>8d1ac25</code>:</li>
+<li><code>git status --porcelain engine/portfolio/</code> reports no <code>UU</code> paths.</li>
+<li><code>engine/portfolio/rebalancer.py</code> has <strong>no</strong> conflict markers and is
+    441 lines (the committed <code>HEAD</code> copy).</li>
+<li><code>python -c "import engine.portfolio"</code> succeeds (no <code>SyntaxError</code>).
+  The conflict was resolved in favour of the <code>dict[str, Any]</code> return
+  type for <code>_strip_keys</code> (the variant the old doc's fix-path recommended).
+  The real, still-true limitation — that the rebalancer is <strong>library-only</strong>
+  (no route drives it) — remains documented in <code>core-domains.md</code> and the
+  P1 entries.</li>
+<li><strong>Re-verified accuracy</strong> of the other high-signal claims: the
+  in-process backtest result store (<code>_backtest_results</code>, <code>backtest.py:22</code>),
+  the marketplace <code>not_implemented</code> stubs, the missing <code>consent_records</code> /
+  <code>deletion_schedules</code> Alembic revisions, and the missing <code>engine/mcp/server.py</code>
+  transport entry point all still hold at this commit.</li>
+</ul>
 
 
 

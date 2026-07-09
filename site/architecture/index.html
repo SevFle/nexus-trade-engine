@@ -516,6 +516,8 @@
       
         
       
+        
+      
     
     
     
@@ -616,6 +618,34 @@
     
   
     Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="analytics-scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analytics, scoring & optimization
   
 
     
@@ -2337,10 +2367,11 @@ components exist, how they fit together, and where to add new code.</p>
    repo before.</li>
 <li><strong><a href="core-domains/">core-domains.md</a></strong> — the domain layer under
    <code>engine/core/</code> + <code>engine/orchestration/</code>: multi-strategy orchestration,
-   the 86-KPI analytics taxonomy, strategy scoring &amp; governance,
-   optimization, and post-trade cost analysis. The companion to
-   <code>overview.md</code> (which is the <em>service</em> view; this is the <em>capability</em>
-   view).</li>
+   cost &amp; risk modeling, execution backends, and portfolio accounting.
+   The companion to <code>overview.md</code> (which is the <em>service</em> view; this is
+   the <em>capability</em> view). Its measurement/governance/tuning companion
+   is <strong><a href="analytics-scoring/">analytics-scoring.md</a></strong> (the 86-KPI
+   analytics taxonomy, strategy scoring &amp; governance, optimization).</li>
 <li><strong><a href="database/">database.md</a></strong> — table inventory, migration policy,
    data ownership.</li>
 <li><strong><a href="plugins/">plugins.md</a></strong> — plugin SDK and the registry that
@@ -2361,8 +2392,8 @@ components in our docs site:</p>
   the registry.</li>
 </ul>
 <p>The flat-markdown architecture docs (<code>overview.md</code>, <code>core-domains.md</code>,
-<code>database.md</code>, <code>plugins.md</code>) are the source of truth; the diagrams are a
-presentation layer on top.</p>
+<code>analytics-scoring.md</code>, <code>database.md</code>, <code>plugins.md</code>) are the source of
+truth; the diagrams are a presentation layer on top.</p>
 <h2 id="conventions">Conventions<a class="headerlink" href="#conventions" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Markdown files in this directory describe the <strong>current</strong> state.
