@@ -43,7 +43,7 @@ __all__ = [
 
 # Single source of truth for "last updated". Bump this when editorial content
 # changes so clients can cache / version-gate the payload deterministically.
-LAST_UPDATED = date(2026, 7, 1)
+LAST_UPDATED = date(2026, 7, 9)
 
 
 class DisclaimerCategory(StrEnum):
@@ -96,7 +96,7 @@ class Disclaimer(BaseModel):
 
 
 class DisclaimerListResponse(BaseModel):
-    """Response body for ``GET /api/legal/disclaimers``.
+    """Response body for ``GET /api/v1/legal/disclaimers``.
 
     ``categories`` describes the categories that are *represented in the
     returned ``disclaimers`` list* (in canonical enum order), so when a
@@ -123,7 +123,7 @@ class RiskFactor(BaseModel):
 
 
 class RiskDisclosureResponse(BaseModel):
-    """Response body for ``GET /api/legal/risk-disclosures``.
+    """Response body for ``GET /api/v1/legal/risk-disclosures``.
 
     Combines a plain-language ``overview``, a list of discrete ``risk_factors``,
     and the ``related_disclaimers`` (the structured disclaimer entries that
@@ -334,11 +334,7 @@ def _coerce_category(category: DisclaimerCategory | str) -> DisclaimerCategory:
 def list_categories() -> list[DisclaimerCategory]:
     """Return the categories that have at least one disclaimer, in canonical order."""
     present = {disclaimer.category for disclaimer in _DISCLAIMERS}
-    return [
-        category
-        for category in DisclaimerCategory
-        if category in present
-    ]
+    return [category for category in DisclaimerCategory if category in present]
 
 
 def get_all_disclaimers() -> list[Disclaimer]:

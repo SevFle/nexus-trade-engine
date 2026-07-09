@@ -28,10 +28,11 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Protocol
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.api.auth.dependency import get_current_user
+from engine.api.rate_limit import InMemoryBucketBackend, TokenBucket
 from engine.config import settings
 from engine.legal.disclaimers import (
     DisclaimerCategory,
@@ -238,6 +239,71 @@ async def require_legal_acceptance(
     )
 
 
+# ---------------------------------------------------------------------------
+# Public-endpoint rate limiting
+# ---------------------------------------------------------------------------
+#
+# The disclaimers and risk-disclosure endpoints are **unauthenticated** — they
+# must render before sign-in / acceptance. That makes them an easy target for
+# naive scrapers and buggy render loops. Each public endpoint consumes one
+# token from a shared in-memory token bucket keyed by client IP. The defaults
+# (60 req/min, burst 30) are well above any legitimate single-page render but
+# cap runaway clients. The bucket is exposed via :func:`get_public_legal_rate_bucket`
+# so tests (or a distributed backend swap) can override it via
+# ``app.dependency_overrides`` without touching module state.
+_PUBLIC_LEGAL_RATE_LIMIT_PER_MINUTE = 60
+_PUBLIC_LEGAL_RATE_LIMIT_BURST = 30
+
+# Process-wide default bucket. Single-pod only by design; for multi-pod
+# deployments override :func:`get_public_legal_rate_bucket` with a bucket
+# backed by :class:`engine.api.rate_limit.ValkeyBucketBackend`.
+_default_public_legal_bucket = TokenBucket(
+    backend=InMemoryBucketBackend(),
+    capacity=_PUBLIC_LEGAL_RATE_LIMIT_BURST,
+    refill_per_sec=_PUBLIC_LEGAL_RATE_LIMIT_PER_MINUTE / 60.0,
+)
+
+
+def get_public_legal_rate_bucket() -> TokenBucket:
+    """FastAPI dependency yielding the bucket used to rate-limit public endpoints.
+
+    Override this in tests (e.g. with a capacity-1 bucket) to exercise the 429
+    path deterministically without burning real time waiting for a refill.
+    """
+    return _default_public_legal_bucket
+
+
+def _client_ip(request: Request) -> str:
+    """Best-effort client IP for the per-IP bucket key."""
+    client = request.client
+    return client.host if client is not None else "unknown"
+
+
+async def rate_limit_public_legal_endpoint(
+    request: Request,
+    bucket: TokenBucket = Depends(get_public_legal_rate_bucket),  # noqa: B008
+) -> None:
+    """Consume one token from the per-IP bucket; raise HTTP 429 when empty.
+
+    Public legal-content endpoints are unauthenticated, so the bucket is keyed
+    solely by client IP. An exhausted bucket yields a structured 429 body plus
+    a ``Retry-After`` header so well-behaved clients back off cleanly.
+    """
+    ip = _client_ip(request)
+    ok, _remaining, retry_after = await bucket.consume(f"ip:{ip}")
+    if not ok:
+        retry_after_int = max(1, int(retry_after + 0.999))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "RATE_LIMIT_EXCEEDED",
+                "message": "Too many requests to legal content; please retry shortly.",
+                "retry_after": retry_after_int,
+            },
+            headers={"Retry-After": str(retry_after_int)},
+        )
+
+
 router = APIRouter()
 
 
@@ -298,7 +364,11 @@ async def get_legal_status(
     )
 
 
-@router.get("/api/legal/disclaimers", response_model=DisclaimerListResponse)
+@router.get(
+    "/api/v1/legal/disclaimers",
+    response_model=DisclaimerListResponse,
+    dependencies=[Depends(rate_limit_public_legal_endpoint)],
+)
 async def list_disclaimers(
     category: Annotated[
         DisclaimerCategory | None,
@@ -324,7 +394,11 @@ async def list_disclaimers(
     return build_disclaimer_list_response(category=category)
 
 
-@router.get("/api/legal/risk-disclosures", response_model=RiskDisclosureResponse)
+@router.get(
+    "/api/v1/legal/risk-disclosures",
+    response_model=RiskDisclosureResponse,
+    dependencies=[Depends(rate_limit_public_legal_endpoint)],
+)
 async def get_risk_disclosures() -> RiskDisclosureResponse:
     """Return detailed, structured risk-disclosure information.
 
