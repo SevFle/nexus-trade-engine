@@ -63,7 +63,7 @@ async def _broker_is_running(broker: object | None) -> bool:
 
 
 @router.get("/status")
-async def task_status(request: Request) -> dict[str, str]:
+async def task_status(request: Request) -> dict[str, object]:
     """Report taskiq broker readiness.
 
     Deliberately **unauthenticated**: this is an infrastructure
@@ -75,12 +75,23 @@ async def task_status(request: Request) -> dict[str, str]:
     (``running`` / ``stopped``) via :func:`_broker_is_running`, rather than
     a hardcoded string, so a probe actually catches a broker outage
     instead of green-lining a dead queue. The overall endpoint ``status``
-    stays ``"ok"`` because the API itself is up regardless of the broker's
-    condition — the per-subsystem ``broker`` field carries the detail.
+    stays ``"ok"`` and the HTTP code is always **200** because the API
+    itself is up regardless of the broker's condition — the per-subsystem
+    ``broker`` / ``broker_online`` fields carry the detail so callers can
+    branch on the broker's health without a failing probe tripping
+    orchestrator restarts or alerting.
     """
     broker = getattr(request.app.state, "taskiq_broker", None)
     running = await _broker_is_running(broker)
-    return {"status": "ok", "broker": "running" if running else "stopped"}
+    return {
+        "status": "ok",
+        "broker": "running" if running else "stopped",
+        # Machine-readable boolean mirror of ``broker``. A probe must never
+        # turn a broker outage into a non-200 (which would trigger
+        # orchestrator restarts), so the HTTP status stays 200 and callers
+        # inspect ``broker_online`` to know whether the queue is reachable.
+        "broker_online": running,
+    }
 
 
 __all__ = ["router", "task_status"]
