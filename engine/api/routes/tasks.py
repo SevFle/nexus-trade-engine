@@ -14,6 +14,14 @@ logger = structlog.get_logger()
 
 router = APIRouter()
 
+# Sentinel distinct from every real attribute value. Used so we can tell
+# "the broker has no ``is_started`` attribute at all" (older taskiq, e.g.
+# 0.12) apart from "the attribute exists but is ``None`` / falsy". Using
+# ``None`` as the ``getattr`` default conflates the two and would make a
+# genuinely-``None`` flag fall through to the PING probe instead of being
+# trusted as a (falsy) value.
+_MISSING: object = object()
+
 
 async def _broker_is_running(broker: object | None) -> bool:
     """Return whether the taskiq ``broker`` is live and ready.
@@ -30,34 +38,52 @@ async def _broker_is_running(broker: object | None) -> bool:
 
     For the live broker we prefer taskiq's own ``is_started`` flag (set by
     ``startup()`` / cleared by ``shutdown()`` in newer releases). Older
-    taskiq (e.g. 0.12) has no such flag, so when it's absent we fall back
-    to an actual ``PING`` against the broker's Redis/Valkey connection
-    pool — the only reliable, version-independent way to confirm the broker
-    can actually reach its broker process. A ping failure is treated as
-    "not running" (and logged) rather than propagated, because a liveness
-    probe must never turn a broker outage into an API 500.
+    taskiq (e.g. 0.12) has no such flag, so when it's *absent* we fall back
+    to an actual ``PING`` against the broker's ``connection_pool`` — the
+    only reliable, version-independent way to confirm the broker can reach
+    its broker process.
+
+    The PING is issued through a throwaway ``redis.asyncio.Redis`` client
+    bound to the broker's pool via ``async with Redis(connection_pool=pool)``.
+    Closing that client on context exit does **not** disconnect the broker's
+    shared pool: redis-py (>=5.0.1) sets ``auto_close_connection_pool =
+    False`` whenever a ``connection_pool`` is passed explicitly to
+    ``Redis()``, so ``aclose()`` only releases the connection the probe
+    borrowed and never calls ``pool.disconnect()``. The probe therefore
+    cannot sever or perturb the pool the app's task dispatch depends on. A
+    ping failure is treated as "not running" (and logged) rather than
+    propagated, because a liveness probe must never turn a broker outage
+    into an API 500.
     """
     if broker is None:
         return False
 
     # Preferred signal: taskiq's own liveness flag (available on newer
-    # taskiq). ``getattr`` keeps this forward/backward compatible.
-    is_started = getattr(broker, "is_started", None)
-    if is_started is not None:
+    # taskiq). ``getattr`` with a MISSING sentinel keeps this forward/backward
+    # compatible AND distinguishes "flag absent" (fall back to PING) from
+    # "flag present but None/falsy" (trust it as a value via ``bool()``).
+    is_started = getattr(broker, "is_started", _MISSING)
+    if is_started is not _MISSING:
         return bool(is_started)
 
     # Fallback for taskiq versions without ``is_started``: probe the
-    # Redis/Valkey pool the broker holds. Only attempted when the broker
-    # actually exposes a connection pool.
+    # Redis/Valkey the broker points at by binding a throwaway client to the
+    # broker's ``connection_pool``. Imported lazily so tests can patch
+    # ``redis.asyncio.Redis`` at call time.
     pool = getattr(broker, "connection_pool", None)
     if pool is None:
         return False
-    try:
-        from redis.asyncio import Redis
+    from redis.asyncio import Redis
 
-        async with Redis(connection_pool=pool) as redis:
-            return bool(await redis.ping())
-    except Exception as exc:  # pragma: no cover - depends on live infra
+    try:
+        # ``Redis(connection_pool=pool)`` reuses the broker's shared pool.
+        # Because the pool is passed explicitly redis-py leaves
+        # ``auto_close_connection_pool`` ``False``, so the ``async with``
+        # exit (which calls ``aclose()``) only releases the connection this
+        # probe borrowed — it never disconnects/severs the broker's pool.
+        async with Redis(connection_pool=pool) as client:
+            return bool(await client.ping())
+    except Exception as exc:
         logger.warning("tasks.status.broker_ping_failed", error=str(exc))
         return False
 
