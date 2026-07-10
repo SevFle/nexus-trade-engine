@@ -70,6 +70,7 @@ React app under `frontend/`.
 | [`engine/api/`](../../engine/api/)                | HTTP/WebSocket surface: routers, auth, rate limiting, error mapping. |
 | [`engine/core/`](../../engine/core/)              | Domain logic: backtest runner, OMS, cost/risk models, analytics. The *capability* map of this tree is [`core-domains.md`](core-domains.md). |
 | [`engine/execution/`](../../engine/execution/)    | Concrete broker execution adapter: `LiveExecutionBackend` (SEV-223) — an Alpaca-compatible REST-backed `ExecutionBackend`. Sits **on top of** the `engine/core/execution/` ABC/factory rather than inside it; see [`core-domains.md`](core-domains.md#execution-backends). |
+| [`engine/brokers/`](../../engine/brokers/)        | **Broker-direct REST facades** — thin per-broker adapters (`AlpacaBrokerAdapter`, `IBKRBrokerAdapter` #1346) that expose each broker's native order/account surface. `AlpacaBrokerAdapter` delegates to `LiveExecutionBackend`; `IBKRBrokerAdapter` owns its own request pipeline. Neither is wired to a route yet — see [`core-domains.md`](core-domains.md#execution-backends). |
 | [`engine/orchestration/`](../../engine/orchestration/) | Multi-strategy `StrategyOrchestrator` (priority / net-position conflict resolution). See [`core-domains.md`](core-domains.md). |
 | [`engine/portfolio/`](../../engine/portfolio/)    | Cross-strategy capital allocation (immutable `CapitalAllocation` value object). |
 | [`engine/data/`](../../engine/data/)              | Market data providers and the registry that picks one at runtime. |
