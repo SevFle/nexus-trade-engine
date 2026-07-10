@@ -117,9 +117,43 @@ class TestReleaseWorkflow:
         assert "push" in triggers
         assert "main" in triggers["push"]["branches"]
 
-    def test_workflow_uses_release_please_v4(self):
+    def test_workflow_pins_release_please_action_to_sha(self):
+        # Supply-chain safety: pin to an immutable commit SHA rather than a
+        # floating tag (``@v4``) that can be moved or hijacked out from under
+        # us. The ref after ``@`` must be a full 40-char hex SHA.
         uses = [s["uses"] for s in self._steps() if "uses" in s]
-        assert "googleapis/release-please-action@v4" in uses
+        rp = next(u for u in uses if u.startswith("googleapis/release-please-action"))
+        ref = rp.split("@", 1)[1]
+        assert re.fullmatch(r"[0-9a-f]{40}", ref), (
+            "release-please-action must be pinned to a 40-char commit SHA, "
+            f"not a floating tag; got ref={ref!r}"
+        )
+        # The moving ``@v4`` tag currently resolves to v4.4.1 at this commit.
+        assert ref == "5c625bfb5d1ff62eadeeb3772007f7f66fdcf071", (
+            f"expected release-please-action pinned to v4.4.1 SHA, got {ref!r}"
+        )
+
+    def test_workflow_action_pin_has_version_comment(self):
+        # YAML drops comments on parse, so inspect the raw text for an inline
+        # version annotation next to the pinned action (e.g. ``# v4.4.1``).
+        # This keeps the otherwise-opaque SHA human-readable.
+        text = (ROOT / ".github" / "workflows" / "release-please.yml").read_text()
+        line = next(ln for ln in text.splitlines() if "release-please-action@" in ln)
+        assert re.search(r"#\s*v\d+\.\d+\.\d+", line), (
+            "pinned action should carry a version comment so the SHA is "
+            f"human-readable; got line={line!r}"
+        )
+
+    def test_workflow_does_not_expose_token_via_job_env(self):
+        # The token must NOT be copied into a job-level ``env:`` block. It is
+        # tested directly via the ``secrets`` context in the step-level ``if:``,
+        # which is both simpler and avoids needless secret surface area.
+        job = self._workflow()["jobs"]["release-please"]
+        env = job.get("env", {})
+        assert "RELEASE_PLEASE_TOKEN" not in env, (
+            "release-please job must not expose RELEASE_PLEASE_TOKEN via a "
+            f"job-level env block; guard the step via secrets instead. env={env!r}"
+        )
 
     def test_workflow_references_config_and_manifest(self):
         withs = [s["with"] for s in self._steps() if "with" in s]
@@ -151,17 +185,36 @@ class TestReleaseWorkflow:
         assert "RELEASE_PLEASE_TOKEN" in rp["with"]["token"]
 
     def test_workflow_skips_when_release_token_absent(self):
-        # PyYAML-based structural assertion: parse the workflow file and assert
-        # the *actual* ``if:`` expression on the release-please job equals the
-        # expected guard exactly. This replaces fragile string-matching / grep
-        # approaches with a structural YAML assertion that inspects the parsed
-        # tree, so reformatting whitespace or key ordering cannot mask a missing
-        # guard.
+        # The ``secrets`` context IS permitted inside a step-level ``if:``
+        # conditional (the restriction only applies to job-level ``if:``).
+        # Therefore the release-please step guards directly on the secret
+        # without any job-level ``env:`` indirection.
         job = self._workflow()["jobs"]["release-please"]
-        expected_if = "${{ secrets.RELEASE_PLEASE_TOKEN != '' }}"
-        assert job["if"] == expected_if, (
-            f"release-please job must skip when token is absent; "
-            f"expected if={expected_if!r}, got if={job.get('if')!r}"
+
+        # The release-please step must skip when the token is absent, using the
+        # ``secrets`` context directly.
+        rp = next(
+            s
+            for s in job["steps"]
+            if s.get("uses", "").startswith("googleapis/release-please-action")
+        )
+        expected = "${{ secrets.RELEASE_PLEASE_TOKEN != '' }}"
+        assert rp.get("if") == expected, (
+            "release-please step must skip when token is absent; "
+            f"expected if={expected!r}, got if={rp.get('if')!r}"
+        )
+
+    def test_workflow_no_env_based_token_pattern_remains(self):
+        # Regression guard: ensure the obsolete ``env.RELEASE_PLEASE_TOKEN``
+        # guard (which relied on a job-level env copy of the secret) has not
+        # crept back in anywhere in the workflow file.
+        text = (ROOT / ".github" / "workflows" / "release-please.yml").read_text()
+        assert "env.RELEASE_PLEASE_TOKEN" not in text, (
+            "workflow must not reference the token via the env context; "
+            "use the secrets context directly in the step-level if:"
+        )
+        assert not re.search(r"^\s*env:\s*$", text, re.MULTILINE), (
+            "workflow must not declare a job-level env block for the token"
         )
 
 
