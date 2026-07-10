@@ -7,6 +7,9 @@ vi.mock("../../hooks/useLegal", () => ({
   useAcceptLegal: () => ({
     mutateAsync: vi.fn().mockResolvedValue({ accepted: [] }),
   }),
+  useLegalDocument: () => ({
+    data: { version: "1.0.0" },
+  }),
 }));
 
 function renderLiveTradingModal(props = {}) {

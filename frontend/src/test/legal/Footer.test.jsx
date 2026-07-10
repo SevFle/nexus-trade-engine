@@ -17,6 +17,7 @@ describe("Footer", () => {
       "Privacy Policy",
       "EULA",
       "Marketplace EULA",
+      "Data Provider Attributions",
     ];
 
     for (const label of expectedLinks) {
@@ -32,7 +33,7 @@ describe("Footer", () => {
       link.getAttribute("href")?.startsWith("/legal/")
     );
 
-    expect(legalLinks.length).toBe(5);
+    expect(legalLinks.length).toBe(6);
 
     const hrefs = legalLinks.map((l) => l.getAttribute("href"));
     expect(hrefs).toContain("/legal/risk-disclaimer");
@@ -40,6 +41,7 @@ describe("Footer", () => {
     expect(hrefs).toContain("/legal/privacy-policy");
     expect(hrefs).toContain("/legal/eula");
     expect(hrefs).toContain("/legal/marketplace-eula");
+    expect(hrefs).toContain("/legal/data-provider-attributions");
   });
 
   it("renders navigation with aria-label for accessibility", () => {
