@@ -466,10 +466,9 @@ for fail-closed auth at the handshake.
   before installing the new one, so a config reload leaks no
   connections or double event-bus subscriptions.
 
-Prefer `/ws/events` when the client can put the token in the handshake
-query (fewer moving parts, fail-closed auth). Prefer `/ws` when the
-token can only be delivered after the socket opens (e.g. a browser
-that refreshes the token in-band).
+Prefer `/ws/events` when the token can go in the handshake query
+(fewer moving parts, fail-closed auth); use `/ws` only when the token
+must arrive after the socket opens (e.g. a browser refreshing it in-band).
 
 ## Errors
 
@@ -478,10 +477,9 @@ that refreshes the token in-band).
   (body `{code:"legal_re_acceptance_required", documents:[…]}`).
 - **Validation**: `422` from FastAPI; `400` for hand-rolled checks
   (e.g. invalid scope in API keys, unknown tax jurisdiction).
-- **Rate limit**: `429` with `Retry-After` from
-  [`RateLimitMiddleware`](../engine/api/rate_limit.py). Default 600
-  req/min/IP, burst 60. `/health` and `/metrics` are exempt;
-  `/api/v1/client/errors` is capped at 30/min to prevent log DoS.
+- **Rate limit**: `429` + `Retry-After` from
+  [`RateLimitMiddleware`](../engine/api/rate_limit.py). Default 600/min/IP,
+  burst 60; `/health` & `/metrics` exempt; `/api/v1/client/errors` 30/min (log-DoS cap).
 - **Body size**: hard 1 MiB cap on every request
   ([`BodySizeLimitMiddleware`](../engine/api/body_size_limit.py)).
 - **Provider errors**: see Market data section above.

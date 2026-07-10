@@ -514,6 +514,8 @@
       
         
       
+        
+      
     
     
     
@@ -613,6 +615,34 @@
     
   
     Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/analytics-and-governance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analytics & governance
   
 
     
@@ -3974,10 +4004,9 @@ for fail-closed auth at the handshake.</p>
   before installing the new one, so a config reload leaks no
   connections or double event-bus subscriptions.</li>
 </ul>
-<p>Prefer <code>/ws/events</code> when the client can put the token in the handshake
-query (fewer moving parts, fail-closed auth). Prefer <code>/ws</code> when the
-token can only be delivered after the socket opens (e.g. a browser
-that refreshes the token in-band).</p>
+<p>Prefer <code>/ws/events</code> when the token can go in the handshake query
+(fewer moving parts, fail-closed auth); use <code>/ws</code> only when the token
+must arrive after the socket opens (e.g. a browser refreshing it in-band).</p>
 <h2 id="errors">Errors<a class="headerlink" href="#errors" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Auth</strong>: <code>401</code> for missing/invalid/expired credentials; <code>403</code> for
@@ -3985,10 +4014,9 @@ that refreshes the token in-band).</p>
   (body <code>{code:"legal_re_acceptance_required", documents:[…]}</code>).</li>
 <li><strong>Validation</strong>: <code>422</code> from FastAPI; <code>400</code> for hand-rolled checks
   (e.g. invalid scope in API keys, unknown tax jurisdiction).</li>
-<li><strong>Rate limit</strong>: <code>429</code> with <code>Retry-After</code> from
-  <a href="../engine/api/rate_limit.py"><code>RateLimitMiddleware</code></a>. Default 600
-  req/min/IP, burst 60. <code>/health</code> and <code>/metrics</code> are exempt;
-  <code>/api/v1/client/errors</code> is capped at 30/min to prevent log DoS.</li>
+<li><strong>Rate limit</strong>: <code>429</code> + <code>Retry-After</code> from
+  <a href="../engine/api/rate_limit.py"><code>RateLimitMiddleware</code></a>. Default 600/min/IP,
+  burst 60; <code>/health</code> &amp; <code>/metrics</code> exempt; <code>/api/v1/client/errors</code> 30/min (log-DoS cap).</li>
 <li><strong>Body size</strong>: hard 1 MiB cap on every request
   (<a href="../engine/api/body_size_limit.py"><code>BodySizeLimitMiddleware</code></a>).</li>
 <li><strong>Provider errors</strong>: see Market data section above.</li>

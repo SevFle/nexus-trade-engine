@@ -512,6 +512,8 @@
       
         
       
+        
+      
     
     
     
@@ -611,6 +613,34 @@
     
   
     Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/analytics-and-governance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analytics & governance
   
 
     
@@ -2224,6 +2254,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Last audit
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -2240,6 +2288,36 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#this-pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        This pass
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -2273,6 +2351,25 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#this-pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        This pass
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -2293,10 +2390,22 @@
 
 <h1 id="last-engineering-docs-audit">Last engineering-docs audit<a class="headerlink" href="#last-engineering-docs-audit" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>Timestamp:</strong> 2026-07-08T20:29:26Z</li>
-<li><strong>Cycle:</strong> 1650</li>
-<li><strong>Commit:</strong> <code>b132e00</code></li>
-<li><strong>Target:</strong> reflect latest 1650 cycles of development</li>
+<li><strong>Timestamp:</strong> 2026-07-10 (reconciled against HEAD <code>9adf89d</code>)</li>
+<li><strong>Previous:</strong> cycle 1692, commit <code>a208eab</code></li>
+<li><strong>Target:</strong> reflect latest 1692 cycles of development</li>
+</ul>
+<h2 id="this-pass">This pass<a class="headerlink" href="#this-pass" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Split <code>architecture/core-domains.md</code> (was 523 lines, over the
+  500-line cap) into <code>core-domains.md</code> (426 lines: orchestration,
+  cost/risk, execution, portfolio accounting) + a new
+  <code>analytics-and-governance.md</code> (152 lines: 86-KPI analytics taxonomy,
+  strategy scoring &amp; governance, optimization, wired-vs-schema
+  reference). Cross-references, <code>mkdocs.yml</code> nav, and the docs indexes
+  updated.</li>
+<li>Trimmed <code>api-reference.md</code> 501 → 499 lines so every doc file is now
+  under the 500-line cap; corrected the stale "~450 lines" claim in
+  <code>docs/README.md</code>.</li>
 </ul>
 <p>This file is touched on every <code>do_engineering_docs</code> run by kaizen, so
 its mtime tells you when documentation was last reconciled with the

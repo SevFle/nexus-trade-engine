@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/adr/0007-strategy-sandbox-allowlist-imports/">
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/architecture/analytics-and-governance/">
       
       
-        <link rel="prev" href="../0006-bcrypt-fernet/">
+        <link rel="prev" href="../core-domains/">
       
       
-        <link rel="next" href="../0008-pluggable-metrics-backend/">
+        <link rel="next" href="../database/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>0007 — Strategy sandbox allowlist imports - Nexus Trade Engine</title>
+        <title>Analytics & governance - Nexus Trade Engine</title>
       
     
     
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#adr-0007-strategy-sandbox-allowlist-import-model" class="md-skip">
+        <a href="#analytics-scoring-governance" class="md-skip">
           Skip to content
         </a>
       
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              0007 — Strategy sandbox allowlist imports
+              Analytics & governance
             
           </span>
         </div>
@@ -247,11 +247,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../architecture/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -313,13 +315,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../adr/" class="md-tabs__link">
           
   
   
@@ -497,6 +497,8 @@
       
   
   
+    
+  
   
   
     
@@ -520,22 +522,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../architecture/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -553,13 +556,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -579,7 +582,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/overview/" class="md-nav__link">
+      <a href="../overview/" class="md-nav__link">
         
   
   
@@ -607,7 +610,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/core-domains/" class="md-nav__link">
+      <a href="../core-domains/" class="md-nav__link">
         
   
   
@@ -632,10 +635,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../architecture/analytics-and-governance/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analytics & governance
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -651,6 +681,148 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#performance-analytics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance analytics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance analytics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#metricsreport-live-used-today" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MetricsReport — live, used today
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performancereport-86-kpi-schema-not-yet-wired" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PerformanceReport — 86-KPI schema, not yet wired
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#companion-analytics-modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Companion analytics modules
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategy-scoring-governance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Strategy scoring &amp; governance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Strategy scoring &amp; governance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#composite-scoring-strategy_evaluatorpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Composite scoring — strategy_evaluator.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lifecycle-versioning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle &amp; versioning
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optimization-param_optimizerpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optimization — param_optimizer.py
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#wired-vs-schema-only-quick-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wired vs. schema-only (quick reference)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -663,7 +835,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/database/" class="md-nav__link">
+      <a href="../database/" class="md-nav__link">
         
   
   
@@ -691,7 +863,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/plugins/" class="md-nav__link">
+      <a href="../plugins/" class="md-nav__link">
         
   
   
@@ -1089,8 +1261,6 @@
       
   
   
-    
-  
   
   
     
@@ -1126,23 +1296,22 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
+            <a href="../../adr/" class="md-nav__link ">
               
   
   
@@ -1160,13 +1329,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1186,7 +1355,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0001-scaffold-tech-choices/" class="md-nav__link">
+      <a href="../../adr/0001-scaffold-tech-choices/" class="md-nav__link">
         
   
   
@@ -1214,7 +1383,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0002-auth-rbac/" class="md-nav__link">
+      <a href="../../adr/0002-auth-rbac/" class="md-nav__link">
         
   
   
@@ -1242,7 +1411,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0003-mobile-app-strategy/" class="md-nav__link">
+      <a href="../../adr/0003-mobile-app-strategy/" class="md-nav__link">
         
   
   
@@ -1270,7 +1439,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0004-task-queue-taskiq/" class="md-nav__link">
+      <a href="../../adr/0004-task-queue-taskiq/" class="md-nav__link">
         
   
   
@@ -1298,7 +1467,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0005-valkey-over-redis/" class="md-nav__link">
+      <a href="../../adr/0005-valkey-over-redis/" class="md-nav__link">
         
   
   
@@ -1326,7 +1495,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0006-bcrypt-fernet/" class="md-nav__link">
+      <a href="../../adr/0006-bcrypt-fernet/" class="md-nav__link">
         
   
   
@@ -1351,37 +1520,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    0007 — Strategy sandbox allowlist imports
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../adr/0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
         
   
   
@@ -1397,220 +1539,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#context-and-problem-statement" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Context and Problem Statement
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#decision-drivers" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Decision Drivers
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#considered-options" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Considered Options
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#decision-outcome" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Decision Outcome
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Decision Outcome">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#consequences" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Consequences
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#details" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Details
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Details">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#enforcement-is-dual-layered" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Enforcement is dual-layered
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#the-contextvars-replacement" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The contextvars replacement
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#builtins-curation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Builtins curation
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#__globals__-introspection" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        __globals__ introspection
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Pros and Cons of the Options
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Pros and Cons of the Options">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#option-1-denylist-status-quo" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Option 1 — Denylist (status quo)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#option-2-allowlist-chosen" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Option 2 — Allowlist (chosen)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#option-3-processcontainer-isolation-only" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Option 3 — Process/container isolation only
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#option-4-sysaudit_hooks-settrace" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Option 4 — sys.audit_hooks / settrace
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#links" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Links
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1623,7 +1551,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0008-pluggable-metrics-backend/" class="md-nav__link">
+      <a href="../../adr/0008-pluggable-metrics-backend/" class="md-nav__link">
         
   
   
@@ -1651,7 +1579,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0009-cross-replica-eventbus-bridge/" class="md-nav__link">
+      <a href="../../adr/0009-cross-replica-eventbus-bridge/" class="md-nav__link">
         
   
   
@@ -1679,7 +1607,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0010-static-ast-validation-toctou-loading/" class="md-nav__link">
+      <a href="../../adr/0010-static-ast-validation-toctou-loading/" class="md-nav__link">
         
   
   
@@ -1707,7 +1635,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../template/" class="md-nav__link">
+      <a href="../../adr/template/" class="md-nav__link">
         
   
   
@@ -2543,55 +2471,44 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#context-and-problem-statement" class="md-nav__link">
+  <a href="#performance-analytics" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Context and Problem Statement
+        Performance analytics
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#decision-drivers" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Decision Drivers
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#considered-options" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Considered Options
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#decision-outcome" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Decision Outcome
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Decision Outcome">
+    <nav class="md-nav" aria-label="Performance analytics">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#consequences" class="md-nav__link">
+  <a href="#metricsreport-live-used-today" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Consequences
+        MetricsReport — live, used today
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performancereport-86-kpi-schema-not-yet-wired" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PerformanceReport — 86-KPI schema, not yet wired
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#companion-analytics-modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Companion analytics modules
       
     </span>
   </a>
@@ -2604,22 +2521,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#details" class="md-nav__link">
+  <a href="#strategy-scoring-governance" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Details
+        Strategy scoring &amp; governance
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Details">
+    <nav class="md-nav" aria-label="Strategy scoring &amp; governance">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#enforcement-is-dual-layered" class="md-nav__link">
+  <a href="#composite-scoring-strategy_evaluatorpy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Enforcement is dual-layered
+        Composite scoring — strategy_evaluator.py
       
     </span>
   </a>
@@ -2627,32 +2544,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#the-contextvars-replacement" class="md-nav__link">
+  <a href="#lifecycle-versioning" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The contextvars replacement
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#builtins-curation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Builtins curation
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#__globals__-introspection" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        __globals__ introspection
+        Lifecycle &amp; versioning
       
     </span>
   </a>
@@ -2665,71 +2560,32 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
+  <a href="#optimization-param_optimizerpy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Pros and Cons of the Options
+        Optimization — param_optimizer.py
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Pros and Cons of the Options">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#option-1-denylist-status-quo" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Option 1 — Denylist (status quo)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#option-2-allowlist-chosen" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Option 2 — Allowlist (chosen)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#option-3-processcontainer-isolation-only" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Option 3 — Process/container isolation only
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#option-4-sysaudit_hooks-settrace" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Option 4 — sys.audit_hooks / settrace
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#links" class="md-nav__link">
+  <a href="#wired-vs-schema-only-quick-reference" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Links
+        Wired vs. schema-only (quick reference)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
       
     </span>
   </a>
@@ -2756,159 +2612,269 @@
   
 
 
-<h1 id="adr-0007-strategy-sandbox-allowlist-import-model">ADR-0007: Strategy sandbox — allowlist import model<a class="headerlink" href="#adr-0007-strategy-sandbox-allowlist-import-model" title="Permanent link">&para;</a></h1>
+<h1 id="analytics-scoring-governance">Analytics, scoring &amp; governance<a class="headerlink" href="#analytics-scoring-governance" title="Permanent link">&para;</a></h1>
+<p>This document is the second half of the <em>capability</em> view of the domain
+layer. <a href="../core-domains/"><code>core-domains.md</code></a> covers the decision →
+execution → accounting path (orchestration, cost/risk modeling,
+execution backends, portfolio accounting, drift-driven rebalancing).
+<strong>This</strong> document covers everything that sits <em>after</em> and <em>around</em> a
+backtest: the performance-analytics taxonomy, the composite strategy
+scorer, the lifecycle/versioning governance services, and the
+hyperparameter optimizer. A "wired vs. schema-only" quick reference at
+the end consolidates which of these are reachable from a route today
+and which are library-only.</p>
+<p>The repo-root <a href="../../ARCHITECTURE.md"><code>ARCHITECTURE.md</code></a> remains the
+authoritative reference for the headline components
+(<code>OrderManager</code>, <code>CostModel</code>, <code>Portfolio</code>, <code>RiskEngine</code>,
+<code>BacktestRunner</code>); we cross-reference it rather than duplicate it.</p>
+<h2 id="performance-analytics">Performance analytics<a class="headerlink" href="#performance-analytics" title="Permanent link">&para;</a></h2>
+<p>There are <strong>two</strong> analytics containers. Do not conflate them:</p>
+<h3 id="metricsreport-live-used-today"><code>MetricsReport</code> — live, used today<a class="headerlink" href="#metricsreport-live-used-today" title="Permanent link">&para;</a></h3>
+<p><a href="../../engine/core/metrics.py"><code>engine/core/metrics.py</code></a>. The container
+the backtest runner actually computes and that <code>GET /backtest/results/{id}</code>
+returns as <code>metrics</code>. ~25 scalar fields (total/annualized return, Sharpe,
+Sortino, Calmar, max drawdown + duration + recovery, volatility,
+win-rate, profit factor, avg winner/loser, streaks, total costs/taxes,
+cost-drag %, turnover, exposure %) plus three series (<code>equity_curve</code>,
+<code>drawdown_curve</code>, <code>rolling_metrics</code>).</p>
+<h3 id="performancereport-86-kpi-schema-not-yet-wired"><code>PerformanceReport</code> — 86-KPI schema, not yet wired<a class="headerlink" href="#performancereport-86-kpi-schema-not-yet-wired" title="Permanent link">&para;</a></h3>
+<p><a href="../../engine/core/analytics/"><code>engine/core/analytics/</code></a> is the
+<strong>86-KPI taxonomy</strong> (gh#97), split into eight section models:</p>
+<table>
+<thead>
+<tr>
+<th>Section (file)</th>
+<th>KPI range</th>
+<th>Covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>returns.py</code></td>
+<td>1–14</td>
+<td>Return ratios + <code>PeriodReturn</code> value object.</td>
+</tr>
+<tr>
+<td><code>risk_adjusted.py</code></td>
+<td>15–24</td>
+<td>Sharpe/Sortino/Omega/Calmar/Treynor/Information/Payoff/Profit-factor. Infinite/undefined ratios → <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>drawdown.py</code></td>
+<td>25–34</td>
+<td>Underwater series + duration/recovery.</td>
+</tr>
+<tr>
+<td><code>trades.py</code></td>
+<td>35–50</td>
+<td>Win/loss rates, streaks, holding periods, cadence.</td>
+</tr>
+<tr>
+<td><code>costs.py</code></td>
+<td>51–58</td>
+<td>Cost breakdown + slippage/IS in basis points.</td>
+</tr>
+<tr>
+<td><code>positions.py</code></td>
+<td>59–66</td>
+<td>Exposure, long/short, concentration, simultaneous positions.</td>
+</tr>
+<tr>
+<td><code>volatility.py</code></td>
+<td>67–76</td>
+<td>VaR/CVaR (positive magnitudes), capture ratios, tail ratio.</td>
+</tr>
+<tr>
+<td><code>time_analysis.py</code></td>
+<td>77–86</td>
+<td>Monthly heatmap, day-of-week/hour returns, rolling Sharpe/DD, dual equity curve.</td>
+</tr>
+<tr>
+<td><code>report.py</code></td>
+<td>envelope</td>
+<td><code>PerformanceReport</code> aggregates the eight; <code>metric_count</code> asserts all 86 present.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Status — accurate caveat.</strong> The section modules and the envelope
+are on disk, but the builder (<code>engine/core/analytics/analyzer.py</code>)
+referenced by their docstrings is <strong>not</strong>, and nothing under
+<code>engine/api/</code> or <code>engine/core/backtest_runner.py</code> imports the report.
+So <code>PerformanceReport</code> is a landed schema, not yet a live output: the
+API surface still serves <code>MetricsReport</code>. Treat the 86-KPI contract as
+the intended shape; a future PR wires an analyzer and a route.</p>
+</blockquote>
+<h3 id="companion-analytics-modules">Companion analytics modules<a class="headerlink" href="#companion-analytics-modules" title="Permanent link">&para;</a></h3>
+<p>These operate on an equity curve / trade log and are independently
+usable:</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Computes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../../engine/core/rolling_metrics.py"><code>rolling_metrics.py</code></a> / <a href="../../engine/core/rolling_correlation.py"><code>rolling_correlation.py</code></a> / <a href="../../engine/core/rolling_benchmark.py"><code>rolling_benchmark.py</code></a> / <a href="../../engine/core/rolling_trade_stats.py"><code>rolling_trade_stats.py</code></a></td>
+<td>Rolling-window Sharpe, correlation, benchmark-relative, and trade statistics.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/drawdown_analytics.py"><code>drawdown_analytics.py</code></a></td>
+<td>Drawdown depth/duration/recovery + excursion stats (<a href="../../engine/core/excursion_stats.py"><code>excursion_stats.py</code></a>).</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/distribution_metrics.py"><code>distribution_metrics.py</code></a></td>
+<td>VaR / CVaR / skew / kurtosis / tail ratio.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/benchmark_comparison.py"><code>benchmark_comparison.py</code></a></td>
+<td>Alpha/beta/R-squared, up/down capture, tracking error vs. a benchmark.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/cumulative_returns.py"><code>cumulative_returns.py</code></a></td>
+<td>Cumulative + <code>PeriodReturn</code> series (daily/weekly/monthly).</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/monte_carlo.py"><code>monte_carlo.py</code></a></td>
+<td>Robustness testing — <code>bootstrap_returns</code> (Efron i.i.d.) and <code>block_bootstrap</code> (Künsch, preserves autocorrelation). Pure numpy, deterministic given a <code>seed</code>.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/portfolio_aggregator.py"><code>portfolio_aggregator.py</code></a> / <a href="../../engine/core/portfolio_concentration.py"><code>portfolio_concentration.py</code></a></td>
+<td>Cross-portfolio rollups and concentration metrics.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="strategy-scoring-governance">Strategy scoring &amp; governance<a class="headerlink" href="#strategy-scoring-governance" title="Permanent link">&para;</a></h2>
+<h3 id="composite-scoring-strategy_evaluatorpy">Composite scoring — <a href="../../engine/core/strategy_evaluator.py"><code>strategy_evaluator.py</code></a><a class="headerlink" href="#composite-scoring-strategy_evaluatorpy" title="Permanent link">&para;</a></h3>
+<p>Turns a <code>MetricsReport</code> into one number in <code>[0, 100]</code> plus a
+per-dimension breakdown, a letter grade, and warnings. Used by the
+marketplace ranking, A/B comparison surfaces, and the backtest summary
+endpoint (so the UI doesn't re-derive it). <strong>Six dimensions</strong>, each
+normalized to <code>[0, 100]</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Inputs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RISK_ADJUSTED_RETURN</code></td>
+<td>Sharpe ratio, piecewise mapping.</td>
+</tr>
+<tr>
+<td><code>DRAWDOWN_CONTROL</code></td>
+<td>Max drawdown, piecewise mapping.</td>
+</tr>
+<tr>
+<td><code>CONSISTENCY</code></td>
+<td>Coefficient of variation of rolling-window Sharpe.</td>
+</tr>
+<tr>
+<td><code>COST_EFFICIENCY</code></td>
+<td>Exponential decay on <code>cost_drag_pct</code>.</td>
+</tr>
+<tr>
+<td><code>WIN_RATE_QUALITY</code></td>
+<td><code>win_rate × (avg_winner / |avg_loser|)</code>.</td>
+</tr>
+<tr>
+<td><code>STABILITY</code></td>
+<td>Annual volatility, piecewise mapping.</td>
+</tr>
+</tbody>
+</table>
+<p>Default weights mirror the spec and sum to 1.0 (risk-adjusted 0.30, …).
+Composite = <code>Σ(dimension × weight)</code>. The evaluator is <strong>stateless</strong> —
+construct one per weight configuration. (See also the persisted
+<code>scoring_snapshots</code> table, written by the scoring routes.)</p>
+<h3 id="lifecycle-versioning">Lifecycle &amp; versioning<a class="headerlink" href="#lifecycle-versioning" title="Permanent link">&para;</a></h3>
+<p>Two services govern <em>when</em> a strategy may run and <em>what code</em> runs:</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../../engine/core/strategy_lifecycle.py"><code>strategy_lifecycle.py</code></a></td>
+<td>State machine <code>draft → backtest → paper → live</code>, with <code>retired</code> reachable from any non-draft stage. <strong>No skipping</strong> — you cannot jump draft→live. Each promotion is gated by a <code>LifecycleEvidence</code> payload: paper requires a backtest id + minimum Sharpe; live requires a paper window + minimum live-paper Sharpe.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/strategy_versioning.py"><code>strategy_versioning.py</code></a></td>
+<td><strong>Content-addressed deploys.</strong> A <code>StrategyVersion</code> is a SHA-256 of the code blob + a hash of its canonical-JSON config, so the same code+config never creates two records (re-deploys are idempotent). <code>deploy</code> → new <code>DRAFT</code>; <code>activate</code> promotes to <code>ACTIVE</code> (demoting the prior); <code>rollback</code> returns to a previous <code>ACTIVE</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Together: <code>StrategyVersionService</code> controls <em>what</em> code runs;
+<code>StrategyLifecycleService</code> controls <em>which stage</em> it's allowed to run at.</p>
+<h2 id="optimization-param_optimizerpy">Optimization — <a href="../../engine/core/param_optimizer.py"><code>param_optimizer.py</code></a><a class="headerlink" href="#optimization-param_optimizerpy" title="Permanent link">&para;</a></h2>
+<p>Pure-Python hyperparameter search against an objective function
+(typically a backtest's Sharpe or compound return).</p>
 <ul>
-<li><strong>Status</strong>: Accepted</li>
-<li><strong>Date</strong>: 2026-06-16</li>
-<li><strong>Deciders</strong>: Lead maintainer + security reviewer</li>
-<li><strong>Tags</strong>: security, plugins, sandbox</li>
+<li><strong><code>ParameterSpace</code></strong> — typed search space (continuous / discrete /
+  categorical dimensions).</li>
+<li><strong><code>Optimizer</code></strong> — Protocol the algorithms implement.</li>
+<li><strong><code>optimize(...)</code></strong> — the dispatch entry point.</li>
 </ul>
-<h2 id="context-and-problem-statement">Context and Problem Statement<a class="headerlink" href="#context-and-problem-statement" title="Permanent link">&para;</a></h2>
-<p>Nexus runs <strong>third-party strategy plugins</strong> inside the engine process.
-Strategies are arbitrary Python that implements <code>IStrategy.evaluate()</code> —
-they could be authored by marketplace contributors, not just the
-operator. A malicious or buggy strategy must not be able to read the
-filesystem, spawn processes, reach the network undeclared, or
-exfiltrate secrets (<code>NEXUS_SECRET_KEY</code>, <code>NEXUS_MFA_ENCRYPTION_KEY</code>,
-provider API keys).</p>
-<p>The first-generation sandbox enforced imports via a <strong>denylist</strong> — a
-<code>BLOCKED_MODULES</code> set of known-dangerous names (<code>os</code>, <code>subprocess</code>,
-<code>socket</code>, …). Every import was allowed unless explicitly blocked. This
-is an unwinnable arms-race: every new dangerous module shipped with
-CPython (or a third-party package already on the import path) is a
-fresh escape vector until someone remembers to add it to the denylist.
-A dedicated security sweep (gh#908) patched critical escape vectors,
-but the review itself proved the denylist approach was structurally
-weak.</p>
-<h2 id="decision-drivers">Decision Drivers<a class="headerlink" href="#decision-drivers" title="Permanent link">&para;</a></h2>
+<p>Algorithms shipped (PR1): <code>GridSearchOptimizer</code>,
+<code>RandomSearchOptimizer</code>, <code>GeneticOptimizer</code>. Bayesian search and
+Hyperband are TODO and noted in the module docstring. Runs are
+deterministic given a seed; pair with <code>monte_carlo</code> to sanity-check that
+an "optimal" parameter set isn't an overfit artifact.</p>
+<h2 id="wired-vs-schema-only-quick-reference">Wired vs. schema-only (quick reference)<a class="headerlink" href="#wired-vs-schema-only-quick-reference" title="Permanent link">&para;</a></h2>
+<p>Consolidated across the whole domain layer (both this document and
+<a href="../core-domains/"><code>core-domains.md</code></a>):</p>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>Wired into a route/runner?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MetricsReport</code>, <code>strategy_evaluator</code>, <code>monte_carlo</code>, <code>param_optimizer</code></td>
+<td>Yes — consumed by the backtest runner / scoring routes.</td>
+</tr>
+<tr>
+<td><code>MultiStrategyPortfolio</code></td>
+<td><strong>No</strong> — capital-aware voter is library-only and fully unit-tested today; the live/paper run route that would drive it is the open P1 (see <a href="../../known-limitations/"><code>known-limitations.md</code></a>).</td>
+</tr>
+<tr>
+<td><code>tca.py</code>, <code>market_impact.py</code></td>
+<td>Library-only today — no public route, and neither is consumed by <code>DefaultCostModel</code> yet (the square-root model is available for strategies / evaluators to call directly).</td>
+</tr>
+<tr>
+<td><code>PerformanceReport</code> (86-KPI)</td>
+<td><strong>No</strong> — schema landed, no analyzer/route yet.</td>
+</tr>
+<tr>
+<td><code>strategy_lifecycle</code> / <code>strategy_versioning</code></td>
+<td>Library-only; the public promotion/version API is part of the still-partial live-trading story (see <a href="../../known-limitations/"><code>known-limitations.md</code></a>).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Threat model.</strong> Strategies are untrusted code running in-process.
-  The import policy is the primary containment boundary before process
-  isolation (layer 5) lands.</li>
-<li><strong>Maintenance cost.</strong> The denylist grew organically and still missed
-  vectors (<code>ast</code>, <code>inspect</code>, <code>code</code>, <code>symtable</code>, <code>contextvars</code>).
-  Reviewing every new stdlib addition is not sustainable.</li>
-<li><strong>Inverting the burden of proof.</strong> A module should be guilty (blocked)
-  unless explicitly proven safe and listed, not the other way round.</li>
-</ul>
-<h2 id="considered-options">Considered Options<a class="headerlink" href="#considered-options" title="Permanent link">&para;</a></h2>
-<ol>
-<li><strong>Keep the denylist, harden it with more entries.</strong></li>
-<li><strong>Switch to an allowlist</strong> — only explicitly listed modules import.</li>
-<li><strong>Drop in-process isolation entirely; require process/container
-   isolation now</strong> (layer 5).</li>
-<li><strong>Use <code>sys.audit_hooks</code> / <code>sys.settrace</code> for dynamic interception.</strong></li>
-</ol>
-<h2 id="decision-outcome">Decision Outcome<a class="headerlink" href="#decision-outcome" title="Permanent link">&para;</a></h2>
-<p>Chosen option: <strong>Option 2 — allowlist import model</strong>, because it
-inverts the burden of proof and makes the policy auditable in one
-frozen set. The allowlist is the default-deny boundary; layers 2–4
-(network whitelist, resource limits, filesystem isolation) sit behind
-it and layer 5 (process isolation) remains the production target.</p>
-<h3 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Positive</strong> — a new stdlib module or transitive dependency can no
-  longer become an escape vector by omission. The policy is a single
-  ~40-entry frozenset that a reviewer can eyeball in 30 seconds.</li>
-<li><strong>Positive</strong> — the denylist set is <em>retained</em> (<code>DENYLIST_MODULES</code> in
-  <a href="../../engine/plugins/allowlist.py"><code>allowlist.py</code></a>) as
-  defence-in-depth, so a future too-permissive allowlist edit does not
-  silently unblock <code>os</code>/<code>subprocess</code>/<code>contextvars</code>. The test suite
-  parametrises escape-vector regressions over this set.</li>
-<li><strong>Negative</strong> — strategy authors who legitimately need a module not in
-  the allowlist must request a code change + security review. This adds
-  friction, which is the point, but it is real friction.</li>
-<li><strong>Negative</strong> — CPython bootstraps certain <code>_</code>-prefixed C-extension
-  modules that cannot be purged from <code>sys.modules</code> without crashing the
-  interpreter. These are enumerated in
-  <code>_ESSENTIAL_CPYTHON_MODULES</code> (<a href="../../engine/plugins/restricted_importer.py"><code>restricted_importer.py:134</code></a>)
-  and kept reachable; they are harmless C-extensions that cannot be
-  used as escape vectors on their own.</li>
-</ul>
-<h2 id="details">Details<a class="headerlink" href="#details" title="Permanent link">&para;</a></h2>
-<h3 id="enforcement-is-dual-layered">Enforcement is dual-layered<a class="headerlink" href="#enforcement-is-dual-layered" title="Permanent link">&para;</a></h3>
-<p>Source: <a href="../../engine/plugins/restricted_importer.py"><code>engine/plugins/restricted_importer.py</code></a>.</p>
-<p><code>RestrictedImporter</code> implements two interception points because a
-single hook leaves a gap:</p>
-<ol>
-<li><strong><code>sys.meta_path</code> finder</strong> (<code>find_spec</code>) — catches <code>import X</code> for
-   modules not yet loaded. Raises <code>ImportError</code> if the root package is
-   not in the allowlist.</li>
-<li><strong><code>builtins.__import__</code> override</strong> (<code>_restricted_import</code>) — catches
-   re-imports of modules already cached in <code>sys.modules</code>. Without this,
-   sandboxed code could do <code>__import__("os")</code> and reach the <code>os</code> module
-   the host process already loaded.</li>
-</ol>
-<p>On sandbox startup, <code>purge_non_allowlisted()</code> removes every
-non-allowlisted entry from <code>sys.modules</code> (except CPython essentials),
-so the cache itself is clean.</p>
-<h3 id="the-contextvars-replacement">The <code>contextvars</code> replacement<a class="headerlink" href="#the-contextvars-replacement" title="Permanent link">&para;</a></h3>
-<p>The previous sandbox gated filesystem access on a <code>ContextVar</code>
-(<code>_sandbox_active</code>). A <code>ContextVar</code> is process-wide mutable state that
-attacker code could clear by importing <code>contextvars</code> and resetting it.
-The fix was two-fold: <code>contextvars</code> is now <strong>denied by the allowlist</strong>
-itself, and the gate was replaced with a process-level flag
-(<code>_ProcessSandboxFlag</code>,
-<a href="../../engine/plugins/sandbox/__init__.py"><code>sandbox/__init__.py:113</code></a>)
-that is itself unreachable because importing <code>engine.plugins.sandbox</code>
-is blocked via <code>_DENIED_SUBMODULES</code>.</p>
-<h3 id="builtins-curation">Builtins curation<a class="headerlink" href="#builtins-curation" title="Permanent link">&para;</a></h3>
-<p>Source: <a href="../../engine/plugins/allowlist.py"><code>allowlist.py:333</code></a> (<code>CURATED_BUILTINS</code>).</p>
-<p><code>CURATED_BUILTINS</code> exposes a subset of <code>builtins</code> to sandboxed code.
-Removed: <code>open</code>, <code>eval</code>, <code>exec</code>, <code>compile</code>, <code>__import__</code>, <code>globals</code>,
-<code>locals</code>, <code>vars</code>, <code>dir</code>, <code>getattr</code> (replaced by a safe wrapper),
-<code>setattr</code>, <code>delattr</code>, <code>type</code> (3-arg form), <code>__build_class__</code>,
-<code>breakpoint</code>, <code>memoryview</code>. Retained: pure functions (<code>abs</code>, <code>len</code>,
-<code>sorted</code>, …), numeric type constructors, and exception classes.</p>
-<h3 id="__globals__-introspection"><code>__globals__</code> introspection<a class="headerlink" href="#__globals__-introspection" title="Permanent link">&para;</a></h3>
-<p>A restricted <code>getattr</code> blocks access to dunder attributes that lead to
-frame/code objects (<code>__globals__</code>, <code>__code__</code>, <code>__builtins__</code>,
-<code>__subclasses__</code>). This closes the "walk <code>object.__subclasses__()</code> to
-find a dangerous type" escape vector (gh#912).</p>
-<h2 id="pros-and-cons-of-the-options">Pros and Cons of the Options<a class="headerlink" href="#pros-and-cons-of-the-options" title="Permanent link">&para;</a></h2>
-<h3 id="option-1-denylist-status-quo">Option 1 — Denylist (status quo)<a class="headerlink" href="#option-1-denylist-status-quo" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Pros:</strong> Zero migration cost; no risk of breaking strategies that
-  import an obscure-but-safe module.</li>
-<li><strong>Cons:</strong> Arms-race; structurally cannot be complete; already missed
-  vectors in the gh#908 audit.</li>
-</ul>
-<h3 id="option-2-allowlist-chosen">Option 2 — Allowlist (chosen)<a class="headerlink" href="#option-2-allowlist-chosen" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Pros:</strong> Default-deny; auditable; new modules can't slip in by
-  omission.</li>
-<li><strong>Cons:</strong> Breaks strategies importing non-listed modules until the
-  allowlist is expanded; needs the CPython-essential carve-out.</li>
-</ul>
-<h3 id="option-3-processcontainer-isolation-only">Option 3 — Process/container isolation only<a class="headerlink" href="#option-3-processcontainer-isolation-only" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Pros:</strong> Strongest boundary; removes the entire in-process escape
-  surface.</li>
-<li><strong>Cons:</strong> Not yet implemented (layer 5). Dropping layers 1–4 now
-  would leave <strong>zero</strong> containment until it ships. The allowlist is the
-  bridge until process isolation lands.</li>
-</ul>
-<h3 id="option-4-sysaudit_hooks-settrace">Option 4 — <code>sys.audit_hooks</code> / <code>settrace</code><a class="headerlink" href="#option-4-sysaudit_hooks-settrace" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Pros:</strong> Dynamic, catches runtime escapes not just imports.</li>
-<li><strong>Cons:</strong> High overhead; <code>audit_hooks</code> is CPython 3.8+ but its event
-  coverage is incomplete for our needs; <code>settrace</code> serialises all
-  execution. Both are harder to reason about than a static frozenset.</li>
-</ul>
-<h2 id="links">Links<a class="headerlink" href="#links" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Switch to allowlist: gh#906</li>
-<li>Critical sandbox escape patches: gh#908</li>
-<li><code>__globals__</code> introspection block: gh#912</li>
-<li>Restricted <code>getattr</code>: gh#914, gh#916</li>
-<li>Source: <a href="../../engine/plugins/allowlist.py"><code>engine/plugins/allowlist.py</code></a>,
-  <a href="../../engine/plugins/restricted_importer.py"><code>engine/plugins/restricted_importer.py</code></a>,
-  <a href="../../engine/plugins/sandbox/__init__.py"><code>engine/plugins/sandbox/__init__.py</code></a></li>
-<li>Complemented by: <a href="../0010-static-ast-validation-toctou-loading/">ADR-0010 — Static AST validation + TOCTOU-safe
-  strategy loading</a> — the
-  parse-time validator and validate-then-exec loader that run <em>before</em>
-  the runtime hooks in this ADR ever fire</li>
-<li>Related: <a href="../../architecture/plugins/"><code>docs/architecture/plugins.md</code></a></li>
+<li><a href="../../ARCHITECTURE.md"><code>ARCHITECTURE.md</code></a> — headline components
+  (<code>OrderManager</code>, <code>CostModel</code>, <code>Portfolio</code>, <code>RiskEngine</code>,
+  <code>BacktestRunner</code>), the signal→fill pipeline, and the SDK plugin
+  interface.</li>
+<li><a href="../core-domains/"><code>core-domains.md</code></a> — the companion capability view:
+  multi-strategy orchestration, cost &amp; risk modeling, execution
+  backends, and portfolio accounting (incl. drift-driven rebalancing).</li>
+<li><a href="../overview/"><code>overview.md</code></a> — service-level view (app factory,
+  middleware, request lifecycle, deploy topology).</li>
+<li><a href="../plugins/"><code>plugins.md</code></a> — strategy discovery, the registry, and the
+  five-layer sandbox.</li>
+<li><a href="../../known-limitations/"><code>known-limitations.md</code></a> — what is
+  half-built, including the live/paper execution and TaskIQ wiring.</li>
 </ul>
 
 
@@ -2947,7 +2913,7 @@ find a dangerous type" escape vector (gh#912).</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../0006-bcrypt-fernet/" class="md-footer__link md-footer__link--prev" aria-label="Previous: 0006 — Password hashing (bcrypt) &amp; MFA at rest (Fernet)">
+          <a href="../core-domains/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Core domains">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -2957,20 +2923,20 @@ find a dangerous type" escape vector (gh#912).</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                0006 — Password hashing (bcrypt) & MFA at rest (Fernet)
+                Core domains
               </div>
             </div>
           </a>
         
         
           
-          <a href="../0008-pluggable-metrics-backend/" class="md-footer__link md-footer__link--next" aria-label="Next: 0008 — Pluggable MetricsBackend Protocol">
+          <a href="../database/" class="md-footer__link md-footer__link--next" aria-label="Next: Database &amp; migrations">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                0008 — Pluggable MetricsBackend Protocol
+                Database & migrations
               </div>
             </div>
             <div class="md-footer__button md-icon">

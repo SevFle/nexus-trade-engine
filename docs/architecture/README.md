@@ -12,20 +12,23 @@ For *why* we made specific structural choices, see
 1. **[overview.md](overview.md)** — high-level component map, request
    lifecycle, key dependencies. Start here if you've never opened the
    repo before.
-2. **[core-domains.md](core-domains.md)** — the domain layer under
-   `engine/core/` + `engine/orchestration/`: multi-strategy orchestration,
-   the 86-KPI analytics taxonomy, strategy scoring & governance,
-   optimization, and post-trade cost analysis. The companion to
-   `overview.md` (which is the *service* view; this is the *capability*
-   view).
-3. **[database.md](database.md)** — table inventory, migration policy,
+2. **[core-domains.md](core-domains.md)** — the decision → execution →
+   accounting path of the domain layer: multi-strategy orchestration,
+   cost & risk modeling, execution backends, and portfolio accounting
+   (incl. drift-driven rebalancing). The companion capability view to
+   `overview.md` (which is the *service* view).
+3. **[analytics-and-governance.md](analytics-and-governance.md)** — the
+   second half of the capability view: the 86-KPI analytics taxonomy,
+   strategy scoring & governance, and hyperparameter optimization. Split
+   out of `core-domains.md` to keep both under the 500-line cap.
+4. **[database.md](database.md)** — table inventory, migration policy,
    data ownership.
-4. **[plugins.md](plugins.md)** — plugin SDK and the registry that
+5. **[plugins.md](plugins.md)** — plugin SDK and the registry that
    loads strategies / data providers / execution backends at runtime.
-5. **[`docs/operations/`](../operations/)** — how the running system is
+6. **[`docs/operations/`](../operations/)** — how the running system is
    monitored, backed up, and recovered. Lives next to the runbooks
    that on-call uses.
-6. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
+7. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
    Read these before proposing a change that contradicts them.
 
 ## Existing diagrams
@@ -39,8 +42,8 @@ components in our docs site:
   the registry.
 
 The flat-markdown architecture docs (`overview.md`, `core-domains.md`,
-`database.md`, `plugins.md`) are the source of truth; the diagrams are a
-presentation layer on top.
+`analytics-and-governance.md`, `database.md`, `plugins.md`) are the
+source of truth; the diagrams are a presentation layer on top.
 
 ## Conventions
 
