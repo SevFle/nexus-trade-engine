@@ -182,6 +182,71 @@ The marketplace routes exist purely to lock the public API shape.
 
 ---
 
+<a id="legal-disclaimers-unmounted"></a>
+## P1 — Legal disclaimers / `status` / in-memory `accept` are unmounted
+
+**Where**: [`engine/api/legal.py`](../engine/api/legal.py) — a
+*self-contained, database-free* legal module with its own `router`,
+its own `require_legal_acceptance`, and an `InMemoryAcceptanceStore`.
+
+The module is complete and unit-tested
+([`tests/test_legal_disclaimers_api.py`](../tests/test_legal_disclaimers_api.py),
+[`tests/test_legal_acceptance_api.py`](../tests/test_legal_acceptance_api.py))
+and declares four routes — **none of which are reachable at runtime**:
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/v1/legal/accept` | **Path-collides** with the live DB-backed accept. Writes to the in-memory store; 409 on version mismatch. |
+| GET | `/api/v1/legal/status` | In-memory acceptance status for `legal_terms_version`. |
+| GET | `/api/v1/legal/disclaimers` | Public structured disclaimers ([`engine/legal/disclaimers.py`](../engine/legal/disclaimers.py)), `?category=` filter; sets `Cache-Control: public, max-age=300`. |
+| GET | `/api/v1/legal/risk-disclosures` | Public structured risk disclosure; same cache header. |
+
+`engine/api/router.py` mounts the *other* legal router — the DB-backed
+[`engine/api/routes/legal.py`](../engine/api/routes/legal.py)
+(`/documents`, `/documents/{slug}`, `/accept` → immutable
+`legal_acceptances` table, `/acceptances/me`, `/attributions`).
+`engine/api/legal.py`'s router is imported only by the two test files,
+which each `include_router` it into a throwaway `FastAPI()`. A request
+to `GET /api/v1/legal/disclaimers` on a running engine **404s**.
+
+There are also **two `require_legal_acceptance` implementations** that
+diverge in behaviour:
+
+| | [`engine/legal/dependencies.py`](../engine/legal/dependencies.py) (LIVE) | [`engine/api/legal.py`](../engine/api/legal.py) (unmounted) |
+|---|---|---|
+| Store | SQLAlchemy `legal_acceptances` (immutable) | `InMemoryAcceptanceStore` |
+| Checks | every `requires_acceptance` document at its version | only `settings.legal_terms_version` |
+| Rejection | **451** `{code:"legal_re_acceptance_required", documents:[…]}` | **403** `{code:"LEGAL_ACCEPTANCE_REQUIRED"}` |
+| Used by | `router.py` + portfolio/strategies/scoring/marketplace | nothing in prod |
+
+Every production caller imports the live one; the `engine.api.legal`
+copy shadows nothing at runtime but is a real trap for a reader who
+greps for `require_legal_acceptance`.
+
+**Impact**: the disclaimer / risk-disclosure surface — added most
+recently (gh#1342) and described in its own docstrings as content that
+"must be displayable before a user signs in" — is a
+compliance-relevant endpoint that 404s in every deployment. The
+`451`-vs-`403` (and document-list-vs-single-version) divergence means
+a frontend built against the in-memory module's contract would
+mis-handle the live consent gate.
+
+**Workaround today**: none at runtime — these routes are dead code.
+Treat the DB-backed `routes/legal.py` as the only legal surface; the
+[`api-reference.md`](api-reference.md) Legal section documents only
+those mounted routes.
+
+**Fix path**: decide which module wins. Recommended: move the
+`disclaimers` / `risk-disclosures` handlers onto the live
+`routes/legal.py` router (they are correctly DB-free editorial content
+and belong as extra routes on the persisted legal surface), then delete
+`engine/api/legal.py` entirely and collapse to a single
+`require_legal_acceptance`. The `InMemoryAcceptanceStore` and the
+path-colliding `accept` go away with it; `/status` is subsumed by the
+existing `GET /legal/acceptances/me`.
+
+---
+
 <a id="react-dashboard"></a>
 ## P1 — React dashboard is real but not production-built
 

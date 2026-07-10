@@ -90,6 +90,7 @@ Unauthenticated probes for load balancers and Prometheus.
 | Method | Path | Source | Notes |
 |---|---|---|---|
 | GET | `/health` | [`routes/health.py`](../engine/api/routes/health.py#L19) | Liveness. Always returns `{"status": "ok"}`. |
+| GET | `/api/v1/health` | same | Aliased liveness probe under the v1 prefix so the k6 smoke load test resolves without a 404; deliberately a distinct route (not a prefix change) so `/health`, `/ready`, and the rate-limit exempt list stay intact. |
 | GET | `/health/providers` | same | Reports each registered data provider (up/degraded/down + latency). |
 | GET | `/ready` | same | Readiness — pings DB (`SELECT 1`) and `valkey.ping()`. Returns `degraded` if either fails. |
 | GET | `/metrics` | [`routes/metrics.py`](../engine/api/routes/metrics.py) | Prometheus exposition. The `RateLimitMiddleware` exempts `/metrics` from throttling. |
@@ -186,6 +187,16 @@ are still under the v1 namespace. It is deliberately **not** gated by
 `require_legal_acceptance`: it has to stay reachable so the user can
 record the acceptance the gate checks for. Source:
 [`routes/legal.py`](../engine/api/routes/legal.py).
+
+> **Heads-up — two legal modules.** A *second*, self-contained module,
+ [`engine/api/legal.py`](../engine/api/legal.py), also declares a
+ `router` and a `require_legal_acceptance`, and adds `GET /status`,
+ `GET /disclaimers`, and `GET /risk-disclosures`. **It is not mounted**
+ by [`router.py`](../engine/api/router.py) — only the DB-backed
+ routes above are. The disclaimers/status routes 404 on a running
+ engine, and the two `require_legal_acceptance` implementations differ
+ (live = `451` + document list; unmounted = `403` + single version). See
+ the dedicated entry in [`known-limitations.md`](known-limitations.md#legal-disclaimers-unmounted).
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
