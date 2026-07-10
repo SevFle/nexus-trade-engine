@@ -23,6 +23,17 @@ from engine.core.strategy_orchestrator import (
     StrategyOrchestratorError,
 )
 
+# The engine.orchestration orchestrator is a DISTINCT module from the
+# engine.core one exercised by the rest of this file (both classes are
+# named ``StrategyOrchestrator``). Imported under aliases so the bare
+# ``StrategyOrchestrator`` name above stays bound for the core tests.
+from engine.orchestration.orchestrator import (
+    ConflictResolution as OrchestrationConflictResolution,
+)
+from engine.orchestration.orchestrator import (
+    StrategyOrchestrator as OrchestrationStrategyOrchestrator,
+)
+
 # --------------------------------------------------------------------- #
 # Test doubles
 # --------------------------------------------------------------------- #
@@ -908,3 +919,94 @@ class TestDispatchStrategy:
         assert "ValueError" in result.errors["boom"]
         assert [b.strategy_id for b in result.batches] == ["good"]
         assert result.signals[0].side == Side.BUY
+
+
+# ===================================================================
+# Happy-path coverage for engine.orchestration.orchestrator
+# -------------------------------------------------------------------
+# Distinct module from the engine.core.strategy_orchestrator exercised
+# above. The class accepts multiple IStrategy instances, calls evaluate()
+# on each with a shared ICostModel, collects the emitted Signal objects,
+# and aggregates them into a weighted allocation decision per symbol.
+# ===================================================================
+
+
+class _OrchestrationCostModelStub:
+    """Minimal ICostModel stand-in.
+
+    The engine.orchestration orchestrator only *forwards* the cost model
+    to each strategy's ``evaluate``; it never invokes methods on it, so a
+    bare sentinel object is a faithful stub.
+    """
+
+
+class _OrchestrationMockStrategy:
+    """Mock IStrategy: emits a fixed list of signals and records the
+    cost-model object handed to ``evaluate`` so the test can assert the
+    shared cost model reached every registered strategy."""
+
+    def __init__(self, sid: str, signals: list[Signal]) -> None:
+        self.id = sid
+        self._signals = list(signals)
+        self.received_cost_model: object | None = None
+
+    async def evaluate(self, market_data, cost_model) -> list[Signal]:
+        self.received_cost_model = cost_model
+        return [s.model_copy() for s in self._signals]
+
+
+class TestOrchestrationHappyPath:
+    """One happy-path test for engine.orchestration.orchestrator:
+    multiple mock strategies are evaluated against a single shared
+    ICostModel, their Signal objects are collected, and then aggregated
+    into one weighted allocation per symbol."""
+
+    async def test_collects_signals_and_aggregates_weighted_allocations(self):
+        cost_model = _OrchestrationCostModelStub()
+        market = {"prices": {"AAPL": 150.0, "MSFT": 300.0}}
+
+        momentum = _OrchestrationMockStrategy(
+            "momentum",
+            [Signal(symbol="AAPL", side=Side.BUY, strategy_id="momentum", weight=1.0)],
+        )
+        value = _OrchestrationMockStrategy(
+            "value",
+            [Signal(symbol="AAPL", side=Side.BUY, strategy_id="value", weight=0.5)],
+        )
+        contrarian = _OrchestrationMockStrategy(
+            "contrarian",
+            [Signal(symbol="MSFT", side=Side.SELL, strategy_id="contrarian", weight=0.3)],
+        )
+
+        orch = OrchestrationStrategyOrchestrator(
+            [momentum, value, contrarian],
+            cost_model,
+            conflict_resolution=OrchestrationConflictResolution.NET_POSITION,
+        )
+
+        # --- Collect: run_all evaluates every strategy with the shared
+        # cost model and returns the flattened raw signals. ---
+        raw = await orch.run_all(market)
+
+        assert len(raw) == 3  # one signal per mock strategy
+        assert {s.symbol for s in raw} == {"AAPL", "MSFT"}
+        # The single shared ICostModel reached every strategy unchanged.
+        assert momentum.received_cost_model is cost_model
+        assert value.received_cost_model is cost_model
+        assert contrarian.received_cost_model is cost_model
+
+        # --- Aggregate: collapse to one weighted decision per symbol. ---
+        decisions = orch.aggregate_signals()
+        by_symbol = {s.symbol: s for s in decisions}
+
+        # AAPL: net BUY weight 1.0 + 0.5 = 1.5, clamped to [0, 1] -> BUY @ 1.0.
+        assert by_symbol["AAPL"].side == Side.BUY
+        assert by_symbol["AAPL"].weight == pytest.approx(1.0)
+        # MSFT: net SELL weight 0.3 -> SELL @ 0.3.
+        assert by_symbol["MSFT"].side == Side.SELL
+        assert by_symbol["MSFT"].weight == pytest.approx(0.3)
+        # Aggregated decisions are stamped as orchestrator output and
+        # record the contributing strategy ids for the audit trail.
+        assert all(s.strategy_id == "orchestrator" for s in decisions)
+        assert set(by_symbol["AAPL"].metadata["orchestrator_sources"]) == {"momentum", "value"}
+        assert by_symbol["MSFT"].metadata["orchestrator_sources"] == ["contrarian"]

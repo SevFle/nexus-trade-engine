@@ -11,10 +11,17 @@ permissions:
 
 jobs:
   release-please:
-    if: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
     runs-on: [self-hosted, nexus]
     steps:
-      - uses: googleapis/release-please-action@v4
+      # Skip the release-please step entirely when no token is configured
+      # (e.g. pull requests from forks). The ``secrets`` context *is* permitted
+      # inside a step-level ``if:`` conditional, so the token can be tested
+      # directly without exposing it through a job-level ``env:`` binding.
+      # (Only job-level ``if:`` conditionals forbid the ``secrets`` context.)
+      # The action is pinned to an immutable commit SHA for supply-chain
+      # safety; a floating tag like ``@v4`` can be moved under us.
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071  # v4.4.1
+        if: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
