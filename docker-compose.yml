@@ -1,30 +1,33 @@
 # Nexus Trade Engine — core Docker Compose stack.
 #
-# Four core services wired together over a dedicated bridge network with
+# Three core services wired together over a dedicated bridge network with
 # health-gated startup ordering:
 #
-#   postgres   PostgreSQL 16 + TimescaleDB, bootstrap SQL auto-run on first boot
-#   valkey     Redis-compatible cache / TaskIQ broker / rate-limit backend
-#   nexus-api  Nexus API built from ./Dockerfile (distroless uvicorn)
-#   worker     TaskIQ async worker (engine.tasks.worker:broker)
+#   nexus-postgres  PostgreSQL 16 + TimescaleDB, bootstrap SQL auto-run on first boot
+#   nexus-valkey    Redis-compatible cache / TaskIQ broker / rate-limit backend
+#   nexus-app       Nexus FastAPI app built from ./Dockerfile (distroless uvicorn)
+#   worker          TaskIQ async worker (engine.tasks.worker:broker)
 #
 # Networking:
 #   - All services attach to the user-defined bridge network ``nexus-net``
-#     so they resolve each other by service name (e.g. ``postgres:5432``).
+#     so they resolve each other by service name (e.g.
+#     ``nexus-postgres:5432``, ``nexus-valkey:6379``).
 #   - Host ports bind to 127.0.0.1 only; put a reverse proxy in front for
 #     real traffic (see docs/deployment.md).
 #
 # Health checks:
 #   - Every service defines a healthcheck.
-#   - nexus-api uses ``depends_on.<svc>.condition: service_healthy`` so it
-#     does not boot until postgres + valkey are accepting connections.
+#   - nexus-app uses ``depends_on.<svc>.condition: service_healthy`` so it
+#     does not boot until nexus-postgres + nexus-valkey are accepting
+#     connections. The worker reuses the same gates.
 #
 # Volumes:
-#   - ``pgdata`` persists the Postgres data dir across container recreation.
+#   - ``pgdata``      persists the Postgres data dir across recreation.
+#   - ``valkeydata``  persists Valkey's AOF/RDB snapshots at /data.
 #
 # Env wiring (engine/config.py — field ``foo_bar`` ↔ env ``NEXUS_FOO_BAR``):
-#   - NEXUS_DATABASE_URL → postgresql+asyncpg://<user>:<pw>@postgres:5432/<db>
-#   - NEXUS_VALKEY_URL   → valkey://valkey:6379/0
+#   - NEXUS_DATABASE_URL → postgresql+asyncpg://<user>:<pw>@nexus-postgres:5432/<db>
+#   - NEXUS_VALKEY_URL   → valkey://nexus-valkey:6379/0
 #
 # Usage:
 #   cp .env.example .env          # then set POSTGRES_PASSWORD + NEXUS_SECRET_KEY
@@ -37,7 +40,7 @@
 # ``docker compose up``.
 
 services:
-  postgres:
+  nexus-postgres:
     image: timescale/timescaledb:2.17.2-pg16
     restart: unless-stopped
     environment:
@@ -63,12 +66,16 @@ services:
       retries: 10
       start_period: 30s
 
-  valkey:
+  nexus-valkey:
     image: valkey/valkey:8-alpine
     restart: unless-stopped
     command: ["valkey-server", "--save", "60", "1", "--loglevel", "warning"]
     ports:
       - "127.0.0.1:6379:6379"
+    volumes:
+      # Persist AOF/RDB snapshots across container recreation. The official
+      # valkey image writes its dump/appendonly files to /data.
+      - valkeydata:/data
     networks:
       - nexus-net
     healthcheck:
@@ -78,24 +85,24 @@ services:
       retries: 5
       start_period: 5s
 
-  nexus-api:
+  nexus-app:
     build:
       context: .
       dockerfile: Dockerfile
-    image: nexus-api:latest
+    image: nexus-app:latest
     restart: unless-stopped
     ports:
       - "127.0.0.1:8000:8000"
     env_file: .env
     environment:
-      # Connection strings override whatever .env ships so the API talks
+      # Connection strings override whatever .env ships so the app talks
       # to the sibling compose services by DNS name.
-      NEXUS_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      NEXUS_VALKEY_URL: valkey://valkey:6379/0
+      NEXUS_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@nexus-postgres:5432/${POSTGRES_DB}
+      NEXUS_VALKEY_URL: valkey://nexus-valkey:6379/0
     depends_on:
-      postgres:
+      nexus-postgres:
         condition: service_healthy
-      valkey:
+      nexus-valkey:
         condition: service_healthy
     networks:
       - nexus-net
@@ -114,28 +121,28 @@ services:
       retries: 5
       start_period: 30s
 
-  # TaskIQ async worker — consumes the broker backed by valkey and runs
-  # background jobs (backtests, async DSR/deletion tasks, etc.). Shares the
-  # same image, env wiring, network and startup ordering as ``nexus-api``;
-  # it only differs in the entrypoint (worker loop instead of uvicorn) and
-  # exposes no host port.
+  # TaskIQ async worker — consumes the broker backed by nexus-valkey and
+  # runs background jobs (backtests, async DSR/deletion tasks, etc.). Shares
+  # the same image, env wiring, network and startup ordering as
+  # ``nexus-app``; it only differs in the entrypoint (worker loop instead of
+  # uvicorn) and exposes no host port.
   worker:
     build:
       context: .
       dockerfile: Dockerfile
-    image: nexus-api:latest
+    image: nexus-app:latest
     restart: unless-stopped
     entrypoint: ["python", "-m", "taskiq", "worker", "engine.tasks.worker:broker"]
     env_file: .env
     environment:
-      # Same connection strings as nexus-api so the worker resolves the
+      # Same connection strings as nexus-app so the worker resolves the
       # sibling compose services by DNS name.
-      NEXUS_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      NEXUS_VALKEY_URL: valkey://valkey:6379/0
+      NEXUS_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@nexus-postgres:5432/${POSTGRES_DB}
+      NEXUS_VALKEY_URL: valkey://nexus-valkey:6379/0
     depends_on:
-      postgres:
+      nexus-postgres:
         condition: service_healthy
-      valkey:
+      nexus-valkey:
         condition: service_healthy
     networks:
       - nexus-net
@@ -146,3 +153,4 @@ networks:
 
 volumes:
   pgdata:
+  valkeydata:
