@@ -87,6 +87,18 @@ class TestLDAPAuthenticateMissingParams:
         assert result.success is False
 
 
+class _FakeLDAPError(Exception):
+    """Base class mimicking ``ldap.LDAPError`` (python-ldap hierarchy)."""
+
+
+class _FakeServerError(_FakeLDAPError):
+    """Mimics ``ldap.SERVER_DOWN`` (directory unreachable)."""
+
+
+class _FakeTimeoutError(_FakeLDAPError):
+    """Mimics ``ldap.TIMEOUT`` (network/operation timeout)."""
+
+
 class _FakeLDAPConn:
     """Fake ldap.ldapobject.LDAPObject for testing."""
 
@@ -133,6 +145,13 @@ def _build_ldap_mock(
     mock_ldap.OPT_NETWORK_TIMEOUT = 7
     mock_ldap.OPT_TIMEOUT = 8
     mock_ldap.SCOPE_SUBTREE = 2
+    # Bind real exception classes so the provider's
+    # ``isinstance(exc, (ldap.SERVER_DOWN, ldap.TIMEOUT))`` operational-error
+    # check resolves against genuine types. A bare MagicMock attribute cannot
+    # be used in an isinstance/except check, so these mirror python-ldap's
+    # SERVER_DOWN and TIMEOUT exceptions.
+    mock_ldap.SERVER_DOWN = _FakeServerError
+    mock_ldap.TIMEOUT = _FakeTimeoutError
     mock_filter = MagicMock()
     mock_filter.escape_filter_chars = MagicMock(side_effect=lambda x: x)
     return mock_ldap, mock_filter
@@ -197,7 +216,9 @@ class TestLDAPAuthenticateSearchResults:
             )
 
         assert result.success is False
-        assert "not found" in result.error.lower()
+        # A missing entry must look identical to a bad password so the search
+        # step cannot be used for user enumeration.
+        assert "invalid credentials" in result.error.lower()
 
 
 def _make_ldap_attrs(
