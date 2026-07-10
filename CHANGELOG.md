@@ -12,6 +12,10 @@ edit this file by hand — it is regenerated as part of every release PR.
 
 ## [Unreleased]
 
+### Internal
+- (write_tests) Write tests for the most recently changed code to break the loop
+
+
 ### Fixed
 - (write_tests) Add a no-retry guard in `LiveExecutionBackend._request` so a transport error on the non-idempotent `POST /v2/orders` (order submission) raises `BrokerConnectionError` immediately instead of retrying, preventing duplicate orders; add unit tests covering the guard and confirming reads still retry.
 - (fix) Fix check ordering in `engine/core/execution/live.py` `execute()` and the two failing tests in `tests/test_execution_backends.py`
