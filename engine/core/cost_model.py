@@ -294,7 +294,11 @@ class DefaultCostModel(ICostModel):
         window_end = sell_date + timedelta(days=self.wash_sale_window_days)
 
         for buy in buy_history:
-            buy_date = buy.get("date")
+            if "date" not in buy:
+                raise TypeError(
+                    "each buy_history entry must include a 'date' key"
+                )
+            buy_date = buy["date"]
             buy_symbol = buy.get("symbol", "")
             if buy_symbol == symbol and window_start <= buy_date <= window_end:
                 return True
@@ -333,7 +337,11 @@ class DefaultCostModel(ICostModel):
 
         replacement_lots = []
         for buy in buy_history:
-            buy_date = buy.get("date")
+            if "date" not in buy:
+                raise TypeError(
+                    "each buy_history entry must include a 'date' key"
+                )
+            buy_date = buy["date"]
             buy_symbol = buy.get("symbol", "")
             if buy_symbol == symbol and window_start <= buy_date <= window_end:
                 replacement_lots.append(

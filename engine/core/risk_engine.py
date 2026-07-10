@@ -23,7 +23,7 @@ logger = structlog.get_logger()
 class RiskCheckResult:
     approved: bool
     reason: str = ""
-    warnings: list[str] = None
+    warnings: list[str] | None = None
 
     def __post_init__(self):
         if self.warnings is None:

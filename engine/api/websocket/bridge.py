@@ -26,7 +26,7 @@ under the same gh#7 follow-up tracker as the manager itself.
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 
@@ -55,7 +55,7 @@ def topic_for_event_type(event_type: str | EventType) -> Topic | None:
     ``None`` means the bridge does not route this event type. The
     caller logs and drops it.
     """
-    raw = event_type.value if hasattr(event_type, "value") else str(event_type)
+    raw = cast("EventType", event_type).value if hasattr(event_type, "value") else str(event_type)
     for prefix, topic in _PREFIX_MAP:
         if raw.startswith(prefix):
             return topic
