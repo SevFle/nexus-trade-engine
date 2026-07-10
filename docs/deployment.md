@@ -103,7 +103,8 @@ Naming convention: field `foo_bar` → env `NEXUS_FOO_BAR`.
 | `NEXUS_LOG_FORMAT` | `console` | Switch to `json` for production log pipelines. |
 | `NEXUS_LOG_LEVEL` | `INFO` | |
 | `NEXUS_OTLP_ENDPOINT` | `""` | OTLP traces + metrics exporter URL. |
-| `NEXUS_SENTRY_DSN` | `""` | |
+| `NEXUS_SENTRY_DSN` | `""` | Crash/error pipeline. Empty → `init_sentry()` is a no-op. See [Sentry PII scrubbing](observability/logging.md#error-tracking-sentry). |
+| `NEXUS_SENTRY_TRACES_SAMPLE_RATE` | `0.0` | Sentry performance-trace sampling (`0.0` disables). |
 | `NEXUS_OPERATOR_NAME/EMAIL/URL` | `"Nexus Trade Engine"` / `"legal@example.com"` / `"https://example.com"` | Substituted into legal docs at render time. |
 | `NEXUS_JURISDICTION` | `"United States"` | Same. |
 | `NEXUS_PLATFORM_FEE_PERCENT` | `30` | Same. |

@@ -2847,7 +2847,12 @@ Naming convention: field <code>foo_bar</code> → env <code>NEXUS_FOO_BAR</code>
 <tr>
 <td><code>NEXUS_SENTRY_DSN</code></td>
 <td><code>""</code></td>
-<td></td>
+<td>Crash/error pipeline. Empty → <code>init_sentry()</code> is a no-op. See <a href="../observability/logging/#error-tracking-sentry">Sentry PII scrubbing</a>.</td>
+</tr>
+<tr>
+<td><code>NEXUS_SENTRY_TRACES_SAMPLE_RATE</code></td>
+<td><code>0.0</code></td>
+<td>Sentry performance-trace sampling (<code>0.0</code> disables).</td>
 </tr>
 <tr>
 <td><code>NEXUS_OPERATOR_NAME/EMAIL/URL</code></td>

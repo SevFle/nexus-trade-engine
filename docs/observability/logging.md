@@ -85,6 +85,82 @@ through the full processor chain and asserts no banned values reach the
 wire. Add new patterns by editing `engine/observability/redact.py` and
 extending the test fixtures.
 
+## Error tracking (Sentry)
+
+Sentry is the crash/error pipeline. It is initialised in the app
+lifespan ([`engine/app.py`](../../engine/app.py) →
+`_init_observability` → [`init_sentry()`](../../engine/observability/sentry.py))
+right after logging/tracing, and torn down last in `_shutdown` via
+`close_sentry()`. When `NEXUS_SENTRY_DSN` is empty (the default)
+`init_sentry()` is a **graceful no-op**, so dev/test runs without a
+backend and the process always starts.
+
+> **Code:** `engine/observability/sentry.py` · reuses
+> `engine/observability/redact.py` · **Issue:** [#1336](https://github.com/SevFle/nexus-trade-engine/issues/1336)
+> **Tests:** `tests/observability/test_sentry.py` (PII scrubbing #1338)
+
+### The PII guarantee is the same as logs
+
+The whole point of routing Sentry through the redaction module is that
+**an error event and a log line leaving the process carry the same
+privacy guarantee**. `init_sentry()` registers a `before_send` hook
+([`_before_send`](../../engine/observability/sentry.py)) that scrubs
+every outbound event using the *exact same* patterns documented in the
+[Redaction](#redaction) table above. There is no second redaction
+vocabulary to keep in sync — extending `engine/observability/redact.py`
+updates both pipelines.
+
+Belt-and-suspenders: Sentry is also initialised with
+`send_default_pii=False`, so the SDK attaches no user/server PII
+server-side in the first place. The `before_send` hook covers the rest
+(request payloads, breadcrumbs, context tags the integrations add).
+
+### What `_before_send` scrubs
+
+| Event field | Treatment |
+|---|---|
+| `contexts` | Recursive [`_scrub_dict`](../../engine/observability/redact.py) walk — catches any context key matching a banned name. |
+| `breadcrumbs` | Scrubbed whether Sentry ships it as a `dict` or a `list`. |
+| `request` (HTTP interface) | Handled by `_scrub_request` (see below). |
+
+The Sentry HTTP integrations attach a `request` object holding `url`,
+`method`, `query_string`, `headers`, and `data` (the body).
+`_scrub_request` only touches the secret-bearing fields and passes
+`url`/`method`/`env` through unchanged:
+
+| `request` field | Treatment |
+|---|---|
+| `query_string` | Parsed **parameter by parameter** by `_redact_query_string`. A param whose decoded key is banned → value replaced wholesale with `REDACTED`; any other param's value still goes through `_scrub_string` (catches Bearer tokens, PANs, `sk*`/`ghp*`/…). |
+| `headers` | Flat `{name: value}` dict scrubbed with `_scrub_dict` (covers `authorization`, `cookie`, `x-api-key`, …). |
+| `data` (str) | Treated as **form-encoded** (`a=1&b=2`) and split param-by-param by `_redact_query_string`. |
+| `data` (bytes) | Decoded, scrubbed the same way, **re-encoded** so the field stays `bytes`. |
+| `data` (dict / list) | Recursive `_scrub_value` walk. |
+
+> **Why `query_string` / form bodies get their own parser.**
+> `_scrub_string`'s inline `key=value` rule uses a greedy `\S+` for the
+> value, which lets a *single* sensitive param absorb its non-sensitive
+> siblings across the `&` (e.g. `token=secret&page=1` would lose
+> `page=1`). `_redact_query_string` splits on `&` / the first `=` so each
+> parameter is considered in isolation — sensitive params are redacted,
+> the rest are preserved verbatim. The same parser is reused for the
+> `data` body so a form post like `password=secret&keep=ok` becomes
+> `password=***REDACTED***&keep=ok`.
+
+### Configuration
+
+| Variable | Default | Notes |
+|---|---|---|
+| `NEXUS_SENTRY_DSN` | `""` | Empty → `init_sentry()` is a no-op (dev/test). |
+| `NEXUS_SENTRY_TRACES_SAMPLE_RATE` | `0.0` | Performance-trace sampling. `0.0` disables; raise to capture traces. |
+| (`release`) | `NEXUS_APP_VERSION` | Auto-set from app version — do **not** pass manually. |
+| (`environment`) | `NEXUS_APP_ENV` | Auto-set from env. |
+
+`close_sentry()` runs last in shutdown: it `flush(timeout=2)` so
+buffered events drain before the process exits (a timeout emits a
+`sentry.flush_timeout` warning rather than hanging shutdown), then
+closes the client. It is safe to call when Sentry was never
+initialised.
+
 ## Sampling
 
 | Level                        | Rate setting                  | Default |
