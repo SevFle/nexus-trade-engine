@@ -100,11 +100,16 @@ class _FakeLDAPConn:
         self._search_results = search_results or []
         self._search_raises = search_raises
         self._options: dict[int, Any] = {}
+        # Track bind/unbind calls so connection-lifecycle tests can assert
+        # that connections are always torn down (no leak).
+        self.bind_calls: list[tuple[str, str]] = []
+        self.unbind_calls = 0
 
     def set_option(self, opt: int, value: Any) -> None:
         self._options[opt] = value
 
     def simple_bind_s(self, dn: str, password: str) -> None:
+        self.bind_calls.append((dn, password))
         if self._bind_raises:
             raise self._bind_raises
 
@@ -114,7 +119,7 @@ class _FakeLDAPConn:
         return self._search_results
 
     def unbind_s(self) -> None:
-        pass
+        self.unbind_calls += 1
 
 
 def _build_ldap_mock(
@@ -509,6 +514,146 @@ class TestLDAPRoleMappingEmpty:
         assert result.success is True
         assert result.user_info is not None
         assert "user" in result.user_info.roles
+
+
+class TestLDAPConnectionLifecycle:
+    """Verify connections are always torn down (no leak) on every code path."""
+
+    async def test_unbind_called_on_successful_auth(self, ldap_provider, mock_settings):
+        attrs = _make_ldap_attrs()
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=testuser,ou=users,dc=example,dc=com", attrs)]
+        )
+        mock_db, _ = _make_mock_db()
+        mock_db.execute = _mock_execute_factory(None, None)
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            await ldap_provider.authenticate(
+                username="testuser", password="pass", db=mock_db
+            )
+
+        fake_conn = mock_ldap.initialize.return_value
+        assert fake_conn.unbind_calls == 1
+
+    async def test_unbind_called_when_bind_fails(self, ldap_provider, mock_settings):
+        """Connection created but bind failed must still be unbound."""
+        mock_ldap, mock_filter = _build_ldap_mock(bind_raises=Exception("LDAP bind failed"))
+        mock_db = AsyncMock(spec=AsyncSession)
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="testuser", password="wrongpass", db=mock_db
+            )
+
+        assert result.success is False
+        fake_conn = mock_ldap.initialize.return_value
+        # A connection WAS created (initialize called, bind attempted) and
+        # must be torn down even though bind raised.
+        assert fake_conn.bind_calls == [
+            ("uid=testuser,ou=users,dc=example,dc=com", "wrongpass")
+        ]
+        assert fake_conn.unbind_calls == 1
+
+    async def test_unbind_called_on_connection_error(self, ldap_provider, mock_settings):
+        mock_ldap, mock_filter = _build_ldap_mock(
+            bind_raises=ConnectionError("Connection refused")
+        )
+        mock_db = AsyncMock(spec=AsyncSession)
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="testuser", password="pass", db=mock_db
+            )
+
+        assert result.success is False
+        fake_conn = mock_ldap.initialize.return_value
+        assert fake_conn.unbind_calls == 1
+
+    async def test_unbind_called_when_user_not_found(self, ldap_provider, mock_settings):
+        mock_ldap, mock_filter = _build_ldap_mock(search_results=[])
+        mock_db = AsyncMock(spec=AsyncSession)
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            result = await ldap_provider.authenticate(
+                username="testuser", password="pass", db=mock_db
+            )
+
+        assert result.success is False
+        assert "not found" in result.error.lower()
+        fake_conn = mock_ldap.initialize.return_value
+        assert fake_conn.unbind_calls == 1
+
+
+class TestLDAPDNEscaping:
+    """RFC 4514 DN escaping for the bind_dn substitution."""
+
+    def test_escape_dn_value_escapes_comma(self):
+        from engine.api.auth.ldap import _escape_dn_value
+
+        assert _escape_dn_value("user,name") == "user\\,name"
+
+    def test_escape_dn_value_escapes_equals(self):
+        from engine.api.auth.ldap import _escape_dn_value
+
+        assert _escape_dn_value("user=name") == "user\\=name"
+
+    def test_escape_dn_value_escapes_backslash(self):
+        from engine.api.auth.ldap import _escape_dn_value
+
+        assert _escape_dn_value("user\\name") == "user\\\\name"
+
+    def test_escape_dn_value_escapes_plus_semicolon_angle(self):
+        from engine.api.auth.ldap import _escape_dn_value
+
+        assert _escape_dn_value("a+b") == "a\\+b"
+        assert _escape_dn_value("a;b") == "a\\;b"
+        assert _escape_dn_value("a<b") == "a\\<b"
+        assert _escape_dn_value("a>b") == "a\\>b"
+
+    def test_escape_dn_value_escapes_quote(self):
+        from engine.api.auth.ldap import _escape_dn_value
+
+        assert _escape_dn_value('a"b') == 'a\\"b'
+
+    def test_escape_dn_value_escapes_leading_hash_and_spaces(self):
+        from engine.api.auth.ldap import _escape_dn_value
+
+        assert _escape_dn_value("#user") == "\\#user"
+        assert _escape_dn_value(" user") == "\\ user"
+        assert _escape_dn_value("user ") == "user\\ "
+        # interior spaces are preserved
+        assert _escape_dn_value("a b") == "a b"
+
+    def test_escape_dn_value_escapes_nul(self):
+        from engine.api.auth.ldap import _escape_dn_value
+
+        assert _escape_dn_value("a\x00b") == "a\\00b"
+
+    def test_escape_dn_value_plain_passthrough(self):
+        from engine.api.auth.ldap import _escape_dn_value
+
+        assert _escape_dn_value("plainuser") == "plainuser"
+        assert _escape_dn_value("") == ""
+
+    async def test_dn_substitution_uses_dn_escaping(self, ldap_provider, mock_settings):
+        """A username with a DN metacharacter must be RFC 4514 escaped in the
+        bind DN (distinct from filter escaping)."""
+        attrs = _make_ldap_attrs()
+        mock_ldap, mock_filter = _build_ldap_mock(
+            search_results=[("uid=testuser,ou=users,dc=example,dc=com", attrs)]
+        )
+        mock_db, _ = _make_mock_db()
+        mock_db.execute = _mock_execute_factory(None, None)
+
+        with patch.dict("sys.modules", {"ldap": mock_ldap, "ldap.filter": mock_filter}):
+            await ldap_provider.authenticate(
+                username="user,name", password="pass", db=mock_db
+            )
+
+        fake_conn = mock_ldap.initialize.return_value
+        bind_dn = fake_conn.bind_calls[0][0]
+        # Comma escaped so the username cannot break out of its RDN.
+        assert bind_dn == "uid=user\\,name,ou=users,dc=example,dc=com"
 
 
 class TestLDAPInheritedMethods:
