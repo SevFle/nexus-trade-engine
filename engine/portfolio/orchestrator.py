@@ -40,7 +40,20 @@ ORCHESTRATED_STRATEGY_ID = "orchestrated"
 
 
 class StrategyOrchestratorError(ValueError):
-    """Bad configuration: invalid weight, malformed strategy, duplicate id."""
+    """Bad configuration: invalid weight, malformed strategy, duplicate id,
+    or an out-of-range eval timeout."""
+
+
+class _StrategyTimeoutError(Exception):
+    """Internal sentinel raised when a strategy's *awaitable* result
+    exceeds the configured ``eval_timeout``.
+
+    It is deliberately distinct from the builtin ``TimeoutError`` so that a
+    strategy which raises ``TimeoutError`` itself (from its synchronous call
+    frame) is reported as a generic failure, while only a genuine
+    ``asyncio.wait_for`` deadline expiry is recorded as a timeout. Raised
+    inside the per-strategy coroutine and captured by
+    ``asyncio.gather(return_exceptions=True)``."""
 
 
 @runtime_checkable
@@ -109,6 +122,21 @@ def _validate_weight(weight: float, sid: str) -> float:
     return value
 
 
+def _validate_timeout(timeout: float) -> float:
+    """Validate the per-strategy eval timeout (finite, positive number)."""
+    try:
+        value = float(timeout)
+    except (TypeError, ValueError) as exc:
+        raise StrategyOrchestratorError(
+            f"eval_timeout must be a number, got {timeout!r}"
+        ) from exc
+    if not math.isfinite(value) or value <= 0:
+        raise StrategyOrchestratorError(
+            f"eval_timeout must be a finite, positive number, got {timeout!r}"
+        )
+    return value
+
+
 class StrategyOrchestrator:
     """Aggregates weighted signals from many strategies into one SignalSet.
 
@@ -116,9 +144,22 @@ class StrategyOrchestrator:
     :meth:`evaluate` each cycle with the shared market context.
     """
 
-    def __init__(self, strategies: list[tuple[IStrategy, float]]) -> None:
+    def __init__(
+        self,
+        strategies: list[tuple[IStrategy, float]],
+        *,
+        eval_timeout: float = 30.0,
+    ) -> None:
         if not isinstance(strategies, list):
             raise StrategyOrchestratorError("`strategies` must be a list")
+        # Per-strategy wall-clock cap on the *awaitable* result of
+        # ``evaluate``. A strategy that exceeds it is cancelled and recorded
+        # as a TimeoutError error result rather than stalling the whole
+        # cycle. The synchronous call frame itself is never bounded — it has
+        # already returned by the time the cap could apply. 30s matches the
+        # platform's overall strategy SLA; tighten for latency-sensitive
+        # paths.
+        self._eval_timeout = _validate_timeout(eval_timeout)
         self._strategies: dict[str, IStrategy] = {}
         self._weights: dict[str, float] = {}
         for entry in strategies:
