@@ -65,6 +65,7 @@ we explain *why*, not *what*.
 |------------------|-----------|
 | Get a 10-minute mental model of the system | [`architecture/overview.md`](architecture/overview.md) |
 | Understand the domain layer (orchestration, analytics, scoring, optimization) | [`architecture/core-domains.md`](architecture/core-domains.md) |
+| Understand how multiple strategies are run together (4 orchestrators, capital allocation) | [`architecture/multi-strategy.md`](architecture/multi-strategy.md) |
 | Understand every table and its constraints | [`data-model.md`](data-model.md) |
 | Understand the 86-KPI analytics + scoring + optimization internals | [`architecture/core-domains.md`](architecture/core-domains.md) |
 | Call the REST / WebSocket API | [`api-reference.md`](api-reference.md) |
@@ -87,6 +88,7 @@ docs/
 ├── architecture/                   ← component-by-component "current state"
 │   ├── overview.md                 ← service view (app, lifecycle, deploy)
 │   ├── core-domains.md             ← domain view (orchestration, analytics, scoring)
+│   ├── multi-strategy.md           ← the 4 multi-strategy orchestrators (incl. MultiStrategyManager)
 │   ├── database.md                 ← migration policy, table inventory
 │   └── plugins.md                  ← plugin SDK + registry
 ├── adr/                            ← architecture decision records (why we chose X)

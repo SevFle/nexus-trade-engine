@@ -466,10 +466,8 @@ for fail-closed auth at the handshake.
   before installing the new one, so a config reload leaks no
   connections or double event-bus subscriptions.
 
-Prefer `/ws/events` when the client can put the token in the handshake
-query (fewer moving parts, fail-closed auth). Prefer `/ws` when the
-token can only be delivered after the socket opens (e.g. a browser
-that refreshes the token in-band).
+Prefer `/ws/events` when the token can ride in the handshake query
+(fail-closed auth); prefer `/ws` when it can only arrive after open.
 
 ## Errors
 

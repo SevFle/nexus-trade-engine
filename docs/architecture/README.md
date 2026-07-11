@@ -13,19 +13,24 @@ For *why* we made specific structural choices, see
    lifecycle, key dependencies. Start here if you've never opened the
    repo before.
 2. **[core-domains.md](core-domains.md)** — the domain layer under
-   `engine/core/` + `engine/orchestration/`: multi-strategy orchestration,
-   the 86-KPI analytics taxonomy, strategy scoring & governance,
+   `engine/core/` + `engine/orchestration/`: multi-strategy orchestration
+   (summary), the 86-KPI analytics taxonomy, strategy scoring & governance,
    optimization, and post-trade cost analysis. The companion to
    `overview.md` (which is the *service* view; this is the *capability*
    view).
-3. **[database.md](database.md)** — table inventory, migration policy,
+3. **[multi-strategy.md](multi-strategy.md)** — the four cooperating
+   multi-strategy orchestrators (`StrategyOrchestrator`, `signal_aggregator`,
+   `MultiStrategyPortfolio`, `MultiStrategyManager`), their voting /
+   capital / provenance contracts, and the decision matrix for which to
+   reach for.
+4. **[database.md](database.md)** — table inventory, migration policy,
    data ownership.
-4. **[plugins.md](plugins.md)** — plugin SDK and the registry that
+5. **[plugins.md](plugins.md)** — plugin SDK and the registry that
    loads strategies / data providers / execution backends at runtime.
-5. **[`docs/operations/`](../operations/)** — how the running system is
+6. **[`docs/operations/`](../operations/)** — how the running system is
    monitored, backed up, and recovered. Lives next to the runbooks
    that on-call uses.
-6. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
+7. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
    Read these before proposing a change that contradicts them.
 
 ## Existing diagrams
@@ -39,8 +44,8 @@ components in our docs site:
   the registry.
 
 The flat-markdown architecture docs (`overview.md`, `core-domains.md`,
-`database.md`, `plugins.md`) are the source of truth; the diagrams are a
-presentation layer on top.
+`multi-strategy.md`, `database.md`, `plugins.md`) are the source of
+truth; the diagrams are a presentation layer on top.
 
 ## Conventions
 

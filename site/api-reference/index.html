@@ -514,6 +514,8 @@
       
         
       
+        
+      
     
     
     
@@ -613,6 +615,34 @@
     
   
     Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/multi-strategy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-strategy orchestration
   
 
     
@@ -3974,10 +4004,8 @@ for fail-closed auth at the handshake.</p>
   before installing the new one, so a config reload leaks no
   connections or double event-bus subscriptions.</li>
 </ul>
-<p>Prefer <code>/ws/events</code> when the client can put the token in the handshake
-query (fewer moving parts, fail-closed auth). Prefer <code>/ws</code> when the
-token can only be delivered after the socket opens (e.g. a browser
-that refreshes the token in-band).</p>
+<p>Prefer <code>/ws/events</code> when the token can ride in the handshake query
+(fail-closed auth); prefer <code>/ws</code> when it can only arrive after open.</p>
 <h2 id="errors">Errors<a class="headerlink" href="#errors" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Auth</strong>: <code>401</code> for missing/invalid/expired credentials; <code>403</code> for

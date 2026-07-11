@@ -516,6 +516,8 @@
       
         
       
+        
+      
     
     
     
@@ -751,6 +753,34 @@
     
   
     Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../multi-strategy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-strategy orchestration
   
 
     
@@ -2598,6 +2628,10 @@ React app under <code>frontend/</code>.</p>
 <tr>
 <td><a href="../../engine/execution/"><code>engine/execution/</code></a></td>
 <td>Concrete broker execution adapter: <code>LiveExecutionBackend</code> (SEV-223) — an Alpaca-compatible REST-backed <code>ExecutionBackend</code>. Sits <strong>on top of</strong> the <code>engine/core/execution/</code> ABC/factory rather than inside it; see <a href="../core-domains/#execution-backends"><code>core-domains.md</code></a>.</td>
+</tr>
+<tr>
+<td><a href="../../engine/brokers/"><code>engine/brokers/</code></a></td>
+<td><strong>Broker-direct REST facades</strong> — thin per-broker adapters (<code>AlpacaBrokerAdapter</code>, <code>IBKRBrokerAdapter</code> #1346) that expose each broker's native order/account surface. <code>AlpacaBrokerAdapter</code> delegates to <code>LiveExecutionBackend</code>; <code>IBKRBrokerAdapter</code> owns its own request pipeline. Neither is wired to a route yet — see <a href="../core-domains/#execution-backends"><code>core-domains.md</code></a>.</td>
 </tr>
 <tr>
 <td><a href="../../engine/orchestration/"><code>engine/orchestration/</code></a></td>

@@ -25,17 +25,20 @@ flowchart TD
         COST["ICostModel"]
     end
 
-    subgraph strat["Strategy layer"]
+    subgraph strat["Strategy layer (see multi-strategy.md)"]
         ONE["single strategy<br/>IStrategy.evaluate"]
         MANY["StrategyOrchestrator<br/>engine/orchestration"]
-        PORTF["MultiStrategyPortfolio<br/>engine/portfolio<br/>(capital-aware, risk-adjusted)"]
+        PORTF["MultiStrategyPortfolio<br/>engine/portfolio<br/>(capital-aware, merges/symbol)"]
+        MGR["MultiStrategyManager<br/>engine/strategies<br/>(absolute budgets, forwards all)"]
     end
 
     ONE --> SIG["list[Signal]"]
     MANY --> AGG["SignalAggregator<br/>majority / weighted / net"]
     AGG --> SIG
     PORTF --> SIG
+    MGR --> SIG
     COST -.->|allocation| PORTF
+    COST -.->|allocation cap| MGR
 
     SIG --> OM["OrderManager<br/>validate → cost → risk → submit"]
     COST -.->|estimate| OM
@@ -115,144 +118,34 @@ is unambiguous.
 
 ## Multi-strategy orchestration
 
-Three orchestrators exist. They overlap in spirit but are deliberately
-separate modules with different conflict-resolution semantics — and, in
-the portfolio's case, different *responsibilities*. Pick by voting model
-*and* by whether you need capital allocation owned for you, not by file
-name.
+Nexus has **four** cooperating classes that turn "run N strategies and
+produce a tradeable signal set" into a single answer. They overlap in
+spirit but are deliberately separate modules with different
+conflict-resolution semantics, different responsibilities around
+*capital*, and different provenance contracts:
 
-### `engine/orchestration/orchestrator.py` — `StrategyOrchestrator`
+| Class | Package | Capital model | Per-symbol merging |
+|---|---|---|---|
+| `StrategyOrchestrator` | `engine/orchestration` | none | yes — `PRIORITY` / `NET_POSITION` |
+| `strategy_orchestrator` + `SignalAggregator` | `engine/core` | none | yes — `MAJORITY` / `WEIGHTED` |
+| `MultiStrategyPortfolio` | `engine/portfolio` | relative `capital_weight` (normalised) | yes — risk-adjusted dollar-exposure netting |
+| `MultiStrategyManager` *(newest, `decf8ca`)* | `engine/strategies` | absolute `allocation_pct` (sum ≤ 100) | **no** — forwards every signal, capped + re-tagged |
 
-The "register N strategies, run them all, collapse to one decision set"
-loop. Two-step API: `await orch.run_all(market)` collects every
-strategy's signals, then `orch.aggregate_signals()` resolves conflicts.
+The one-line rule for the two capital-aware classes: the **portfolio
+*merges*** into one position per symbol (relative weights); the **manager
+*forwards*** every strategy's signals, just allocation-capped and
+re-tagged with the caller-supplied `strategy_id` (absolute budgets,
+per-strategy provenance — the contract per-strategy attribution and
+per-strategy risk limits need).
 
-`ConflictResolution` selects the merge rule:
-
-| Mode | Rule |
-|---|---|
-| `PRIORITY` *(default)* | The highest-priority strategy with a non-HOLD opinion wins. Opposing signals from strategies tied at top priority → HOLD (stalemate). HOLD abstains. |
-| `NET_POSITION` | `BUY = +weight`, `SELL = −weight` summed per symbol. Positive net → BUY, negative → SELL, zero → HOLD. Resolved weight is the net magnitude clamped to `[0, 1]`, so conviction can override headcount. *(Unique to this orchestrator.)* |
-
-### `engine/core/strategy_orchestrator.py` — async orchestrator
-
-The heavier async counterpart. Three responsibilities that the bare
-[`SignalAggregator`](../../engine/core/signal_aggregator.py) (gh#21) does
-not own:
-
-1. **Registry** — each strategy is registered with a per-strategy
-   `weight`.
-2. **Evaluation** — every registered strategy sees the *same*
-   `market_data` and `cost_model` so cross-strategy comparisons are
-   apples-to-apples. A single failing strategy is isolated: its error is
-   recorded and the rest still vote.
-3. **Dispatch** — hands the per-strategy `SignalBatch`es to
-   `SignalAggregator`, which is the single source of truth for tie
-   handling.
-
-Aggregation modes (in [`signal_aggregator.py`](../../engine/core/signal_aggregator.py)):
-
-| Mode | Rule |
-|---|---|
-| `MAJORITY` | Strictly more than half of BUY-vs-SELL votes wins; tie → HOLD. HOLD abstains and is excluded from the denominator. |
-| `WEIGHTED` | Vote × registered weight (default 1.0); strictly higher total wins; tie → HOLD. Lets a high-conviction strategy override a numerical majority. |
-
-HOLD-as-abstain is the unifying contract across all three orchestrators:
-a strategy that declines to vote never blocks the others, and a symbol
-on which every strategy abstains still yields a single HOLD record so
-downstream consumers know it was considered.
-
-### `engine/portfolio/multi_strategy.py` — `MultiStrategyPortfolio`
-
-The **capital-aware** orchestrator. Where `StrategyOrchestrator` and
-`SignalAggregator` are pure signal voters (one signal = one vote, scaled
-at most by a unitless weight), `MultiStrategyPortfolio` is the only one
-that knows *how much money* each strategy may deploy. It owns three
-concerns the voters deliberately do not:
-
-1. **Capital allocation** — each strategy is registered with a
-   `capital_weight` (a *relative*, non-negative share of a fixed
-   `total_capital`). Weights need not sum to 1.0: dollar allocations
-   (`allocation(id)`, `allocations()`) are computed on demand by
-   normalising against the weight sum, so `{a:2, b:1}` deploys 2/3 to `a`
-   and 1/3 to `b`. This is the source of truth for how much of the book
-   a strategy can move.
-2. **Evaluation** — `await evaluate_all(market_data, merge_mode=…)` runs
-   every registered strategy against the *same* `market_data` and the
-   portfolio's own `ICostModel` (per the cost-first spec), each strategy
-   receiving an **independent `copy.deepcopy`** of both inputs so a
-   misbehaving plugin cannot poison its siblings or the caller's
-   originals. A single failing — or timed-out — strategy is isolated:
-   its `{id: error}` lands in `errors` and the rest still contribute.
-3. **Risk-adjusted signal merging** — per symbol, the **capital-weighted
-   dollar exposure** is netted: signed exposure =
-   `side_sign(sid) * allocation(sid) * sig.weight` (BUY `+1`, SELL `-1`,
-   HOLD `0`, abstains). The merged side is the sign of the net (a
-   `_NET_EPSILON` = 1e-9 dead band treats float dust as a stalemate →
-   HOLD); the merged weight is `|net exposure| / total_capital` clamped
-   to `[0, 1]`. This makes the merge *risk-adjusted* in two senses: a
-   strategy with more capital at risk moves the decision proportionally
-   more, **and** the emitted weight is itself a measure of how much of
-   the book is committed. Opposing equal-dollar signals net to zero
-   (stalemate → HOLD); non-finite `NaN`/`Inf` weights abstain so they
-   cannot poison the sum.
-
-The only merge mode today is `SignalMergeMode.RISK_ADJUSTED`; the enum
-is reserved for future cycles (e.g. a net-position mode), mirroring the
-placeholder discipline on `StrategyOrchestrator.ConflictResolution`.
-
-#### Outcome shape — `PortfolioEvaluation` / `CombinedPosition`
-
-`evaluate_all` returns a `PortfolioEvaluation`, which is richer than a
-bare `list[Signal]` for the same audit/safety reasons the other two
-orchestrators' results are:
-
-| Field | Meaning |
-|---|---|
-| `signals` | Merged decisions (HOLD-on-stalemate symbols are dropped to match the engine's "HOLD = no action" semantics). |
-| `positions` | `dict[symbol, CombinedPosition]` — per-symbol net exposure, weight, and `contributors` (the strategy ids that expressed a non-HOLD opinion). A pure-HOLD symbol still appears here so risk reports know it was considered. |
-| `per_strategy_signals` | Raw per-strategy provenance (`dict[id, list[Signal]]`) for the audit trail. |
-| `capital_deployed` / `net_exposure` | Gross (`Σ|net exposure|`) and signed capital at risk. |
-| `capital_utilization` | `capital_deployed / total_capital` — how much of the book is committed this cycle. |
-| `errors` | `dict[id, message]` for any strategy that raised *or* exceeded `eval_timeout`. A timeout is reported as `TimeoutError: evaluate exceeded <N>s timeout` and never stalls the cycle. |
-| `trade_signals` / `is_noop` | Convenience views: non-HOLD signals, and the "nothing to do" predicate (empty registry, all-empty results, **or** zero total capital). |
-
-Each merged `Signal` is stamped with `strategy_id="portfolio"` and a
-`metadata.portfolio_contributors` list so the decision stays auditable
-end-to-end; nested `metadata` is deep-copied so downstream mutation can't
-leak back into the source signals.
-
-#### Fault isolation contract
-
-Two guards keep one bad plugin from aborting a cycle:
-
-- **Snapshot before iterate.** `evaluate_all` snapshots the registry
-  before walking it, so a strategy that registers/unregisters a sibling
-  mid-cycle cannot mutate the dict under us (added strategies run next
-  cycle).
-- **Tight `wait_for` guard.** Only the *awaitable* result is bounded by
-  the per-strategy `eval_timeout` (default 30 s); the synchronous call
-  frame is not (it has already returned before the cap could apply). A
-  builtin `TimeoutError` raised inside the coroutine is therefore
-  classified as a strategy failure, not a deadline — only a genuine
-  `asyncio.wait_for` expiry is reported as a timeout.
-
-#### When to pick it
-
-Use `MultiStrategyPortfolio` when strategies compete for *capital* (you
-have N strategies and a fixed dollar book to split between them). Use
-`StrategyOrchestrator`/`SignalAggregator` when strategies merely *vote*
-(one signal per strategy, no money model). The portfolio is the heavier
-abstraction: it composes a cost model and the allocation value object
-([`engine/portfolio/allocation.py`](../../engine/portfolio/allocation.py))
-and is the natural top-level loop once paper/live routes land.
-
-> **Status:** `MultiStrategyPortfolio` is **library-only** today — there
-> is no public run route that drives it, and it is not registered in the
-> execution factory. It is fully unit-tested
-> ([`tests/test_multi_strategy_portfolio.py`](../../tests/test_multi_strategy_portfolio.py)).
-> See [`known-limitations.md`](../known-limitations.md): the live/paper
-> run route that would naturally consume it is the open P1.
+The full decision matrix, outcome shapes (`PortfolioEvaluation`,
+`MultiStrategyEvaluation`), validation rules, the shared fault-isolation
+contract (snapshot-before-iterate + tight `wait_for` guard, HOLD-as-
+abstain), and per-class status live in
+[`multi-strategy.md`](multi-strategy.md). All four are **library-only**
+today — none is wired to a public run route; see
+[`known-limitations.md`](../known-limitations.md) for the open live/paper
+P1 they would consume.
 
 ## Cost & risk modeling
 
@@ -337,7 +230,8 @@ documented above:
 |---|---|
 | [`capital_allocation.py`](../../engine/core/capital_allocation.py) | **Largest-remainder (Hamilton) apportionment** of total capital across strategies proportional to weights, computed in fixed-point `Decimal` so the result is exact to the cent. Floors each raw share, then distributes the leftover cents to the largest fractional remainders. |
 | [`portfolio/allocation.py`](../../engine/portfolio/allocation.py) | `CapitalAllocation` — the **immutable value object** recording the split. Weights sum to exactly 1.0 (ε-tolerant), are non-negative, and the strategy count is capped by `max_strategies`. In-place mutation is blocked (gh#1042). |
-| [`portfolio/multi_strategy.py`](../../engine/portfolio/multi_strategy.py) | `MultiStrategyPortfolio` — the **capital-aware runtime** that consumes an allocation, evaluates every strategy, and merges signals risk-adjusted. See the [Multi-strategy orchestration](#engineportfoliomulti_strategypy-multistrategyportfolio) section above for the full contract. |
+| [`portfolio/multi_strategy.py`](../../engine/portfolio/multi_strategy.py) | `MultiStrategyPortfolio` — the **capital-aware runtime** that consumes an allocation, evaluates every strategy, and merges signals risk-adjusted. Full contract in [`multi-strategy.md`](multi-strategy.md). |
+| [`engine/strategies/multi_manager.py`](../../engine/strategies/multi_manager.py) | `MultiStrategyManager` — the **capital-aware, provenance-preserving registry**. Absolute per-strategy `allocation_pct` budgets (sum ≤ 100), allocation-cap enforcement (scales a strategy's active weights to its fraction), and per-strategy signal provenance. Newest of the four orchestrators (`decf8ca`). Full contract in [`multi-strategy.md`](multi-strategy.md). |
 | [`portfolio/rebalancer.py`](../../engine/portfolio/rebalancer.py) | `PortfolioRebalancer` — the **drift detector** that compares a portfolio's *target* policy weights against its *current* dollar allocation and emits advisory `RebalanceOrder` signals. Companion to `MultiStrategyPortfolio` (which decides *what to trade*); the rebalancer decides *how to get back to target*. See [Drift-driven rebalancing](#drift-driven-rebalancing-portfoliorebalancer) below. |
 
 <a id="drift-driven-rebalancing-portfoliorebalancer"></a>
@@ -504,7 +398,7 @@ an "optimal" parameter set isn't an overfit artifact.
 | Capability | Wired into a route/runner? |
 |---|---|
 | `MetricsReport`, `strategy_evaluator`, `monte_carlo`, `param_optimizer` | Yes — consumed by the backtest runner / scoring routes. |
-| `MultiStrategyPortfolio` | **No** — capital-aware voter is library-only and fully unit-tested today; the live/paper run route that would drive it is the open P1 (see [`known-limitations.md`](../known-limitations.md)). |
+| `MultiStrategyPortfolio`, `MultiStrategyManager` | **No** — both capital-aware orchestrators are library-only and fully unit-tested today; the live/paper run route that would drive them is the open P1 (see [`multi-strategy.md`](multi-strategy.md) and [`known-limitations.md`](../known-limitations.md)). |
 | `tca.py`, `market_impact.py` | Library-only today — no public route, and neither is consumed by `DefaultCostModel` yet (the square-root model is available for strategies / evaluators to call directly). |
 | `PerformanceReport` (86-KPI) | **No** — schema landed, no analyzer/route yet. |
 | `strategy_lifecycle` / `strategy_versioning` | Library-only; the public promotion/version API is part of the still-partial live-trading story (see [`known-limitations.md`](../known-limitations.md)). |

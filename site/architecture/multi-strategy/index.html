@@ -10,31 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/operations/runbooks/auth-mfa/">
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/architecture/multi-strategy/">
       
       
-        <link rel="prev" href="../api-latency/">
+        <link rel="prev" href="../core-domains/">
       
       
-        <link rel="next" href="../backtest-submit/">
+        <link rel="next" href="../database/">
       
       
         
       
       
-      <link rel="icon" href="../../../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Auth & MFA - Nexus Trade Engine</title>
+        <title>Multi-strategy orchestration - Nexus Trade Engine</title>
       
     
     
-      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -53,7 +53,7 @@
       
     
     
-    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#runbook-auth-mfa" class="md-skip">
+        <a href="#multi-strategy-orchestration" class="md-skip">
           Skip to content
         </a>
       
@@ -92,7 +92,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../.." title="Nexus Trade Engine" class="md-header__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
+    <a href="../.." title="Nexus Trade Engine" class="md-header__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m3.5 18.5 6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17z"/></svg>
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Auth & MFA
+              Multi-strategy orchestration
             
           </span>
         </div>
@@ -230,7 +230,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../.." class="md-tabs__link">
+      <a href="../.." class="md-tabs__link">
         
   
   
@@ -247,11 +247,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../../architecture/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -273,7 +275,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../api-reference/" class="md-tabs__link">
+        <a href="../../api-reference/" class="md-tabs__link">
           
   
   
@@ -295,7 +297,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../development/" class="md-tabs__link">
+        <a href="../../development/" class="md-tabs__link">
           
   
   
@@ -317,7 +319,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../adr/" class="md-tabs__link">
+        <a href="../../adr/" class="md-tabs__link">
           
   
   
@@ -335,13 +337,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../../slos/" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../operations/slos/" class="md-tabs__link">
           
   
   
@@ -363,7 +363,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../observability/logging/" class="md-tabs__link">
+        <a href="../../observability/logging/" class="md-tabs__link">
           
   
   
@@ -385,7 +385,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../legal/processors/" class="md-tabs__link">
+        <a href="../../legal/processors/" class="md-tabs__link">
           
   
   
@@ -407,7 +407,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../known-limitations/" class="md-tabs__link">
+        <a href="../../known-limitations/" class="md-tabs__link">
           
   
   
@@ -443,7 +443,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../.." title="Nexus Trade Engine" class="md-nav__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
+    <a href="../.." title="Nexus Trade Engine" class="md-nav__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m3.5 18.5 6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17z"/></svg>
@@ -473,7 +473,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../.." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -497,6 +497,8 @@
       
   
   
+    
+  
   
   
     
@@ -520,22 +522,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../../architecture/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -553,13 +556,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -579,7 +582,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../architecture/overview/" class="md-nav__link">
+      <a href="../overview/" class="md-nav__link">
         
   
   
@@ -607,7 +610,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../architecture/core-domains/" class="md-nav__link">
+      <a href="../core-domains/" class="md-nav__link">
         
   
   
@@ -632,10 +635,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../../architecture/multi-strategy/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-strategy orchestration
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -651,6 +681,164 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#decision-matrix-which-one-do-i-reach-for" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision matrix — which one do I reach for?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#engineorchestrationorchestratorpy-strategyorchestrator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        engine/orchestration/orchestrator.py — StrategyOrchestrator
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enginecorestrategy_orchestratorpy-async-orchestrator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        engine/core/strategy_orchestrator.py — async orchestrator
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#engineportfoliomulti_strategypy-multistrategyportfolio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        engine/portfolio/multi_strategy.py — MultiStrategyPortfolio
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enginestrategiesmulti_managerpy-multistrategymanager-newest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        engine/strategies/multi_manager.py — MultiStrategyManager (newest)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="engine/strategies/multi_manager.py — MultiStrategyManager (newest)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-it-owns-that-the-siblings-do-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it owns (that the siblings do not)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#outcome-shape-multistrategyevaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outcome shape — MultiStrategyEvaluation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#construction-registration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Construction &amp; registration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fault-isolation-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fault isolation contract
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shared-contracts-across-all-four" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared contracts across all four
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#status-all-four-are-library-only-today" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status — all four are library-only today
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -663,7 +851,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../architecture/database/" class="md-nav__link">
+      <a href="../database/" class="md-nav__link">
         
   
   
@@ -691,7 +879,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../architecture/plugins/" class="md-nav__link">
+      <a href="../plugins/" class="md-nav__link">
         
   
   
@@ -788,7 +976,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../api-reference/" class="md-nav__link">
+      <a href="../../api-reference/" class="md-nav__link">
         
   
   
@@ -816,7 +1004,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../mcp-server/" class="md-nav__link">
+      <a href="../../mcp-server/" class="md-nav__link">
         
   
   
@@ -844,7 +1032,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../data-model/" class="md-nav__link">
+      <a href="../../data-model/" class="md-nav__link">
         
   
   
@@ -945,7 +1133,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../development/" class="md-nav__link">
+      <a href="../../development/" class="md-nav__link">
         
   
   
@@ -973,7 +1161,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../deployment/" class="md-nav__link">
+      <a href="../../deployment/" class="md-nav__link">
         
   
   
@@ -1001,7 +1189,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../RELEASING/" class="md-nav__link">
+      <a href="../../RELEASING/" class="md-nav__link">
         
   
   
@@ -1029,7 +1217,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../PLUGIN_DEV_GUIDE/" class="md-nav__link">
+      <a href="../../PLUGIN_DEV_GUIDE/" class="md-nav__link">
         
   
   
@@ -1057,7 +1245,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../contributors/" class="md-nav__link">
+      <a href="../../contributors/" class="md-nav__link">
         
   
   
@@ -1139,7 +1327,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../../adr/" class="md-nav__link ">
+            <a href="../../adr/" class="md-nav__link ">
               
   
   
@@ -1183,7 +1371,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0001-scaffold-tech-choices/" class="md-nav__link">
+      <a href="../../adr/0001-scaffold-tech-choices/" class="md-nav__link">
         
   
   
@@ -1211,7 +1399,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0002-auth-rbac/" class="md-nav__link">
+      <a href="../../adr/0002-auth-rbac/" class="md-nav__link">
         
   
   
@@ -1239,7 +1427,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0003-mobile-app-strategy/" class="md-nav__link">
+      <a href="../../adr/0003-mobile-app-strategy/" class="md-nav__link">
         
   
   
@@ -1267,7 +1455,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0004-task-queue-taskiq/" class="md-nav__link">
+      <a href="../../adr/0004-task-queue-taskiq/" class="md-nav__link">
         
   
   
@@ -1295,7 +1483,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0005-valkey-over-redis/" class="md-nav__link">
+      <a href="../../adr/0005-valkey-over-redis/" class="md-nav__link">
         
   
   
@@ -1323,7 +1511,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0006-bcrypt-fernet/" class="md-nav__link">
+      <a href="../../adr/0006-bcrypt-fernet/" class="md-nav__link">
         
   
   
@@ -1351,7 +1539,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
+      <a href="../../adr/0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
         
   
   
@@ -1379,7 +1567,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0008-pluggable-metrics-backend/" class="md-nav__link">
+      <a href="../../adr/0008-pluggable-metrics-backend/" class="md-nav__link">
         
   
   
@@ -1407,7 +1595,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0009-cross-replica-eventbus-bridge/" class="md-nav__link">
+      <a href="../../adr/0009-cross-replica-eventbus-bridge/" class="md-nav__link">
         
   
   
@@ -1435,7 +1623,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0010-static-ast-validation-toctou-loading/" class="md-nav__link">
+      <a href="../../adr/0010-static-ast-validation-toctou-loading/" class="md-nav__link">
         
   
   
@@ -1463,7 +1651,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/template/" class="md-nav__link">
+      <a href="../../adr/template/" class="md-nav__link">
         
   
   
@@ -1495,8 +1683,6 @@
       
   
   
-    
-  
   
   
     
@@ -1520,23 +1706,22 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
+            <a href="../../operations/runbooks/" class="md-nav__link ">
               
   
   
@@ -1554,13 +1739,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1578,7 +1763,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../slos/" class="md-nav__link">
+      <a href="../../operations/slos/" class="md-nav__link">
         
   
   
@@ -1606,7 +1791,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../backup-and-recovery/" class="md-nav__link">
+      <a href="../../operations/backup-and-recovery/" class="md-nav__link">
         
   
   
@@ -1634,7 +1819,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../dr-drill-checklist/" class="md-nav__link">
+      <a href="../../operations/dr-drill-checklist/" class="md-nav__link">
         
   
   
@@ -1662,7 +1847,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../load-testing/" class="md-nav__link">
+      <a href="../../operations/load-testing/" class="md-nav__link">
         
   
   
@@ -1689,10 +1874,8 @@
                 
   
   
-    
   
   
-  
     
     
       
@@ -1715,21 +1898,20 @@
     
       
       
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
         
           
-          
         
-      
-    
-    
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_6" checked>
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_6" >
         
           
-          <label class="md-nav__link" for="__nav_6_6" id="__nav_6_6_label" tabindex="">
+          <label class="md-nav__link" for="__nav_6_6" id="__nav_6_6_label" tabindex="0">
             
   
   
@@ -1747,7 +1929,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1765,7 +1947,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api-availability/" class="md-nav__link">
+      <a href="../../operations/runbooks/api-availability/" class="md-nav__link">
         
   
   
@@ -1793,7 +1975,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api-latency/" class="md-nav__link">
+      <a href="../../operations/runbooks/api-latency/" class="md-nav__link">
         
   
   
@@ -1818,37 +2000,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Auth & MFA
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/auth-mfa/" class="md-nav__link">
         
   
   
@@ -1864,92 +2019,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#what-this-means" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What this means
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#first-60-seconds" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        First 60 seconds
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#triage" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Triage
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#common-causes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Common causes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#escalation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Escalation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#post-incident" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Post-incident
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1962,7 +2031,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../backtest-submit/" class="md-nav__link">
+      <a href="../../operations/runbooks/backtest-submit/" class="md-nav__link">
         
   
   
@@ -1990,7 +2059,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../webhook-delivery/" class="md-nav__link">
+      <a href="../../operations/runbooks/webhook-delivery/" class="md-nav__link">
         
   
   
@@ -2018,7 +2087,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../task-pipeline/" class="md-nav__link">
+      <a href="../../operations/runbooks/task-pipeline/" class="md-nav__link">
         
   
   
@@ -2046,7 +2115,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../common-issues/" class="md-nav__link">
+      <a href="../../operations/runbooks/common-issues/" class="md-nav__link">
         
   
   
@@ -2147,7 +2216,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../observability/logging/" class="md-nav__link">
+      <a href="../../observability/logging/" class="md-nav__link">
         
   
   
@@ -2240,7 +2309,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../legal/processors/" class="md-nav__link">
+      <a href="../../legal/processors/" class="md-nav__link">
         
   
   
@@ -2335,7 +2404,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../known-limitations/" class="md-nav__link">
+      <a href="../../known-limitations/" class="md-nav__link">
         
   
   
@@ -2363,7 +2432,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../LAST_AUDIT/" class="md-nav__link">
+      <a href="../../LAST_AUDIT/" class="md-nav__link">
         
   
   
@@ -2418,10 +2487,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-this-means" class="md-nav__link">
+  <a href="#decision-matrix-which-one-do-i-reach-for" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What this means
+        Decision matrix — which one do I reach for?
       
     </span>
   </a>
@@ -2429,10 +2498,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#first-60-seconds" class="md-nav__link">
+  <a href="#engineorchestrationorchestratorpy-strategyorchestrator" class="md-nav__link">
     <span class="md-ellipsis">
       
-        First 60 seconds
+        engine/orchestration/orchestrator.py — StrategyOrchestrator
       
     </span>
   </a>
@@ -2440,10 +2509,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#triage" class="md-nav__link">
+  <a href="#enginecorestrategy_orchestratorpy-async-orchestrator" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Triage
+        engine/core/strategy_orchestrator.py — async orchestrator
       
     </span>
   </a>
@@ -2451,10 +2520,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#common-causes" class="md-nav__link">
+  <a href="#engineportfoliomulti_strategypy-multistrategyportfolio" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Common causes
+        engine/portfolio/multi_strategy.py — MultiStrategyPortfolio
       
     </span>
   </a>
@@ -2462,10 +2531,71 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#escalation" class="md-nav__link">
+  <a href="#enginestrategiesmulti_managerpy-multistrategymanager-newest" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Escalation
+        engine/strategies/multi_manager.py — MultiStrategyManager (newest)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="engine/strategies/multi_manager.py — MultiStrategyManager (newest)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-it-owns-that-the-siblings-do-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it owns (that the siblings do not)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#outcome-shape-multistrategyevaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outcome shape — MultiStrategyEvaluation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#construction-registration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Construction &amp; registration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fault-isolation-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fault isolation contract
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shared-contracts-across-all-four" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared contracts across all four
       
     </span>
   </a>
@@ -2473,10 +2603,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#post-incident" class="md-nav__link">
+  <a href="#status-all-four-are-library-only-today" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Post-incident
+        Status — all four are library-only today
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
       
     </span>
   </a>
@@ -2503,85 +2644,385 @@
   
 
 
-<h1 id="runbook-auth-mfa">Runbook — Auth &amp; MFA<a class="headerlink" href="#runbook-auth-mfa" title="Permanent link">&para;</a></h1>
-<p><strong>Alerts</strong>: <code>AuthMFAFastBurn</code>, <code>AuthMFAMediumBurn</code>, <code>AuthMFASlowBurn</code>,
-<code>AuthMFABudgetExhaustion</code></p>
-<p><strong>SLO</strong>: 99.9% non-failure auth + MFA-verify outcomes over 28 days
-(<a href="../../slos/#critical-user-journeys">slos.md</a>).</p>
-<h2 id="what-this-means">What this means<a class="headerlink" href="#what-this-means" title="Permanent link">&para;</a></h2>
-<p>Legitimate users cannot reliably log in. Auth is one nine higher than
-general API availability because login is a binary cliff: a 1% failure
-rate locks ≈ 1% of users out completely. <strong>Page severity at every burn
-rate.</strong> Treat as a security-adjacent incident: do not investigate
-quickly <em>and</em> sloppily.</p>
-<h2 id="first-60-seconds">First 60 seconds<a class="headerlink" href="#first-60-seconds" title="Permanent link">&para;</a></h2>
+<h1 id="multi-strategy-orchestration">Multi-strategy orchestration<a class="headerlink" href="#multi-strategy-orchestration" title="Permanent link">&para;</a></h1>
+<p>Nexus has <strong>four</strong> cooperating classes that turn "run N strategies and
+produce a tradeable signal set" into a single answer. They overlap in
+spirit but are deliberately separate modules with different
+conflict-resolution semantics, different responsibilities around
+<em>capital</em>, and different provenance contracts. Pick by <strong>voting model
+AND capital model AND whether you need per-symbol merging</strong>, not by file
+name.</p>
+<pre class="mermaid"><code>flowchart LR
+    subgraph voters["Capital-free voters"]
+        ORC1["StrategyOrchestrator&lt;br/&gt;engine/orchestration"]
+        ORC2["strategy_orchestrator&lt;br/&gt;engine/core (+SignalAggregator)"]
+    end
+    subgraph capital["Capital-aware"]
+        PORTF["MultiStrategyPortfolio&lt;br/&gt;engine/portfolio"]
+        MGR["MultiStrategyManager&lt;br/&gt;engine/strategies"]
+    end
+    ORC1 --&gt;|one decision / symbol| OUT1["list[Signal]"]
+    ORC2 --&gt;|one decision / symbol| OUT1
+    PORTF --&gt;|netted per symbol&lt;br/&gt;relative weights| OUT2["PortfolioEvaluation"]
+    MGR --&gt;|every signal kept&lt;br/&gt;capped + re-tagged| OUT3["MultiStrategyEvaluation"]</code></pre>
+<h2 id="decision-matrix-which-one-do-i-reach-for">Decision matrix — which one do I reach for?<a class="headerlink" href="#decision-matrix-which-one-do-i-reach-for" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>You need…</th>
+<th>Use</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pure voting, no money model, collapse conflicts per symbol</td>
+<td><code>StrategyOrchestrator</code> (<code>engine/orchestration</code>)</td>
+<td>Two-step <code>run_all</code> → <code>aggregate_signals</code>; <code>PRIORITY</code> / <code>NET_POSITION</code>.</td>
+</tr>
+<tr>
+<td>Async registry + weighted/majority voting, still no money</td>
+<td><code>strategy_orchestrator</code> (<code>engine/core</code>) + <code>SignalAggregator</code></td>
+<td><code>MAJORITY</code> / <code>WEIGHTED</code> tie handling; per-strategy <code>weight</code>.</td>
+</tr>
+<tr>
+<td>A fixed dollar book split across strategies, net to <strong>one</strong> position per symbol</td>
+<td><code>MultiStrategyPortfolio</code> (<code>engine/portfolio</code>)</td>
+<td>Relative <code>capital_weight</code> (normalised); risk-adjusted dollar-exposure netting.</td>
+</tr>
+<tr>
+<td>Per-strategy <strong>absolute</strong> budgets, <strong>keep every signal</strong>, enforce a cap per strategy</td>
+<td><code>MultiStrategyManager</code> (<code>engine/strategies</code>)</td>
+<td><code>allocation_pct</code> (sum ≤ 100); proportional weight scaling; provenance preserved.</td>
+</tr>
+</tbody>
+</table>
+<p>The two capital-aware classes are the ones people confuse. The
+one-line rule: <strong><code>MultiStrategyPortfolio</code> <em>merges</em> into one position per
+symbol (relative weights); <code>MultiStrategyManager</code> <em>forwards</em> every
+strategy's signals, just allocation-capped and re-tagged (absolute
+budgets).</strong> The first is right for "I have one book and want one
+decision"; the second is right for "I have per-strategy risk limits and
+need to attribute every signal to its source."</p>
+<hr />
+<h2 id="engineorchestrationorchestratorpy-strategyorchestrator"><code>engine/orchestration/orchestrator.py</code> — <code>StrategyOrchestrator</code><a class="headerlink" href="#engineorchestrationorchestratorpy-strategyorchestrator" title="Permanent link">&para;</a></h2>
+<p>The "register N strategies, run them all, collapse to one decision set"
+loop. Two-step API: <code>await orch.run_all(market)</code> collects every
+strategy's signals, then <code>orch.aggregate_signals()</code> resolves conflicts.</p>
+<p><code>ConflictResolution</code> selects the merge rule:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PRIORITY</code> <em>(default)</em></td>
+<td>The highest-priority strategy with a non-HOLD opinion wins. Opposing signals from strategies tied at top priority → HOLD (stalemate). HOLD abstains.</td>
+</tr>
+<tr>
+<td><code>NET_POSITION</code></td>
+<td><code>BUY = +weight</code>, <code>SELL = −weight</code> summed per symbol. Positive net → BUY, negative → SELL, zero → HOLD. Resolved weight is the net magnitude clamped to <code>[0, 1]</code>, so conviction can override headcount. <em>(Unique to this orchestrator.)</em></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="enginecorestrategy_orchestratorpy-async-orchestrator"><code>engine/core/strategy_orchestrator.py</code> — async orchestrator<a class="headerlink" href="#enginecorestrategy_orchestratorpy-async-orchestrator" title="Permanent link">&para;</a></h2>
+<p>The heavier async counterpart. Three responsibilities the bare
+<a href="../../engine/core/signal_aggregator.py"><code>SignalAggregator</code></a> (gh#21) does
+not own:</p>
 <ol>
-<li>Open the <strong>Nexus / SLO overview</strong> dashboard. Check the "Auth &amp; MFA"
-   panel. Confirm the failure ratio is real, not a single noisy probe.</li>
-<li>Try logging in with a known-good test account. If it works, the
-   alert may be firing on a specific user cohort — not all users.</li>
-<li>If it fails, capture the response body (redact sensitive fields)
-   and the request id. Move to "Common causes → MFA verification
-   broken".</li>
+<li><strong>Registry</strong> — each strategy is registered with a per-strategy
+   <code>weight</code>.</li>
+<li><strong>Evaluation</strong> — every registered strategy sees the <em>same</em>
+   <code>market_data</code> and <code>cost_model</code> so cross-strategy comparisons are
+   apples-to-apples. A single failing strategy is isolated: its error is
+   recorded and the rest still vote.</li>
+<li><strong>Dispatch</strong> — hands the per-strategy <code>SignalBatch</code>es to
+   <code>SignalAggregator</code>, which is the single source of truth for tie
+   handling.</li>
 </ol>
-<h2 id="triage">Triage<a class="headerlink" href="#triage" title="Permanent link">&para;</a></h2>
+<p>Aggregation modes (in <a href="../../engine/core/signal_aggregator.py"><code>signal_aggregator.py</code></a>):</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MAJORITY</code></td>
+<td>Strictly more than half of BUY-vs-SELL votes wins; tie → HOLD. HOLD abstains and is excluded from the denominator.</td>
+</tr>
+<tr>
+<td><code>WEIGHTED</code></td>
+<td>Vote × registered weight (default 1.0); strictly higher total wins; tie → HOLD. Lets a high-conviction strategy override a numerical majority.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="engineportfoliomulti_strategypy-multistrategyportfolio"><code>engine/portfolio/multi_strategy.py</code> — <code>MultiStrategyPortfolio</code><a class="headerlink" href="#engineportfoliomulti_strategypy-multistrategyportfolio" title="Permanent link">&para;</a></h2>
+<p>The <strong>capital-aware merger</strong>. Where the two voters above are pure signal
+voters (one signal = one vote, scaled at most by a unitless weight),
+this is the class that knows <em>how much money</em> each strategy may deploy
+<em>and</em> collapses to one position per symbol. It owns three concerns the
+voters deliberately do not:</p>
+<ol>
+<li><strong>Capital allocation</strong> — each strategy is registered with a
+   <code>capital_weight</code> (a <em>relative</em>, non-negative share of a fixed
+   <code>total_capital</code>). Weights need not sum to 1.0: dollar allocations
+   (<code>allocation(id)</code>, <code>allocations()</code>) are computed on demand by
+   normalising against the weight sum, so <code>{a:2, b:1}</code> deploys &#8532; to <code>a</code>
+   and &#8531; to <code>b</code>.</li>
+<li><strong>Evaluation</strong> — <code>await evaluate_all(market_data, merge_mode=…)</code> runs
+   every registered strategy against the <em>same</em> <code>market_data</code> and the
+   portfolio's own <code>ICostModel</code> (cost-first spec), each strategy
+   receiving an <strong>independent <code>copy.deepcopy</code></strong> of both inputs so a
+   misbehaving plugin cannot poison its siblings or the caller's
+   originals. A single failing — or timed-out — strategy is isolated.</li>
+<li><strong>Risk-adjusted signal merging</strong> — per symbol, the <strong>capital-weighted
+   dollar exposure</strong> is netted: signed exposure =
+   <code>side_sign(sid) * allocation(sid) * sig.weight</code> (BUY <code>+1</code>, SELL <code>-1</code>,
+   HOLD <code>0</code>, abstains). The merged side is the sign of the net (a
+   <code>_NET_EPSILON</code> = 1e-9 dead band treats float dust as stalemate →
+   HOLD); the merged weight is <code>|net exposure| / total_capital</code> clamped
+   to <code>[0, 1]</code>. Opposing equal-dollar signals net to zero (HOLD);
+   non-finite <code>NaN</code>/<code>Inf</code> weights abstain.</li>
+</ol>
+<p>The only merge mode today is <code>SignalMergeMode.RISK_ADJUSTED</code>; the enum
+is reserved for future cycles, mirroring the placeholder discipline on
+<code>StrategyOrchestrator.ConflictResolution</code>.</p>
+<p><code>evaluate_all</code> returns a <code>PortfolioEvaluation</code> richer than a bare
+<code>list[Signal]</code>: merged <code>signals</code>, per-symbol <code>CombinedPosition</code>s with
+<code>contributors</code>, raw <code>per_strategy_signals</code> provenance, gross
+<code>capital_deployed</code> / signed <code>net_exposure</code>, <code>capital_utilization</code>, an
+<code>errors</code> map, and <code>trade_signals</code> / <code>is_noop</code> convenience views. Each
+merged <code>Signal</code> is stamped <code>strategy_id="portfolio"</code> with a
+<code>metadata.portfolio_contributors</code> list.</p>
+<p>Fault isolation: the registry is snapshotted before iterate, and only the
+<em>awaitable</em> result is bounded by <code>eval_timeout</code> (default 30 s) — so a
+builtin <code>TimeoutError</code> raised inside the coroutine is classified as a
+strategy failure, not a deadline.</p>
+<p>Fully unit-tested: <a href="../../tests/test_multi_strategy_portfolio.py"><code>tests/test_multi_strategy_portfolio.py</code></a>.</p>
+<hr />
+<h2 id="enginestrategiesmulti_managerpy-multistrategymanager-newest"><code>engine/strategies/multi_manager.py</code> — <code>MultiStrategyManager</code> <em>(newest)</em><a class="headerlink" href="#enginestrategiesmulti_managerpy-multistrategymanager-newest" title="Permanent link">&para;</a></h2>
+<p>The <strong>capital-aware, provenance-preserving registry</strong>. Added in the
+most recent feature commit (<code>decf8ca</code>), it is the fourth orchestrator
+and exists because none of the other three simultaneously owns <em>absolute
+per-strategy budgets</em>, <em>allocation-cap enforcement</em>, and <em>per-strategy
+signal provenance</em>.</p>
+<p>Where <code>MultiStrategyPortfolio</code> (the section above) treats
+<code>capital_weight</code> as a <strong>relative</strong> share and <strong>merges</strong> signals to one
+position per symbol, <code>MultiStrategyManager</code> treats <code>allocation_pct</code>
+as an <strong>absolute</strong> budget per strategy and <strong>forwards every signal</strong> —
+just allocation-capped and re-tagged. That is the contract that
+per-strategy attribution and per-strategy risk limits need.</p>
+<h3 id="what-it-owns-that-the-siblings-do-not">What it owns (that the siblings do not)<a class="headerlink" href="#what-it-owns-that-the-siblings-do-not" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Registration with explicit ids.</strong> Strategies register under a
+   caller-supplied <code>strategy_id</code> together with an <code>allocation_pct</code>. The
+   id is the <em>source of truth</em> for provenance: every signal a strategy
+   emits is re-tagged with its registered id, so a strategy that
+   mislabels its own <code>Signal.strategy_id</code> can never impersonate a sibling
+   or hide its origin.</li>
+<li><strong>Per-strategy capital budgets.</strong> Each registration carries a dollar
+   cap = <code>total_capital * allocation_pct / 100</code>, exposed via
+   <code>allocation_cap(id)</code> / <code>allocations()</code> for risk/UI consumers. The sum
+   of all <code>allocation_pct</code> is enforced <code>≤ 100</code> at <code>register()</code> time
+   (rejecting an over-commit), so two strategies can never silently claim
+   overlapping capital.</li>
+<li><strong>Allocation-cap enforcement.</strong> When a strategy emits active
+   (BUY/SELL) signals whose collective target weight exceeds its
+   allocation fraction (<code>allocation_pct / 100</code>), the manager scales <em>that
+   strategy's</em> weights down proportionally so the cap is respected. HOLD
+   signals abstain and pass through; the original weights are recorded
+   on the signal (never silently lost).</li>
+<li><strong>Provenance-preserving aggregation.</strong> Every emitted signal keeps its
+   registered <code>strategy_id</code> (it is <strong>not</strong> collapsed to an
+   <code>"aggregated"</code> / <code>"portfolio"</code> sentinel), so downstream consumers can
+   attribute each signal to the strategy that produced it.</li>
+</ol>
+<h3 id="outcome-shape-multistrategyevaluation">Outcome shape — <code>MultiStrategyEvaluation</code><a class="headerlink" href="#outcome-shape-multistrategyevaluation" title="Permanent link">&para;</a></h3>
+<p><code>await evaluate_all(market_data, cost_model)</code> returns:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>signals</code></td>
+<td><strong>All</strong> emitted signals across every strategy (capped + re-tagged).</td>
+</tr>
+<tr>
+<td><code>per_strategy_signals</code></td>
+<td><code>dict[id, list[Signal]]</code> — full provenance, grouped by source id.</td>
+</tr>
+<tr>
+<td><code>allocation_caps</code></td>
+<td>Dollar budget per strategy (<code>total_capital * pct / 100</code>).</td>
+</tr>
+<tr>
+<td><code>allocation_adjustments</code></td>
+<td><code>dict[id, scale]</code> for each strategy whose weights were scaled (<code>0 ≤ scale &lt; 1</code>); absent if untouched.</td>
+</tr>
+<tr>
+<td><code>errors</code></td>
+<td><code>dict[id, message]</code> for any strategy that raised <em>or</em> exceeded <code>eval_timeout</code>.</td>
+</tr>
+<tr>
+<td><code>trade_signals</code></td>
+<td>Convenience view: non-HOLD signals.</td>
+</tr>
+<tr>
+<td><code>is_noop</code></td>
+<td>True when no signal was produced (empty registry, all-empty results, or every strategy failed).</td>
+</tr>
+<tr>
+<td><code>strategy_count</code></td>
+<td>Number of strategies that contributed.</td>
+</tr>
+</tbody>
+</table>
+<p>Each capped signal carries <code>metadata</code> recording its capital budget
+(<code>allocation_cap_pct</code>, <code>allocation_cap_dollars</code>), and — if scaled —
+<code>allocation_capped=True</code> plus <code>allocation_original_weight</code>.</p>
+<h3 id="construction-registration">Construction &amp; registration<a class="headerlink" href="#construction-registration" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.strategies</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiStrategyManager</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">mgr</span> <span class="o">=</span> <span class="n">MultiStrategyManager</span><span class="p">(</span><span class="n">total_capital</span><span class="o">=</span><span class="mi">1_000_000</span><span class="p">,</span> <span class="n">eval_timeout</span><span class="o">=</span><span class="mf">30.0</span><span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">mgr</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;momentum&quot;</span><span class="p">,</span>  <span class="n">momentum_strategy</span><span class="p">,</span>  <span class="n">allocation_pct</span><span class="o">=</span><span class="mi">40</span><span class="p">)</span>  <span class="c1"># $400k cap</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">mgr</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;mean_rev&quot;</span><span class="p">,</span>  <span class="n">mean_rev_strategy</span><span class="p">,</span>  <span class="n">allocation_pct</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>  <span class="c1"># $300k cap</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">mgr</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;hedged&quot;</span><span class="p">,</span>    <span class="n">hedged_strategy</span><span class="p">,</span>    <span class="n">allocation_pct</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>   <span class="c1"># warm, capital-starved</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mgr</span><span class="o">.</span><span class="n">evaluate_all</span><span class="p">(</span><span class="n">market_data</span><span class="p">,</span> <span class="n">cost_model</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Validation is strict (raises <code>MultiStrategyManagerError</code>):</p>
 <ul>
-<li><strong>Is the failure on password verification or on MFA verification?</strong></li>
-<li><code>nexus_auth_attempts_total{outcome="failure"}</code> is split by neither
-    today; look at engine logs for the request id to disambiguate.</li>
-<li>The relevant call-sites are
-    <a href="../../../engine/api/routes/auth.py"><code>engine/api/routes/auth.py</code></a>
-    (password / login) and
-    <a href="../../../engine/api/auth/mfa_service.py"><code>engine/api/auth/mfa_service.py</code></a>
-    (<code>verify_login_code</code>, <code>verify_challenge</code>).</li>
-<li><strong>Spike correlated with a deploy?</strong> Cross-reference the spike with
-  release-please tag history. A botched MFA-encryption-key roll is the
-  most damaging cause and is documented under "Common causes".</li>
-<li><strong>Spike correlated with a brute-force attempt?</strong> Look at
-  <code>nexus_auth_attempts_total{outcome="failure"}</code> partitioned by source
-  IP if your edge proxy attaches it. A spike that doesn't move
-  <code>outcome="success"</code> means the SLO is firing on probably-malicious
-  traffic — the SLO definition deliberately includes failed attempts,
-  so this is "working as designed" but the on-call still needs to
-  decide whether to rate-limit harder.</li>
+<li><code>strategy_id</code> must be a non-empty <strong>string</strong> (it is <em>not</em> derived from
+  <code>strategy.id</code> — provenance is caller-controlled). Duplicate ids
+  rejected.</li>
+<li><code>strategy</code> must expose a callable <code>evaluate</code> (sync <strong>or</strong> async).</li>
+<li><code>allocation_pct</code> must be a finite number in <code>[0, 100]</code>. <code>0</code> is allowed
+  — it registers a strategy that is intentionally capital-starved (e.g.
+  paused) while keeping its code path warm; its active weights are
+  zeroed rather than dropped, so the audit trail still shows intent.</li>
+<li><code>total_capital</code> must be finite and <code>≥ 0</code>; <code>0</code> is allowed (every cap is
+  then <code>$0</code>, but allocation <em>fractions</em> are still enforced).</li>
+<li><code>eval_timeout</code> must be finite and <code>&gt; 0</code>; <code>max_strategies</code> must be <code>≥ 1</code>.</li>
+<li>Numeric inputs go through a <code>_finite</code> gate that explicitly rejects
+  <code>bool</code> (a sneaky <code>int</code> subclass), numeric <strong>strings</strong>, <code>None</code>, and
+  non-finite values — <code>math.isfinite</code> is the gate because bare <code>w &lt; 0</code>
+  silently admits <code>NaN</code>.</li>
 </ul>
-<h2 id="common-causes">Common causes<a class="headerlink" href="#common-causes" title="Permanent link">&para;</a></h2>
+<h3 id="fault-isolation-contract">Fault isolation contract<a class="headerlink" href="#fault-isolation-contract" title="Permanent link">&para;</a></h3>
+<p>Same two guards as <code>MultiStrategyPortfolio</code>, for the same reasons:</p>
 <ul>
-<li><strong>MFA encryption key drift</strong> — the running engine's
-  <code>MFA_ENCRYPTION_KEY</code> does not match the one used when the user's
-  secret was encrypted. Symptom: every MFA verify returns "failure"
-  for users with <code>mfa_enabled = true</code>. Fix: restore the previous key
-  from the secrets vault, see
-  <a href="../../backup-and-recovery/#secrets-and-keys"><code>backup-and-recovery.md → Secrets</code></a>.
-  <strong>Do not</strong> rotate the key under load — it must be a coordinated
-  re-encryption.</li>
-<li><strong>MFA challenge token expired</strong> — challenge TTL is <code>mfa_challenge_ttl_seconds</code>
-  (default 300 s). If users are slow to enter codes, this will look like
-  failures. Consider raising the TTL if the SLO violation correlates
-  with operator-set TTL.</li>
-<li><strong>Clock skew</strong> — TOTP relies on synchronized clocks. NTP drift on
-  hosts &gt; ±1 step causes legitimate codes to be rejected. Verify with
-  <code>chronyc tracking</code> or equivalent.</li>
-<li><strong>DB unavailable for the <code>users</code> table read path</strong> — login fails to
-  even fetch the user record. Treat as a DB incident
-  (<a href="../../backup-and-recovery/"><code>backup-and-recovery.md</code></a>) and remediate
-  there first.</li>
-<li><strong>Brute-force / credential-stuffing campaign</strong> — failures dominated by
-  one ASN / set of IPs. Engage the rate-limit / WAF surface; do not
-  relax the SLO.</li>
+<li><strong>Snapshot before iterate.</strong> <code>evaluate_all</code> snapshots the registry
+  (<code>list(self._registrations.items())</code>) before walking it, so a strategy
+  that registers/unregisters a sibling mid-cycle cannot mutate the dict
+  under us. Added strategies run next cycle.</li>
+<li><strong>Tight <code>wait_for</code> guard.</strong> Only the <em>awaitable</em> result is bounded by
+  <code>eval_timeout</code>. A builtin <code>TimeoutError</code> raised inside the coroutine
+  is classified as a strategy failure (<code>strategy_failed</code>), not a
+  deadline; only a genuine <code>asyncio.wait_for</code> expiry is reported as
+  <code>TimeoutError: evaluate exceeded &lt;N&gt;s timeout</code>.</li>
 </ul>
-<h2 id="escalation">Escalation<a class="headerlink" href="#escalation" title="Permanent link">&para;</a></h2>
-<p>Auth failures touch security: page the security on-call alongside the
-service on-call. Time-to-page should be <strong>immediate</strong> for the fast-burn
-alert.</p>
-<h2 id="post-incident">Post-incident<a class="headerlink" href="#post-incident" title="Permanent link">&para;</a></h2>
+<p>Sync and async strategies are both supported transparently: if
+<code>inspect.isawaitable(raw)</code> the result is awaited under the timeout,
+otherwise the sync return is used directly.</p>
+<p>Fully unit-tested: <a href="../../tests/test_multi_strategy_manager.py"><code>tests/test_multi_strategy_manager.py</code></a>
+(942 lines covering registration validation, cap enforcement, sync/async
+strategies, fault isolation, and provenance).</p>
+<hr />
+<h2 id="shared-contracts-across-all-four">Shared contracts across all four<a class="headerlink" href="#shared-contracts-across-all-four" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Contract</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>HOLD-as-abstain</strong></td>
+<td>A HOLD signal never blocks the others; a symbol on which every strategy abstains still yields a single HOLD record so downstream consumers know it was considered. (In <code>MultiStrategyManager</code>, HOLDs pass through uncapped.)</td>
+</tr>
+<tr>
+<td><strong>Apples-to-apples evaluation</strong></td>
+<td>Every registered strategy sees the <em>same</em> <code>market_data</code> / <code>cost_model</code>; capital-aware variants deep-copy per strategy so a plugin can't poison siblings.</td>
+</tr>
+<tr>
+<td><strong>Single-failure isolation</strong></td>
+<td>One failing or timed-out strategy is recorded in <code>errors</code>; the rest still contribute. A timeout never stalls the cycle.</td>
+</tr>
+<tr>
+<td><strong>Caller-controlled provenance</strong></td>
+<td><code>MultiStrategyManager</code> makes this explicit — the <code>strategy_id</code> is a registration parameter, not derived from the plugin. The other three derive it from the strategy object.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="status-all-four-are-library-only-today">Status — all four are library-only today<a class="headerlink" href="#status-all-four-are-library-only-today" title="Permanent link">&para;</a></h2>
+<p>None of the four orchestrators is wired to a public run route yet. The
+<strong>only</strong> execution backend reachable from an HTTP route is the
+<code>BacktestBackend</code> (single-strategy) driven by the backtest runner. The
+capital-aware classes are the natural consumers of the missing
+live/paper run route.</p>
+<table>
+<thead>
+<tr>
+<th>Class</th>
+<th>Unit-tested?</th>
+<th>Wired to a route?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>StrategyOrchestrator</code> (<code>engine/orchestration</code>)</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+<tr>
+<td><code>strategy_orchestrator</code> + <code>SignalAggregator</code> (<code>engine/core</code>)</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+<tr>
+<td><code>MultiStrategyPortfolio</code> (<code>engine/portfolio</code>)</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+<tr>
+<td><code>MultiStrategyManager</code> (<code>engine/strategies</code>)</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+</tbody>
+</table>
+<p>The open P1 is the <strong>live/paper run route</strong> that would drive these — see
+<a href="../../known-limitations/"><code>known-limitations.md</code></a>. The broker-direct
+plumbing the route needs (<code>LiveExecutionBackend</code>, <code>AlpacaTradingClient</code>,
+<code>client_order_id</code> idempotency, typed broker-error translation) is already
+on disk; the missing piece is the route + worker glue.</p>
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Capture how many user accounts were affected and for how long.</li>
-<li>If MFA secrets had to be re-encrypted, document the rotation in the
-  on-call log and confirm the new key is in the secrets vault with
-  cross-region replication.</li>
-<li>If the cause was a brute-force attempt, file a security advisory only
-  if user accounts were actually compromised.</li>
+<li><a href="../core-domains/"><code>core-domains.md</code></a> — where multi-strategy fits in the
+  wider domain map (cost/risk modeling, execution backends, analytics,
+  governance). The allocation value object
+  (<a href="../../engine/portfolio/allocation.py"><code>engine/portfolio/allocation.py</code></a>)
+  and the <code>PortfolioRebalancer</code> drift detector
+  (<a href="../../engine/portfolio/rebalancer.py"><code>engine/portfolio/rebalancer.py</code></a>)
+  are documented there.</li>
+<li><a href="../../known-limitations/"><code>known-limitations.md</code></a> — the live/paper
+  execution gap (P1) and the TaskIQ wiring that a run route depends on.</li>
+<li><a href="../../ARCHITECTURE.md"><code>ARCHITECTURE.md</code></a> — the signal→fill pipeline
+  and the SDK <code>IStrategy</code> interface every registered strategy implements.</li>
 </ul>
 
 
@@ -2620,7 +3061,7 @@ alert.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../api-latency/" class="md-footer__link md-footer__link--prev" aria-label="Previous: API latency">
+          <a href="../core-domains/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Core domains">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -2630,20 +3071,20 @@ alert.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                API latency
+                Core domains
               </div>
             </div>
           </a>
         
         
           
-          <a href="../backtest-submit/" class="md-footer__link md-footer__link--next" aria-label="Next: Backtest submit">
+          <a href="../database/" class="md-footer__link md-footer__link--next" aria-label="Next: Database &amp; migrations">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Backtest submit
+                Database & migrations
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -2698,10 +3139,10 @@ alert.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>

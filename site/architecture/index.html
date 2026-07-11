@@ -516,6 +516,8 @@
       
         
       
+        
+      
     
     
     
@@ -616,6 +618,34 @@
     
   
     Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="multi-strategy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-strategy orchestration
   
 
     
@@ -2336,11 +2366,16 @@ components exist, how they fit together, and where to add new code.</p>
    lifecycle, key dependencies. Start here if you've never opened the
    repo before.</li>
 <li><strong><a href="core-domains/">core-domains.md</a></strong> — the domain layer under
-   <code>engine/core/</code> + <code>engine/orchestration/</code>: multi-strategy orchestration,
-   the 86-KPI analytics taxonomy, strategy scoring &amp; governance,
+   <code>engine/core/</code> + <code>engine/orchestration/</code>: multi-strategy orchestration
+   (summary), the 86-KPI analytics taxonomy, strategy scoring &amp; governance,
    optimization, and post-trade cost analysis. The companion to
    <code>overview.md</code> (which is the <em>service</em> view; this is the <em>capability</em>
    view).</li>
+<li><strong><a href="multi-strategy/">multi-strategy.md</a></strong> — the four cooperating
+   multi-strategy orchestrators (<code>StrategyOrchestrator</code>, <code>signal_aggregator</code>,
+   <code>MultiStrategyPortfolio</code>, <code>MultiStrategyManager</code>), their voting /
+   capital / provenance contracts, and the decision matrix for which to
+   reach for.</li>
 <li><strong><a href="database/">database.md</a></strong> — table inventory, migration policy,
    data ownership.</li>
 <li><strong><a href="plugins/">plugins.md</a></strong> — plugin SDK and the registry that
@@ -2361,8 +2396,8 @@ components in our docs site:</p>
   the registry.</li>
 </ul>
 <p>The flat-markdown architecture docs (<code>overview.md</code>, <code>core-domains.md</code>,
-<code>database.md</code>, <code>plugins.md</code>) are the source of truth; the diagrams are a
-presentation layer on top.</p>
+<code>multi-strategy.md</code>, <code>database.md</code>, <code>plugins.md</code>) are the source of
+truth; the diagrams are a presentation layer on top.</p>
 <h2 id="conventions">Conventions<a class="headerlink" href="#conventions" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Markdown files in this directory describe the <strong>current</strong> state.
