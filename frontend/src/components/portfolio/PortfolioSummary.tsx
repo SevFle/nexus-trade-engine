@@ -10,6 +10,17 @@ export interface PortfolioSummaryProps {
   dayPnl?: string;
   /** Day P&L expressed as a percentage, e.g. "+1.11%". */
   dayPnlPct?: string;
+  /**
+   * Numeric P&L direction used to tone the Day P&L metric. Positive
+   * values render an upward/success tone, negative values a downward/
+   * accent tone, and zero (or undefined) a neutral tone.
+   *
+   * This is preferred over sniffing a "+"/"-" prefix off `dayPnl`, which
+   * breaks for locales that format signed currency differently and for
+   * negative-zero (`-0`) strings. Pass the raw signed delta here and the
+   * formatted, locale-aware string via `dayPnl`.
+   */
+  pnlDirection?: number;
   /** Count of currently open positions. */
   openPositions?: number;
   /** Overall strategy-health score (0–100). */
@@ -38,15 +49,21 @@ export function PortfolioSummary({
   dayPnlPct = "—",
   openPositions = 0,
   healthScore,
+  pnlDirection,
   placeholder = true,
   className,
 }: PortfolioSummaryProps) {
-  const positive = dayPnl.trim().startsWith("+");
-  const pnlTone: Tone = placeholder
-    ? "neutral"
-    : positive
-      ? "positive"
-      : "negative";
+  // Tone is derived from the numeric P&L direction rather than from a
+  // string prefix on `dayPnl`, so locale-specific formatting of the
+  // currency string can't flip the colour by accident.
+  const pnlTone: Tone =
+    placeholder || pnlDirection == null
+      ? "neutral"
+      : pnlDirection > 0
+        ? "positive"
+        : pnlDirection < 0
+          ? "negative"
+          : "neutral";
 
   return (
     <section
