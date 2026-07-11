@@ -13,6 +13,7 @@ edit this file by hand — it is regenerated as part of every release PR.
 ## [Unreleased]
 
 ### Fixed
+- (fix) Harden `MultiStrategyManager` input validation per review findings: route `max_strategies` through `_finite()` to reject bool/float/inf/nan (HIGH), return stripped `strategy_id` from `_validate_strategy_id` (MEDIUM), and validate the `evaluate` signature via `inspect` instead of accepting `Any` (MEDIUM); add unit tests covering all three fixes.
 - (write_tests) Add a no-retry guard in `LiveExecutionBackend._request` so a transport error on the non-idempotent `POST /v2/orders` (order submission) raises `BrokerConnectionError` immediately instead of retrying, preventing duplicate orders; add unit tests covering the guard and confirming reads still retry.
 - (fix) Fix check ordering in `engine/core/execution/live.py` `execute()` and the two failing tests in `tests/test_execution_backends.py`
 
@@ -50,4 +51,4 @@ edit this file by hand — it is regenerated as part of every release PR.
 
 
 The initial public 0.1.0 release line. Entries below this point are appended
-automatically once release-please starts cutting tagged releases.
+automatically once release-please starts cutting tagged rele

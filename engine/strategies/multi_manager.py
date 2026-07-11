@@ -149,17 +149,47 @@ def _validate_strategy_id(strategy_id: Any) -> str:
         )
     if not strategy_id.strip():
         raise MultiStrategyManagerError("strategy_id must be a non-empty string")
-    return strategy_id
+    # Normalise so leading/trailing whitespace can never leak into the
+    # provenance key (and so ``"  dup  "`` collides with ``"dup"``).
+    return strategy_id.strip()
 
 
 def _validate_strategy(strategy_id: str, strategy: Any) -> None:
-    """Require a callable ``evaluate`` on ``strategy``."""
+    """Require a callable ``evaluate`` on ``strategy`` whose signature
+    accepts the ``(market_data, cost_model)`` positional call the manager
+    makes every cycle.
+
+    The :func:`inspect.signature` check fails registration *before* a
+    strategy ever runs, so a plugin whose ``evaluate`` dropped or renamed
+    a parameter is reported at registration time rather than surfacing as
+    a cryptic ``TypeError`` mid-cycle.
+    """
     if strategy is None:
         raise MultiStrategyManagerError(f"strategy {strategy_id!r} must not be None")
-    if not callable(getattr(strategy, "evaluate", None)):
+    evaluate = getattr(strategy, "evaluate", None)
+    if not callable(evaluate):
         raise MultiStrategyManagerError(
             f"strategy {strategy_id!r} must expose a callable `evaluate` method"
         )
+    try:
+        sig = inspect.signature(evaluate)
+    except (TypeError, ValueError) as exc:
+        # Some C-implemented / builtins are not introspectable.
+        raise MultiStrategyManagerError(
+            f"strategy {strategy_id!r} `evaluate` signature could not be "
+            f"inspected: {exc}"
+        ) from exc
+    # ``sig.bind`` (not ``bind_partial``) verifies the method accepts
+    # being called with *exactly* two positional arguments: the right
+    # arity, no missing required params, and no keyword-only params the
+    # positional call would skip.
+    try:
+        sig.bind(object(), object())
+    except TypeError as exc:
+        raise MultiStrategyManagerError(
+            f"strategy {strategy_id!r} `evaluate` must accept "
+            f"(market_data, cost_model) positional arguments: {exc}"
+        ) from exc
 
 
 def _finite(value: float, label: str) -> float:
@@ -254,10 +284,18 @@ class MultiStrategyManager:
             )
         self._eval_timeout = timeout
 
-        max_n = int(max_strategies)
+        # Reject bool/strings/non-finite via the shared numeric gate,
+        # then require a positive whole number *before* truncating to
+        # int. A bare ``int(max_strategies)`` would silently accept
+        # ``True`` (-> 1), ``"5"`` (-> 5) and ``2.5`` (-> 2).
+        max_n = _finite(max_strategies, "max_strategies")
         if max_n < 1:
             raise MultiStrategyManagerError(f"max_strategies must be >= 1, got {max_strategies!r}")
-        self._max_strategies = max_n
+        if not max_n.is_integer():
+            raise MultiStrategyManagerError(
+                f"max_strategies must be a whole number, got {max_strategies!r}"
+            )
+        self._max_strategies = int(max_n)
 
         # Insertion-ordered so evaluate_all iterates deterministically.
         self._registrations: dict[str, StrategyRegistration] = {}

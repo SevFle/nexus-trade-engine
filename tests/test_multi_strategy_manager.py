@@ -133,6 +133,37 @@ class TestRegistration:
         with pytest.raises(MultiStrategyManagerError, match="non-empty string"):
             mgr.register("   ", _RecordingStrategy([]), allocation_pct=10.0)
 
+    def test_register_strips_whitespace_from_id(self):
+        # Leading/trailing whitespace is normalised away so it can never
+        # leak into the provenance key.
+        mgr = MultiStrategyManager()
+        reg = mgr.register("  momentum  ", _RecordingStrategy([]), allocation_pct=10.0)
+        assert reg.strategy_id == "momentum"
+        assert mgr.strategy_ids == ["momentum"]
+        assert "momentum" in mgr
+        # The unstripped form is NOT the stored key.
+        assert "  momentum  " not in mgr
+
+    async def test_stripped_id_used_for_signal_provenance(self):
+        mgr = MultiStrategyManager()
+        mgr.register(
+            "  spaced  ",
+            _RecordingStrategy([_sig("AAPL", Side.BUY, "spaced", weight=0.1)]),
+            allocation_pct=20.0,
+        )
+        result = await mgr.evaluate_all(_MARKET, _COSTS)
+        assert result.signals[0].strategy_id == "spaced"
+        assert "spaced" in result.per_strategy_signals
+        # The whitespace-padded key is absent from the result.
+        assert "  spaced  " not in result.per_strategy_signals
+
+    def test_register_whitespace_id_collides_with_stripped(self):
+        # ``"  dup  "`` and ``"dup"`` normalise to the same key.
+        mgr = MultiStrategyManager()
+        mgr.register("dup", _RecordingStrategy([]), allocation_pct=10.0)
+        with pytest.raises(MultiStrategyManagerError, match="already registered"):
+            mgr.register("   dup   ", _RecordingStrategy([]), allocation_pct=20.0)
+
     def test_register_rejects_duplicate(self):
         mgr = MultiStrategyManager()
         mgr.register("dup", _RecordingStrategy([]), allocation_pct=10.0)
@@ -148,6 +179,67 @@ class TestRegistration:
         mgr = MultiStrategyManager()
         with pytest.raises(MultiStrategyManagerError, match="must not be None"):
             mgr.register("bad", None, allocation_pct=10.0)  # type: ignore[arg-type]
+
+    def test_register_rejects_evaluate_with_no_params(self):
+        # ``evaluate`` must accept the (market_data, cost_model) call the
+        # manager makes every cycle; the signature check fails fast at
+        # registration rather than mid-cycle.
+        class _NoParams:
+            def evaluate(self):  # type: ignore[no-untyped-def]
+                return []
+
+        mgr = MultiStrategyManager()
+        with pytest.raises(MultiStrategyManagerError, match="must accept"):
+            mgr.register("bad", _NoParams(), allocation_pct=10.0)
+
+    def test_register_rejects_evaluate_with_one_param(self):
+        class _OneParam:
+            def evaluate(self, market_data):  # type: ignore[no-untyped-def]
+                return []
+
+        mgr = MultiStrategyManager()
+        with pytest.raises(MultiStrategyManagerError, match="must accept"):
+            mgr.register("bad", _OneParam(), allocation_pct=10.0)
+
+    def test_register_rejects_evaluate_with_three_required_params(self):
+        class _ThreeRequired:
+            def evaluate(self, market_data, cost_model, extra):  # type: ignore[no-untyped-def]
+                return []
+
+        mgr = MultiStrategyManager()
+        with pytest.raises(MultiStrategyManagerError, match="must accept"):
+            mgr.register("bad", _ThreeRequired(), allocation_pct=10.0)
+
+    def test_register_rejects_evaluate_with_keyword_only_cost_model(self):
+        # ``cost_model`` is keyword-only; the positional call misses it.
+        class _KeywordOnly:
+            def evaluate(self, market_data, *, cost_model):  # type: ignore[no-untyped-def]
+                return []
+
+        mgr = MultiStrategyManager()
+        with pytest.raises(MultiStrategyManagerError, match="must accept"):
+            mgr.register("bad", _KeywordOnly(), allocation_pct=10.0)
+
+    def test_register_accepts_evaluate_with_optional_extra_param(self):
+        # An extra param with a default is fine: the manager still calls
+        # with exactly two positional args.
+        class _OptionalExtra:
+            async def evaluate(self, market_data, cost_model, extra=None):  # type: ignore[no-untyped-def]
+                return []
+
+        mgr = MultiStrategyManager()
+        reg = mgr.register("ok", _OptionalExtra(), allocation_pct=10.0)
+        assert reg.strategy_id == "ok"
+        assert "ok" in mgr
+
+    def test_register_accepts_evaluate_with_var_args(self):
+        class _VarArgs:
+            async def evaluate(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+                return []
+
+        mgr = MultiStrategyManager()
+        mgr.register("ok", _VarArgs(), allocation_pct=10.0)
+        assert "ok" in mgr
 
     @pytest.mark.parametrize("bad", [-0.01, -1.0, 100.01, 150.0, float("nan"), float("inf")])
     def test_register_rejects_out_of_range_allocation_pct(self, bad):
@@ -240,6 +332,37 @@ class TestConstructor:
     def test_rejects_zero_max_strategies(self):
         with pytest.raises(MultiStrategyManagerError, match="max_strategies"):
             MultiStrategyManager(max_strategies=0)
+
+    def test_rejects_negative_max_strategies(self):
+        with pytest.raises(MultiStrategyManagerError, match=">= 1"):
+            MultiStrategyManager(max_strategies=-3)
+
+    @pytest.mark.parametrize("bad", [True, False])
+    def test_rejects_bool_max_strategies(self, bad):
+        # bool subclasses int and would sneak through ``int()`` as 1/0.
+        with pytest.raises(MultiStrategyManagerError, match="must be a number"):
+            MultiStrategyManager(max_strategies=bad)
+
+    @pytest.mark.parametrize("bad", ["5", "ten", None])
+    def test_rejects_non_numeric_max_strategies(self, bad):
+        with pytest.raises(MultiStrategyManagerError, match="must be a number"):
+            MultiStrategyManager(max_strategies=bad)
+
+    @pytest.mark.parametrize("bad", [float("inf"), float("nan")])
+    def test_rejects_non_finite_max_strategies(self, bad):
+        with pytest.raises(MultiStrategyManagerError, match="finite"):
+            MultiStrategyManager(max_strategies=bad)
+
+    @pytest.mark.parametrize("bad", [2.5, 49.9, 1.1])
+    def test_rejects_non_whole_max_strategies(self, bad):
+        with pytest.raises(MultiStrategyManagerError, match="whole number"):
+            MultiStrategyManager(max_strategies=bad)
+
+    def test_float_max_strategies_whole_number_accepted(self):
+        # A float that *is* a whole number is accepted and truncated.
+        mgr = MultiStrategyManager(max_strategies=2.0)
+        assert mgr._max_strategies == 2
+        assert isinstance(mgr._max_strategies, int)
 
 
 # --------------------------------------------------------------------- #
