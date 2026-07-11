@@ -52,6 +52,9 @@ describe("PortfolioSummary", () => {
     );
     expect(container.querySelectorAll("svg.lucide-trending-up")).toHaveLength(1);
     expect(container.querySelector("svg.lucide-trending-down")).toBeNull();
+    // Positive tone paints the trend icon with the success colour.
+    expect(container.querySelector(".text-nx-success")).not.toBeNull();
+    expect(container.querySelector(".text-nx-accent")).toBeNull();
   });
 
   it("derives a negative tone from a negative pnlDirection", () => {
@@ -65,6 +68,9 @@ describe("PortfolioSummary", () => {
     );
     expect(container.querySelectorAll("svg.lucide-trending-down")).toHaveLength(1);
     expect(container.querySelector("svg.lucide-trending-up")).toBeNull();
+    // Negative tone paints the trend icon with the accent colour.
+    expect(container.querySelector(".text-nx-accent")).not.toBeNull();
+    expect(container.querySelector(".text-nx-success")).toBeNull();
   });
 
   it("renders a neutral tone when pnlDirection is zero", () => {

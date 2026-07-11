@@ -19,7 +19,7 @@ import { PortfolioSummary } from "../../components/portfolio/PortfolioSummary";
  */
 describe("PortfolioSummary error boundary", () => {
   beforeEach(() => {
-    vi.useRealTimals();
+    vi.useRealTimers();
   });
 
   afterEach(() => {
