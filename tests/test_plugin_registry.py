@@ -100,6 +100,19 @@ class TestLoadStrategyClass:
         with pytest.raises((ImportError, FileNotFoundError)):
             load_strategy_class("/nonexistent/strategy.py")
 
+    def test_raises_import_error_for_blocked_import(self, strategies_dir):
+        # A strategy that smuggles in a blocked module is rejected by the
+        # Layer-0 static validator before any of its body executes.  This
+        # exercises the ``strategy_source_blocked`` warning path in
+        # ``load_strategy_class`` (which re-raises the ``ImportError`` raised
+        # by ``validate_file``).
+        code = "import os\n\nclass Strategy:\n    name = 'blocked'\n"
+        path = strategies_dir / "blocked"
+        _write_strategy(path, {"name": "blocked"}, code)
+
+        with pytest.raises(ImportError, match="import validator"):
+            load_strategy_class(str(path / "strategy.py"))
+
     def test_raises_attribute_error_when_no_strategy_class(self, strategies_dir):
         path = strategies_dir / "no_class"
         path.mkdir(parents=True, exist_ok=True)
@@ -290,7 +303,10 @@ class TestLoadStrategyClassValidatedBytesAreExecuted:
                 pass
             return real_open(file, mode, *args, **kwargs)
 
-        monkeypatch.setattr("engine.plugins.registry.open", open_spy, raising=False)
+        # The single disk read now happens inside ``validate_file`` in
+        # ``restricted_importer`` (not the registry), so the open-spy must be
+        # installed there to observe it.
+        monkeypatch.setattr("engine.plugins.restricted_importer.open", open_spy, raising=False)
 
         load_strategy_class(str(module_file))
 

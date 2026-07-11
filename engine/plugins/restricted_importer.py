@@ -45,6 +45,7 @@ from engine.plugins.allowlist import DENYLIST_MODULES, FROZEN_ALLOWED_MODULES
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
     from importlib.machinery import ModuleSpec
+    from pathlib import Path
 
 # Re-exported for backward compatibility with existing tests and callers.
 # This is a *known-dangerous-modules* registry, not the enforcement mechanism.
@@ -643,10 +644,76 @@ class ImportValidator(ast.NodeVisitor):
         return self.violations
 
 
+# --------------------------------------------------------------------- #
+# File-level helper: TOCTOU-safe read + validate                         #
+# --------------------------------------------------------------------- #
+
+
+def validate_file(
+    path: str | Path,
+    *,
+    validator: ImportValidator | None = None,
+) -> bytes:
+    """Read a plugin file, run Layer-0 static validation, and return its source.
+
+    This is the canonical entry point for loading strategy/plugin source: it
+    reads the file **once** and returns the *exact* bytes that passed
+    :class:`ImportValidator` validation.  Callers must :func:`compile` and
+    :func:`exec` the returned bytes directly (instead of re-reading the file
+    via ``importlib`` / ``spec.loader.exec_module``) to close the
+    time-of-check/time-of-use gap: an attacker who swaps the file on disk
+    between this validation read and the consumer's execution read would
+    otherwise execute different, un-validated bytes than the ones just
+    checked.
+
+    Parameters
+    ----------
+    path:
+        Filesystem path to the plugin source file.  Any :func:`open`-compatible
+        path-like is accepted.
+    validator:
+        Optional pre-configured :class:`ImportValidator`.  Defaults to one
+        constructed from the frozen :data:`~engine.plugins.allowlist.DENYLIST_MODULES`,
+        matching the runtime policy enforced by :class:`RestrictedImporter`.
+
+    Returns
+    -------
+    bytes
+        The validated source — the exact bytes read from disk.  These (not a
+        later re-read) are what the caller must compile/execute.
+
+    Raises
+    ------
+    ImportError
+        If the source contains a policy violation (a blocked ``import`` or a
+        call to a code-execution / dynamic-import builtin).
+    SyntaxError
+        Propagated from :func:`ast.parse` for malformed source — malformed
+        source is itself a reason to reject.
+    OSError
+        If the file cannot be opened or read.
+    """
+    if validator is None:
+        validator = ImportValidator(DENYLIST_MODULES)
+    # Read the file exactly once.  The returned ``source_bytes`` are the
+    # authoritative copy the caller must execute — they are *not* re-read
+    # from disk later, which is the whole point of this helper.
+    with open(path, "rb") as fh:
+        source_bytes = fh.read()
+    violations = validator.validate(source_bytes)
+    if violations:
+        joined = "; ".join(violations)
+        raise ImportError(
+            f"Plugin source {path!s} rejected by import validator: {joined}"
+        )
+    return source_bytes
+
+
 __all__ = [
     "ALLOWED_MODULES",
     "BLOCKED_MODULES",
     "ImportValidator",
     "RestrictedImporter",
     "extract_hostnames",
+    "validate_file",
 ]
