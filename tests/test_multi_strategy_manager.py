@@ -271,6 +271,19 @@ class TestConstructor:
         with pytest.raises(MultiStrategyManagerError, match="must be a number"):
             MultiStrategyManager(max_strategies=True)  # type: ignore[arg-type]
 
+    def test_overflowing_max_strategies_rejected(self):
+        # ``float(10 ** 400)`` raises ``OverflowError`` (the integer is too
+        # large to be represented as a finite float). That low-level error
+        # must be translated into a ``MultiStrategyManagerError`` rather
+        # than leaking out of the constructor.
+        with pytest.raises(MultiStrategyManagerError, match="max_strategies"):
+            MultiStrategyManager(max_strategies=10**400)
+
+    def test_overflowing_total_capital_rejected(self):
+        # The same overflow guard applies to every ``_finite`` input.
+        with pytest.raises(MultiStrategyManagerError, match="total_capital"):
+            MultiStrategyManager(total_capital=10**400)
+
 
 # --------------------------------------------------------------------- #
 # Capital allocation math

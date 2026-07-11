@@ -179,6 +179,10 @@ def _finite(value: float, label: str) -> float:
         num = float(value)
     except (TypeError, ValueError) as exc:
         raise MultiStrategyManagerError(f"{label} must be a number, got {value!r}") from exc
+    except OverflowError as exc:
+        # e.g. ``float(10 ** 400)`` — the value is too large to be
+        # represented as a finite float, so treat it as non-finite.
+        raise MultiStrategyManagerError(f"{label} must be finite, got {value!r}") from exc
     if not math.isfinite(num):
         raise MultiStrategyManagerError(f"{label} must be finite, got {value!r}")
     return num
