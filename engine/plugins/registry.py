@@ -15,6 +15,53 @@ logger = structlog.get_logger()
 STRATEGIES_DIR = Path(__file__).resolve().parent.parent.parent / "strategies"
 
 
+class PluginError(Exception):
+    """Raised when a strategy plugin fails validation or registration.
+
+    Raised by :meth:`PluginRegistry.register` (and other validation entry
+    points) when a candidate object is not a *concrete*
+    :class:`~nexus_sdk.strategy.IStrategy` subclass — for example when an
+    abstract base class such as ``IStrategy`` itself is offered for
+    registration. Catching this lets callers distinguish "bad plugin" from
+    ordinary ``ImportError``/``AttributeError`` coming from disk-based
+    loading.
+    """
+
+
+def _is_strategy_class(strategy_class: Any) -> bool:
+    """Return ``True`` iff *strategy_class* is a concrete IStrategy subclass.
+
+    A candidate is accepted only when **all** of the following hold:
+
+    1. it is itself a ``type`` (rejecting instances and arbitrary objects),
+    2. it is a subclass of :class:`nexus_sdk.strategy.IStrategy`, and
+    3. it has no remaining abstract methods (``__abstractmethods__`` is
+       empty), i.e. it is *concrete* and can be instantiated.
+
+    The third check is what stops the abstract base classes themselves —
+    notably ``IStrategy`` — from being accepted: ``issubclass(IStrategy,
+    IStrategy)`` is trivially ``True``, yet ``IStrategy()`` raises
+    :class:`TypeError` because its abstract methods are unimplemented.
+    Failing early here yields a clear :class:`PluginError` instead of a
+    confusing ``TypeError`` deep inside instantiation.
+    """
+    if not isinstance(strategy_class, type):
+        return False
+    try:
+        from nexus_sdk.strategy import IStrategy
+    except ImportError:
+        return False
+    if not issubclass(strategy_class, IStrategy):
+        return False
+    # After the issubclass check: reject classes that still declare abstract
+    # methods. ``__abstractmethods__`` is populated by ``ABCMeta`` at class
+    # creation; an empty frozenset means every abstract method has been
+    # overridden and the class is concrete.
+    if getattr(strategy_class, "__abstractmethods__", set()):  # noqa: SIM103
+        return False
+    return True
+
+
 def is_scoring_strategy(instance: Any) -> bool:
     try:
         from nexus_sdk.scoring import IScoringStrategy
@@ -108,8 +155,67 @@ class PluginRegistry:
 
     def __init__(self, strategies_dir: Path | None = None) -> None:
         self._strategies = discover_strategies(strategies_dir)
+        # In-memory concrete strategy classes registered via :meth:`register`,
+        # keyed by the registered name. These take precedence over on-disk
+        # entries of the same name and let callers plug in strategies without
+        # a manifest or ``strategy.py`` file.
+        self._classes: dict[str, Any] = {}
+
+    def register(self, strategy_class: Any, *, name: str | None = None) -> str:
+        """Register an in-memory concrete strategy *class*.
+
+        Unlike :meth:`load_strategy` (which reads ``strategy.py`` from disk),
+        this validates and stores an already-imported class so it can be
+        instantiated by name without a manifest or on-disk module.
+
+        Parameters
+        ----------
+        strategy_class:
+            A *concrete* :class:`~nexus_sdk.strategy.IStrategy` subclass.
+        name:
+            Optional registration key; defaults to ``strategy_class.__name__``.
+
+        Returns the name under which the class was registered. Raises
+        :class:`PluginError` if *strategy_class* is not a concrete
+        ``IStrategy`` subclass — for example ``IStrategy`` itself (which is
+        abstract) or a plain object.
+        """
+        if not _is_strategy_class(strategy_class):
+            label = getattr(strategy_class, "__name__", strategy_class)
+            abstract = sorted(getattr(strategy_class, "__abstractmethods__", set()))
+            reason = (
+                f"has unimplemented abstract methods {abstract}"
+                if abstract
+                else "is not an IStrategy subclass"
+            )
+            raise PluginError(
+                f"{label!r} is not a concrete IStrategy subclass ({reason}) "
+                f"and cannot be registered as a plugin"
+            )
+        registered_name = name or strategy_class.__name__
+        self._classes[registered_name] = strategy_class
+        logger.info(
+            "strategy_registered",
+            strategy=registered_name,
+            cls=strategy_class.__name__,
+        )
+        return registered_name
 
     def load_strategy(self, strategy_name: str) -> Any | None:
+        # In-memory registrations take precedence over on-disk entries.
+        cls = self._classes.get(strategy_name)
+        if cls is not None:
+            try:
+                return cls()
+            except Exception as exc:
+                logger.exception(
+                    "strategy_instantiation_failed",
+                    strategy=strategy_name,
+                    cls=cls.__name__,
+                    error=str(exc),
+                )
+                return None
+
         entry = self._strategies.get(strategy_name)
         if entry is None:
             logger.warning("strategy_not_found", strategy=strategy_name)
@@ -131,7 +237,7 @@ class PluginRegistry:
             return None
 
     def list_strategies(self) -> list[str]:
-        return list(self._strategies.keys())
+        return list({*self._strategies.keys(), *self._classes.keys()})
 
     def get_manifest(self, strategy_name: str) -> dict[str, Any] | None:
         """Return the parsed ``manifest.yaml`` dict for ``strategy_name``.

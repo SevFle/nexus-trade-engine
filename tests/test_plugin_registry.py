@@ -9,7 +9,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-from engine.plugins.registry import PluginRegistry, discover_strategies, load_strategy_class
+from engine.plugins.registry import (
+    PluginError,
+    PluginRegistry,
+    _is_strategy_class,
+    discover_strategies,
+    load_strategy_class,
+)
+from nexus_sdk.strategy import IStrategy, MarketState, StrategyConfig
 
 
 @pytest.fixture
@@ -325,3 +332,182 @@ class TestDiscoverRealStrategies:
         manifest = entry["manifest"]
         assert manifest["name"] == "mean_reversion_basic"
         assert "version" in manifest
+
+
+# ---------------------------------------------------------------------------
+# Concrete / partial strategy fixtures for ``register`` / ``_is_strategy_class``
+# ---------------------------------------------------------------------------
+
+
+class _ConcreteStrategy(IStrategy):
+    """A fully-implemented IStrategy: no abstract methods remain."""
+
+    @property
+    def id(self) -> str:
+        return "concrete"
+
+    @property
+    def name(self) -> str:
+        return "Concrete"
+
+    @property
+    def version(self) -> str:
+        return "0.1.0"
+
+    async def initialize(self, config: StrategyConfig) -> None:
+        pass
+
+    async def dispose(self) -> None:
+        pass
+
+    async def evaluate(self, portfolio, market: MarketState, costs) -> list:
+        return []
+
+    def get_config_schema(self) -> dict:
+        return {}
+
+
+class _PartialStrategy(IStrategy):
+    """Implements *some* abstract methods but leaves others abstract.
+
+    ``__abstractmethods__`` is therefore still populated, so the class is
+    abstract even though it is a genuine ``IStrategy`` subclass.
+    """
+
+    @property
+    def id(self) -> str:
+        return "partial"
+
+    async def initialize(self, config: StrategyConfig) -> None:
+        pass
+
+
+class TestIsStrategyClass:
+    """Unit tests for the ``_is_strategy_class`` predicate."""
+
+    def test_concrete_subclass_is_accepted(self):
+        assert _is_strategy_class(_ConcreteStrategy) is True
+
+    def test_abstract_base_is_rejected(self):
+        # IStrategy passes issubclass but still carries abstract methods.
+        assert _is_strategy_class(IStrategy) is False
+
+    def test_partial_abstract_subclass_is_rejected(self):
+        assert _is_strategy_class(_PartialStrategy) is False
+
+    def test_non_strategy_class_is_rejected(self):
+        class NotAStrategy:
+            pass
+
+        assert _is_strategy_class(NotAStrategy) is False
+
+    def test_builtin_types_are_rejected(self):
+        assert _is_strategy_class(int) is False
+        assert _is_strategy_class(dict) is False
+
+    def test_instance_is_rejected(self):
+        # Must be a *class*, not an instance.
+        assert _is_strategy_class(_ConcreteStrategy()) is False
+
+    def test_arbitrary_object_is_rejected(self):
+        assert _is_strategy_class("not a class") is False
+        assert _is_strategy_class(42) is False
+        assert _is_strategy_class(None) is False
+
+    def test_concrete_strategy_has_no_abstractmethods(self):
+        # Sanity check: a concrete subclass really does clear the set, so the
+        # guard in _is_strategy_class is what distinguishes it from the base.
+        assert getattr(_ConcreteStrategy, "__abstractmethods__", set()) == set()
+
+    def test_abstract_base_carries_abstractmethods(self):
+        assert bool(getattr(IStrategy, "__abstractmethods__", set())) is True
+
+
+class TestRegisterStrategy:
+    """Tests for ``PluginRegistry.register`` and its abstract-class guard."""
+
+    def test_abstract_base_rejected(self, strategies_dir):
+        """IStrategy itself must not be registerable — it is abstract."""
+        registry = PluginRegistry(strategies_dir)
+        with pytest.raises(PluginError) as excinfo:
+            registry.register(IStrategy)
+        # Error message should mention the offending class and the reason.
+        message = str(excinfo.value)
+        assert "IStrategy" in message
+        assert "abstract" in message.lower()
+
+    def test_partial_abstract_subclass_rejected(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+        with pytest.raises(PluginError) as excinfo:
+            registry.register(_PartialStrategy)
+        # Should name the leftover abstract methods so the author can fix them.
+        message = str(excinfo.value)
+        assert "_PartialStrategy" in message
+        assert "abstract" in message.lower()
+
+    def test_non_strategy_class_rejected(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+
+        class NotAStrategy:
+            pass
+
+        with pytest.raises(PluginError):
+            registry.register(NotAStrategy)
+
+    def test_instance_rejected(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+        with pytest.raises(PluginError):
+            registry.register(_ConcreteStrategy())
+
+    def test_builtin_rejected(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+        with pytest.raises(PluginError):
+            registry.register(int)
+
+    def test_concrete_strategy_registered_returns_name(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+        name = registry.register(_ConcreteStrategy)
+        assert name == "_ConcreteStrategy"
+
+    def test_register_with_custom_name(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+        name = registry.register(_ConcreteStrategy, name="custom-strat")
+        assert name == "custom-strat"
+        assert "custom-strat" in registry.list_strategies()
+
+    def test_registered_strategy_appears_in_list(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+        assert "_ConcreteStrategy" not in registry.list_strategies()
+        registry.register(_ConcreteStrategy)
+        assert "_ConcreteStrategy" in registry.list_strategies()
+
+    def test_registered_strategy_is_loadable(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+        registry.register(_ConcreteStrategy)
+        instance = registry.load_strategy("_ConcreteStrategy")
+        assert isinstance(instance, _ConcreteStrategy)
+        assert instance.id == "concrete"
+
+    def test_registered_strategy_overrides_disk_entry(self, strategies_dir):
+        """An in-memory registration shadows a same-named on-disk strategy."""
+        _write_strategy(
+            strategies_dir / "_ConcreteStrategy",
+            {"name": "_ConcreteStrategy", "version": "9.9.9"},
+            "class Strategy: pass\n",
+        )
+        registry = PluginRegistry(strategies_dir)
+        registry.register(_ConcreteStrategy)
+        instance = registry.load_strategy("_ConcreteStrategy")
+        # The in-memory concrete class wins over the trivial on-disk class.
+        assert isinstance(instance, _ConcreteStrategy)
+
+    def test_load_unknown_registered_strategy_returns_none(self, strategies_dir):
+        registry = PluginRegistry(strategies_dir)
+        registry.register(_ConcreteStrategy)
+        assert registry.load_strategy("not-registered") is None
+
+    def test_plugin_error_is_not_subclass_of_other_registry_errors(self):
+        # PluginError must be catchable independently of ImportError/
+        # AttributeError that disk loading raises.
+        assert not issubclass(PluginError, ImportError)
+        assert not issubclass(PluginError, AttributeError)
