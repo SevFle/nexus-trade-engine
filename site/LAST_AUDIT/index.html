@@ -2224,6 +2224,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Last audit
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -2240,6 +2258,36 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#2026-07-10-reconciliation-manual" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2026-07-10 reconciliation (manual)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -2273,6 +2321,25 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#2026-07-10-reconciliation-manual" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2026-07-10 reconciliation (manual)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -2293,14 +2360,36 @@
 
 <h1 id="last-engineering-docs-audit">Last engineering-docs audit<a class="headerlink" href="#last-engineering-docs-audit" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>Timestamp:</strong> 2026-07-08T20:29:26Z</li>
-<li><strong>Cycle:</strong> 1650</li>
-<li><strong>Commit:</strong> <code>b132e00</code></li>
-<li><strong>Target:</strong> reflect latest 1650 cycles of development</li>
+<li><strong>Timestamp:</strong> 2026-07-10T23:30:00Z</li>
+<li><strong>Cycle:</strong> 1692</li>
+<li><strong>Commit:</strong> <code>fe64f03</code></li>
+<li><strong>Target:</strong> reflect latest 1692 cycles of development</li>
 </ul>
 <p>This file is touched on every <code>do_engineering_docs</code> run by kaizen, so
 its mtime tells you when documentation was last reconciled with the
 codebase — even when the audit produced no diff.</p>
+<h2 id="2026-07-10-reconciliation-manual">2026-07-10 reconciliation (manual)<a class="headerlink" href="#2026-07-10-reconciliation-manual" title="Permanent link">&para;</a></h2>
+<p>Full doc set was re-read against source ahead of this cycle and
+verified accurate. One drift was found and closed:</p>
+<ul>
+<li><strong><code>observability/logging.md</code></strong> had no coverage of the Sentry error
+  pipeline even though <code>engine/observability/sentry.py</code> ships a
+  <code>before_send</code> PII scrubber wired into the app lifespan (gh#1336 /
+  #1338). Added an <strong>"Error tracking (Sentry)"</strong> section documenting
+  the lifecycle (<code>init_sentry</code> / <code>close_sentry</code>), the design decision
+  that Sentry reuses <code>engine/observability/redact.py</code> so logs and
+  error events share one privacy guarantee, what <code>_before_send</code> /
+  <code>_scrub_request</code> scrub (contexts, breadcrumbs, request
+  <code>query_string</code> / <code>headers</code> / <code>data</code>), why query strings get a
+  dedicated param parser, and the <code>NEXUS_SENTRY_*</code> knobs.</li>
+<li><strong><code>.env.example</code></strong> / <strong><code>deployment.md</code></strong> — added the previously
+  undocumented <code>NEXUS_SENTRY_TRACES_SAMPLE_RATE</code> knob (real config
+  field, default <code>0.0</code>) and cross-linked deployment to the new Sentry
+  section.</li>
+</ul>
+<p><code>uv run mkdocs build</code> is green (exit 0); the only warnings remain the
+intentional, documented source-relative <code>../engine/...</code> links kept at
+<code>validation.links.not_found: warn</code>.</p>
 
 
 

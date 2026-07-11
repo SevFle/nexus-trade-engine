@@ -2105,6 +2105,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#error-tracking-sentry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error tracking (Sentry)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Error tracking (Sentry)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-pii-guarantee-is-the-same-as-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The PII guarantee is the same as logs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-_before_send-scrubs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What _before_send scrubs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#sampling" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2451,6 +2501,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#error-tracking-sentry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error tracking (Sentry)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Error tracking (Sentry)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-pii-guarantee-is-the-same-as-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The PII guarantee is the same as logs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-_before_send-scrubs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What _before_send scrubs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#sampling" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2668,6 +2768,137 @@ Banned keys (case-insensitive, dashes normalized to underscores):</p>
 through the full processor chain and asserts no banned values reach the
 wire. Add new patterns by editing <code>engine/observability/redact.py</code> and
 extending the test fixtures.</p>
+<h2 id="error-tracking-sentry">Error tracking (Sentry)<a class="headerlink" href="#error-tracking-sentry" title="Permanent link">&para;</a></h2>
+<p>Sentry is the crash/error pipeline. It is initialised in the app
+lifespan (<a href="../../engine/app.py"><code>engine/app.py</code></a> →
+<code>_init_observability</code> → <a href="../../engine/observability/sentry.py"><code>init_sentry()</code></a>)
+right after logging/tracing, and torn down last in <code>_shutdown</code> via
+<code>close_sentry()</code>. When <code>NEXUS_SENTRY_DSN</code> is empty (the default)
+<code>init_sentry()</code> is a <strong>graceful no-op</strong>, so dev/test runs without a
+backend and the process always starts.</p>
+<blockquote>
+<p><strong>Code:</strong> <code>engine/observability/sentry.py</code> · reuses
+<code>engine/observability/redact.py</code> · <strong>Issue:</strong> <a href="https://github.com/SevFle/nexus-trade-engine/issues/1336">#1336</a>
+<strong>Tests:</strong> <code>tests/observability/test_sentry.py</code> (PII scrubbing #1338)</p>
+</blockquote>
+<h3 id="the-pii-guarantee-is-the-same-as-logs">The PII guarantee is the same as logs<a class="headerlink" href="#the-pii-guarantee-is-the-same-as-logs" title="Permanent link">&para;</a></h3>
+<p>The whole point of routing Sentry through the redaction module is that
+<strong>an error event and a log line leaving the process carry the same
+privacy guarantee</strong>. <code>init_sentry()</code> registers a <code>before_send</code> hook
+(<a href="../../engine/observability/sentry.py"><code>_before_send</code></a>) that scrubs
+every outbound event using the <em>exact same</em> patterns documented in the
+<a href="#redaction">Redaction</a> table above. There is no second redaction
+vocabulary to keep in sync — extending <code>engine/observability/redact.py</code>
+updates both pipelines.</p>
+<p>Belt-and-suspenders: Sentry is also initialised with
+<code>send_default_pii=False</code>, so the SDK attaches no user/server PII
+server-side in the first place. The <code>before_send</code> hook covers the rest
+(request payloads, breadcrumbs, context tags the integrations add).</p>
+<h3 id="what-_before_send-scrubs">What <code>_before_send</code> scrubs<a class="headerlink" href="#what-_before_send-scrubs" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Event field</th>
+<th>Treatment</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>contexts</code></td>
+<td>Recursive <a href="../../engine/observability/redact.py"><code>_scrub_dict</code></a> walk — catches any context key matching a banned name.</td>
+</tr>
+<tr>
+<td><code>breadcrumbs</code></td>
+<td>Scrubbed whether Sentry ships it as a <code>dict</code> or a <code>list</code>.</td>
+</tr>
+<tr>
+<td><code>request</code> (HTTP interface)</td>
+<td>Handled by <code>_scrub_request</code> (see below).</td>
+</tr>
+</tbody>
+</table>
+<p>The Sentry HTTP integrations attach a <code>request</code> object holding <code>url</code>,
+<code>method</code>, <code>query_string</code>, <code>headers</code>, and <code>data</code> (the body).
+<code>_scrub_request</code> only touches the secret-bearing fields and passes
+<code>url</code>/<code>method</code>/<code>env</code> through unchanged:</p>
+<table>
+<thead>
+<tr>
+<th><code>request</code> field</th>
+<th>Treatment</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>query_string</code></td>
+<td>Parsed <strong>parameter by parameter</strong> by <code>_redact_query_string</code>. A param whose decoded key is banned → value replaced wholesale with <code>REDACTED</code>; any other param's value still goes through <code>_scrub_string</code> (catches Bearer tokens, PANs, <code>sk*</code>/<code>ghp*</code>/…).</td>
+</tr>
+<tr>
+<td><code>headers</code></td>
+<td>Flat <code>{name: value}</code> dict scrubbed with <code>_scrub_dict</code> (covers <code>authorization</code>, <code>cookie</code>, <code>x-api-key</code>, …).</td>
+</tr>
+<tr>
+<td><code>data</code> (str)</td>
+<td>Treated as <strong>form-encoded</strong> (<code>a=1&amp;b=2</code>) and split param-by-param by <code>_redact_query_string</code>.</td>
+</tr>
+<tr>
+<td><code>data</code> (bytes)</td>
+<td>Decoded, scrubbed the same way, <strong>re-encoded</strong> so the field stays <code>bytes</code>.</td>
+</tr>
+<tr>
+<td><code>data</code> (dict / list)</td>
+<td>Recursive <code>_scrub_value</code> walk.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Why <code>query_string</code> / form bodies get their own parser.</strong>
+<code>_scrub_string</code>'s inline <code>key=value</code> rule uses a greedy <code>\S+</code> for the
+value, which lets a <em>single</em> sensitive param absorb its non-sensitive
+siblings across the <code>&amp;</code> (e.g. <code>token=secret&amp;page=1</code> would lose
+<code>page=1</code>). <code>_redact_query_string</code> splits on <code>&amp;</code> / the first <code>=</code> so each
+parameter is considered in isolation — sensitive params are redacted,
+the rest are preserved verbatim. The same parser is reused for the
+<code>data</code> body so a form post like <code>password=secret&amp;keep=ok</code> becomes
+<code>password=***REDACTED***&amp;keep=ok</code>.</p>
+</blockquote>
+<h3 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NEXUS_SENTRY_DSN</code></td>
+<td><code>""</code></td>
+<td>Empty → <code>init_sentry()</code> is a no-op (dev/test).</td>
+</tr>
+<tr>
+<td><code>NEXUS_SENTRY_TRACES_SAMPLE_RATE</code></td>
+<td><code>0.0</code></td>
+<td>Performance-trace sampling. <code>0.0</code> disables; raise to capture traces.</td>
+</tr>
+<tr>
+<td>(<code>release</code>)</td>
+<td><code>NEXUS_APP_VERSION</code></td>
+<td>Auto-set from app version — do <strong>not</strong> pass manually.</td>
+</tr>
+<tr>
+<td>(<code>environment</code>)</td>
+<td><code>NEXUS_APP_ENV</code></td>
+<td>Auto-set from env.</td>
+</tr>
+</tbody>
+</table>
+<p><code>close_sentry()</code> runs last in shutdown: it <code>flush(timeout=2)</code> so
+buffered events drain before the process exits (a timeout emits a
+<code>sentry.flush_timeout</code> warning rather than hanging shutdown), then
+closes the client. It is safe to call when Sentry was never
+initialised.</p>
 <h2 id="sampling">Sampling<a class="headerlink" href="#sampling" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
