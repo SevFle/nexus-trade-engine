@@ -1,14 +1,28 @@
-"""Tests for PluginRegistry — discover, load, list strategies."""
+"""Tests for PluginRegistry — discover, load, list strategies.
+
+Also covers the in-memory :class:`engine.plugins.plugin_registry.PluginRegistry`
+public API (register / unregister / get / list_all / clear / __contains__ /
+__len__) and its validation errors.
+"""
 
 from __future__ import annotations
 
 import builtins
+import re
 import textwrap
 from pathlib import Path
 
 import pytest
 import yaml
 
+from engine.plugins.plugin_registry import (
+    DuplicatePluginError,
+    PluginError,
+    PluginNotFoundError,
+)
+from engine.plugins.plugin_registry import (
+    PluginRegistry as InMemoryPluginRegistry,
+)
 from engine.plugins.registry import PluginRegistry, discover_strategies, load_strategy_class
 
 
@@ -325,3 +339,307 @@ class TestDiscoverRealStrategies:
         manifest = entry["manifest"]
         assert manifest["name"] == "mean_reversion_basic"
         assert "version" in manifest
+
+
+# ---------------------------------------------------------------------- #
+# In-memory PluginRegistry (register / unregister / get / list_all /     #
+# clear / __contains__ / __len__)                                        #
+# ---------------------------------------------------------------------- #
+from nexus_sdk.strategy import IStrategy  # noqa: E402
+
+
+class _ValidStrategy(IStrategy):
+    """A fully-implemented IStrategy used as the happy-path fixture."""
+
+    @property
+    def id(self) -> str:
+        return "valid"
+
+    @property
+    def name(self) -> str:
+        return "Valid Strategy"
+
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    async def initialize(self, config) -> None:
+        return None
+
+    async def dispose(self) -> None:
+        return None
+
+    async def evaluate(self, portfolio, market, costs):
+        return []
+
+    def get_config_schema(self) -> dict:
+        return {"type": "object"}
+
+
+class _AlternativeValidStrategy(IStrategy):
+    """Second valid strategy so multi-plugin tests have distinct classes."""
+
+    @property
+    def id(self) -> str:
+        return "alt"
+
+    @property
+    def name(self) -> str:
+        return "Alt"
+
+    @property
+    def version(self) -> str:
+        return "2.0.0"
+
+    async def initialize(self, config) -> None:
+        return None
+
+    async def dispose(self) -> None:
+        return None
+
+    async def evaluate(self, portfolio, market, costs):
+        return []
+
+    def get_config_schema(self) -> dict:
+        return {}
+
+
+class _IncompleteStrategy(IStrategy):
+    """Subclasses IStrategy but leaves abstract methods unimplemented."""
+
+
+class _BareClass:
+    """An ordinary class that does not implement IStrategy at all."""
+
+
+class TestPluginRegistryRegisterValidation:
+    """Validation performed at registration time."""
+
+    def test_register_non_class_raises_plugin_error(self):
+        registry = InMemoryPluginRegistry()
+        # Instance instead of a class.
+        with pytest.raises(PluginError, match="must be a class"):
+            registry.register("instance", _ValidStrategy())
+        # A bare value.
+        with pytest.raises(PluginError, match="must be a class"):
+            registry.register("number", 42)
+        # A function (callable but not a class).
+        def some_function() -> None:
+            return None
+
+        with pytest.raises(PluginError, match="must be a class"):
+            registry.register("func", some_function)
+
+    def test_register_empty_name_raises_plugin_error(self):
+        registry = InMemoryPluginRegistry()
+        with pytest.raises(PluginError, match="non-empty str"):
+            registry.register("", _ValidStrategy)
+
+    def test_register_non_string_name_raises_plugin_error(self):
+        registry = InMemoryPluginRegistry()
+        with pytest.raises(PluginError, match="non-empty str"):
+            registry.register(123, _ValidStrategy)  # type: ignore[arg-type]
+
+    def test_register_bare_class_missing_istrategy_raises_plugin_error(self):
+        """A class that is not an IStrategy subclass is rejected."""
+        registry = InMemoryPluginRegistry()
+        with pytest.raises(PluginError, match=re.escape("subclass of nexus_sdk.strategy.IStrategy")):
+            registry.register("bare", _BareClass)
+        # Registry stays empty after a failed registration.
+        assert len(registry) == 0
+
+    def test_register_abstract_subclass_raises_plugin_error(self):
+        """An IStrategy subclass with unimplemented abstract methods is rejected."""
+        registry = InMemoryPluginRegistry()
+        with pytest.raises(PluginError, match="unimplemented abstract methods"):
+            registry.register("incomplete", _IncompleteStrategy)
+        # And the partially-valid class never pollutes the registry.
+        assert "incomplete" not in registry
+
+    def test_duplicate_register_raises_duplicate_plugin_error(self):
+        registry = InMemoryPluginRegistry()
+        registry.register("dupe", _ValidStrategy)
+        with pytest.raises(DuplicatePluginError, match="already registered"):
+            registry.register("dupe", _AlternativeValidStrategy)
+        # Original registration is preserved.
+        assert registry.get("dupe") is _ValidStrategy
+
+    def test_duplicate_register_is_plugin_error_subclass(self):
+        """DuplicatePluginError must be catchable as the base PluginError."""
+        registry = InMemoryPluginRegistry()
+        registry.register("dupe", _ValidStrategy)
+        with pytest.raises(PluginError):
+            registry.register("dupe", _ValidStrategy)
+
+
+class TestPluginRegistryUnregister:
+    def test_unregister_unknown_raises_plugin_not_found_error(self):
+        registry = InMemoryPluginRegistry()
+        with pytest.raises(PluginNotFoundError, match="not registered"):
+            registry.unregister("ghost")
+
+    def test_unregister_unknown_is_plugin_error_subclass(self):
+        registry = InMemoryPluginRegistry()
+        with pytest.raises(PluginError):
+            registry.unregister("ghost")
+
+    def test_unregister_known_removes_it(self):
+        registry = InMemoryPluginRegistry()
+        registry.register("s", _ValidStrategy)
+        registry.unregister("s")
+        assert registry.get("s") is None
+        assert "s" not in registry
+        assert len(registry) == 0
+
+    def test_unregister_then_re_register_works(self):
+        registry = InMemoryPluginRegistry()
+        registry.register("s", _ValidStrategy)
+        registry.unregister("s")
+        # Re-using the name after removal must not trip DuplicatePluginError.
+        registry.register("s", _AlternativeValidStrategy)
+        assert registry.get("s") is _AlternativeValidStrategy
+
+
+class TestPluginRegistryLifecycle:
+    """register -> get -> unregister -> get full lifecycle."""
+
+    def test_register_get_unregister_get_lifecycle(self):
+        registry = InMemoryPluginRegistry()
+
+        # Initially absent.
+        assert registry.get("life") is None
+        assert "life" not in registry
+        assert len(registry) == 0
+
+        # Register -> present.
+        registry.register("life", _ValidStrategy)
+        assert registry.get("life") is _ValidStrategy
+        assert "life" in registry
+        assert len(registry) == 1
+
+        # Unregister -> absent again.
+        registry.unregister("life")
+        assert registry.get("life") is None
+        assert "life" not in registry
+        assert len(registry) == 0
+
+    def test_get_returns_none_for_unknown(self):
+        registry = InMemoryPluginRegistry()
+        assert registry.get("nope") is None
+
+    def test_get_returns_the_exact_class_registered(self):
+        registry = InMemoryPluginRegistry()
+        registry.register("exact", _ValidStrategy)
+        assert registry.get("exact") is _ValidStrategy
+
+    def test_multiple_registrations_coexist(self):
+        registry = InMemoryPluginRegistry()
+        registry.register("a", _ValidStrategy)
+        registry.register("b", _AlternativeValidStrategy)
+        assert len(registry) == 2
+        assert registry.get("a") is _ValidStrategy
+        assert registry.get("b") is _AlternativeValidStrategy
+
+
+class TestPluginRegistryListAllCopySemantics:
+    def test_list_all_returns_copy_not_internal_state(self):
+        registry = InMemoryPluginRegistry()
+        registry.register("a", _ValidStrategy)
+        snapshot = registry.list_all()
+        # Mutating the returned list must not affect the registry.
+        snapshot.append("a")
+        snapshot.clear()
+        assert registry.list_all() == ["a"]
+
+    def test_list_all_returns_new_object_each_call(self):
+        registry = InMemoryPluginRegistry()
+        registry.register("a", _ValidStrategy)
+        first = registry.list_all()
+        second = registry.list_all()
+        assert first == second == ["a"]
+        assert first is not second
+
+    def test_list_all_is_empty_for_fresh_registry(self):
+        assert InMemoryPluginRegistry().list_all() == []
+
+    def test_list_all_reflects_current_keys(self):
+        registry = InMemoryPluginRegistry()
+        registry.register("a", _ValidStrategy)
+        registry.register("b", _AlternativeValidStrategy)
+        assert set(registry.list_all()) == {"a", "b"}
+        registry.unregister("a")
+        assert registry.list_all() == ["b"]
+
+
+class TestPluginRegistryClear:
+    def test_clear_empties_registry(self):
+        registry = InMemoryPluginRegistry()
+        registry.register("a", _ValidStrategy)
+        registry.register("b", _AlternativeValidStrategy)
+        assert len(registry) == 2
+        registry.clear()
+        assert len(registry) == 0
+        assert registry.list_all() == []
+        assert registry.get("a") is None
+
+    def test_clear_on_empty_registry_is_noop(self):
+        registry = InMemoryPluginRegistry()
+        registry.clear()  # must not raise
+        assert len(registry) == 0
+
+    def test_clear_allows_reuse_of_names(self):
+        registry = InMemoryPluginRegistry()
+        registry.register("a", _ValidStrategy)
+        registry.clear()
+        # Name is free again after clear.
+        registry.register("a", _AlternativeValidStrategy)
+        assert registry.get("a") is _AlternativeValidStrategy
+
+
+class TestPluginRegistryContainsAndLen:
+    def test_contains_true_for_registered(self):
+        registry = InMemoryPluginRegistry()
+        registry.register("s", _ValidStrategy)
+        assert "s" in registry
+
+    def test_contains_false_for_unknown(self):
+        registry = InMemoryPluginRegistry()
+        assert "ghost" not in registry
+
+    def test_contains_false_after_unregister(self):
+        registry = InMemoryPluginRegistry()
+        registry.register("s", _ValidStrategy)
+        assert "s" in registry
+        registry.unregister("s")
+        assert "s" not in registry
+
+    def test_contains_unhashable_name_returns_false_not_typeerror(self):
+        """Unhashable keys must degrade to False instead of raising."""
+        registry = InMemoryPluginRegistry()
+        registry.register("s", _ValidStrategy)
+        assert ["s"] not in registry  # list is unhashable
+        assert {"s": 1} not in registry  # dict is unhashable
+
+    def test_len_tracks_registrations(self):
+        registry = InMemoryPluginRegistry()
+        assert len(registry) == 0
+        registry.register("a", _ValidStrategy)
+        assert len(registry) == 1
+        registry.register("b", _AlternativeValidStrategy)
+        assert len(registry) == 2
+        registry.unregister("a")
+        assert len(registry) == 1
+        registry.clear()
+        assert len(registry) == 0
+
+
+class TestPluginRegistryExceptionHierarchy:
+    def test_duplicate_plugin_error_is_plugin_error(self):
+        assert issubclass(DuplicatePluginError, PluginError)
+
+    def test_plugin_not_found_error_is_plugin_error(self):
+        assert issubclass(PluginNotFoundError, PluginError)
+
+    def test_errors_are_distinct(self):
+        assert DuplicatePluginError is not PluginNotFoundError
+        assert DuplicatePluginError is not PluginError
