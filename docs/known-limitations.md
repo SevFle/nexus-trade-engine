@@ -14,6 +14,54 @@ Priority legend:
 
 ---
 
+<a id="tax-lot-name-drift"></a>
+## P0 — `tax_lot_records` model targets a table no migration creates
+
+**Where**: [`engine/db/models.py`](../engine/db/models.py) declares
+`TaxLotRecord.__tablename__ = "tax_lot_records"`; migration
+[`002_additional_tables.py`](../engine/db/migrations/versions/002_additional_tables.py)
+creates a table named **`tax_lots`** instead. No revision anywhere in
+the chain creates `tax_lot_records` (verified:
+`grep -rn tax_lot_records engine/db/migrations/` is empty).
+
+The model is **actively queried** —
+[`engine/core/tax/reports/form_1099b.py`](../engine/core/tax/reports/form_1099b.py)
+selects against `TaxLotRecord` to build the 1099-B disposition
+schedule.
+
+**Why it ships green**: exactly the same reason the
+[`consent_records` / `deletion_schedules` P0](#privacy-tables-no-migration)
+above ships green — the test suite runs against SQLite and calls
+`Base.metadata.create_all`, which builds `tax_lot_records` directly
+from the model and never runs Alembic. The drift is invisible until a
+fresh Postgres is provisioned via `alembic upgrade head`.
+
+**Impact**: every US-tax 1099-B report fails with
+`asyncpg.exceptions.UndefinedTableError: relation "tax_lot_records"
+does not exist` on any migration-provisioned database. On such a
+database the `tax_lots` table *does* exist but is unreachable from the
+ORM, so tax-lot data written there (if anything ever wrote to it) is
+also orphaned.
+
+**Workaround today**: after `alembic upgrade head`, rename the
+misnamed table in place (one statement, idempotent):
+
+```sql
+ALTER TABLE IF EXISTS tax_lots RENAME TO tax_lot_records;
+```
+
+(The index names `ix_tax_lots_portfolio_id` / `ix_tax_lots_symbol`
+created by `002` are not query-critical, so leaving them is fine; a
+clean fix would also `ALTER INDEX … RENAME TO ix_tax_lot_*`.)
+
+**Fix path**: add `015_tax_lots_rename_to_tax_lot_records.py` that
+runs the `ALTER TABLE … RENAME TO` above on upgrade (and the inverse
+on downgrade), plus the same empty-Postgres CI gate as the other
+drift items. This is the third member of the model↔migration drift
+family documented in [`architecture/database.md`](architecture/database.md).
+
+---
+
 <a id="rebalancer-merge-conflict"></a>
 ## P2 — No CI guard against committed merge-conflict markers
 

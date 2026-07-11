@@ -125,6 +125,14 @@ wash-sale basis shifts (US).
 
 Index `ix_tax_lot_portfolio_symbol` backs the per-symbol lot walk.
 
+> **Migration drift:** migration `002` created this table as
+> **`tax_lots`**, but the model targets **`tax_lot_records`** and no
+> revision creates the model's name. The table is queried by
+> [`form_1099b.py`](../engine/core/tax/reports/form_1099b.py), so a
+> 1099-B report throws `UndefinedTableError` on any database
+> provisioned via `alembic upgrade head`. See the P0 entry in
+> [`known-limitations.md`](known-limitations.md#tax-lot-name-drift).
+
 ### `backtest_results` (002 → 003 nullable portfolio → 008 composite score)
 
 The result row a `POST /backtest/run` *should* be writing — see

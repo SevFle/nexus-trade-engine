@@ -25,12 +25,12 @@ The schema is owned by the Alembic migration chain in
 
 | Rev   | Adds / changes                                                 |
 |-------|----------------------------------------------------------------|
-| 001   | Initial schema: users, strategies, backtest_results, accounts. |
-| 002   | Auxiliary tables (portfolios, journals, positions, fills).     |
+| 001   | Core schema: `users`, `portfolios`, `positions`, `orders`, `installed_strategies`, `backtest_results`, `ohlcv_bars`. |
+| 002   | Time-series + tax tables: `portfolio_snapshots` (hypertable), `evaluation_log` (hypertable), `tax_lots`, `marketplace_entries`, `marketplace_reviews`. |
 | 003   | Make `backtest_results.portfolio_id` nullable.                 |
-| 004   | Legal documents (Terms, Privacy, Disclaimer, …).               |
-| 005   | Auth/RBAC tables (roles, role_assignments).                    |
-| 006   | Make `legal_acceptance` rows immutable (no update/delete).     |
+| 004   | Legal surface: `legal_documents`, `legal_acceptances`, `data_provider_attributions`. |
+| 005   | RBAC + sessions: add `users.role`/`auth_provider`/`external_id` columns + the `uq_user_provider_external` partial unique index; create `refresh_tokens`. RBAC is a role **column** + a Python hierarchy (ADR-0002), **not** a join table. |
+| 006   | Make `legal_acceptances` rows immutable (no update/delete trigger). |
 | 007   | `scoring_snapshots` for cross-strategy composite scoring.      |
 | 008   | `backtest_results.composite_score` + `score_breakdown` (gh#8). |
 | 009   | `users.{mfa_enabled, mfa_secret_encrypted, mfa_backup_codes}`. |
@@ -42,15 +42,39 @@ The schema is owned by the Alembic migration chain in
 Run `alembic history` for the source of truth. The next free revision
 number is `014`.
 
-> **Known drift:** the `ConsentRecord` and `DeletionSchedule` models in
-> [`models.py`](../../engine/db/models.py) are read/written by
-> [`engine/privacy/deletion.py`](../../engine/privacy/deletion.py) but
-> are created by **no** revision. `alembic upgrade head` on an empty DB
-> omits both tables. See the P0 entry in
-> [`known-limitations.md`](../known-limitations.md). This is the same
-> model-without-migration class of bug that `013` just fixed for
-> `users.processing_restricted`; SQLite tests mask it because fixtures
-> call `Base.metadata.create_all` instead of Alembic.
+> **Known drift (3 independent gaps, all P0):** SQLite tests mask every
+> one of these because fixtures call `Base.metadata.create_all` instead
+> of Alembic, so the suite is green against a schema that migrations do
+> not reproduce. See the matching P0 entries in
+> [`known-limitations.md`](../known-limitations.md).
+>
+> 1. **Models without a migration.** `ConsentRecord` and
+>    `DeletionSchedule` are read/written by
+>    [`engine/privacy/deletion.py`](../../engine/privacy/deletion.py) but
+>    created by **no** revision. `alembic upgrade head` on an empty DB
+>    omits both — the GDPR Art. 17 deletion flow throws
+>    `UndefinedTableError` on any migration-provisioned database. Same
+>    class of bug that `013` just fixed for `users.processing_restricted`.
+> 2. **Model/migration name mismatch.** Migration `002` creates a table
+>    named **`tax_lots`**, but the live ORM model `TaxLotRecord` targets
+>    **`tax_lot_records`** ([`models.py`](../../engine/db/models.py)). No
+>    migration creates `tax_lot_records`. The model is actively queried —
+>    [`engine/core/tax/reports/form_1099b.py`](../../engine/core/tax/reports/form_1099b.py)
+>    selects against it — so any 1099-B report fails on a
+>    migration-provisioned database.
+> 3. **Orphaned migration tables.** Migration `002` also creates
+>    `marketplace_entries` and `marketplace_reviews`, which have **no**
+>    SQLAlchemy model and **no** code reference anywhere in `engine/`.
+>    They exist in migration-provisioned databases only and are dead
+>    weight. (`portfolio_snapshots` and `evaluation_log`, also from
+>    `002`, have no ORM model either but are referenced by the retention
+>    policies in [`engine/data/retention.py`](../../engine/data/retention.py),
+>    so they are intentional migration-only tables, not orphans.)
+>
+> All three would be caught by the "boot empty Postgres → `alembic
+> upgrade head` → reflect models" CI job in the P2
+> ["No Alembic check in CI"](../known-limitations.md#no-alembic-check)
+> entry.
 
 ## Critical tables
 
@@ -63,9 +87,11 @@ runbook at [`docs/operations/backup-and-recovery.md`](../operations/backup-and-r
 - **`backtest_results`** — every run a user has ever submitted. The
   `score_breakdown` JSONB column is the per-dimension score map from
   the strategy evaluator.
-- **`portfolios`, `accounts`, `positions`, `fills`** — operational
-  trading state. When live trading lands (#109 / #111) these tables
-  will see write traffic on every fill.
+- **`portfolios`, `positions`, `orders`, `installed_strategies`,
+  `tax_lot_records`** — operational trading state. When live trading
+  lands (#109 / #111) these tables will see write traffic on every
+  fill. (Note: migration 002 created a `tax_lots` table but the live
+  ORM model targets `tax_lot_records` — see the drift callout below.)
 - **`webhook_configs`, `webhook_deliveries`** — the outbound webhook
   registry and a delivery audit trail. The `signing_secret` column is
   returned to the operator only on create; reads return null. **Do not
