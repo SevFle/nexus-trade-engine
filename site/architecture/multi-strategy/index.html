@@ -10,31 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/RELEASING/">
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/architecture/multi-strategy/">
       
       
-        <link rel="prev" href="../deployment/">
+        <link rel="prev" href="../core-domains/">
       
       
-        <link rel="next" href="../PLUGIN_DEV_GUIDE/">
+        <link rel="next" href="../database/">
       
       
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Releasing - Nexus Trade Engine</title>
+        <title>Multi-strategy coordination - Nexus Trade Engine</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -53,7 +53,7 @@
       
     
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#releasing" class="md-skip">
+        <a href="#multi-strategy-coordination" class="md-skip">
           Skip to content
         </a>
       
@@ -92,7 +92,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="Nexus Trade Engine" class="md-header__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
+    <a href="../.." title="Nexus Trade Engine" class="md-header__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m3.5 18.5 6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17z"/></svg>
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Releasing
+              Multi-strategy coordination
             
           </span>
         </div>
@@ -230,7 +230,7 @@
   
   
     <li class="md-tabs__item">
-      <a href=".." class="md-tabs__link">
+      <a href="../.." class="md-tabs__link">
         
   
   
@@ -247,11 +247,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../architecture/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -273,7 +275,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../api-reference/" class="md-tabs__link">
+        <a href="../../api-reference/" class="md-tabs__link">
           
   
   
@@ -291,13 +293,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../development/" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../development/" class="md-tabs__link">
           
   
   
@@ -319,7 +319,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../adr/" class="md-tabs__link">
+        <a href="../../adr/" class="md-tabs__link">
           
   
   
@@ -341,7 +341,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../operations/slos/" class="md-tabs__link">
+        <a href="../../operations/slos/" class="md-tabs__link">
           
   
   
@@ -363,7 +363,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../observability/logging/" class="md-tabs__link">
+        <a href="../../observability/logging/" class="md-tabs__link">
           
   
   
@@ -385,7 +385,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../legal/processors/" class="md-tabs__link">
+        <a href="../../legal/processors/" class="md-tabs__link">
           
   
   
@@ -407,7 +407,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../known-limitations/" class="md-tabs__link">
+        <a href="../../known-limitations/" class="md-tabs__link">
           
   
   
@@ -443,7 +443,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="Nexus Trade Engine" class="md-nav__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
+    <a href="../.." title="Nexus Trade Engine" class="md-nav__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m3.5 18.5 6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17z"/></svg>
@@ -473,7 +473,7 @@
   
   
     <li class="md-nav__item">
-      <a href=".." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -497,6 +497,8 @@
       
   
   
+    
+  
   
   
     
@@ -520,22 +522,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../architecture/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -553,13 +556,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -579,7 +582,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../architecture/overview/" class="md-nav__link">
+      <a href="../overview/" class="md-nav__link">
         
   
   
@@ -607,7 +610,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../architecture/core-domains/" class="md-nav__link">
+      <a href="../core-domains/" class="md-nav__link">
         
   
   
@@ -632,10 +635,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../architecture/multi-strategy/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-strategy coordination
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -651,6 +681,159 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-more-than-one" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why more than one
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The map
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-voters-capital-free" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The voters (capital-free)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The voters (capital-free)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#orchestrationorchestratorpy-two-step-priority-net-position" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        orchestration/orchestrator.py — two-step priority / net-position
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#corestrategy_orchestratorpy-async-majority-weighted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core/strategy_orchestrator.py — async majority / weighted
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#portfolioorchestratorpy-lightweight-net-weighted-vote" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        portfolio/orchestrator.py — lightweight net-weighted-vote
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-capital-aware-coordinators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The capital-aware coordinators
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The capital-aware coordinators">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#portfoliomulti_strategypy-multistrategyportfolio-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        portfolio/multi_strategy.py — MultiStrategyPortfolio (merge)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#strategiesmulti_managerpy-multistrategymanager-forward" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        strategies/multi_manager.py — MultiStrategyManager (forward)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sibling-drift-driven-rebalancing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sibling: drift-driven rebalancing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -663,7 +846,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../architecture/database/" class="md-nav__link">
+      <a href="../database/" class="md-nav__link">
         
   
   
@@ -691,7 +874,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../architecture/plugins/" class="md-nav__link">
+      <a href="../plugins/" class="md-nav__link">
         
   
   
@@ -788,7 +971,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api-reference/" class="md-nav__link">
+      <a href="../../api-reference/" class="md-nav__link">
         
   
   
@@ -816,7 +999,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mcp-server/" class="md-nav__link">
+      <a href="../../mcp-server/" class="md-nav__link">
         
   
   
@@ -844,7 +1027,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../data-model/" class="md-nav__link">
+      <a href="../../data-model/" class="md-nav__link">
         
   
   
@@ -876,10 +1059,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -897,22 +1078,21 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
             
   
   
@@ -930,7 +1110,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -948,7 +1128,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../development/" class="md-nav__link">
+      <a href="../../development/" class="md-nav__link">
         
   
   
@@ -976,7 +1156,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../deployment/" class="md-nav__link">
+      <a href="../../deployment/" class="md-nav__link">
         
   
   
@@ -1001,37 +1181,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Releasing
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../RELEASING/" class="md-nav__link">
         
   
   
@@ -1047,131 +1200,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#versioning" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Versioning
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#conventional-commits" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Conventional Commits
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#how-a-release-happens" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        How a Release Happens
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#container-images" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Container Images
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Container Images">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#verifying-a-published-image" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Verifying a published image
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#manual-republish" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Manual republish
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cutting-an-out-of-cycle-patch" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Cutting an Out-of-Cycle Patch
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#first-release-checklist" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        First Release Checklist
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#troubleshooting" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Troubleshooting
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1184,7 +1212,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../PLUGIN_DEV_GUIDE/" class="md-nav__link">
+      <a href="../../PLUGIN_DEV_GUIDE/" class="md-nav__link">
         
   
   
@@ -1212,7 +1240,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../contributors/" class="md-nav__link">
+      <a href="../../contributors/" class="md-nav__link">
         
   
   
@@ -1294,7 +1322,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../adr/" class="md-nav__link ">
+            <a href="../../adr/" class="md-nav__link ">
               
   
   
@@ -1338,7 +1366,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../adr/0001-scaffold-tech-choices/" class="md-nav__link">
+      <a href="../../adr/0001-scaffold-tech-choices/" class="md-nav__link">
         
   
   
@@ -1366,7 +1394,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../adr/0002-auth-rbac/" class="md-nav__link">
+      <a href="../../adr/0002-auth-rbac/" class="md-nav__link">
         
   
   
@@ -1394,7 +1422,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../adr/0003-mobile-app-strategy/" class="md-nav__link">
+      <a href="../../adr/0003-mobile-app-strategy/" class="md-nav__link">
         
   
   
@@ -1422,7 +1450,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../adr/0004-task-queue-taskiq/" class="md-nav__link">
+      <a href="../../adr/0004-task-queue-taskiq/" class="md-nav__link">
         
   
   
@@ -1450,7 +1478,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../adr/0005-valkey-over-redis/" class="md-nav__link">
+      <a href="../../adr/0005-valkey-over-redis/" class="md-nav__link">
         
   
   
@@ -1478,7 +1506,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../adr/0006-bcrypt-fernet/" class="md-nav__link">
+      <a href="../../adr/0006-bcrypt-fernet/" class="md-nav__link">
         
   
   
@@ -1506,7 +1534,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../adr/0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
+      <a href="../../adr/0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
         
   
   
@@ -1534,7 +1562,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../adr/0008-pluggable-metrics-backend/" class="md-nav__link">
+      <a href="../../adr/0008-pluggable-metrics-backend/" class="md-nav__link">
         
   
   
@@ -1562,7 +1590,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../adr/0009-cross-replica-eventbus-bridge/" class="md-nav__link">
+      <a href="../../adr/0009-cross-replica-eventbus-bridge/" class="md-nav__link">
         
   
   
@@ -1590,7 +1618,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../adr/0010-static-ast-validation-toctou-loading/" class="md-nav__link">
+      <a href="../../adr/0010-static-ast-validation-toctou-loading/" class="md-nav__link">
         
   
   
@@ -1618,7 +1646,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../adr/template/" class="md-nav__link">
+      <a href="../../adr/template/" class="md-nav__link">
         
   
   
@@ -1688,7 +1716,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../operations/runbooks/" class="md-nav__link ">
+            <a href="../../operations/runbooks/" class="md-nav__link ">
               
   
   
@@ -1730,7 +1758,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/slos/" class="md-nav__link">
+      <a href="../../operations/slos/" class="md-nav__link">
         
   
   
@@ -1758,7 +1786,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/backup-and-recovery/" class="md-nav__link">
+      <a href="../../operations/backup-and-recovery/" class="md-nav__link">
         
   
   
@@ -1786,7 +1814,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/dr-drill-checklist/" class="md-nav__link">
+      <a href="../../operations/dr-drill-checklist/" class="md-nav__link">
         
   
   
@@ -1814,7 +1842,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/load-testing/" class="md-nav__link">
+      <a href="../../operations/load-testing/" class="md-nav__link">
         
   
   
@@ -1914,7 +1942,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/runbooks/api-availability/" class="md-nav__link">
+      <a href="../../operations/runbooks/api-availability/" class="md-nav__link">
         
   
   
@@ -1942,7 +1970,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/runbooks/api-latency/" class="md-nav__link">
+      <a href="../../operations/runbooks/api-latency/" class="md-nav__link">
         
   
   
@@ -1970,7 +1998,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/runbooks/auth-mfa/" class="md-nav__link">
+      <a href="../../operations/runbooks/auth-mfa/" class="md-nav__link">
         
   
   
@@ -1998,7 +2026,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/runbooks/backtest-submit/" class="md-nav__link">
+      <a href="../../operations/runbooks/backtest-submit/" class="md-nav__link">
         
   
   
@@ -2026,7 +2054,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/runbooks/webhook-delivery/" class="md-nav__link">
+      <a href="../../operations/runbooks/webhook-delivery/" class="md-nav__link">
         
   
   
@@ -2054,7 +2082,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/runbooks/task-pipeline/" class="md-nav__link">
+      <a href="../../operations/runbooks/task-pipeline/" class="md-nav__link">
         
   
   
@@ -2082,7 +2110,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/runbooks/common-issues/" class="md-nav__link">
+      <a href="../../operations/runbooks/common-issues/" class="md-nav__link">
         
   
   
@@ -2183,7 +2211,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../observability/logging/" class="md-nav__link">
+      <a href="../../observability/logging/" class="md-nav__link">
         
   
   
@@ -2276,7 +2304,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../legal/processors/" class="md-nav__link">
+      <a href="../../legal/processors/" class="md-nav__link">
         
   
   
@@ -2371,7 +2399,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../known-limitations/" class="md-nav__link">
+      <a href="../../known-limitations/" class="md-nav__link">
         
   
   
@@ -2399,7 +2427,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../LAST_AUDIT/" class="md-nav__link">
+      <a href="../../LAST_AUDIT/" class="md-nav__link">
         
   
   
@@ -2454,10 +2482,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#versioning" class="md-nav__link">
+  <a href="#why-more-than-one" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Versioning
+        Why more than one
       
     </span>
   </a>
@@ -2465,10 +2493,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#conventional-commits" class="md-nav__link">
+  <a href="#the-map" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Conventional Commits
+        The map
       
     </span>
   </a>
@@ -2476,33 +2504,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#how-a-release-happens" class="md-nav__link">
+  <a href="#the-voters-capital-free" class="md-nav__link">
     <span class="md-ellipsis">
       
-        How a Release Happens
+        The voters (capital-free)
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#container-images" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Container Images
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Container Images">
+    <nav class="md-nav" aria-label="The voters (capital-free)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#verifying-a-published-image" class="md-nav__link">
+  <a href="#orchestrationorchestratorpy-two-step-priority-net-position" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Verifying a published image
+        orchestration/orchestrator.py — two-step priority / net-position
       
     </span>
   </a>
@@ -2510,10 +2527,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#manual-republish" class="md-nav__link">
+  <a href="#corestrategy_orchestratorpy-async-majority-weighted" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Manual republish
+        core/strategy_orchestrator.py — async majority / weighted
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#portfolioorchestratorpy-lightweight-net-weighted-vote" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        portfolio/orchestrator.py — lightweight net-weighted-vote
       
     </span>
   </a>
@@ -2526,10 +2554,49 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#cutting-an-out-of-cycle-patch" class="md-nav__link">
+  <a href="#the-capital-aware-coordinators" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Cutting an Out-of-Cycle Patch
+        The capital-aware coordinators
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The capital-aware coordinators">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#portfoliomulti_strategypy-multistrategyportfolio-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        portfolio/multi_strategy.py — MultiStrategyPortfolio (merge)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#strategiesmulti_managerpy-multistrategymanager-forward" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        strategies/multi_manager.py — MultiStrategyManager (forward)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sibling-drift-driven-rebalancing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sibling: drift-driven rebalancing
       
     </span>
   </a>
@@ -2537,21 +2604,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#first-release-checklist" class="md-nav__link">
+  <a href="#see-also" class="md-nav__link">
     <span class="md-ellipsis">
       
-        First Release Checklist
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#troubleshooting" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Troubleshooting
+        See also
       
     </span>
   </a>
@@ -2578,181 +2634,388 @@
   
 
 
-<h1 id="releasing">Releasing<a class="headerlink" href="#releasing" title="Permanent link">&para;</a></h1>
-<p>Nexus Trade Engine uses <a href="https://github.com/googleapis/release-please">release-please</a>
-to drive every public release. The process is fully automated as long as
-contributors use <a href="https://www.conventionalcommits.org/">Conventional Commits</a>
-on <code>main</code>.</p>
-<h2 id="versioning">Versioning<a class="headerlink" href="#versioning" title="Permanent link">&para;</a></h2>
-<p>We follow <a href="https://semver.org/">Semantic Versioning 2.0.0</a>:</p>
-<ul>
-<li><strong>MAJOR</strong> — incompatible API or operator-visible behaviour change.</li>
-<li><strong>MINOR</strong> — backwards-compatible feature additions.</li>
-<li><strong>PATCH</strong> — backwards-compatible bug fixes, perf, docs.</li>
-</ul>
-<p>While the project is <code>0.x</code>, breaking changes bump the <strong>minor</strong> number, not
-the major (this matches semver pre-1.0 conventions and is configured via
-<code>bump-minor-pre-major: true</code> in <code>release-please-config.json</code>).</p>
-<p>The single source of truth for the current version is
-<code>.release-please-manifest.json</code>. Two downstream artifacts are kept in lock
-step automatically:</p>
-<ul>
-<li><code>pyproject.toml</code> (<code>project.version</code>)</li>
-<li><code>frontend/package.json</code> (<code>version</code>)</li>
-</ul>
-<h2 id="conventional-commits">Conventional Commits<a class="headerlink" href="#conventional-commits" title="Permanent link">&para;</a></h2>
-<p>The PR title (and the squash-merge commit) becomes the release-note entry.
-Use one of:</p>
+<!--
+Part of the MkDocs Material site (see ../README.md for the doc-stack
+rationale). This page documents the multi-strategy coordination layer —
+the modules that sit above individual IStrategy plugins and decide how
+their signals combine. It is the deep-dive companion to the
+"Multi-strategy orchestration" section of core-domains.md.
+-->
+
+<h1 id="multi-strategy-coordination">Multi-strategy coordination<a class="headerlink" href="#multi-strategy-coordination" title="Permanent link">&para;</a></h1>
+<p>Strategies emit <code>Signal</code>s; <strong>coordinators</strong> decide what happens when
+several strategies run together. Nexus has <em>five</em> coordinators spread
+across three packages. They overlap in spirit but are deliberately
+separate, because they answer different questions and make different
+trade-offs about capital, provenance, and conflict resolution. Picking
+the wrong one is a real bug class, so this page is the authoritative
+map.</p>
+<blockquote>
+<p>This page is the deep-dive. For the one-paragraph summary and the
+cross-references into the rest of the domain layer, see
+<a href="../core-domains/#multi-strategy-orchestration"><code>core-domains.md</code></a>.</p>
+</blockquote>
+<h2 id="why-more-than-one">Why more than one<a class="headerlink" href="#why-more-than-one" title="Permanent link">&para;</a></h2>
+<p>The temptation is to have a single <code>combine(signals)</code> function. We don't,
+because the answers to three independent questions change the right
+design:</p>
+<ol>
+<li><strong>Does a strategy own money, or just a vote?</strong> A pure voter treats one
+   signal as one opinion (optionally scaled by a unitless weight). A
+   <em>capital-aware</em> coordinator knows how many dollars each strategy may
+   move, which is the only thing that makes "risk-adjusted" or
+   "budget-capped" merges meaningful.</li>
+<li><strong>Do conflicting symbols collapse to one decision, or stay separate?</strong>
+   A <em>merging</em> coordinator nets BUY vs. SELL on the same symbol into one
+   <code>Signal</code> (and a stalemate becomes HOLD). A <em>forwarding</em> coordinator
+   keeps every signal distinct so downstream attribution and per-strategy
+   risk limits can see who said what.</li>
+<li><strong>Whose <code>strategy_id</code> wins?</strong> Some coordinators re-tag every emitted
+   signal with the caller's registered id (so a misbehaving plugin can
+   never impersonate a sibling). Others stamp a single sentinel
+   (<code>"orchestrated"</code>, <code>"portfolio"</code>) on the merged output.</li>
+</ol>
+<p>The five coordinators below are the five useful combinations of those
+answers.</p>
+<h2 id="the-map">The map<a class="headerlink" href="#the-map" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Type</th>
-<th>Section</th>
-<th>Bumps version?</th>
+<th>Coordinator</th>
+<th>Package</th>
+<th>Capital-aware?</th>
+<th>Symbol conflict</th>
+<th>Provenance</th>
+<th>Status</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>feat</code></td>
-<td>Features</td>
-<td>Yes (minor)</td>
+<td><code>StrategyOrchestrator</code></td>
+<td><a href="../../engine/orchestration/orchestrator.py"><code>orchestration/orchestrator.py</code></a></td>
+<td>no</td>
+<td><strong>merges</strong> (priority / net-position)</td>
+<td>sentinel</td>
+<td>library-only</td>
 </tr>
 <tr>
-<td><code>fix</code></td>
-<td>Bug Fixes</td>
-<td>Yes (patch)</td>
+<td><code>StrategyOrchestrator</code> (async)</td>
+<td><a href="../../engine/core/strategy_orchestrator.py"><code>core/strategy_orchestrator.py</code></a></td>
+<td>no</td>
+<td><strong>merges</strong> (majority / weighted, via <code>SignalAggregator</code>)</td>
+<td>sentinel</td>
+<td>library-only</td>
 </tr>
 <tr>
-<td><code>perf</code></td>
-<td>Performance Improvements</td>
-<td>Yes (patch)</td>
+<td><code>StrategyOrchestrator</code> (lightweight)</td>
+<td><a href="../../engine/portfolio/orchestrator.py"><code>portfolio/orchestrator.py</code></a></td>
+<td>no</td>
+<td><strong>merges</strong> (net weighted vote)</td>
+<td>sentinel (<code>"orchestrated"</code>)</td>
+<td>library-only</td>
 </tr>
 <tr>
-<td><code>refactor</code></td>
-<td>Code Refactoring</td>
-<td>Yes (patch)</td>
+<td><code>MultiStrategyPortfolio</code></td>
+<td><a href="../../engine/portfolio/multi_strategy.py"><code>portfolio/multi_strategy.py</code></a></td>
+<td><strong>yes</strong> (relative share)</td>
+<td><strong>merges</strong> (risk-adjusted dollar netting)</td>
+<td>sentinel (<code>"portfolio"</code>) + contributors list</td>
+<td>library-only</td>
 </tr>
 <tr>
-<td><code>docs</code></td>
-<td>Documentation</td>
-<td>Yes (patch)</td>
-</tr>
-<tr>
-<td><code>revert</code></td>
-<td>Reverts</td>
-<td>Yes (patch)</td>
-</tr>
-<tr>
-<td><code>test</code></td>
-<td>Tests</td>
-<td>No (hidden)</td>
-</tr>
-<tr>
-<td><code>build</code></td>
-<td>Build System</td>
-<td>No (hidden)</td>
-</tr>
-<tr>
-<td><code>ci</code></td>
-<td>Continuous Integration</td>
-<td>No (hidden)</td>
-</tr>
-<tr>
-<td><code>chore</code></td>
-<td>Miscellaneous Chores</td>
-<td>No (hidden)</td>
+<td><code>MultiStrategyManager</code></td>
+<td><a href="../../engine/strategies/multi_manager.py"><code>strategies/multi_manager.py</code></a></td>
+<td><strong>yes</strong> (absolute budget)</td>
+<td><strong>forwards</strong> (no merge)</td>
+<td><strong>re-tags with caller id</strong></td>
+<td>library-only</td>
 </tr>
 </tbody>
 </table>
-<p>Add <code>!</code> after the type (e.g. <code>feat!: drop /v0/foo</code>) <strong>or</strong> include
-<code>BREAKING CHANGE:</code> in the commit body to force a major bump (or, while we are
-0.x, a minor bump).</p>
-<p>Examples:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>feat(webhooks): add Telegram template
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>fix(auth): reject expired MFA challenge tokens
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>docs(community): add CoC, security, governance, contributing
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>feat!: replace /api/v1/strategy with /api/v2/strategy
+<blockquote>
+<p><strong>Three classes are named <code>StrategyOrchestrator</code>.</strong> They live in
+different packages and have different conflict-resolution semantics
+(priority/net-position, majority/weighted, and net-weighted-vote
+respectively). Always qualify by import path; the bare class name is
+ambiguous. The <code>engine.strategies</code> package docstring frames
+<code>MultiStrategyManager</code> as the layer that binds strategies to <em>capital</em>,
+sitting above the voters.</p>
+</blockquote>
+<p>All five are <strong>library-only today</strong>: none is driven by a public run route
+or registered in the execution factory. They are all fully unit-tested
+(<code>tests/test_multi_strategy_manager.py</code>, <code>tests/test_multi_strategy_portfolio.py</code>,
+and the orchestration tests). The live/paper run route that would
+naturally consume them is the open P1 — see
+<a href="../../known-limitations/"><code>known-limitations.md</code></a>.</p>
+<h2 id="the-voters-capital-free">The voters (capital-free)<a class="headerlink" href="#the-voters-capital-free" title="Permanent link">&para;</a></h2>
+<p>These three answer <em>"given N opinions, what is the consensus?"</em> No money
+model — a strategy's influence is at most a unitless weight.</p>
+<h3 id="orchestrationorchestratorpy-two-step-priority-net-position"><code>orchestration/orchestrator.py</code> — two-step priority / net-position<a class="headerlink" href="#orchestrationorchestratorpy-two-step-priority-net-position" title="Permanent link">&para;</a></h3>
+<p>The "register N, run all, then collapse" loop. Two-step API:
+<code>await orch.run_all(market)</code> collects every strategy's signals, then
+<code>aggregate_signals()</code> resolves conflicts. <code>ConflictResolution</code> selects
+the merge rule:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PRIORITY</code> <em>(default)</em></td>
+<td>Highest-priority strategy with a non-HOLD opinion wins. Opposing signals from strategies tied at top priority → HOLD (stalemate). HOLD abstains.</td>
+</tr>
+<tr>
+<td><code>NET_POSITION</code></td>
+<td><code>BUY = +weight</code>, <code>SELL = −weight</code> summed per symbol. Positive net → BUY, negative → SELL, zero → HOLD. Resolved weight is the net magnitude clamped to <code>[0, 1]</code>, so conviction can override headcount. <em>(Unique to this orchestrator.)</em></td>
+</tr>
+</tbody>
+</table>
+<h3 id="corestrategy_orchestratorpy-async-majority-weighted"><code>core/strategy_orchestrator.py</code> — async majority / weighted<a class="headerlink" href="#corestrategy_orchestratorpy-async-majority-weighted" title="Permanent link">&para;</a></h3>
+<p>The heavier async counterpart. Each strategy is registered with a
+per-strategy <code>weight</code>; every strategy sees the <em>same</em> <code>market_data</code> and
+<code>cost_model</code> so cross-strategy comparisons are apples-to-apples; a single
+failing strategy is isolated. Dispatches to
+<a href="../../engine/core/signal_aggregator.py"><code>SignalAggregator</code></a>, the single
+source of truth for tie handling:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MAJORITY</code></td>
+<td>Strictly more than half of BUY-vs-SELL votes wins; tie → HOLD. HOLD abstains and is excluded from the denominator.</td>
+</tr>
+<tr>
+<td><code>WEIGHTED</code></td>
+<td>Vote × registered weight (default 1.0); strictly higher total wins; tie → HOLD. Lets a high-conviction strategy override a numerical majority.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="portfolioorchestratorpy-lightweight-net-weighted-vote"><code>portfolio/orchestrator.py</code> — lightweight net-weighted-vote<a class="headerlink" href="#portfolioorchestratorpy-lightweight-net-weighted-vote" title="Permanent link">&para;</a></h3>
+<p>The smallest of the three voters, and the one most often overlooked
+because it shares a package with <code>MultiStrategyPortfolio</code>. A synchronous
+register-once / <code>evaluate(market_context)</code> loop that aggregates signals
+into a <a href="../../engine/portfolio/orchestrator.py"><code>SignalSet</code></a> by <strong>net
+weighted vote</strong>: each BUY casts <code>+weight</code>, each SELL casts <code>−weight</code>, HOLD
+abstains; the side with the strictly greater net weight wins, and an
+exact tie resolves to HOLD ("strongest net weight wins"). Resolved
+signals are stamped with the <code>ORCHESTRATED_STRATEGY_ID</code> sentinel so audit
+code can tell a merged decision apart from a raw per-strategy signal.</p>
+<p>Pick it when you want the weighted-vote semantics of the async
+orchestrator without the timeout/async machinery — it is the natural
+drop-in for a synchronous backtest loop.</p>
+<h2 id="the-capital-aware-coordinators">The capital-aware coordinators<a class="headerlink" href="#the-capital-aware-coordinators" title="Permanent link">&para;</a></h2>
+<p>These two answer <em>"given a fixed dollar book, how much may each strategy
+deploy, and what is the net position?"</em> They are the two halves of the
+allocation story, and they make <strong>opposite</strong> choices about merging.</p>
+<h3 id="portfoliomulti_strategypy-multistrategyportfolio-merge"><code>portfolio/multi_strategy.py</code> — <code>MultiStrategyPortfolio</code> (merge)<a class="headerlink" href="#portfoliomulti_strategypy-multistrategyportfolio-merge" title="Permanent link">&para;</a></h3>
+<p>The merging, risk-adjusted coordinator. Each strategy is registered with
+a <code>capital_weight</code> — a <strong>relative</strong> share (need not sum to 1.0; dollar
+allocations are normalised on demand). Per symbol, the capital-weighted
+<strong>dollar exposure</strong> is netted:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>signed_exposure = side_sign(strategy_id) * allocation(strategy_id) * signal.weight
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>                     # BUY +1, SELL −1, HOLD 0
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>merged.side   = sign( Σ signed_exposure )        # |net| &lt; ε → HOLD
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>merged.weight = | Σ signed_exposure | / total_capital   # clamped to [0,1]
 </span></code></pre></div>
-<h2 id="how-a-release-happens">How a Release Happens<a class="headerlink" href="#how-a-release-happens" title="Permanent link">&para;</a></h2>
+<p>The merge is <em>risk-adjusted</em> in two senses: a strategy with more capital
+at risk moves the decision proportionally more, <strong>and</strong> the emitted
+weight is itself a measure of how much of the book is committed.
+Opposing equal-dollar signals net to zero (stalemate → HOLD).</p>
+<p>Outcome is a <code>PortfolioEvaluation</code> richer than a bare <code>list[Signal]</code>:
+merged <code>signals</code>, per-symbol <code>CombinedPosition</code>s (with <code>contributors</code>),
+full <code>per_strategy_signals</code> provenance, <code>capital_deployed</code> /
+<code>net_exposure</code> / <code>capital_utilization</code>, and an <code>errors</code> map. The only
+merge mode today is <code>SignalMergeMode.RISK_ADJUSTED</code> (the enum is reserved
+for future cycles). See <a href="../core-domains/"><code>core-domains.md</code></a> for the full
+field-by-field contract.</p>
+<h3 id="strategiesmulti_managerpy-multistrategymanager-forward"><code>strategies/multi_manager.py</code> — <code>MultiStrategyManager</code> (forward)<a class="headerlink" href="#strategiesmulti_managerpy-multistrategymanager-forward" title="Permanent link">&para;</a></h3>
+<p>The forwarding, provenance-preserving coordinator — and the natural
+choice when you need <strong>per-strategy attribution and per-strategy risk
+limits</strong>, because it refuses to collapse disagreeing signals into one.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.strategies</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiStrategyManager</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">manager</span> <span class="o">=</span> <span class="n">MultiStrategyManager</span><span class="p">(</span><span class="n">total_capital</span><span class="o">=</span><span class="mf">100_000.0</span><span class="p">,</span> <span class="n">eval_timeout</span><span class="o">=</span><span class="mf">30.0</span><span class="p">)</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">manager</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;momentum&quot;</span><span class="p">,</span>   <span class="n">momentum_strategy</span><span class="p">,</span>  <span class="n">allocation_pct</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">manager</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;mean-revert&quot;</span><span class="p">,</span> <span class="n">mean_revert_strategy</span><span class="p">,</span> <span class="n">allocation_pct</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># 10% of the book left unallocated by design.</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">manager</span><span class="o">.</span><span class="n">evaluate_all</span><span class="p">(</span><span class="n">market_data</span><span class="p">,</span> <span class="n">cost_model</span><span class="p">)</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">result</span><span class="o">.</span><span class="n">signals</span>                  <span class="c1"># every emitted signal, capped + re-tagged</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">result</span><span class="o">.</span><span class="n">per_strategy_signals</span>     <span class="c1"># {&quot;momentum&quot;: [...], &quot;mean-revert&quot;: [...]}</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">result</span><span class="o">.</span><span class="n">allocation_caps</span>          <span class="c1"># {&quot;momentum&quot;: 60000.0, &quot;mean-revert&quot;: 30000.0}</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="n">result</span><span class="o">.</span><span class="n">allocation_adjustments</span>   <span class="c1"># {&quot;momentum&quot;: 0.83}  ← scaled down</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">result</span><span class="o">.</span><span class="n">errors</span>                   <span class="c1"># {} unless a strategy failed / timed out</span>
+</span></code></pre></div>
+<p>It owns four concerns the voters and <code>MultiStrategyPortfolio</code> do not:</p>
 <ol>
-<li>PRs land on <code>main</code> with conventional-commit titles.</li>
-<li>The <strong>Release Please</strong> workflow (<code>.github/workflows/release-please.yml</code>)
-   runs on every push to <code>main</code>. It opens (or updates) a single rolling
-   "release PR" that bumps the version, regenerates <code>CHANGELOG.md</code>, and
-   updates the version files listed above.</li>
-<li>Maintainers review the release PR. The diff is exactly the changelog
-   delta and version bumps — nothing else.</li>
-<li>Merging the release PR triggers release-please again, which:</li>
-<li>Tags the commit (<code>vX.Y.Z</code>).</li>
-<li>Creates a GitHub Release with the changelog excerpt.</li>
-<li>Triggers any downstream workflows that listen on <code>release: published</code>,
-     primarily <code>.github/workflows/publish-images.yml</code> which builds and pushes
-     a multi-arch (<code>linux/amd64</code>, <code>linux/arm64</code>) image to
-     <code>ghcr.io/&lt;owner&gt;/nexus-trade-engine</code>, signs it with cosign (keyless
-     OIDC), and attaches an SPDX SBOM attestation.</li>
+<li><strong>Registration with explicit ids.</strong> The <code>strategy_id</code> is a
+   caller-supplied parameter, <em>not</em> derived from <code>strategy.id</code>. It is the
+   source of truth for provenance: every emitted signal is re-tagged with
+   the registered id, so a strategy that mislabels its own
+   <code>Signal.strategy_id</code> can never impersonate a sibling or hide its
+   origin.</li>
+<li><strong>Per-strategy capital budgets.</strong> Each registration carries a dollar
+   cap = <code>total_capital * allocation_pct / 100</code>. <code>allocation_pct</code> is an
+   <strong>absolute</strong> percentage in <code>[0, 100]</code>, and the sum across the registry
+   must not exceed 100 (registering a strategy that would push the total
+   over raises <code>MultiStrategyManagerError</code>). <code>0</code> is allowed — it registers
+   a strategy that is intentionally capital-starved (paused) while
+   keeping its code path warm.</li>
+<li><strong>Allocation-cap enforcement.</strong> If a strategy's active (BUY/SELL)
+   signal weights collectively exceed its allocation fraction
+   (<code>allocation_pct / 100</code>), <em>that strategy's</em> weights are scaled down
+   proportionally so the cap is respected exactly. HOLD signals abstain
+   and pass through unchanged. The original weights are preserved in each
+   signal's <code>metadata</code> (<code>allocation_original_weight</code>,
+   <code>allocation_capped</code>), so the adjustment is auditable rather than
+   silent. A <code>pct=0</code> strategy has its active weights zeroed (intent
+   preserved, no capital deployed).</li>
+<li><strong>Provenance-preserving aggregation.</strong> Unlike
+   <code>MultiStrategyPortfolio</code>, the manager does <strong>not</strong> merge conflicting
+   symbols — it forwards every signal, just allocation-capped and
+   re-tagged. Downstream consumers see exactly who said what. Pair it
+   with a voter (e.g. <code>portfolio/orchestrator.py</code>) if you <em>also</em> need
+   symbol-level conflict resolution.</li>
 </ol>
-<p>No manual <code>git tag</code> or <code>gh release create</code> is required. Hand-rolled tags
-will desynchronise the manifest and should be avoided.</p>
-<h2 id="container-images">Container Images<a class="headerlink" href="#container-images" title="Permanent link">&para;</a></h2>
-<p>Every published release produces a multi-arch container image at:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>ghcr.io/&lt;owner&gt;/nexus-trade-engine:&lt;version&gt;
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>ghcr.io/&lt;owner&gt;/nexus-trade-engine:&lt;major&gt;.&lt;minor&gt;
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>ghcr.io/&lt;owner&gt;/nexus-trade-engine:latest      # only on non-prerelease
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>ghcr.io/&lt;owner&gt;/nexus-trade-engine:sha-&lt;sha&gt;
-</span></code></pre></div>
-<p>Architectures published: <code>linux/amd64</code>, <code>linux/arm64</code>. Provenance and SPDX
-SBOMs are attached as image attestations and pushed to the registry.</p>
-<h3 id="verifying-a-published-image">Verifying a published image<a class="headerlink" href="#verifying-a-published-image" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Verify the cosign signature (keyless OIDC, GitHub Actions identity).</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>cosign<span class="w"> </span>verify<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>--certificate-identity-regexp<span class="w"> </span><span class="s1">&#39;https://github.com/&lt;owner&gt;/nexus-trade-engine/.github/workflows/publish-images.yml@.*&#39;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--certificate-oidc-issuer<span class="w"> </span>https://token.actions.githubusercontent.com<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>ghcr.io/&lt;owner&gt;/nexus-trade-engine:&lt;version&gt;
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># Pull the SBOM attestation (SPDX JSON).</span>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>cosign<span class="w"> </span>download<span class="w"> </span>attestation<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span>--predicate-type<span class="w"> </span>https://spdx.dev/Document<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">  </span>ghcr.io/&lt;owner&gt;/nexus-trade-engine:&lt;version&gt;<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">&#39;.payload&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.predicate&#39;</span>
-</span></code></pre></div>
-<h3 id="manual-republish">Manual republish<a class="headerlink" href="#manual-republish" title="Permanent link">&para;</a></h3>
-<p>The publish workflow can be re-run from the Actions tab via
-<strong>Run workflow → Publish container images</strong>. Use this if a release was
-published before the workflow existed, or to re-tag a digest.</p>
-<h2 id="cutting-an-out-of-cycle-patch">Cutting an Out-of-Cycle Patch<a class="headerlink" href="#cutting-an-out-of-cycle-patch" title="Permanent link">&para;</a></h2>
-<p>If a security or critical fix needs to land on a prior minor:</p>
-<ol>
-<li>Create a <code>release-X.Y</code> branch from the tag.</li>
-<li>Cherry-pick the fix.</li>
-<li>Bump the version in <code>pyproject.toml</code>, <code>frontend/package.json</code>, and
-   <code>.release-please-manifest.json</code> manually on that branch.</li>
-<li>Tag and push: <code>git tag vX.Y.Z+1 &amp;&amp; git push origin vX.Y.Z+1</code>.</li>
-<li>Open a GitHub Release manually for the tag. Forward-port the fix to
-   <code>main</code> so the next normal release picks it up.</li>
-</ol>
-<p>This is intentionally awkward — it should be rare. See <code>SECURITY.md</code> for the
-disclosure timeline that may force this path.</p>
-<h2 id="first-release-checklist">First Release Checklist<a class="headerlink" href="#first-release-checklist" title="Permanent link">&para;</a></h2>
-<p>Before <code>v0.1.0</code> (or whatever the first tagged release is) ships:</p>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>pyproject.toml</code>, <code>frontend/package.json</code>, and
-      <code>.release-please-manifest.json</code> agree on the starting version.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <code>CHANGELOG.md</code> exists and is committed (release-please refuses to
-      operate without one).</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> At least one conventional-commit landed on <code>main</code> since the last
-      version, otherwise no release PR will open.</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h4 id="multistrategyevaluation-outcome"><code>MultiStrategyEvaluation</code> outcome<a class="headerlink" href="#multistrategyevaluation-outcome" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>signals</code></td>
+<td>All emitted signals across every strategy (capped, re-tagged).</td>
+</tr>
+<tr>
+<td><code>per_strategy_signals</code></td>
+<td><code>dict[id, list[Signal]]</code> — full per-strategy provenance.</td>
+</tr>
+<tr>
+<td><code>total_capital</code></td>
+<td>The manager's dollar budget (echoed for consumers).</td>
+</tr>
+<tr>
+<td><code>allocation_caps</code></td>
+<td><code>dict[id, dollars]</code> — the per-strategy budget actually applied.</td>
+</tr>
+<tr>
+<td><code>allocation_adjustments</code></td>
+<td><code>dict[id, scale]</code> for each strategy whose weights were scaled (<code>0 &lt; scale &lt; 1</code>; <code>0.0</code> for a capital-starved strategy). Absent if no adjustment.</td>
+</tr>
+<tr>
+<td><code>errors</code></td>
+<td><code>dict[id, message]</code> for any strategy that raised <em>or</em> exceeded <code>eval_timeout</code>. A timeout is reported as <code>TimeoutError: evaluate exceeded &lt;N&gt;s timeout</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Convenience properties: <code>trade_signals</code> (non-HOLD), <code>is_noop</code> (empty
+registry, all-empty results, or all-failed), <code>strategy_count</code>.</p>
+<h4 id="fault-isolation-input-safety">Fault isolation &amp; input safety<a class="headerlink" href="#fault-isolation-input-safety" title="Permanent link">&para;</a></h4>
+<p>Two guards keep one bad plugin from aborting a cycle, mirroring
+<code>MultiStrategyPortfolio</code>:</p>
 <ul>
-<li><strong>No release PR appearing.</strong> Either every commit on <code>main</code> since the last
-  release was a hidden type (<code>chore</code>, <code>ci</code>, <code>build</code>, <code>test</code>), or the commit
-  titles aren't conventional. Check the Actions tab for the most recent
-  <code>release-please</code> run.</li>
-<li><strong>Wrong version bump.</strong> Add or amend a commit with the correct prefix and
-  push to <code>main</code> — the release PR rewrites itself.</li>
-<li><strong>Manifest drifted from <code>pyproject.toml</code>.</strong> Edit
-  <code>.release-please-manifest.json</code> to match what is actually deployed and
-  push. The release PR will regenerate from that anchor.</li>
+<li><strong>Independent deep copies.</strong> Each strategy receives a fresh
+  <code>copy.deepcopy</code> of <code>market_data</code> and <code>cost_model</code>, so a misbehaving
+  plugin cannot poison its siblings or the caller's originals.</li>
+<li><strong>Tight <code>wait_for</code> guard.</strong> Only the <em>awaitable</em> result is bounded by
+  <code>eval_timeout</code>; the synchronous call frame is not (it has already
+  returned). A builtin <code>TimeoutError</code> raised inside the coroutine is
+  therefore classified as a strategy failure, not a deadline — only a
+  genuine <code>asyncio.wait_for</code> expiry is reported as a timeout. Sync
+  strategies (returning a <code>list</code>) are supported transparently and are
+  never subject to the timeout.</li>
+<li><strong>Snapshot before iterate.</strong> <code>evaluate_all</code> snapshots the registry
+  before walking it, so a strategy that registers/unregisters a sibling
+  mid-cycle cannot mutate the dict under us (added strategies run next
+  cycle).</li>
+</ul>
+<h4 id="construction-hardening-recent">Construction hardening (recent)<a class="headerlink" href="#construction-hardening-recent" title="Permanent link">&para;</a></h4>
+<p><code>MultiStrategyManager.__init__</code> validates every numeric parameter through
+a single <code>_finite</code> gate, which rejects <code>bool</code> (a sneaky <code>int</code> subclass),
+numeric strings, <code>None</code>, and non-finite values — <code>math.isfinite</code> is the
+check because a bare <code>w &lt; 0</code> silently admits <code>NaN</code>. Two recent fixes
+closed edge cases in that gate:</p>
+<ul>
+<li><strong>#1390</strong> — <code>max_strategies</code> is validated via <code>float(max_n).is_integer()</code>
+  rather than <code>max_n.is_integer()</code>, so the integrality check also works
+  for plain <code>int</code> inputs on Python &lt; 3.12 (where <code>int</code> has no
+  <code>is_integer</code> method). The integrality check runs <em>before</em> the range
+  check so a fractional input yields a clear "must be an integer" error
+  rather than a misleading truncation complaint.</li>
+<li><strong>#1392</strong> — the <code>_finite</code> coercion catches <code>OverflowError</code> (e.g.
+  <code>float(10 ** 400)</code>) and reports it as non-finite, instead of letting
+  it abort construction with an unguarded <code>OverflowError</code>.</li>
+</ul>
+<p>These are the only coordinator whose construction validates its inputs
+this strictly; the others rely on the caller passing sane types.</p>
+<h4 id="when-to-pick-it-over-multistrategyportfolio">When to pick it over <code>MultiStrategyPortfolio</code><a class="headerlink" href="#when-to-pick-it-over-multistrategyportfolio" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>You want…</th>
+<th>Pick</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>One merged decision per symbol, with conviction scaled by capital at risk</td>
+<td><code>MultiStrategyPortfolio</code></td>
+</tr>
+<tr>
+<td>Per-strategy attribution preserved end-to-end, with each strategy capped to its own dollar budget</td>
+<td><code>MultiStrategyManager</code></td>
+</tr>
+<tr>
+<td>A relative capital split (weights need not sum to 1.0)</td>
+<td><code>MultiStrategyPortfolio</code></td>
+</tr>
+<tr>
+<td>An absolute capital split (percentages must sum to ≤ 100)</td>
+<td><code>MultiStrategyManager</code></td>
+</tr>
+</tbody>
+</table>
+<p>The two are <strong>not</strong> interchangeable. <code>MultiStrategyPortfolio</code> is the
+right top-level loop when strategies compete for a shared book and you
+want a single netted position per symbol. <code>MultiStrategyManager</code> is the
+right loop when strategies run with independent budgets and you must
+attribute every signal to its source — the contract multi-strategy
+attribution reports and per-strategy risk limits need. It composes
+cleanly with a downstream voter if you later need symbol-level conflict
+resolution too.</p>
+<h2 id="sibling-drift-driven-rebalancing">Sibling: drift-driven rebalancing<a class="headerlink" href="#sibling-drift-driven-rebalancing" title="Permanent link">&para;</a></h2>
+<p><code>MultiStrategyPortfolio</code> and <code>MultiStrategyManager</code> both answer <em>"what
+should we trade this cycle?"</em> <a href="../../engine/portfolio/rebalancer.py"><code>PortfolioRebalancer</code></a>
+answers the slower, periodic question: <em>"the strategies' dollar values
+have drifted away from the policy weights — by how much, and what
+capital transfers would restore them?"</em> It emits advisory
+<code>RebalanceOrder</code>s (BUY underweight / SELL overweight), is pure / no-I/O,
+and lives in the same <code>engine/portfolio/</code> package (which owns no
+execution by design). See <a href="../core-domains/"><code>core-domains.md</code></a> for its
+full contract; it is the closing half of the allocation story and is
+also library-only today.</p>
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../core-domains/"><code>core-domains.md</code></a> — the domain-layer map this page
+  extends, including the cost/risk and analytics layers.</li>
+<li><a href="../../known-limitations/"><code>known-limitations.md</code></a> — the live/paper run
+  route that would drive these coordinators is the open P1.</li>
+<li><a href="../../adr/"><code>adr/</code></a> — no dedicated ADR yet for the multi-coordinator
+  split; capture one (from <a href="../../adr/template/"><code>../adr/template.md</code></a>) the next
+  time a sixth coordinator is proposed, so the "why five" rationale
+  doesn't live only in this page.</li>
 </ul>
 
 
@@ -2791,7 +3054,7 @@ disclosure timeline that may force this path.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../deployment/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Deployment">
+          <a href="../core-domains/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Core domains">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -2801,20 +3064,20 @@ disclosure timeline that may force this path.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Deployment
+                Core domains
               </div>
             </div>
           </a>
         
         
           
-          <a href="../PLUGIN_DEV_GUIDE/" class="md-footer__link md-footer__link--next" aria-label="Next: Plugin developer guide">
+          <a href="../database/" class="md-footer__link md-footer__link--next" aria-label="Next: Database &amp; migrations">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Plugin developer guide
+                Database & migrations
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -2869,10 +3132,10 @@ disclosure timeline that may force this path.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>

@@ -115,11 +115,41 @@ is unambiguous.
 
 ## Multi-strategy orchestration
 
-Three orchestrators exist. They overlap in spirit but are deliberately
-separate modules with different conflict-resolution semantics — and, in
-the portfolio's case, different *responsibilities*. Pick by voting model
-*and* by whether you need capital allocation owned for you, not by file
-name.
+There are **five** strategy coordinators across three packages. They
+overlap in spirit but are deliberately separate, because the answers to
+three independent questions — *does a strategy own money or just a
+vote?*, *do conflicting symbols collapse or stay separate?*, and
+*whose `strategy_id` wins?* — change the right design. Pick by those
+answers, not by file name.
+
+The three detailed below are the ones most code paths reach. Two more
+landed since the last audit pass and are documented in full in
+[`multi-strategy.md`](multi-strategy.md) (the authoritative map with a
+side-by-side comparison table):
+
+- [`engine/portfolio/orchestrator.py`](../../engine/portfolio/orchestrator.py)
+  — a **lightweight net-weighted-vote** voter (`StrategyOrchestrator` +
+  `SignalSet`), the synchronous counterpart to the async
+  `core/strategy_orchestrator`. The smallest of the voters and the one
+  most often overlooked because it shares a package with
+  `MultiStrategyPortfolio`.
+- [`engine/strategies/multi_manager.py`](../../engine/strategies/multi_manager.py)
+  — `MultiStrategyManager`, the **second capital-aware** coordinator.
+  Where `MultiStrategyPortfolio` *merges* (relative-share dollar netting
+  into one position per symbol), `MultiStrategyManager` *forwards*: it
+  treats `allocation_pct` as an **absolute** per-strategy budget, scales
+  each strategy's active weights down to respect its own cap, and
+  **re-tags every signal with the caller's registered id** so
+  per-strategy attribution survives end-to-end. It is the right loop
+  when strategies run with independent budgets and you must attribute
+  every signal to its source (the contract multi-strategy attribution
+  reports and per-strategy risk limits need). It was recently hardened
+  (#1390 / #1392 — see [`multi-strategy.md`](multi-strategy.md)).
+
+> **Three classes are named `StrategyOrchestrator`.** They live in
+> `engine/orchestration/`, `engine/core/`, and `engine/portfolio/` and
+> have *different* conflict-resolution semantics. Always qualify by
+> import path; the bare class name is ambiguous.
 
 ### `engine/orchestration/orchestrator.py` — `StrategyOrchestrator`
 
@@ -252,7 +282,10 @@ and is the natural top-level loop once paper/live routes land.
 > execution factory. It is fully unit-tested
 > ([`tests/test_multi_strategy_portfolio.py`](../../tests/test_multi_strategy_portfolio.py)).
 > See [`known-limitations.md`](../known-limitations.md): the live/paper
-> run route that would naturally consume it is the open P1.
+> run route that would naturally consume it is the open P1. The same
+> status applies to `MultiStrategyManager` and the lightweight
+> `portfolio/orchestrator.py` voter — see [`multi-strategy.md`](multi-strategy.md)
+> for the full coordinator map.
 
 ## Cost & risk modeling
 
