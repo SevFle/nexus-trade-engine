@@ -1,5 +1,10 @@
-import React from "react";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+} from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./auth/AuthContext";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
@@ -8,6 +13,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LegalProvider } from "./context/LegalContext";
 import { ConsentModal } from "./components/legal/ConsentModal";
 import { OnboardingManager } from "./components/onboarding/OnboardingManager";
+import { PortfolioSummary } from "./components/portfolio/PortfolioSummary";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import OAuthCallback from "./pages/OAuthCallback";
@@ -39,6 +45,9 @@ function ShellLayout() {
       <ConsentModal />
       <OnboardingManager />
       <Shell>
+        {/* Persistent portfolio summary card (placeholder) rendered in the
+            main content area above the routed screen. */}
+        <PortfolioSummary placeholder />
         {/* Per-route boundary so a failure on one screen doesn't nuke
             the shell, sidebar, or legal context. */}
         <ErrorBoundary scope="page">
@@ -58,32 +67,32 @@ export default function App() {
               missed (errors thrown above the route shell — auth init,
               query-client setup, etc.). */}
           <ErrorBoundary scope="app">
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/auth/callback" element={<OAuthCallback />} />
-            <Route path="/onboarding" element={<Onboarding />} />
-            <Route
-              element={
-                <ProtectedRoute>
-                  <ShellLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/market-watch" element={<MarketWatch />} />
-              <Route path="/strategies" element={<Strategies />} />
-              <Route path="/backtest" element={<Backtest />} />
-              <Route path="/marketplace" element={<Marketplace />} />
-              <Route path="/positions" element={<Positions />} />
-              <Route path="/costs" element={<CostAnalysis />} />
-              <Route path="/risk" element={<RiskMonitor />} />
-              <Route path="/dev" element={<DevConsole />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/legal/:slug" element={<LegalDocument />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
-          </Routes>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/auth/callback" element={<OAuthCallback />} />
+              <Route path="/onboarding" element={<Onboarding />} />
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <ShellLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/market-watch" element={<MarketWatch />} />
+                <Route path="/strategies" element={<Strategies />} />
+                <Route path="/backtest" element={<Backtest />} />
+                <Route path="/marketplace" element={<Marketplace />} />
+                <Route path="/positions" element={<Positions />} />
+                <Route path="/costs" element={<CostAnalysis />} />
+                <Route path="/risk" element={<RiskMonitor />} />
+                <Route path="/dev" element={<DevConsole />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/legal/:slug" element={<LegalDocument />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            </Routes>
           </ErrorBoundary>
         </AuthProvider>
       </BrowserRouter>

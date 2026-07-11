@@ -1,6 +1,9 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
+// https://vitejs.dev/config/
+// Note: defineConfig is imported from "vitest/config" so the `test` field
+// (Vitest options) is fully typed alongside the Vite options.
 export default defineConfig({
   plugins: [react()],
   server: {
