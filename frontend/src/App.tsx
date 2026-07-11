@@ -46,8 +46,12 @@ function ShellLayout() {
       <OnboardingManager />
       <Shell>
         {/* Persistent portfolio summary card (placeholder) rendered in the
-            main content area above the routed screen. */}
-        <PortfolioSummary placeholder />
+            main content area above the routed screen. It gets its own
+            boundary so a data/render failure in the summary degrades to an
+            inline notice instead of blanking the whole shell. */}
+        <ErrorBoundary scope="portfolio-summary">
+          <PortfolioSummary placeholder />
+        </ErrorBoundary>
         {/* Per-route boundary so a failure on one screen doesn't nuke
             the shell, sidebar, or legal context. */}
         <ErrorBoundary scope="page">
