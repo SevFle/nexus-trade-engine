@@ -241,6 +241,36 @@ class TestConstructor:
         with pytest.raises(MultiStrategyManagerError, match="max_strategies"):
             MultiStrategyManager(max_strategies=0)
 
+    def test_int_max_strategies_accepted(self):
+        # A plain ``int`` (the documented type) must not crash.
+        mgr = MultiStrategyManager(max_strategies=5)
+        assert mgr._max_strategies == 5
+        # The ceiling is enforced against the int value.
+        for sid in ("a", "b", "c", "d", "e"):
+            mgr.register(sid, _RecordingStrategy([]), allocation_pct=10.0)
+        with pytest.raises(MultiStrategyManagerError, match="max_strategies"):
+            mgr.register("f", _RecordingStrategy([]), allocation_pct=10.0)
+
+    def test_integer_valued_float_max_strategies_accepted(self):
+        # ``5.0`` is an integer value -> coerced to 5.
+        mgr = MultiStrategyManager(max_strategies=5.0)
+        assert mgr._max_strategies == 5
+
+    def test_fractional_max_strategies_rejected(self):
+        # ``5.5`` must NOT be silently truncated to 5 by ``int()``.
+        with pytest.raises(MultiStrategyManagerError, match="must be an integer"):
+            MultiStrategyManager(max_strategies=5.5)
+
+    def test_string_max_strategies_rejected(self):
+        # Consistent with ``_finite``: numeric strings are rejected.
+        with pytest.raises(MultiStrategyManagerError, match="must be a number"):
+            MultiStrategyManager(max_strategies="5")  # type: ignore[arg-type]
+
+    def test_bool_max_strategies_rejected(self):
+        # bool subclasses int and must not sneak through as 1.
+        with pytest.raises(MultiStrategyManagerError, match="must be a number"):
+            MultiStrategyManager(max_strategies=True)  # type: ignore[arg-type]
+
 
 # --------------------------------------------------------------------- #
 # Capital allocation math

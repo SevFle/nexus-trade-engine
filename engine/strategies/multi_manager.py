@@ -254,7 +254,21 @@ class MultiStrategyManager:
             )
         self._eval_timeout = timeout
 
-        max_n = int(max_strategies)
+        # Validate via ``_finite`` first so non-numbers, bools and
+        # numeric strings are rejected consistently with the rest of the
+        # manager. Then require an integer *value*: ``int()`` alone would
+        # silently truncate ``5.5`` to ``5``. The integrality check is
+        # performed before the range check so a fractional input yields a
+        # clear "must be an integer" error rather than a misleading one.
+        # ``float(max_n).is_integer()`` is used (not ``max_n.is_integer()``)
+        # so the guard also works for plain ``int`` inputs on Python < 3.12,
+        # where ``int`` has no ``is_integer`` method.
+        max_n = _finite(max_strategies, "max_strategies")
+        if not float(max_n).is_integer():
+            raise MultiStrategyManagerError(
+                f"max_strategies must be an integer, got {max_strategies!r}"
+            )
+        max_n = int(max_n)
         if max_n < 1:
             raise MultiStrategyManagerError(f"max_strategies must be >= 1, got {max_strategies!r}")
         self._max_strategies = max_n
