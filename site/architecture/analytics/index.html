@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/architecture/multi-strategy/">
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/architecture/analytics/">
       
       
-        <link rel="prev" href="../analytics/">
+        <link rel="prev" href="../core-domains/">
       
       
-        <link rel="next" href="../database/">
+        <link rel="next" href="../multi-strategy/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Multi-strategy coordination - Nexus Trade Engine</title>
+        <title>Analytics & optimization - Nexus Trade Engine</title>
       
     
     
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#multi-strategy-coordination" class="md-skip">
+        <a href="#analytics-scoring-optimization" class="md-skip">
           Skip to content
         </a>
       
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Multi-strategy coordination
+              Analytics & optimization
             
           </span>
         </div>
@@ -637,34 +637,6 @@
                 
   
   
-  
-  
-    <li class="md-nav__item">
-      <a href="../analytics/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Analytics & optimization
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
     
   
   
@@ -684,7 +656,7 @@
   <span class="md-ellipsis">
     
   
-    Multi-strategy coordination
+    Analytics & optimization
   
 
     
@@ -702,7 +674,7 @@
   <span class="md-ellipsis">
     
   
-    Multi-strategy coordination
+    Analytics & optimization
   
 
     
@@ -728,10 +700,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#why-more-than-one" class="md-nav__link">
+  <a href="#component-map" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Why more than one
+        Component map
       
     </span>
   </a>
@@ -739,33 +711,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-map" class="md-nav__link">
+  <a href="#performance-analytics" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The map
+        Performance analytics
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-voters-capital-free" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The voters (capital-free)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="The voters (capital-free)">
+    <nav class="md-nav" aria-label="Performance analytics">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#orchestrationorchestratorpy-two-step-priority-net-position" class="md-nav__link">
+  <a href="#metricsreport-live-used-today" class="md-nav__link">
     <span class="md-ellipsis">
       
-        orchestration/orchestrator.py — two-step priority / net-position
+        MetricsReport — live, used today
       
     </span>
   </a>
@@ -773,10 +734,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#corestrategy_orchestratorpy-async-majority-weighted" class="md-nav__link">
+  <a href="#performancereport-86-kpi-schema-not-yet-wired" class="md-nav__link">
     <span class="md-ellipsis">
       
-        core/strategy_orchestrator.py — async majority / weighted
+        PerformanceReport — 86-KPI schema, not yet wired
       
     </span>
   </a>
@@ -784,10 +745,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#portfolioorchestratorpy-lightweight-net-weighted-vote" class="md-nav__link">
+  <a href="#companion-analytics-modules" class="md-nav__link">
     <span class="md-ellipsis">
       
-        portfolio/orchestrator.py — lightweight net-weighted-vote
+        Companion analytics modules
       
     </span>
   </a>
@@ -800,22 +761,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-capital-aware-coordinators" class="md-nav__link">
+  <a href="#strategy-scoring-governance" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The capital-aware coordinators
+        Strategy scoring &amp; governance
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="The capital-aware coordinators">
+    <nav class="md-nav" aria-label="Strategy scoring &amp; governance">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#portfoliomulti_strategypy-multistrategyportfolio-merge" class="md-nav__link">
+  <a href="#composite-scoring-strategy_evaluatorpy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        portfolio/multi_strategy.py — MultiStrategyPortfolio (merge)
+        Composite scoring — strategy_evaluator.py
       
     </span>
   </a>
@@ -823,10 +784,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#strategiesmulti_managerpy-multistrategymanager-forward" class="md-nav__link">
+  <a href="#lifecycle-versioning" class="md-nav__link">
     <span class="md-ellipsis">
       
-        strategies/multi_manager.py — MultiStrategyManager (forward)
+        Lifecycle &amp; versioning
       
     </span>
   </a>
@@ -839,10 +800,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#sibling-drift-driven-rebalancing" class="md-nav__link">
+  <a href="#optimization-param_optimizerpy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Sibling: drift-driven rebalancing
+        Optimization — param_optimizer.py
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#wired-vs-schema-only-quick-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wired vs. schema-only (quick reference)
       
     </span>
   </a>
@@ -864,6 +836,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../multi-strategy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-strategy coordination
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -2512,10 +2512,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#why-more-than-one" class="md-nav__link">
+  <a href="#component-map" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Why more than one
+        Component map
       
     </span>
   </a>
@@ -2523,33 +2523,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-map" class="md-nav__link">
+  <a href="#performance-analytics" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The map
+        Performance analytics
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-voters-capital-free" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The voters (capital-free)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="The voters (capital-free)">
+    <nav class="md-nav" aria-label="Performance analytics">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#orchestrationorchestratorpy-two-step-priority-net-position" class="md-nav__link">
+  <a href="#metricsreport-live-used-today" class="md-nav__link">
     <span class="md-ellipsis">
       
-        orchestration/orchestrator.py — two-step priority / net-position
+        MetricsReport — live, used today
       
     </span>
   </a>
@@ -2557,10 +2546,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#corestrategy_orchestratorpy-async-majority-weighted" class="md-nav__link">
+  <a href="#performancereport-86-kpi-schema-not-yet-wired" class="md-nav__link">
     <span class="md-ellipsis">
       
-        core/strategy_orchestrator.py — async majority / weighted
+        PerformanceReport — 86-KPI schema, not yet wired
       
     </span>
   </a>
@@ -2568,10 +2557,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#portfolioorchestratorpy-lightweight-net-weighted-vote" class="md-nav__link">
+  <a href="#companion-analytics-modules" class="md-nav__link">
     <span class="md-ellipsis">
       
-        portfolio/orchestrator.py — lightweight net-weighted-vote
+        Companion analytics modules
       
     </span>
   </a>
@@ -2584,22 +2573,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-capital-aware-coordinators" class="md-nav__link">
+  <a href="#strategy-scoring-governance" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The capital-aware coordinators
+        Strategy scoring &amp; governance
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="The capital-aware coordinators">
+    <nav class="md-nav" aria-label="Strategy scoring &amp; governance">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#portfoliomulti_strategypy-multistrategyportfolio-merge" class="md-nav__link">
+  <a href="#composite-scoring-strategy_evaluatorpy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        portfolio/multi_strategy.py — MultiStrategyPortfolio (merge)
+        Composite scoring — strategy_evaluator.py
       
     </span>
   </a>
@@ -2607,10 +2596,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#strategiesmulti_managerpy-multistrategymanager-forward" class="md-nav__link">
+  <a href="#lifecycle-versioning" class="md-nav__link">
     <span class="md-ellipsis">
       
-        strategies/multi_manager.py — MultiStrategyManager (forward)
+        Lifecycle &amp; versioning
       
     </span>
   </a>
@@ -2623,10 +2612,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#sibling-drift-driven-rebalancing" class="md-nav__link">
+  <a href="#optimization-param_optimizerpy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Sibling: drift-driven rebalancing
+        Optimization — param_optimizer.py
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#wired-vs-schema-only-quick-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wired vs. schema-only (quick reference)
       
     </span>
   </a>
@@ -2664,388 +2664,273 @@
   
 
 
-<!--
-Part of the MkDocs Material site (see ../README.md for the doc-stack
-rationale). This page documents the multi-strategy coordination layer —
-the modules that sit above individual IStrategy plugins and decide how
-their signals combine. It is the deep-dive companion to the
-"Multi-strategy orchestration" section of core-domains.md.
--->
-
-<h1 id="multi-strategy-coordination">Multi-strategy coordination<a class="headerlink" href="#multi-strategy-coordination" title="Permanent link">&para;</a></h1>
-<p>Strategies emit <code>Signal</code>s; <strong>coordinators</strong> decide what happens when
-several strategies run together. Nexus has <em>five</em> coordinators spread
-across three packages. They overlap in spirit but are deliberately
-separate, because they answer different questions and make different
-trade-offs about capital, provenance, and conflict resolution. Picking
-the wrong one is a real bug class, so this page is the authoritative
-map.</p>
-<blockquote>
-<p>This page is the deep-dive. For the one-paragraph summary and the
-cross-references into the rest of the domain layer, see
-<a href="../core-domains/#multi-strategy-orchestration"><code>core-domains.md</code></a>.</p>
-</blockquote>
-<h2 id="why-more-than-one">Why more than one<a class="headerlink" href="#why-more-than-one" title="Permanent link">&para;</a></h2>
-<p>The temptation is to have a single <code>combine(signals)</code> function. We don't,
-because the answers to three independent questions change the right
-design:</p>
-<ol>
-<li><strong>Does a strategy own money, or just a vote?</strong> A pure voter treats one
-   signal as one opinion (optionally scaled by a unitless weight). A
-   <em>capital-aware</em> coordinator knows how many dollars each strategy may
-   move, which is the only thing that makes "risk-adjusted" or
-   "budget-capped" merges meaningful.</li>
-<li><strong>Do conflicting symbols collapse to one decision, or stay separate?</strong>
-   A <em>merging</em> coordinator nets BUY vs. SELL on the same symbol into one
-   <code>Signal</code> (and a stalemate becomes HOLD). A <em>forwarding</em> coordinator
-   keeps every signal distinct so downstream attribution and per-strategy
-   risk limits can see who said what.</li>
-<li><strong>Whose <code>strategy_id</code> wins?</strong> Some coordinators re-tag every emitted
-   signal with the caller's registered id (so a misbehaving plugin can
-   never impersonate a sibling). Others stamp a single sentinel
-   (<code>"orchestrated"</code>, <code>"portfolio"</code>) on the merged output.</li>
-</ol>
-<p>The five coordinators below are the five useful combinations of those
-answers.</p>
-<h2 id="the-map">The map<a class="headerlink" href="#the-map" title="Permanent link">&para;</a></h2>
+<h1 id="analytics-scoring-optimization">Analytics, scoring &amp; optimization<a class="headerlink" href="#analytics-scoring-optimization" title="Permanent link">&para;</a></h1>
+<p>This file is the second half of the domain map started in
+<a href="../core-domains/"><code>core-domains.md</code></a>. That document covers the
+<strong>decision/execution</strong> layer — instruments, multi-strategy orchestration,
+cost &amp; risk, execution backends, portfolio accounting. This one covers
+the <strong>analytics &amp; evaluation</strong> layer: the two performance-report
+containers, the composite strategy scorer, strategy lifecycle/versioning
+governance, and the parameter optimizer.</p>
+<p>The split exists for one reason: <code>core-domains.md</code> crossed the 500-line
+documentation cap. The boundary between "runtime that turns signals into
+fills" and "post-trade numerics that score the result" is clean, so the
+analytics tail lives here. Cross-references go both ways.</p>
+<h2 id="component-map">Component map<a class="headerlink" href="#component-map" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart LR
+    EXEC["ExecutionBackend&lt;br/&gt;(see core-domains.md)"] --&gt; PORT["Portfolio&lt;br/&gt;tax-lot accounting"]
+    PORT --&gt; MET["metrics.py&lt;br/&gt;MetricsReport (live, ~25 fields)"]
+    MET --&gt; EVAL["strategy_evaluator&lt;br/&gt;composite score [0,100]"]
+    MET -.-&gt;|schema only| REPORT["analytics/&lt;br/&gt;PerformanceReport (86 KPIs)"]
+    MET --&gt; MC["monte_carlo&lt;br/&gt;robustness"]
+    MET --&gt; OPT["param_optimizer&lt;br/&gt;grid / random / genetic"]
+    GOV["strategy_lifecycle&lt;br/&gt;draft→bt→paper→live"]
+    VER["strategy_versioning&lt;br/&gt;content-addressed deploys"]
+    GOV -.-&gt;|gates promotions| EVAL
+    VER -.-&gt;|pinned code| EVAL</code></pre>
+<h2 id="performance-analytics">Performance analytics<a class="headerlink" href="#performance-analytics" title="Permanent link">&para;</a></h2>
+<p>There are <strong>two</strong> analytics containers. Do not conflate them:</p>
+<h3 id="metricsreport-live-used-today"><code>MetricsReport</code> — live, used today<a class="headerlink" href="#metricsreport-live-used-today" title="Permanent link">&para;</a></h3>
+<p><a href="../../engine/core/metrics.py"><code>engine/core/metrics.py</code></a>. The container
+the backtest runner actually computes and that <code>GET /backtest/results/{id}</code>
+returns as <code>metrics</code>. ~25 scalar fields (total/annualized return, Sharpe,
+Sortino, Calmar, max drawdown + duration + recovery, volatility,
+win-rate, profit factor, avg winner/loser, streaks, total costs/taxes,
+cost-drag %, turnover, exposure %) plus three series (<code>equity_curve</code>,
+<code>drawdown_curve</code>, <code>rolling_metrics</code>).</p>
+<h3 id="performancereport-86-kpi-schema-not-yet-wired"><code>PerformanceReport</code> — 86-KPI schema, not yet wired<a class="headerlink" href="#performancereport-86-kpi-schema-not-yet-wired" title="Permanent link">&para;</a></h3>
+<p><a href="../../engine/core/analytics/"><code>engine/core/analytics/</code></a> is the
+<strong>86-KPI taxonomy</strong> (gh#97), split into eight section models:</p>
 <table>
 <thead>
 <tr>
-<th>Coordinator</th>
-<th>Package</th>
-<th>Capital-aware?</th>
-<th>Symbol conflict</th>
-<th>Provenance</th>
-<th>Status</th>
+<th>Section (file)</th>
+<th>KPI range</th>
+<th>Covers</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>StrategyOrchestrator</code></td>
-<td><a href="../../engine/orchestration/orchestrator.py"><code>orchestration/orchestrator.py</code></a></td>
-<td>no</td>
-<td><strong>merges</strong> (priority / net-position)</td>
-<td>sentinel</td>
-<td>library-only</td>
+<td><code>returns.py</code></td>
+<td>1–14</td>
+<td>Return ratios + <code>PeriodReturn</code> value object.</td>
 </tr>
 <tr>
-<td><code>StrategyOrchestrator</code> (async)</td>
-<td><a href="../../engine/core/strategy_orchestrator.py"><code>core/strategy_orchestrator.py</code></a></td>
-<td>no</td>
-<td><strong>merges</strong> (majority / weighted, via <code>SignalAggregator</code>)</td>
-<td>sentinel</td>
-<td>library-only</td>
+<td><code>risk_adjusted.py</code></td>
+<td>15–24</td>
+<td>Sharpe/Sortino/Omega/Calmar/Treynor/Information/Payoff/Profit-factor. Infinite/undefined ratios → <code>null</code>.</td>
 </tr>
 <tr>
-<td><code>StrategyOrchestrator</code> (lightweight)</td>
-<td><a href="../../engine/portfolio/orchestrator.py"><code>portfolio/orchestrator.py</code></a></td>
-<td>no</td>
-<td><strong>merges</strong> (net weighted vote)</td>
-<td>sentinel (<code>"orchestrated"</code>)</td>
-<td>library-only</td>
+<td><code>drawdown.py</code></td>
+<td>25–34</td>
+<td>Underwater series + duration/recovery.</td>
 </tr>
 <tr>
-<td><code>MultiStrategyPortfolio</code></td>
-<td><a href="../../engine/portfolio/multi_strategy.py"><code>portfolio/multi_strategy.py</code></a></td>
-<td><strong>yes</strong> (relative share)</td>
-<td><strong>merges</strong> (risk-adjusted dollar netting)</td>
-<td>sentinel (<code>"portfolio"</code>) + contributors list</td>
-<td>library-only</td>
+<td><code>trades.py</code></td>
+<td>35–50</td>
+<td>Win/loss rates, streaks, holding periods, cadence.</td>
 </tr>
 <tr>
-<td><code>MultiStrategyManager</code></td>
-<td><a href="../../engine/strategies/multi_manager.py"><code>strategies/multi_manager.py</code></a></td>
-<td><strong>yes</strong> (absolute budget)</td>
-<td><strong>forwards</strong> (no merge)</td>
-<td><strong>re-tags with caller id</strong></td>
-<td>library-only</td>
+<td><code>costs.py</code></td>
+<td>51–58</td>
+<td>Cost breakdown + slippage/IS in basis points.</td>
+</tr>
+<tr>
+<td><code>positions.py</code></td>
+<td>59–66</td>
+<td>Exposure, long/short, concentration, simultaneous positions.</td>
+</tr>
+<tr>
+<td><code>volatility.py</code></td>
+<td>67–76</td>
+<td>VaR/CVaR (positive magnitudes), capture ratios, tail ratio.</td>
+</tr>
+<tr>
+<td><code>time_analysis.py</code></td>
+<td>77–86</td>
+<td>Monthly heatmap, day-of-week/hour returns, rolling Sharpe/DD, dual equity curve.</td>
+</tr>
+<tr>
+<td><code>report.py</code></td>
+<td>envelope</td>
+<td><code>PerformanceReport</code> aggregates the eight; <code>metric_count</code> asserts all 86 present.</td>
 </tr>
 </tbody>
 </table>
 <blockquote>
-<p><strong>Three classes are named <code>StrategyOrchestrator</code>.</strong> They live in
-different packages and have different conflict-resolution semantics
-(priority/net-position, majority/weighted, and net-weighted-vote
-respectively). Always qualify by import path; the bare class name is
-ambiguous. The <code>engine.strategies</code> package docstring frames
-<code>MultiStrategyManager</code> as the layer that binds strategies to <em>capital</em>,
-sitting above the voters.</p>
+<p><strong>Status — accurate caveat.</strong> The section modules and the envelope
+are on disk, but the builder (<code>engine/core/analytics/analyzer.py</code>)
+referenced by their docstrings is <strong>not</strong>, and nothing under
+<code>engine/api/</code> or <code>engine/core/backtest_runner.py</code> imports the report.
+So <code>PerformanceReport</code> is a landed schema, not yet a live output: the
+API surface still serves <code>MetricsReport</code>. Treat the 86-KPI contract as
+the intended shape; a future PR wires an analyzer and a route.</p>
 </blockquote>
-<p>All five are <strong>library-only today</strong>: none is driven by a public run route
-or registered in the execution factory. They are all fully unit-tested
-(<code>tests/test_multi_strategy_manager.py</code>, <code>tests/test_multi_strategy_portfolio.py</code>,
-and the orchestration tests). The live/paper run route that would
-naturally consume them is the open P1 — see
-<a href="../../known-limitations/"><code>known-limitations.md</code></a>.</p>
-<h2 id="the-voters-capital-free">The voters (capital-free)<a class="headerlink" href="#the-voters-capital-free" title="Permanent link">&para;</a></h2>
-<p>These three answer <em>"given N opinions, what is the consensus?"</em> No money
-model — a strategy's influence is at most a unitless weight.</p>
-<h3 id="orchestrationorchestratorpy-two-step-priority-net-position"><code>orchestration/orchestrator.py</code> — two-step priority / net-position<a class="headerlink" href="#orchestrationorchestratorpy-two-step-priority-net-position" title="Permanent link">&para;</a></h3>
-<p>The "register N, run all, then collapse" loop. Two-step API:
-<code>await orch.run_all(market)</code> collects every strategy's signals, then
-<code>aggregate_signals()</code> resolves conflicts. <code>ConflictResolution</code> selects
-the merge rule:</p>
+<h3 id="companion-analytics-modules">Companion analytics modules<a class="headerlink" href="#companion-analytics-modules" title="Permanent link">&para;</a></h3>
+<p>These operate on an equity curve / trade log and are independently
+usable:</p>
 <table>
 <thead>
 <tr>
-<th>Mode</th>
-<th>Rule</th>
+<th>Module</th>
+<th>Computes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>PRIORITY</code> <em>(default)</em></td>
-<td>Highest-priority strategy with a non-HOLD opinion wins. Opposing signals from strategies tied at top priority → HOLD (stalemate). HOLD abstains.</td>
+<td><a href="../../engine/core/rolling_metrics.py"><code>rolling_metrics.py</code></a> / <a href="../../engine/core/rolling_correlation.py"><code>rolling_correlation.py</code></a> / <a href="../../engine/core/rolling_benchmark.py"><code>rolling_benchmark.py</code></a> / <a href="../../engine/core/rolling_trade_stats.py"><code>rolling_trade_stats.py</code></a></td>
+<td>Rolling-window Sharpe, correlation, benchmark-relative, and trade statistics.</td>
 </tr>
 <tr>
-<td><code>NET_POSITION</code></td>
-<td><code>BUY = +weight</code>, <code>SELL = −weight</code> summed per symbol. Positive net → BUY, negative → SELL, zero → HOLD. Resolved weight is the net magnitude clamped to <code>[0, 1]</code>, so conviction can override headcount. <em>(Unique to this orchestrator.)</em></td>
+<td><a href="../../engine/core/drawdown_analytics.py"><code>drawdown_analytics.py</code></a></td>
+<td>Drawdown depth/duration/recovery + excursion stats (<a href="../../engine/core/excursion_stats.py"><code>excursion_stats.py</code></a>).</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/distribution_metrics.py"><code>distribution_metrics.py</code></a></td>
+<td>VaR / CVaR / skew / kurtosis / tail ratio.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/benchmark_comparison.py"><code>benchmark_comparison.py</code></a></td>
+<td>Alpha/beta/R-squared, up/down capture, tracking error vs. a benchmark.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/cumulative_returns.py"><code>cumulative_returns.py</code></a></td>
+<td>Cumulative + <code>PeriodReturn</code> series (daily/weekly/monthly).</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/monte_carlo.py"><code>monte_carlo.py</code></a></td>
+<td>Robustness testing — <code>bootstrap_returns</code> (Efron i.i.d.) and <code>block_bootstrap</code> (Künsch, preserves autocorrelation). Pure numpy, deterministic given a <code>seed</code>.</td>
+</tr>
+<tr>
+<td><a href="../../engine/core/portfolio_aggregator.py"><code>portfolio_aggregator.py</code></a> / <a href="../../engine/core/portfolio_concentration.py"><code>portfolio_concentration.py</code></a></td>
+<td>Cross-portfolio rollups and concentration metrics.</td>
 </tr>
 </tbody>
 </table>
-<h3 id="corestrategy_orchestratorpy-async-majority-weighted"><code>core/strategy_orchestrator.py</code> — async majority / weighted<a class="headerlink" href="#corestrategy_orchestratorpy-async-majority-weighted" title="Permanent link">&para;</a></h3>
-<p>The heavier async counterpart. Each strategy is registered with a
-per-strategy <code>weight</code>; every strategy sees the <em>same</em> <code>market_data</code> and
-<code>cost_model</code> so cross-strategy comparisons are apples-to-apples; a single
-failing strategy is isolated. Dispatches to
-<a href="../../engine/core/signal_aggregator.py"><code>SignalAggregator</code></a>, the single
-source of truth for tie handling:</p>
+<h2 id="strategy-scoring-governance">Strategy scoring &amp; governance<a class="headerlink" href="#strategy-scoring-governance" title="Permanent link">&para;</a></h2>
+<h3 id="composite-scoring-strategy_evaluatorpy">Composite scoring — <a href="../../engine/core/strategy_evaluator.py"><code>strategy_evaluator.py</code></a><a class="headerlink" href="#composite-scoring-strategy_evaluatorpy" title="Permanent link">&para;</a></h3>
+<p>Turns a <code>MetricsReport</code> into one number in <code>[0, 100]</code> plus a
+per-dimension breakdown, a letter grade, and warnings. Used by the
+marketplace ranking, A/B comparison surfaces, and the backtest summary
+endpoint (so the UI doesn't re-derive it). <strong>Six dimensions</strong>, each
+normalized to <code>[0, 100]</code>:</p>
 <table>
 <thead>
 <tr>
-<th>Mode</th>
-<th>Rule</th>
+<th>Dimension</th>
+<th>Inputs</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>MAJORITY</code></td>
-<td>Strictly more than half of BUY-vs-SELL votes wins; tie → HOLD. HOLD abstains and is excluded from the denominator.</td>
+<td><code>RISK_ADJUSTED_RETURN</code></td>
+<td>Sharpe ratio, piecewise mapping.</td>
 </tr>
 <tr>
-<td><code>WEIGHTED</code></td>
-<td>Vote × registered weight (default 1.0); strictly higher total wins; tie → HOLD. Lets a high-conviction strategy override a numerical majority.</td>
+<td><code>DRAWDOWN_CONTROL</code></td>
+<td>Max drawdown, piecewise mapping.</td>
+</tr>
+<tr>
+<td><code>CONSISTENCY</code></td>
+<td>Coefficient of variation of rolling-window Sharpe.</td>
+</tr>
+<tr>
+<td><code>COST_EFFICIENCY</code></td>
+<td>Exponential decay on <code>cost_drag_pct</code>.</td>
+</tr>
+<tr>
+<td><code>WIN_RATE_QUALITY</code></td>
+<td><code>win_rate × (avg_winner / |avg_loser|)</code>.</td>
+</tr>
+<tr>
+<td><code>STABILITY</code></td>
+<td>Annual volatility, piecewise mapping.</td>
 </tr>
 </tbody>
 </table>
-<h3 id="portfolioorchestratorpy-lightweight-net-weighted-vote"><code>portfolio/orchestrator.py</code> — lightweight net-weighted-vote<a class="headerlink" href="#portfolioorchestratorpy-lightweight-net-weighted-vote" title="Permanent link">&para;</a></h3>
-<p>The smallest of the three voters, and the one most often overlooked
-because it shares a package with <code>MultiStrategyPortfolio</code>. A synchronous
-register-once / <code>evaluate(market_context)</code> loop that aggregates signals
-into a <a href="../../engine/portfolio/orchestrator.py"><code>SignalSet</code></a> by <strong>net
-weighted vote</strong>: each BUY casts <code>+weight</code>, each SELL casts <code>−weight</code>, HOLD
-abstains; the side with the strictly greater net weight wins, and an
-exact tie resolves to HOLD ("strongest net weight wins"). Resolved
-signals are stamped with the <code>ORCHESTRATED_STRATEGY_ID</code> sentinel so audit
-code can tell a merged decision apart from a raw per-strategy signal.</p>
-<p>Pick it when you want the weighted-vote semantics of the async
-orchestrator without the timeout/async machinery — it is the natural
-drop-in for a synchronous backtest loop.</p>
-<h2 id="the-capital-aware-coordinators">The capital-aware coordinators<a class="headerlink" href="#the-capital-aware-coordinators" title="Permanent link">&para;</a></h2>
-<p>These two answer <em>"given a fixed dollar book, how much may each strategy
-deploy, and what is the net position?"</em> They are the two halves of the
-allocation story, and they make <strong>opposite</strong> choices about merging.</p>
-<h3 id="portfoliomulti_strategypy-multistrategyportfolio-merge"><code>portfolio/multi_strategy.py</code> — <code>MultiStrategyPortfolio</code> (merge)<a class="headerlink" href="#portfoliomulti_strategypy-multistrategyportfolio-merge" title="Permanent link">&para;</a></h3>
-<p>The merging, risk-adjusted coordinator. Each strategy is registered with
-a <code>capital_weight</code> — a <strong>relative</strong> share (need not sum to 1.0; dollar
-allocations are normalised on demand). Per symbol, the capital-weighted
-<strong>dollar exposure</strong> is netted:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>signed_exposure = side_sign(strategy_id) * allocation(strategy_id) * signal.weight
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>                     # BUY +1, SELL −1, HOLD 0
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>merged.side   = sign( Σ signed_exposure )        # |net| &lt; ε → HOLD
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>merged.weight = | Σ signed_exposure | / total_capital   # clamped to [0,1]
-</span></code></pre></div>
-<p>The merge is <em>risk-adjusted</em> in two senses: a strategy with more capital
-at risk moves the decision proportionally more, <strong>and</strong> the emitted
-weight is itself a measure of how much of the book is committed.
-Opposing equal-dollar signals net to zero (stalemate → HOLD).</p>
-<p>Outcome is a <code>PortfolioEvaluation</code> richer than a bare <code>list[Signal]</code>:
-merged <code>signals</code>, per-symbol <code>CombinedPosition</code>s (with <code>contributors</code>),
-full <code>per_strategy_signals</code> provenance, <code>capital_deployed</code> /
-<code>net_exposure</code> / <code>capital_utilization</code>, and an <code>errors</code> map. The only
-merge mode today is <code>SignalMergeMode.RISK_ADJUSTED</code> (the enum is reserved
-for future cycles). See <a href="../core-domains/"><code>core-domains.md</code></a> for the full
-field-by-field contract.</p>
-<h3 id="strategiesmulti_managerpy-multistrategymanager-forward"><code>strategies/multi_manager.py</code> — <code>MultiStrategyManager</code> (forward)<a class="headerlink" href="#strategiesmulti_managerpy-multistrategymanager-forward" title="Permanent link">&para;</a></h3>
-<p>The forwarding, provenance-preserving coordinator — and the natural
-choice when you need <strong>per-strategy attribution and per-strategy risk
-limits</strong>, because it refuses to collapse disagreeing signals into one.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">engine.strategies</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiStrategyManager</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">manager</span> <span class="o">=</span> <span class="n">MultiStrategyManager</span><span class="p">(</span><span class="n">total_capital</span><span class="o">=</span><span class="mf">100_000.0</span><span class="p">,</span> <span class="n">eval_timeout</span><span class="o">=</span><span class="mf">30.0</span><span class="p">)</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">manager</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;momentum&quot;</span><span class="p">,</span>   <span class="n">momentum_strategy</span><span class="p">,</span>  <span class="n">allocation_pct</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">manager</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;mean-revert&quot;</span><span class="p">,</span> <span class="n">mean_revert_strategy</span><span class="p">,</span> <span class="n">allocation_pct</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># 10% of the book left unallocated by design.</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">manager</span><span class="o">.</span><span class="n">evaluate_all</span><span class="p">(</span><span class="n">market_data</span><span class="p">,</span> <span class="n">cost_model</span><span class="p">)</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">result</span><span class="o">.</span><span class="n">signals</span>                  <span class="c1"># every emitted signal, capped + re-tagged</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">result</span><span class="o">.</span><span class="n">per_strategy_signals</span>     <span class="c1"># {&quot;momentum&quot;: [...], &quot;mean-revert&quot;: [...]}</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">result</span><span class="o">.</span><span class="n">allocation_caps</span>          <span class="c1"># {&quot;momentum&quot;: 60000.0, &quot;mean-revert&quot;: 30000.0}</span>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="n">result</span><span class="o">.</span><span class="n">allocation_adjustments</span>   <span class="c1"># {&quot;momentum&quot;: 0.83}  ← scaled down</span>
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">result</span><span class="o">.</span><span class="n">errors</span>                   <span class="c1"># {} unless a strategy failed / timed out</span>
-</span></code></pre></div>
-<p>It owns four concerns the voters and <code>MultiStrategyPortfolio</code> do not:</p>
-<ol>
-<li><strong>Registration with explicit ids.</strong> The <code>strategy_id</code> is a
-   caller-supplied parameter, <em>not</em> derived from <code>strategy.id</code>. It is the
-   source of truth for provenance: every emitted signal is re-tagged with
-   the registered id, so a strategy that mislabels its own
-   <code>Signal.strategy_id</code> can never impersonate a sibling or hide its
-   origin.</li>
-<li><strong>Per-strategy capital budgets.</strong> Each registration carries a dollar
-   cap = <code>total_capital * allocation_pct / 100</code>. <code>allocation_pct</code> is an
-   <strong>absolute</strong> percentage in <code>[0, 100]</code>, and the sum across the registry
-   must not exceed 100 (registering a strategy that would push the total
-   over raises <code>MultiStrategyManagerError</code>). <code>0</code> is allowed — it registers
-   a strategy that is intentionally capital-starved (paused) while
-   keeping its code path warm.</li>
-<li><strong>Allocation-cap enforcement.</strong> If a strategy's active (BUY/SELL)
-   signal weights collectively exceed its allocation fraction
-   (<code>allocation_pct / 100</code>), <em>that strategy's</em> weights are scaled down
-   proportionally so the cap is respected exactly. HOLD signals abstain
-   and pass through unchanged. The original weights are preserved in each
-   signal's <code>metadata</code> (<code>allocation_original_weight</code>,
-   <code>allocation_capped</code>), so the adjustment is auditable rather than
-   silent. A <code>pct=0</code> strategy has its active weights zeroed (intent
-   preserved, no capital deployed).</li>
-<li><strong>Provenance-preserving aggregation.</strong> Unlike
-   <code>MultiStrategyPortfolio</code>, the manager does <strong>not</strong> merge conflicting
-   symbols — it forwards every signal, just allocation-capped and
-   re-tagged. Downstream consumers see exactly who said what. Pair it
-   with a voter (e.g. <code>portfolio/orchestrator.py</code>) if you <em>also</em> need
-   symbol-level conflict resolution.</li>
-</ol>
-<h4 id="multistrategyevaluation-outcome"><code>MultiStrategyEvaluation</code> outcome<a class="headerlink" href="#multistrategyevaluation-outcome" title="Permanent link">&para;</a></h4>
+<p>Default weights mirror the spec and sum to 1.0 (risk-adjusted 0.30, …).
+Composite = <code>Σ(dimension × weight)</code>. The evaluator is <strong>stateless</strong> —
+construct one per weight configuration. (See also the persisted
+<code>scoring_snapshots</code> table, written by the scoring routes.)</p>
+<h3 id="lifecycle-versioning">Lifecycle &amp; versioning<a class="headerlink" href="#lifecycle-versioning" title="Permanent link">&para;</a></h3>
+<p>Two services govern <em>when</em> a strategy may run and <em>what code</em> runs:</p>
 <table>
 <thead>
 <tr>
-<th>Field</th>
-<th>Meaning</th>
+<th>Module</th>
+<th>Responsibility</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>signals</code></td>
-<td>All emitted signals across every strategy (capped, re-tagged).</td>
+<td><a href="../../engine/core/strategy_lifecycle.py"><code>strategy_lifecycle.py</code></a></td>
+<td>State machine <code>draft → backtest → paper → live</code>, with <code>retired</code> reachable from any non-draft stage. <strong>No skipping</strong> — you cannot jump draft→live. Each promotion is gated by a <code>LifecycleEvidence</code> payload: paper requires a backtest id + minimum Sharpe; live requires a paper window + minimum live-paper Sharpe.</td>
 </tr>
 <tr>
-<td><code>per_strategy_signals</code></td>
-<td><code>dict[id, list[Signal]]</code> — full per-strategy provenance.</td>
-</tr>
-<tr>
-<td><code>total_capital</code></td>
-<td>The manager's dollar budget (echoed for consumers).</td>
-</tr>
-<tr>
-<td><code>allocation_caps</code></td>
-<td><code>dict[id, dollars]</code> — the per-strategy budget actually applied.</td>
-</tr>
-<tr>
-<td><code>allocation_adjustments</code></td>
-<td><code>dict[id, scale]</code> for each strategy whose weights were scaled (<code>0 &lt; scale &lt; 1</code>; <code>0.0</code> for a capital-starved strategy). Absent if no adjustment.</td>
-</tr>
-<tr>
-<td><code>errors</code></td>
-<td><code>dict[id, message]</code> for any strategy that raised <em>or</em> exceeded <code>eval_timeout</code>. A timeout is reported as <code>TimeoutError: evaluate exceeded &lt;N&gt;s timeout</code>.</td>
+<td><a href="../../engine/core/strategy_versioning.py"><code>strategy_versioning.py</code></a></td>
+<td><strong>Content-addressed deploys.</strong> A <code>StrategyVersion</code> is a SHA-256 of the code blob + a hash of its canonical-JSON config, so the same code+config never creates two records (re-deploys are idempotent). <code>deploy</code> → new <code>DRAFT</code>; <code>activate</code> promotes to <code>ACTIVE</code> (demoting the prior); <code>rollback</code> returns to a previous <code>ACTIVE</code>.</td>
 </tr>
 </tbody>
 </table>
-<p>Convenience properties: <code>trade_signals</code> (non-HOLD), <code>is_noop</code> (empty
-registry, all-empty results, or all-failed), <code>strategy_count</code>.</p>
-<h4 id="fault-isolation-input-safety">Fault isolation &amp; input safety<a class="headerlink" href="#fault-isolation-input-safety" title="Permanent link">&para;</a></h4>
-<p>Two guards keep one bad plugin from aborting a cycle, mirroring
-<code>MultiStrategyPortfolio</code>:</p>
+<p>Together: <code>StrategyVersionService</code> controls <em>what</em> code runs;
+<code>StrategyLifecycleService</code> controls <em>which stage</em> it's allowed to run at.</p>
+<h2 id="optimization-param_optimizerpy">Optimization — <a href="../../engine/core/param_optimizer.py"><code>param_optimizer.py</code></a><a class="headerlink" href="#optimization-param_optimizerpy" title="Permanent link">&para;</a></h2>
+<p>Pure-Python hyperparameter search against an objective function
+(typically a backtest's Sharpe or compound return).</p>
 <ul>
-<li><strong>Independent deep copies.</strong> Each strategy receives a fresh
-  <code>copy.deepcopy</code> of <code>market_data</code> and <code>cost_model</code>, so a misbehaving
-  plugin cannot poison its siblings or the caller's originals.</li>
-<li><strong>Tight <code>wait_for</code> guard.</strong> Only the <em>awaitable</em> result is bounded by
-  <code>eval_timeout</code>; the synchronous call frame is not (it has already
-  returned). A builtin <code>TimeoutError</code> raised inside the coroutine is
-  therefore classified as a strategy failure, not a deadline — only a
-  genuine <code>asyncio.wait_for</code> expiry is reported as a timeout. Sync
-  strategies (returning a <code>list</code>) are supported transparently and are
-  never subject to the timeout.</li>
-<li><strong>Snapshot before iterate.</strong> <code>evaluate_all</code> snapshots the registry
-  before walking it, so a strategy that registers/unregisters a sibling
-  mid-cycle cannot mutate the dict under us (added strategies run next
-  cycle).</li>
+<li><strong><code>ParameterSpace</code></strong> — typed search space (continuous / discrete /
+  categorical dimensions).</li>
+<li><strong><code>Optimizer</code></strong> — Protocol the algorithms implement.</li>
+<li><strong><code>optimize(...)</code></strong> — the dispatch entry point.</li>
 </ul>
-<h4 id="construction-hardening-recent">Construction hardening (recent)<a class="headerlink" href="#construction-hardening-recent" title="Permanent link">&para;</a></h4>
-<p><code>MultiStrategyManager.__init__</code> validates every numeric parameter through
-a single <code>_finite</code> gate, which rejects <code>bool</code> (a sneaky <code>int</code> subclass),
-numeric strings, <code>None</code>, and non-finite values — <code>math.isfinite</code> is the
-check because a bare <code>w &lt; 0</code> silently admits <code>NaN</code>. Two recent fixes
-closed edge cases in that gate:</p>
-<ul>
-<li><strong>#1390</strong> — <code>max_strategies</code> is validated via <code>float(max_n).is_integer()</code>
-  rather than <code>max_n.is_integer()</code>, so the integrality check also works
-  for plain <code>int</code> inputs on Python &lt; 3.12 (where <code>int</code> has no
-  <code>is_integer</code> method). The integrality check runs <em>before</em> the range
-  check so a fractional input yields a clear "must be an integer" error
-  rather than a misleading truncation complaint.</li>
-<li><strong>#1392</strong> — the <code>_finite</code> coercion catches <code>OverflowError</code> (e.g.
-  <code>float(10 ** 400)</code>) and reports it as non-finite, instead of letting
-  it abort construction with an unguarded <code>OverflowError</code>.</li>
-</ul>
-<p>These are the only coordinator whose construction validates its inputs
-this strictly; the others rely on the caller passing sane types.</p>
-<h4 id="when-to-pick-it-over-multistrategyportfolio">When to pick it over <code>MultiStrategyPortfolio</code><a class="headerlink" href="#when-to-pick-it-over-multistrategyportfolio" title="Permanent link">&para;</a></h4>
+<p>Algorithms shipped (PR1): <code>GridSearchOptimizer</code>,
+<code>RandomSearchOptimizer</code>, <code>GeneticOptimizer</code>. Bayesian search and
+Hyperband are TODO and noted in the module docstring. Runs are
+deterministic given a seed; pair with <code>monte_carlo</code> to sanity-check that
+an "optimal" parameter set isn't an overfit artifact.</p>
+<h2 id="wired-vs-schema-only-quick-reference">Wired vs. schema-only (quick reference)<a class="headerlink" href="#wired-vs-schema-only-quick-reference" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>You want…</th>
-<th>Pick</th>
+<th>Capability</th>
+<th>Wired into a route/runner?</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>One merged decision per symbol, with conviction scaled by capital at risk</td>
+<td><code>MetricsReport</code>, <code>strategy_evaluator</code>, <code>monte_carlo</code>, <code>param_optimizer</code></td>
+<td>Yes — consumed by the backtest runner / scoring routes.</td>
+</tr>
+<tr>
 <td><code>MultiStrategyPortfolio</code></td>
+<td><strong>No</strong> — capital-aware voter is library-only and fully unit-tested today; the live/paper run route that would drive it is the open P1 (see <a href="../../known-limitations/"><code>known-limitations.md</code></a>).</td>
 </tr>
 <tr>
-<td>Per-strategy attribution preserved end-to-end, with each strategy capped to its own dollar budget</td>
-<td><code>MultiStrategyManager</code></td>
+<td><code>tca.py</code>, <code>market_impact.py</code></td>
+<td>Library-only today — no public route, and neither is consumed by <code>DefaultCostModel</code> yet (the square-root model is available for strategies / evaluators to call directly).</td>
 </tr>
 <tr>
-<td>A relative capital split (weights need not sum to 1.0)</td>
-<td><code>MultiStrategyPortfolio</code></td>
+<td><code>PerformanceReport</code> (86-KPI)</td>
+<td><strong>No</strong> — schema landed, no analyzer/route yet.</td>
 </tr>
 <tr>
-<td>An absolute capital split (percentages must sum to ≤ 100)</td>
-<td><code>MultiStrategyManager</code></td>
+<td><code>strategy_lifecycle</code> / <code>strategy_versioning</code></td>
+<td>Library-only; the public promotion/version API is part of the still-partial live-trading story (see <a href="../../known-limitations/"><code>known-limitations.md</code></a>).</td>
 </tr>
 </tbody>
 </table>
-<p>The two are <strong>not</strong> interchangeable. <code>MultiStrategyPortfolio</code> is the
-right top-level loop when strategies compete for a shared book and you
-want a single netted position per symbol. <code>MultiStrategyManager</code> is the
-right loop when strategies run with independent budgets and you must
-attribute every signal to its source — the contract multi-strategy
-attribution reports and per-strategy risk limits need. It composes
-cleanly with a downstream voter if you later need symbol-level conflict
-resolution too.</p>
-<h2 id="sibling-drift-driven-rebalancing">Sibling: drift-driven rebalancing<a class="headerlink" href="#sibling-drift-driven-rebalancing" title="Permanent link">&para;</a></h2>
-<p><code>MultiStrategyPortfolio</code> and <code>MultiStrategyManager</code> both answer <em>"what
-should we trade this cycle?"</em> <a href="../../engine/portfolio/rebalancer.py"><code>PortfolioRebalancer</code></a>
-answers the slower, periodic question: <em>"the strategies' dollar values
-have drifted away from the policy weights — by how much, and what
-capital transfers would restore them?"</em> It emits advisory
-<code>RebalanceOrder</code>s (BUY underweight / SELL overweight), is pure / no-I/O,
-and lives in the same <code>engine/portfolio/</code> package (which owns no
-execution by design). See <a href="../core-domains/"><code>core-domains.md</code></a> for its
-full contract; it is the closing half of the allocation story and is
-also library-only today.</p>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../core-domains/"><code>core-domains.md</code></a> — the domain-layer map this page
-  extends, including the cost/risk and analytics layers.</li>
-<li><a href="../../known-limitations/"><code>known-limitations.md</code></a> — the live/paper run
-  route that would drive these coordinators is the open P1.</li>
-<li><a href="../../adr/"><code>adr/</code></a> — no dedicated ADR yet for the multi-coordinator
-  split; capture one (from <a href="../../adr/template/"><code>../adr/template.md</code></a>) the next
-  time a sixth coordinator is proposed, so the "why five" rationale
-  doesn't live only in this page.</li>
+<li><a href="../core-domains/"><code>core-domains.md</code></a> — the decision/execution half of
+  this map (instruments, multi-strategy orchestration, cost &amp; risk,
+  execution backends, portfolio accounting).</li>
+<li><a href="../../ARCHITECTURE.md"><code>ARCHITECTURE.md</code></a> — headline components
+  (<code>OrderManager</code>, <code>CostModel</code>, <code>Portfolio</code>, <code>RiskEngine</code>,
+  <code>BacktestRunner</code>), the signal→fill pipeline, and the SDK plugin
+  interface.</li>
+<li><a href="../../known-limitations/"><code>known-limitations.md</code></a> — what is
+  half-built, including the live/paper execution and the 86-KPI
+  analyzer gap.</li>
 </ul>
 
 
@@ -3084,7 +2969,7 @@ also library-only today.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../analytics/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Analytics &amp; optimization">
+          <a href="../core-domains/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Core domains">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -3094,20 +2979,20 @@ also library-only today.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Analytics & optimization
+                Core domains
               </div>
             </div>
           </a>
         
         
           
-          <a href="../database/" class="md-footer__link md-footer__link--next" aria-label="Next: Database &amp; migrations">
+          <a href="../multi-strategy/" class="md-footer__link md-footer__link--next" aria-label="Next: Multi-strategy coordination">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Database & migrations
+                Multi-strategy coordination
               </div>
             </div>
             <div class="md-footer__button md-icon">

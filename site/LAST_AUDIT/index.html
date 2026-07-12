@@ -514,6 +514,8 @@
       
         
       
+        
+      
     
     
     
@@ -613,6 +615,34 @@
     
   
     Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/analytics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analytics & optimization
   
 
     
@@ -2254,24 +2284,6 @@
         
       
       
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Last audit
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -2288,58 +2300,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#diff-this-cycle" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Diff this cycle
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#verified-no-change-needed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Verified, no change needed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#known-intentionally-not-fixed-this-cycle" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Known, intentionally not fixed this cycle
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
       
     </li>
   
@@ -2373,47 +2333,6 @@
     
   
   
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#diff-this-cycle" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Diff this cycle
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#verified-no-change-needed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Verified, no change needed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#known-intentionally-not-fixed-this-cycle" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Known, intentionally not fixed this cycle
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
 </nav>
                   </div>
                 </div>
@@ -2434,60 +2353,14 @@
 
 <h1 id="last-engineering-docs-audit">Last engineering-docs audit<a class="headerlink" href="#last-engineering-docs-audit" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>Timestamp:</strong> 2026-07-11T20:40:00Z</li>
-<li><strong>Cycle:</strong> 1711</li>
-<li><strong>Commit:</strong> <code>ee93e73</code></li>
-<li><strong>Target:</strong> reconcile docs with the 9 commits since <code>fe64f03</code></li>
+<li><strong>Timestamp:</strong> 2026-07-12T01:52:10Z</li>
+<li><strong>Cycle:</strong> 1740</li>
+<li><strong>Commit:</strong> <code>82bf6d0</code></li>
+<li><strong>Target:</strong> reflect latest 1740 cycles of development</li>
 </ul>
 <p>This file is touched on every <code>do_engineering_docs</code> run by kaizen, so
 its mtime tells you when documentation was last reconciled with the
 codebase — even when the audit produced no diff.</p>
-<h2 id="diff-this-cycle">Diff this cycle<a class="headerlink" href="#diff-this-cycle" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>Added</strong> <a href="../architecture/multi-strategy/"><code>architecture/multi-strategy.md</code></a>
-  and registered it in <code>mkdocs.yml</code> + the <code>docs/README.md</code> index. The
-  <code>core-domains.md</code> "Multi-strategy orchestration" section previously
-  claimed "three orchestrators exist"; the codebase has <strong>five</strong>, and
-  two — the lightweight <code>portfolio/orchestrator.py</code> voter and the
-  capital-aware, provenance-preserving
-  <a href="../engine/strategies/multi_manager.py"><code>MultiStrategyManager</code></a> —
-  were undocumented. <code>MultiStrategyManager</code> was also the subject of two
-  recent hardening commits (<code>#1390</code> cast <code>max_n</code> to <code>float</code> before
-  <code>is_integer()</code>; <code>#1392</code> guard <code>_finite</code> against <code>OverflowError</code>), so
-  its construction contract is now spelled out.</li>
-</ul>
-<h2 id="verified-no-change-needed">Verified, no change needed<a class="headerlink" href="#verified-no-change-needed" title="Permanent link">&para;</a></h2>
-<ul>
-<li><code>architecture/overview.md</code>, <code>api-reference.md</code>, <code>data-model.md</code>,
-  <code>deployment.md</code>, <code>development.md</code>, <code>known-limitations.md</code>,
-  <code>architecture/plugins.md</code>, <code>architecture/database.md</code> were re-read
-  against <code>HEAD=ee93e73</code> and remain accurate. Spot-checks that passed:</li>
-<li><code>engine/app.py</code> lifespan wiring (TaskIQ broker, EventBus,
-    ConnectionManager, SecurityHeaders, rate-limit backend selection)
-    matches the overview's request-lifecycle + middleware order.</li>
-<li><code>engine/api/router.py</code> route prefixes/tags match the API reference
-    table (every router is accounted for).</li>
-<li><code>Dockerfile</code> entrypoint (<code>uvicorn engine.app:create_app --factory</code>)
-    and distroless runtime match <code>deployment.md</code>.</li>
-<li>Migration chain tops out at <code>013</code> (next free is <code>014</code>), matching
-    <code>architecture/database.md</code> and <code>data-model.md</code>.</li>
-<li><code>engine/brokers/</code> exposes <code>AlpacaBrokerAdapter</code> + <code>IBKRBrokerAdapter</code>
-    (#1346), neither wired to a route, matching the overview table.</li>
-<li><code>Makefile</code> targets (<code>dev</code>, <code>test</code> with <code>--cov-fail-under=70</code>,
-    <code>lint</code>, <code>fix</code>, <code>typecheck</code>, <code>migrate</code>, the <code>docker-dev-*</code> family)
-    match <code>development.md</code>.</li>
-</ul>
-<h2 id="known-intentionally-not-fixed-this-cycle">Known, intentionally not fixed this cycle<a class="headerlink" href="#known-intentionally-not-fixed-this-cycle" title="Permanent link">&para;</a></h2>
-<ul>
-<li>The P0s in <a href="../known-limitations/"><code>known-limitations.md</code></a> (backtest
-  results not persisted; <code>consent_records</code> / <code>deletion_schedules</code> have
-  models but no migration) are code fixes, not doc fixes — they stay
-  documented as open until the code lands.</li>
-<li><code>core-domains.md</code> is 545 lines (over the 500-line soft cap). The
-  added cross-reference to <code>multi-strategy.md</code> is the start of the
-  split; a future cycle should move the three deep coordinator
-  subsections into <code>multi-strategy.md</code> and leave a summary here.</li>
-</ul>
 
 
 

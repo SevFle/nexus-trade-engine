@@ -516,6 +516,8 @@
       
         
       
+        
+      
     
     
     
@@ -615,6 +617,34 @@
     
   
     Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/analytics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analytics & optimization
   
 
     
@@ -3643,6 +3673,11 @@ Requires legal acceptance.</p>
 <tbody>
 <tr>
 <td>GET</td>
+<td><code>/api/v1/reference/exchanges</code></td>
+<td>Static list of supported trading venues (ISO 10383 MIC → name / country / currency). Fully cached read — no DB, no network — so it is the cheapest probe in the API and the one <code>tests/load/api-baseline.js</code> exercises for a warm-cache latency floor. Backs the frontend venue picker.</td>
+</tr>
+<tr>
+<td>GET</td>
 <td><code>/api/v1/reference/suggest?q=&amp;limit=&amp;asset_class=</code></td>
 <td>Typeahead. Tries the local <code>SearchIndex</code> first (seeded at startup), then falls through to the Yahoo Finance search API. Caps <code>limit</code> at 50; rejects empty / oversize <code>q</code>.</td>
 </tr>
@@ -3988,9 +4023,7 @@ for fail-closed auth at the handshake.</p>
   the same <code>decode_token</code> the REST dependency uses; scopes via the
   shared <code>extract_scopes</code>. <strong>JWT-only</strong> — no <code>nxs_*</code> API keys, same
   as <code>/ws</code>.</li>
-<li><strong>Server not ready</strong>: if hit before <code>init_ws_events</code>, the socket is
-  closed with code <code>1011</code> (<code>WS_CLOSE_SERVER_ERROR</code>, reason
-  <code>server not ready</code>).</li>
+<li><strong>Server not ready</strong>: if hit before <code>init_ws_events</code>, the socket is closed with code <code>1011</code> (<code>WS_CLOSE_SERVER_ERROR</code>, reason <code>server not ready</code>).</li>
 <li><strong>Actionable inbound messages</strong>: <code>subscribe</code>, <code>unsubscribe</code>, <code>ping</code>
   (parsed by the shared <code>parse_inbound</code>). Mid-session token refresh is
   <strong>not</strong> supported here — the token is bound to the handshake, so a
@@ -4004,10 +4037,9 @@ for fail-closed auth at the handshake.</p>
   before installing the new one, so a config reload leaks no
   connections or double event-bus subscriptions.</li>
 </ul>
-<p>Prefer <code>/ws/events</code> when the client can put the token in the handshake
-query (fewer moving parts, fail-closed auth). Prefer <code>/ws</code> when the
-token can only be delivered after the socket opens (e.g. a browser
-that refreshes the token in-band).</p>
+<p>Prefer <code>/ws/events</code> when the token can ride in the handshake query
+(fail-closed auth, fewer moving parts); prefer <code>/ws</code> when the token
+can only arrive after the socket opens (e.g. an in-band browser refresh).</p>
 <h2 id="errors">Errors<a class="headerlink" href="#errors" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Auth</strong>: <code>401</code> for missing/invalid/expired credentials; <code>403</code> for

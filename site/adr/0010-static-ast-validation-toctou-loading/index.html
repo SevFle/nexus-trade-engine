@@ -516,6 +516,8 @@
       
         
       
+        
+      
     
     
     
@@ -615,6 +617,34 @@
     
   
     Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/analytics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analytics & optimization
   
 
     
@@ -2808,7 +2838,17 @@ ADR-0007).</p>
 <li><strong>Positive</strong> — the TOCTOU window between validation and execution is
   eliminated: the loader reads the file <strong>once</strong> (as bytes), validates
   those bytes, then <code>compile()</code>s and <code>exec()</code>s the <em>same</em> bytes into the
-  module namespace. There is no second disk read.</li>
+  module namespace. There is no second disk read. The single read goes
+  through the size-bounded <code>read_plugin_source</code> helper (see below).</li>
+<li><strong>Positive</strong> — the single read is size-capped at <code>MAX_PLUGIN_SIZE</code>
+  (1 MiB) by <code>read_plugin_source</code> with <strong>two</strong> independent guards
+  (<code>os.fstat</code> on the open fd, then a <code>max_size + 1</code> capped read that
+  catches growth between the stat and the read). A hostile multi-gigabyte
+  <code>strategy.py</code> is rejected before any <code>ast.parse</code>/<code>compile</code> work
+  happens, closing the unbounded-read DoS a raw <code>f.read()</code> would expose
+  (gh#1402). Rejected sources are also logged at warning level with
+  their violation list (<code>strategy_source_blocked</code>) so the rejection is
+  observable, not silent.</li>
 <li><strong>Positive</strong> — the allowlist can never be defeated by a blocked module
   sneaking into it: an <em>exact</em> match in the blocked set short-circuits
   to "blocked" before the allowlist is consulted (the allowlist may only
@@ -2869,15 +2909,18 @@ every <code>validate()</code> call — so a single instance is safe to reuse.</p
 <h3 id="the-loader-validate-then-exec-the-exact-bytes">The loader — validate-then-exec the exact bytes<a class="headerlink" href="#the-loader-validate-then-exec-the-exact-bytes" title="Permanent link">&para;</a></h3>
 <p>Source: <a href="../../engine/plugins/registry.py"><code>engine/plugins/registry.py</code></a>
 (<code>load_strategy_class</code>).</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">module_path</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">source_bytes</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>                      <span class="c1"># single read</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">violations</span> <span class="o">=</span> <span class="n">ImportValidator</span><span class="p">(</span><span class="n">DENYLIST_MODULES</span><span class="p">)</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">source_bytes</span><span class="p">)</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">if</span> <span class="n">violations</span><span class="p">:</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;... rejected by import validator: </span><span class="si">{</span><span class="n">joined</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">module_from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>   <span class="c1"># populates __file__/__loader__/__spec__</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">code</span> <span class="o">=</span> <span class="nb">compile</span><span class="p">(</span><span class="n">source_bytes</span><span class="p">,</span> <span class="n">module_path</span><span class="p">,</span> <span class="s2">&quot;exec&quot;</span><span class="p">)</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">exec</span><span class="p">(</span><span class="n">code</span><span class="p">,</span> <span class="n">module</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>                      <span class="c1"># the exact validated bytes</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># read once, size-bounded (MAX_PLUGIN_SIZE = 1 MiB) — closes the</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># unbounded-read DoS AND pins the bytes that get compiled/exec&#39;d.</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">source_bytes</span> <span class="o">=</span> <span class="n">read_plugin_source</span><span class="p">(</span><span class="n">module_path</span><span class="p">,</span> <span class="n">opener</span><span class="o">=</span><span class="nb">open</span><span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">violations</span> <span class="o">=</span> <span class="n">ImportValidator</span><span class="p">(</span><span class="n">DENYLIST_MODULES</span><span class="p">)</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">source_bytes</span><span class="p">)</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">if</span> <span class="n">violations</span><span class="p">:</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">joined</span> <span class="o">=</span> <span class="s2">&quot;; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">violations</span><span class="p">)</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;strategy_source_blocked&quot;</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">module_path</span><span class="p">,</span> <span class="n">violations</span><span class="o">=</span><span class="n">violations</span><span class="p">)</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Strategy source </span><span class="si">{</span><span class="n">module_path</span><span class="si">}</span><span class="s2"> rejected by import validator: </span><span class="si">{</span><span class="n">joined</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">module_from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>   <span class="c1"># populates __file__/__loader__/__spec__</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">code</span> <span class="o">=</span> <span class="nb">compile</span><span class="p">(</span><span class="n">source_bytes</span><span class="p">,</span> <span class="n">module_path</span><span class="p">,</span> <span class="s2">&quot;exec&quot;</span><span class="p">)</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="n">exec</span><span class="p">(</span><span class="n">code</span><span class="p">,</span> <span class="n">module</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>                      <span class="c1"># the exact validated bytes (noqa: S102)</span>
 </span></code></pre></div>
 <p><code>spec.loader.exec_module(module)</code> is <strong>deliberately avoided</strong>: it
 re-reads the file from disk, which would re-open the TOCTOU window.
@@ -2887,6 +2930,19 @@ module's file path (so tracebacks still point at <code>strategy.py</code>) and
 call has already populated <code>__file__</code> / <code>__loader__</code> / <code>__spec__</code>, so
 the module looks identical to one loaded the standard way — only the
 byte-source is pinned.</p>
+<p>The single physical read goes through <code>read_plugin_source</code> (in
+<a href="../../engine/plugins/restricted_importer.py"><code>restricted_importer.py</code></a>),
+not a raw <code>open()…read()</code>. It enforces <code>MAX_PLUGIN_SIZE</code> (1 MiB) with
+<em>two</em> independent guards so the read itself can't be weaponised:
+<code>os.fstat</code> on the open file descriptor rejects obviously-oversized
+files without materialising their contents, and a <em>capped</em> read of
+<code>max_size + 1</code> bytes catches a file that grew between the stat and the
+read (procfs/pipe backing store, or a concurrent writer) — the trailing
+byte proves the file exceeds the limit, so the loader rejects rather
+than truncating silently. <code>load_strategy_class</code> forwards its own
+module-level <code>open</code> as the <code>opener=</code>, which is what the test harness
+patches to assert the file is read <strong>exactly once</strong> (the TOCTOU
+contract: validated bytes == executed bytes).</p>
 <p>This is a deliberate, audited <code>exec</code> call site (<code># noqa: S102</code>); the
 <code>S102</code> (flake8-bandit "use of exec") suppression is documented inline
 precisely because removing the <code>exec</code> would require <code>exec_module</code>, which
@@ -2949,6 +3005,8 @@ security boundary — see the threat-model note in
 <ul>
 <li>Block unsafe AST nodes + fix import bypass: gh#1239</li>
 <li>Close TOCTOU race in plugin loading: gh#1245</li>
+<li>Cap plugin source size + restore violation logging (unbounded-read
+  DoS + observability): gh#1402</li>
 <li>Source:
   <a href="../../engine/plugins/restricted_importer.py"><code>engine/plugins/restricted_importer.py</code></a>
   (<code>ImportValidator</code>),
