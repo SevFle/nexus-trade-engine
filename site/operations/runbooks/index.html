@@ -516,6 +516,8 @@
       
         
       
+        
+      
     
     
     
@@ -615,6 +617,34 @@
     
   
     Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/analytics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analytics & optimization
   
 
     
@@ -2373,6 +2403,11 @@ The <code>runbook</code> annotation on every alert points back here.</p>
 </tr>
 </tbody>
 </table>
+<p><a href="common-issues/"><code>common-issues.md</code></a> is the general-purpose debug
+runbook — it is <strong>not</strong> tied to a single SLO. Start there for any
+incident that does not map cleanly to one of the alerts above (DB
+connection exhaustion, migration failures, broker outages, config
+drift, etc.).</p>
 <h2 id="runbook-structure">Runbook structure<a class="headerlink" href="#runbook-structure" title="Permanent link">&para;</a></h2>
 <p>Every runbook follows the same shape so on-call can scan them at 03:00:</p>
 <ol>

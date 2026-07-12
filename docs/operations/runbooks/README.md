@@ -13,6 +13,12 @@ The `runbook` annotation on every alert points back here.
 | [webhook-delivery.md](webhook-delivery.md) | `WebhookDeliverySlowBurn`, `WebhookDeliveryBudgetExhaustion`                        |
 | [task-pipeline.md](task-pipeline.md)      | `TaskPipelineSlowBurn`, `TaskPipelineBudgetExhaustion`                              |
 
+[`common-issues.md`](common-issues.md) is the general-purpose debug
+runbook — it is **not** tied to a single SLO. Start there for any
+incident that does not map cleanly to one of the alerts above (DB
+connection exhaustion, migration failures, broker outages, config
+drift, etc.).
+
 ## Runbook structure
 
 Every runbook follows the same shape so on-call can scan them at 03:00:

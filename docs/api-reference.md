@@ -268,6 +268,7 @@ Requires legal acceptance.
 
 | Method | Path | Notes |
 |---|---|---|
+| GET | `/api/v1/reference/exchanges` | Static list of supported trading venues (ISO 10383 MIC → name / country / currency). Fully cached read — no DB, no network — so it is the cheapest probe in the API and the one `tests/load/api-baseline.js` exercises for a warm-cache latency floor. Backs the frontend venue picker. |
 | GET | `/api/v1/reference/suggest?q=&limit=&asset_class=` | Typeahead. Tries the local `SearchIndex` first (seeded at startup), then falls through to the Yahoo Finance search API. Caps `limit` at 50; rejects empty / oversize `q`. |
 
 ## Market data
@@ -450,9 +451,7 @@ for fail-closed auth at the handshake.
   the same `decode_token` the REST dependency uses; scopes via the
   shared `extract_scopes`. **JWT-only** — no `nxs_*` API keys, same
   as `/ws`.
-- **Server not ready**: if hit before `init_ws_events`, the socket is
-  closed with code `1011` (`WS_CLOSE_SERVER_ERROR`, reason
-  `server not ready`).
+- **Server not ready**: if hit before `init_ws_events`, the socket is closed with code `1011` (`WS_CLOSE_SERVER_ERROR`, reason `server not ready`).
 - **Actionable inbound messages**: `subscribe`, `unsubscribe`, `ping`
   (parsed by the shared `parse_inbound`). Mid-session token refresh is
   **not** supported here — the token is bound to the handshake, so a
@@ -466,10 +465,9 @@ for fail-closed auth at the handshake.
   before installing the new one, so a config reload leaks no
   connections or double event-bus subscriptions.
 
-Prefer `/ws/events` when the client can put the token in the handshake
-query (fewer moving parts, fail-closed auth). Prefer `/ws` when the
-token can only be delivered after the socket opens (e.g. a browser
-that refreshes the token in-band).
+Prefer `/ws/events` when the token can ride in the handshake query
+(fail-closed auth, fewer moving parts); prefer `/ws` when the token
+can only arrive after the socket opens (e.g. an in-band browser refresh).
 
 ## Errors
 
