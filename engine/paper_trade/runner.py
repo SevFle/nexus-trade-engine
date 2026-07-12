@@ -96,8 +96,10 @@ class DataFeed(Protocol):
 class PaperTradeConfig:
     """Tunable settings for a paper-trading run."""
 
-    #: Starting cash for an auto-created portfolio (ignored when the
-    #: OrderManager already carries one).
+    #: Starting cash for the session portfolio. The runner itself never
+    #: creates a portfolio — it always operates on ``order_manager.portfolio``
+    #: — so this value is informational/reserved for runners that build an
+    #: :class:`OrderManager` (with its :class:`Portfolio`) from config.
     initial_capital: float = 100_000.0
     #: Symbols the feed is expected to publish. Informational only — used
     #: for logging and for validating the watchlist at start.
@@ -167,7 +169,6 @@ class PaperTradeRunner:
         paper_broker: ExecutionBackend,
         order_manager: OrderManager,
         config: PaperTradeConfig | None = None,
-        portfolio: Portfolio | None = None,
     ) -> None:
         if strategy is None:
             raise ValueError("strategy is required")
@@ -187,11 +188,12 @@ class PaperTradeRunner:
         self.order_manager = order_manager
         self.config = config or PaperTradeConfig()
 
-        # Reuse the OrderManager's portfolio by default so fills mutate the
-        # same state the runner snapshots for the strategy.
-        self.portfolio: Portfolio = (
-            portfolio if portfolio is not None else order_manager.portfolio
-        )
+        # The runner always shares the OrderManager's portfolio so that order
+        # fills mutate exactly the same state the runner snapshots and marks
+        # to market for the strategy. There is deliberately no separate
+        # ``portfolio`` parameter: allowing a divergent portfolio would let
+        # fills and strategy decisions drift out of sync.
+        self.portfolio: Portfolio = order_manager.portfolio
         if self.portfolio is None:
             # Without a portfolio there is nothing to mutate, snapshot, or mark
             # to market — refuse rather than fail later with an opaque

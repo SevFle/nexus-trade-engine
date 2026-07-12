@@ -217,17 +217,52 @@ class TestConstruction:
         )
         assert runner.portfolio is order_manager.portfolio
 
-    def test_explicit_portfolio_wins(self, cost_model, paper_broker, order_manager, portfolio):
+    def test_explicit_portfolio_kwarg_rejected_uses_order_manager_portfolio(
+        self, cost_model, paper_broker, order_manager, portfolio
+    ):
+        """The runner deliberately does NOT accept a ``portfolio=`` parameter.
+
+        Allowing a divergent portfolio would let order fills (which mutate
+        ``order_manager.portfolio``) and strategy decisions drift out of sync.
+        The runner must therefore share the OrderManager's portfolio by object
+        identity, and construction with a separate ``portfolio=`` kwarg must
+        fail loudly with a ``TypeError``.
+        """
         other = Portfolio(initial_cash=50.0)
+
+        # 1) A separate portfolio kwarg is no longer part of the contract.
+        with pytest.raises(TypeError, match="portfolio"):
+            PaperTradeRunner(
+                strategy=_RecordingStrategy(),
+                data_feed=_ListDataFeed([]),
+                cost_model=cost_model,
+                paper_broker=paper_broker,
+                order_manager=order_manager,
+                portfolio=other,
+            )
+
+        # 2) Without the kwarg, the runner binds to order_manager.portfolio.
         runner = PaperTradeRunner(
             strategy=_RecordingStrategy(),
             data_feed=_ListDataFeed([]),
             cost_model=cost_model,
             paper_broker=paper_broker,
             order_manager=order_manager,
-            portfolio=other,
         )
-        assert runner.portfolio is other
+        # Same object identity — fills and snapshots share one source of truth.
+        assert runner.portfolio is order_manager.portfolio
+        assert runner.portfolio is not other
+
+        # 3) Mutating the shared Portfolio object is observable through the
+        #    runner too — proving they reference the *same* object, not a
+        #    copy. This is exactly the invariant the runner relies on so
+        #    filled orders mutate the state it marks to market and snapshots
+        #    for the strategy.
+        original_cash = order_manager.portfolio._cash
+        order_manager.portfolio._cash = original_cash + 1.0
+        assert runner.portfolio._cash == original_cash + 1.0
+        # Sanity: a freshly-built separate portfolio is unaffected.
+        assert other._cash != original_cash + 1.0
 
     def test_raises_when_portfolio_resolves_to_none(
         self, cost_model, risk_engine, paper_broker
