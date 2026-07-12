@@ -95,11 +95,19 @@ def normalize_ports(ports: Any) -> list[str]:
     ``"target"`` when ``published`` is absent) so callers can search the
     rendered text for substrings like ``"8000:8000"`` regardless of how the
     author wrote it.
+
+    Only ``str`` and ``int`` scalars are accepted on the wire: ``bool`` (a
+    subclass of ``int``), ``float``, ``bytes``, and other types are rejected
+    with ``TypeError`` so that ambiguous spellings surface immediately
+    instead of being silently coerced via ``str()``. A long-syntax dict
+    with neither ``published`` nor ``target`` is rejected with ``ValueError``
+    because it carries no meaningful port mapping.
     """
     if ports is None:
         return []
-    if isinstance(ports, (str, int)):
-        # A single scalar port (unusual but valid YAML).
+    if isinstance(ports, (str, int)) and not isinstance(ports, bool):
+        # A single scalar port (unusual but valid YAML). ``bool`` is a
+        # subclass of ``int``, so it must be excluded explicitly.
         return [str(ports)]
     if not isinstance(ports, list):
         raise TypeError(f"ports must be a list, got {type(ports).__name__}")
@@ -116,15 +124,27 @@ def normalize_ports(ports: Any) -> list[str]:
             elif published is not None:
                 rendered.append(str(published))
             else:
-                rendered.append(str(entry))
-        else:
-            # str, int, float — stringify before joining so int ports
-            # (e.g. ``- 8000``) do not raise ``TypeError: sequence item``.
+                # A long-syntax dict with neither key carries no port
+                # mapping — surface it loudly instead of stringifying the
+                # whole dict (which would silently hide the misconfiguration).
+                raise ValueError(
+                    "ports dict entry must define at least one of "
+                    f"'target' or 'published', got {entry!r}"
+                )
+        elif isinstance(entry, (str, int)) and not isinstance(entry, bool):
+            # Explicit type whitelist: only str/int are accepted so that
+            # float (e.g. ``8000.0``), bool (``True``), bytes, and similar
+            # ambiguous types are rejected rather than coerced via str().
             rendered.append(str(entry))
+        else:
+            raise TypeError(
+                "ports entry must be a str, int, or port-mapping dict, "
+                f"got {type(entry).__name__}: {entry!r}"
+            )
     return rendered
 
 
-def normalize_volumes(volumes: Any) -> list[dict[str, str | None]]:
+def normalize_volumes(volumes: Any) -> list[dict[str, str | None | dict]]:
     """Normalize a compose ``volumes`` field to a list of mappings.
 
     Each entry carries ``source`` and ``target`` keys plus the original raw
@@ -249,6 +269,35 @@ class TestNormalizationHelpers:
 
     def test_ports_scalar_int(self):
         assert normalize_ports(8000) == ["8000"]
+
+    def test_ports_float_entry_rejected(self):
+        # float ports are ambiguous (``8000.0`` vs ``8000``) and must be
+        # rejected rather than silently coerced via ``str()``.
+        with pytest.raises(TypeError):
+            normalize_ports([3.14])  # type: ignore[list-item]
+
+    def test_ports_bool_entry_rejected(self):
+        # ``bool`` is a subclass of ``int``; without an explicit guard
+        # ``True`` would stringify to "True".
+        with pytest.raises(TypeError):
+            normalize_ports([True])  # type: ignore[list-item]
+
+    def test_ports_scalar_bool_rejected(self):
+        # The top-level ``(str, int)`` short-circuit must also reject a
+        # scalar bool.
+        with pytest.raises(TypeError):
+            normalize_ports(True)  # type: ignore[arg-type]
+
+    def test_ports_bytes_entry_rejected(self):
+        # bytes are not a valid port spelling; reject explicitly.
+        with pytest.raises(TypeError):
+            normalize_ports([b"8000"])  # type: ignore[list-item]
+
+    def test_ports_dict_without_target_or_published_raises(self):
+        # A long-syntax dict with neither ``target`` nor ``published`` is
+        # meaningless; raise ValueError instead of stringifying the dict.
+        with pytest.raises(ValueError):
+            normalize_ports([{"protocol": "tcp"}])
 
     def test_ports_invalid_type_raises(self):
         with pytest.raises(TypeError):
