@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import ast
 import builtins
+import os
 import socket
 import sys
 from importlib.abc import MetaPathFinder
@@ -49,6 +50,13 @@ if TYPE_CHECKING:
 # Re-exported for backward compatibility with existing tests and callers.
 # This is a *known-dangerous-modules* registry, not the enforcement mechanism.
 BLOCKED_MODULES: frozenset[str] = DENYLIST_MODULES
+
+#: Maximum size, in bytes, of a plugin/strategy source file that the loader
+#: will read and validate.  A plugin larger than this is rejected *before* any
+#: ``ast.parse`` / ``compile`` work happens, bounding the CPU and memory cost
+#: of a hostile or runaway ``strategy.py``.  1 MiB is generous for source code
+#: while still well clear of anything reasonable.
+MAX_PLUGIN_SIZE: int = 1 << 20  # 1 MiB
 
 
 # Sentinel used by :func:`extract_hostnames` to represent an *invalid*
@@ -643,10 +651,64 @@ class ImportValidator(ast.NodeVisitor):
         return self.violations
 
 
+def read_plugin_source(
+    path: str | os.PathLike[str],
+    *,
+    max_size: int = MAX_PLUGIN_SIZE,
+    opener: Callable[..., Any] = open,
+) -> bytes:
+    """Read a plugin's source bytes, rejecting files larger than *max_size*.
+
+    Used by :func:`engine.plugins.registry.load_strategy_class` so that the
+    single read that feeds both static validation and ``compile``/``exec`` is
+    size-bounded.  Two independent size guards are applied to close a
+    time-of-check/time-of-use gap:
+
+      1. ``os.fstat`` on the already-open file descriptor — fails fast for
+         obviously oversized files without materialising their contents.
+      2. A *capped* read of ``max_size + 1`` bytes — if the file grew between
+         the ``fstat`` and the read (e.g. a procfs/pipe backing store, or a
+         concurrent writer) the trailing byte proves the file exceeds the
+         limit and we reject rather than truncating silently.
+
+    The optional *opener* (defaulting to the builtin :func:`open`) lets the
+    caller route the single physical read through its own module-level
+    ``open``.  :func:`engine.plugins.registry.load_strategy_class` does exactly
+    this so the read is attributable to the public registry entry point —
+    which is what test harnesses patch to assert the file is read exactly
+    once (the TOCTOU guarantee: validated bytes == executed bytes).
+
+    Returns the source bytes for files within the limit.  Raises
+    :class:`ValueError` (with a descriptive message that includes the observed
+    size and the limit) for anything larger, so the caller can surface a
+    clear rejection reason.
+    """
+    with opener(path, "rb") as f:
+        size = os.fstat(f.fileno()).st_size
+        if size > max_size:
+            raise ValueError(
+                f"plugin source {os.fspath(path)} is {size} bytes which exceeds "
+                f"the {max_size}-byte MAX_PLUGIN_SIZE limit"
+            )
+        # Defence-in-depth: cap the read itself so a file that grows *between*
+        # the fstat above and the read below cannot smuggle unbounded bytes
+        # into memory.  Reading one byte past the limit lets us distinguish
+        # "exactly at the limit" from "over the limit".
+        data = f.read(max_size + 1)
+    if len(data) > max_size:
+        raise ValueError(
+            f"plugin source {os.fspath(path)} exceeds the {max_size}-byte "
+            f"MAX_PLUGIN_SIZE limit (read {len(data)} bytes before bailing out)"
+        )
+    return data
+
+
 __all__ = [
     "ALLOWED_MODULES",
     "BLOCKED_MODULES",
+    "MAX_PLUGIN_SIZE",
     "ImportValidator",
     "RestrictedImporter",
     "extract_hostnames",
+    "read_plugin_source",
 ]

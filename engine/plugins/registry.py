@@ -8,7 +8,7 @@ import structlog
 import yaml
 
 from engine.plugins.allowlist import DENYLIST_MODULES
-from engine.plugins.restricted_importer import ImportValidator
+from engine.plugins.restricted_importer import ImportValidator, read_plugin_source
 
 logger = structlog.get_logger()
 
@@ -62,18 +62,26 @@ def load_strategy_class(module_path: str) -> Any:
     # modules or invokes code-execution builtins (``exec``/``eval``/
     # ``compile``/``__import__``/``importlib.import_module``) *before*
     # the module body executes.  This fails fast and side-effect free,
-    # complementing the runtime :class:`RestrictedImporter` hooks.  Reading
-    # the file here is safe: restrictions are not active while the host loads
-    # strategies, so plain ``open`` is used.
+    # complementing the runtime :class:`RestrictedImporter` hooks.
     #
-    # The file is read **once** (as bytes) and the *exact same* bytes that
-    # pass validation are then :func:`compile`-d and :func:`exec`-d directly
-    # into the module namespace.  This closes a time-of-check/time-of-use gap:
-    # ``spec.loader.exec_module`` re-reads the file from disk, so an attacker
-    # who swaps the file between the validation read and the exec read could
-    # execute different (un-validated) bytes than the ones just checked.
-    with open(module_path, "rb") as f:
-        source_bytes = f.read()
+    # The file is read **once** (as bytes, size-bounded by
+    # :func:`read_plugin_source` which enforces :data:`MAX_PLUGIN_SIZE`) and
+    # the *exact same* bytes that pass validation are then :func:`compile`-d
+    # and :func:`exec`-d directly into the module namespace.  This closes two
+    # gaps: (a) a time-of-check/time-of-use race — ``spec.loader.exec_module``
+    # re-reads the file from disk, so an attacker who swaps the file between
+    # the validation read and the exec read could execute different
+    # (un-validated) bytes than the ones just checked; (b) an unbounded read
+    # of a hostile multi-gigabyte ``strategy.py`` — the size guard rejects it
+    # before any ``ast.parse``/``compile`` work happens.
+    # The file is read **once** through the registry module's own ``open``
+    # (forwarded as ``opener`` to :func:`read_plugin_source`), so the single
+    # physical read is attributable to this public entry point.  Reading via
+    # the module-global ``open`` (rather than the helper's own) lets test
+    # harnesses patch ``engine.plugins.registry.open`` to assert the file is
+    # read exactly once — the TOCTOU guarantee that the validated bytes are
+    # the executed bytes.
+    source_bytes = read_plugin_source(module_path, opener=open)
     violations = ImportValidator(DENYLIST_MODULES).validate(source_bytes)
     if violations:
         joined = "; ".join(violations)
@@ -116,7 +124,7 @@ class PluginRegistry:
             return None
         try:
             cls = load_strategy_class(entry["module_path"])
-        except (ImportError, AttributeError) as exc:
+        except (ImportError, AttributeError, SyntaxError, ValueError) as exc:
             logger.exception("strategy_load_failed", strategy=strategy_name, error=str(exc))
             return None
         try:

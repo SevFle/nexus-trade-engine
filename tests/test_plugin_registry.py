@@ -209,6 +209,106 @@ class TestPluginRegistry:
         assert registry.get_module_path("does_not_exist") is None
 
 
+class TestRegistrySyntaxErrorAndOversizedLogging:
+    """Item 3: the SyntaxError logging path and oversized-file rejection.
+
+    ``PluginRegistry.load_strategy`` must swallow ``SyntaxError`` (and the
+    ``ValueError`` raised by the size guard) and surface them via the warning
+    log *with the captured exception message*, returning ``None`` rather than
+    propagating — so one broken/oversized strategy never takes down the whole
+    registry load.
+    """
+
+    def test_syntax_error_in_strategy_returns_none_and_logs(
+        self, strategies_dir, monkeypatch
+    ):
+        from unittest.mock import MagicMock
+
+        import engine.plugins.registry as reg
+
+        path = strategies_dir / "bad_syntax"
+        # Malformed Python → ast.parse (inside ImportValidator.validate) and
+        # compile both raise SyntaxError.
+        _write_strategy(
+            path,
+            {"name": "bad_syntax", "version": "1.0.0"},
+            "def foo(:\n    pass\n",
+        )
+
+        mock_logger = MagicMock()
+        monkeypatch.setattr(reg, "logger", mock_logger)
+
+        registry = PluginRegistry(strategies_dir)
+        # SyntaxError is caught, not propagated.
+        assert registry.load_strategy("bad_syntax") is None
+
+        # The exception message is captured in the warning/error log.
+        mock_logger.exception.assert_called_once()
+        call = mock_logger.exception.call_args
+        assert call.args[0] == "strategy_load_failed"
+        assert call.kwargs["strategy"] == "bad_syntax"
+        error = call.kwargs["error"]
+        assert isinstance(error, str)
+        assert error  # non-empty: the exception message was captured
+
+    def test_syntax_error_propagates_from_load_strategy_class(self, strategies_dir):
+        """At the class level (no swallowing) SyntaxError surfaces directly."""
+        path = strategies_dir / "bad_syntax"
+        _write_strategy(
+            path,
+            {"name": "bad_syntax", "version": "1.0.0"},
+            "def foo(:\n    pass\n",
+        )
+        with pytest.raises(SyntaxError):
+            load_strategy_class(str(path / "strategy.py"))
+
+    def test_oversized_strategy_file_returns_none_and_logs(
+        self, strategies_dir, monkeypatch
+    ):
+        from unittest.mock import MagicMock
+
+        import engine.plugins.registry as reg
+        from engine.plugins.restricted_importer import MAX_PLUGIN_SIZE
+
+        path = strategies_dir / "too_big"
+        # One byte over the hard cap → read_plugin_source raises ValueError
+        # *before* any ast.parse/compile work happens.
+        _write_strategy(
+            path,
+            {"name": "too_big", "version": "1.0.0"},
+            "# " + "x" * MAX_PLUGIN_SIZE,
+        )
+        assert (path / "strategy.py").stat().st_size > MAX_PLUGIN_SIZE
+
+        mock_logger = MagicMock()
+        monkeypatch.setattr(reg, "logger", mock_logger)
+
+        registry = PluginRegistry(strategies_dir)
+        assert registry.load_strategy("too_big") is None
+
+        mock_logger.exception.assert_called_once()
+        call = mock_logger.exception.call_args
+        assert call.args[0] == "strategy_load_failed"
+        assert call.kwargs["strategy"] == "too_big"
+        error = call.kwargs["error"]
+        assert "exceeds" in error
+        assert "MAX_PLUGIN_SIZE" in error
+
+    def test_oversized_strategy_file_raises_value_error_from_load_strategy_class(
+        self, strategies_dir
+    ):
+        from engine.plugins.restricted_importer import MAX_PLUGIN_SIZE
+
+        path = strategies_dir / "too_big"
+        _write_strategy(
+            path,
+            {"name": "too_big", "version": "1.0.0"},
+            "# " + "x" * MAX_PLUGIN_SIZE,
+        )
+        with pytest.raises(ValueError, match="exceeds"):
+            load_strategy_class(str(path / "strategy.py"))
+
+
 class TestLoadStrategyClassValidatedBytesAreExecuted:
     """The exact bytes that pass static validation must be the ones executed.
 
