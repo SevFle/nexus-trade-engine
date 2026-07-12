@@ -2353,10 +2353,32 @@
 
 <h1 id="last-engineering-docs-audit">Last engineering-docs audit<a class="headerlink" href="#last-engineering-docs-audit" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>Timestamp:</strong> 2026-07-12T01:52:10Z</li>
-<li><strong>Cycle:</strong> 1740</li>
-<li><strong>Commit:</strong> <code>82bf6d0</code></li>
-<li><strong>Target:</strong> reflect latest 1740 cycles of development</li>
+<li><strong>Timestamp:</strong> 2026-07-12T16:20:00Z</li>
+<li><strong>Cycle:</strong> 1753</li>
+<li><strong>Commit:</strong> <code>01851b0</code></li>
+<li><strong>Target:</strong> reflect HEAD after the short-position P&amp;L / cross-endpoint
+  drift fix (#1416).</li>
+</ul>
+<p>Reconciliation performed for this cycle:</p>
+<ul>
+<li>Verified every mounted HTTP/WS route in <code>engine/api/</code> against
+  <code>api-reference.md</code> (all 69 live routes). Two previously-undocumented
+  routes were added this cycle:</li>
+<li><code>GET /api/v1/health</code> — the k6 liveness alias (<code>health.py</code>).</li>
+<li><code>POST /api/v1/backtest</code> — the async submission endpoint the k6
+    baseline exercises (dual <code>strategy_name</code>/<code>strategy_id</code> spelling,
+    <code>BacktestSubmitRequest</code>).</li>
+<li>Re-confirmed the P0/P1/P2 inventory in <code>known-limitations.md</code> against
+  source: <code>backtest_results</code> still uses the in-process dict (<code>backtest.py</code>),
+  <code>consent_records</code> / <code>deletion_schedules</code> still have no Alembic revision,
+  <code>engine/mcp/server.py</code> is still absent, <code>frontend/Dockerfile</code> still runs
+  <code>npm run dev</code>, and the prod compose still has no <code>frontend</code> service.</li>
+<li>Re-confirmed <code>MultiStrategyManager</code> construction hardening (<code>_finite</code>
+  gate, <code>#1390</code> <code>float(max_n).is_integer()</code>, <code>#1392</code> <code>OverflowError</code>
+  catch) against <code>engine/strategies/multi_manager.py</code>.</li>
+<li>Re-confirmed the 19-table SQLAlchemy model set in <code>engine/db/models.py</code>
+  against <code>data-model.md</code>, and the migration chain (latest <code>013</code>) against
+  <code>architecture/database.md</code>.</li>
 </ul>
 <p>This file is touched on every <code>do_engineering_docs</code> run by kaizen, so
 its mtime tells you when documentation was last reconciled with the

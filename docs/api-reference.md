@@ -90,6 +90,7 @@ Unauthenticated probes for load balancers and Prometheus.
 | Method | Path | Source | Notes |
 |---|---|---|---|
 | GET | `/health` | [`routes/health.py`](../engine/api/routes/health.py#L19) | Liveness. Always returns `{"status": "ok"}`. |
+| GET | `/api/v1/health` | same ([`#L24`](../engine/api/routes/health.py#L24)) | v1-prefixed liveness alias; `{"status":"ok"}`. Exists so the k6 baseline (`tests/load/api-baseline.js`) resolves without a 404 — a distinct route, not a prefix change. |
 | GET | `/health/providers` | same | Reports each registered data provider (up/degraded/down + latency). |
 | GET | `/ready` | same | Readiness — pings DB (`SELECT 1`) and `valkey.ping()`. Returns `degraded` if either fails. |
 | GET | `/metrics` | [`routes/metrics.py`](../engine/api/routes/metrics.py) | Prometheus exposition. The `RateLimitMiddleware` exempts `/metrics` from throttling. |
@@ -231,12 +232,11 @@ are lost on process restart.
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
-| POST | `/api/v1/backtest/run` | `{strategy_name, symbol, start_date, end_date, initial_capital?, config?}` | Returns `202 {status:"accepted", backtest_id}`. Computation runs as a `BackgroundTasks` job (not TaskIQ — see [known-limitations.md](known-limitations.md)). |
+| POST | `/api/v1/backtest` | `BacktestSubmitRequest` — same shape as `/run` but accepts **dual field spellings** (`strategy_name`\|`strategy_id`; `start_date`\|`start`; `end_date`\|`end`) via `AliasChoices`. | `202 {status:"accepted", backtest_id}`. Canonical async entry point the k6 baseline exercises; normalises to `BacktestRequest` and runs the same `_run_backtest_background` job. |
+| POST | `/api/v1/backtest/run` | `{strategy_name, symbol, start_date, end_date, initial_capital?, config?}` | Returns `202 {status:"accepted", backtest_id}`. Same background job as the alias above. Computation runs as a `BackgroundTasks` job (not TaskIQ — see [known-limitations.md](known-limitations.md)). |
 | GET | `/api/v1/backtest/results/{backtest_id}` | — | `202 {status:"running"}` · `200 {status:"completed", metrics, equity_curve, drawdown_curve, evaluation?}` · `200 {status:"failed", error}` · `404` · `403`. |
 
-The `metrics` object is `MetricsSummary` (24 fields including rolling
-windows); see source for the canonical schema. The full list is also
-served via OpenAPI.
+The `metrics` object is `MetricsSummary` (24 fields incl. rolling windows); the canonical schema lives in source and is also served via OpenAPI.
 
 ## Scoring
 

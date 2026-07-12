@@ -3192,6 +3192,12 @@ calls <code>/reference/suggest</code> to render attributions).</p>
 </tr>
 <tr>
 <td>GET</td>
+<td><code>/api/v1/health</code></td>
+<td>same (<a href="../engine/api/routes/health.py#L24"><code>#L24</code></a>)</td>
+<td>v1-prefixed liveness alias; <code>{"status":"ok"}</code>. Exists so the k6 baseline (<code>tests/load/api-baseline.js</code>) resolves without a 404 — a distinct route, not a prefix change.</td>
+</tr>
+<tr>
+<td>GET</td>
 <td><code>/health/providers</code></td>
 <td>same</td>
 <td>Reports each registered data provider (up/degraded/down + latency).</td>
@@ -3572,9 +3578,15 @@ are lost on process restart.</p>
 <tbody>
 <tr>
 <td>POST</td>
+<td><code>/api/v1/backtest</code></td>
+<td><code>BacktestSubmitRequest</code> — same shape as <code>/run</code> but accepts <strong>dual field spellings</strong> (<code>strategy_name</code>|<code>strategy_id</code>; <code>start_date</code>|<code>start</code>; <code>end_date</code>|<code>end</code>) via <code>AliasChoices</code>.</td>
+<td><code>202 {status:"accepted", backtest_id}</code>. Canonical async entry point the k6 baseline exercises; normalises to <code>BacktestRequest</code> and runs the same <code>_run_backtest_background</code> job.</td>
+</tr>
+<tr>
+<td>POST</td>
 <td><code>/api/v1/backtest/run</code></td>
 <td><code>{strategy_name, symbol, start_date, end_date, initial_capital?, config?}</code></td>
-<td>Returns <code>202 {status:"accepted", backtest_id}</code>. Computation runs as a <code>BackgroundTasks</code> job (not TaskIQ — see <a href="../known-limitations/">known-limitations.md</a>).</td>
+<td>Returns <code>202 {status:"accepted", backtest_id}</code>. Same background job as the alias above. Computation runs as a <code>BackgroundTasks</code> job (not TaskIQ — see <a href="../known-limitations/">known-limitations.md</a>).</td>
 </tr>
 <tr>
 <td>GET</td>
@@ -3584,9 +3596,7 @@ are lost on process restart.</p>
 </tr>
 </tbody>
 </table>
-<p>The <code>metrics</code> object is <code>MetricsSummary</code> (24 fields including rolling
-windows); see source for the canonical schema. The full list is also
-served via OpenAPI.</p>
+<p>The <code>metrics</code> object is <code>MetricsSummary</code> (24 fields incl. rolling windows); the canonical schema lives in source and is also served via OpenAPI.</p>
 <h2 id="scoring">Scoring<a class="headerlink" href="#scoring" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/scoring/*</code>. Source: <a href="../engine/api/routes/scoring.py"><code>routes/scoring.py</code></a>.
 Requires legal acceptance.</p>
