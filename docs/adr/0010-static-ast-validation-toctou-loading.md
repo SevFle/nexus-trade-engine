@@ -73,7 +73,17 @@ ADR-0007).
 - **Positive** — the TOCTOU window between validation and execution is
   eliminated: the loader reads the file **once** (as bytes), validates
   those bytes, then `compile()`s and `exec()`s the *same* bytes into the
-  module namespace. There is no second disk read.
+  module namespace. There is no second disk read. The single read goes
+  through the size-bounded `read_plugin_source` helper (see below).
+- **Positive** — the single read is size-capped at `MAX_PLUGIN_SIZE`
+  (1 MiB) by `read_plugin_source` with **two** independent guards
+  (`os.fstat` on the open fd, then a `max_size + 1` capped read that
+  catches growth between the stat and the read). A hostile multi-gigabyte
+  `strategy.py` is rejected before any `ast.parse`/`compile` work
+  happens, closing the unbounded-read DoS a raw `f.read()` would expose
+  (gh#1402). Rejected sources are also logged at warning level with
+  their violation list (`strategy_source_blocked`) so the rejection is
+  observable, not silent.
 - **Positive** — the allowlist can never be defeated by a blocked module
   sneaking into it: an *exact* match in the blocked set short-circuits
   to "blocked" before the allowlist is consulted (the allowlist may only
@@ -123,15 +133,18 @@ Source: [`engine/plugins/registry.py`](../../engine/plugins/registry.py)
 (`load_strategy_class`).
 
 ```python
-with open(module_path, "rb") as f:
-    source_bytes = f.read()                      # single read
+# read once, size-bounded (MAX_PLUGIN_SIZE = 1 MiB) — closes the
+# unbounded-read DoS AND pins the bytes that get compiled/exec'd.
+source_bytes = read_plugin_source(module_path, opener=open)
 violations = ImportValidator(DENYLIST_MODULES).validate(source_bytes)
 if violations:
-    raise ImportError(f"... rejected by import validator: {joined}")
+    joined = "; ".join(violations)
+    logger.warning("strategy_source_blocked", path=module_path, violations=violations)
+    raise ImportError(f"Strategy source {module_path} rejected by import validator: {joined}")
 
 module = importlib.util.module_from_spec(spec)   # populates __file__/__loader__/__spec__
 code = compile(source_bytes, module_path, "exec")
-exec(code, module.__dict__)                      # the exact validated bytes
+exec(code, module.__dict__)                      # the exact validated bytes (noqa: S102)
 ```
 
 `spec.loader.exec_module(module)` is **deliberately avoided**: it
@@ -142,6 +155,20 @@ module's file path (so tracebacks still point at `strategy.py`) and
 call has already populated `__file__` / `__loader__` / `__spec__`, so
 the module looks identical to one loaded the standard way — only the
 byte-source is pinned.
+
+The single physical read goes through `read_plugin_source` (in
+[`restricted_importer.py`](../../engine/plugins/restricted_importer.py)),
+not a raw `open()…read()`. It enforces `MAX_PLUGIN_SIZE` (1 MiB) with
+*two* independent guards so the read itself can't be weaponised:
+`os.fstat` on the open file descriptor rejects obviously-oversized
+files without materialising their contents, and a *capped* read of
+`max_size + 1` bytes catches a file that grew between the stat and the
+read (procfs/pipe backing store, or a concurrent writer) — the trailing
+byte proves the file exceeds the limit, so the loader rejects rather
+than truncating silently. `load_strategy_class` forwards its own
+module-level `open` as the `opener=`, which is what the test harness
+patches to assert the file is read **exactly once** (the TOCTOU
+contract: validated bytes == executed bytes).
 
 This is a deliberate, audited `exec` call site (`# noqa: S102`); the
 `S102` (flake8-bandit "use of exec") suppression is documented inline
@@ -212,6 +239,8 @@ security boundary — see the threat-model note in
 
 - Block unsafe AST nodes + fix import bypass: gh#1239
 - Close TOCTOU race in plugin loading: gh#1245
+- Cap plugin source size + restore violation logging (unbounded-read
+  DoS + observability): gh#1402
 - Source:
   [`engine/plugins/restricted_importer.py`](../../engine/plugins/restricted_importer.py)
   (`ImportValidator`),
