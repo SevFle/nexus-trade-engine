@@ -19,7 +19,7 @@ evolves independently from the instrument taxonomy (what the engine
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping  # noqa: TC003
+from collections.abc import Mapping
 from datetime import date  # noqa: TC003 - needed at runtime by pydantic
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -156,6 +156,13 @@ class Instrument(BaseModel):
         if not isinstance(data, dict):
             if hasattr(data, "model_dump"):
                 data = data.model_dump()
+            elif isinstance(data, Mapping):
+                # Non-dict mappings (e.g. types.MappingProxyType, custom
+                # collections.abc.Mapping subclasses) are dict-like: read
+                # their *items*, not their instance __dict__. Without this
+                # branch a read-only mapping silently drops the
+                # ``expiry_date`` alias (expiration stays None).
+                data = dict(data)
             elif hasattr(data, "__dict__"):
                 data = dict(vars(data))
             else:
