@@ -22,6 +22,7 @@ from engine.api.routes.tasks import router as tasks_router
 from engine.api.routes.tax import router as tax_router
 from engine.api.routes.webhooks import router as webhooks_router
 from engine.api.ws.events import router as ws_events_router
+from engine.api.ws.portfolio_stream import router as ws_portfolio_router
 from engine.api.ws.router import router as websocket_router
 from engine.legal.dependencies import require_legal_acceptance
 
@@ -36,6 +37,7 @@ api_router.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"])
 api_router.include_router(privacy_router, prefix="/api/v1", tags=["privacy"])
 api_router.include_router(websocket_router, prefix="/api/v1", tags=["websocket"])
 api_router.include_router(ws_events_router, prefix="/api/v1", tags=["websocket"])
+api_router.include_router(ws_portfolio_router, prefix="/api/v1", tags=["websocket"])
 api_router.include_router(
     backtest_router,
     prefix="/api/v1/backtest",
