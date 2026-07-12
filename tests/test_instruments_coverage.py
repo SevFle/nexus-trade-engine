@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping as ABCMapping
 from datetime import date
+from types import MappingProxyType
 
 import pydantic
 import pytest
@@ -332,3 +334,122 @@ class TestExpiryDateAlias:
         rebuilt = Instrument.model_validate(original)
         assert rebuilt.uid == original.uid
         assert rebuilt.option_type == OptionType.CALL
+
+    def test_foreign_pydantic_model_folds_expiry_date_alias(self):
+        # A *different* pydantic BaseModel (has ``model_dump`` but is not
+        # an ``Instrument``) reaches the ``model_dump`` branch of the
+        # before-validator and must fold the ``expiry_date`` alias.
+        class ForeignModel(pydantic.BaseModel):
+            symbol: str
+            asset_class: str
+            expiry_date: date
+
+        fm = ForeignModel(symbol="ES", asset_class="future", expiry_date=date(2026, 12, 19))
+        inst = Instrument.model_validate(fm)
+        assert inst.expiration == date(2026, 12, 19)
+        assert inst.uid == "ES_20261219"
+
+
+class TestMappingInput:
+    """Cover the ``Mapping`` branch added to ``_reject_expiry_date_alias``.
+
+    Non-dict mappings (``MappingProxyType``, custom
+    ``collections.abc.Mapping`` subclasses) are dict-like: their *items*
+    must be read, not the instance ``__dict__``. Without this branch a
+    read-only mapping silently drops the ``expiry_date`` alias so
+    ``expiration`` stays ``None``.
+    """
+
+    def test_mapping_proxy_type_folds_expiry_date_alias(self):
+        # The exact regression the recent change fixes: a read-only
+        # mapping carrying the legacy ``expiry_date`` alias must populate
+        # the canonical ``expiration`` field.
+        ro = MappingProxyType(
+            {
+                "symbol": "ES",
+                "asset_class": "future",
+                "expiry_date": date(2026, 12, 19),
+            }
+        )
+        inst = Instrument.model_validate(ro)
+        assert inst.expiration == date(2026, 12, 19)
+        assert inst.uid == "ES_20261219"
+
+    def test_custom_abc_mapping_subclass_folds_expiry_date_alias(self):
+        # Any ``collections.abc.Mapping`` subclass (not just the stdlib
+        # proxy) must be read by items, not by ``__dict__``.
+        class CustomMapping(ABCMapping):
+            def __init__(self, d):
+                self._d = d
+
+            def __getitem__(self, k):
+                return self._d[k]
+
+            def __iter__(self):
+                return iter(self._d)
+
+            def __len__(self):
+                return len(self._d)
+
+        payload = CustomMapping(
+            {
+                "symbol": "AAPL_20260619_C_200.00",
+                "asset_class": "option",
+                "underlying": "AAPL",
+                "strike": 200.0,
+                "option_type": "call",
+                "expiry_date": date(2026, 6, 19),
+            }
+        )
+        inst = Instrument.model_validate(payload)
+        assert inst.expiration == date(2026, 6, 19)
+        assert inst.uid == "AAPL_20260619_C_200.00"
+
+    def test_mapping_with_both_expiration_and_expiry_date_prefers_expiration(self):
+        # The canonical ``expiration`` wins over the alias when a mapping
+        # supplies both, mirroring the dict path.
+        ro = MappingProxyType(
+            {
+                "symbol": "ES",
+                "asset_class": "future",
+                "expiration": date(2027, 1, 1),
+                "expiry_date": date(2020, 1, 1),
+            }
+        )
+        inst = Instrument.model_validate(ro)
+        assert inst.expiration == date(2027, 1, 1)
+
+    def test_mapping_without_alias_round_trips_cleanly(self):
+        # A mapping that carries no alias is simply converted to a dict
+        # and validated normally — no spurious extras, no data loss.
+        ro = MappingProxyType(
+            {
+                "symbol": "AAPL",
+                "asset_class": InstrumentAssetClass.EQUITY,
+            }
+        )
+        inst = Instrument.model_validate(ro)
+        assert inst.symbol == "AAPL"
+        assert inst.asset_class == InstrumentAssetClass.EQUITY
+        assert inst.expiration is None
+
+
+class TestOptionUidDefensiveGuard:
+    """Cover the defensive ``uid`` guard for an incomplete OPTION.
+
+    ``_enforce_class_invariants`` rejects an OPTION that is missing its
+    required fields during normal construction, so the guard inside the
+    ``uid`` property (the raise for missing expiration/option_type/
+    strike) is only reachable by bypassing validation via
+    ``model_construct``. The guard must still raise a clear ``ValueError``
+    rather than silently formatting against ``None`` values.
+    """
+
+    def test_uid_raises_when_required_option_fields_missing(self):
+        bad = Instrument.model_construct(
+            symbol="AAPL",
+            asset_class=InstrumentAssetClass.OPTION,
+            underlying="AAPL",
+        )
+        with pytest.raises(ValueError, match="option uid requires"):
+            _ = bad.uid
