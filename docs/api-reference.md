@@ -251,8 +251,9 @@ Requires legal acceptance.
 ## Marketplace
 
 `/api/v1/marketplace/*`. Source: [`routes/marketplace.py`](../engine/api/routes/marketplace.py).
-**Most routes are stubs** (`{status:"not_implemented"}`) — see
-[known-limitations.md](known-limitations.md).
+The whole router requires legal acceptance. **Discovery/install are
+stubs** (`{status:"not_implemented"}`); **ratings are real but
+in-memory only** — see [known-limitations.md](known-limitations.md).
 
 | Method | Path | Auth | Status |
 |---|---|---|---|
@@ -260,7 +261,15 @@ Requires legal acceptance.
 | GET | `/api/v1/marketplace/categories` | `user` | Static category list (algorithmic, ml, llm, hybrid, income, macro). |
 | POST | `/api/v1/marketplace/install` | `developer` | Stub. |
 | DELETE | `/api/v1/marketplace/uninstall/{strategy_id}` | `developer` | Stub. |
-| POST | `/api/v1/marketplace/{strategy_id}/rate?rating=&review=` | `user` | Stub. `400` if `rating ∉ [1,5]`. |
+| POST | `/api/v1/marketplace/{strategy_id}/rate?rating=&review=` | `user` | **Legacy stub** (`400` if `rating ∉ [1,5]`); superseded by `/ratings`. |
+| POST | `/api/v1/marketplace/strategies/{strategy_id}/ratings` | `user` | **Real.** Body `{stars:int∈[1,5], review?:str≤2000}` → `201 RatingResponse`. One rating per `(strategy_id,user_id)`; resubmit **upserts** in place. `400` on `InvalidRatingError`. |
+| GET | `/api/v1/marketplace/strategies/{strategy_id}/ratings?limit=&offset=` | `user` | **Real.** `200 RatingsListResponse{aggregate:{average,count,distribution:{"<stars>":tally}}, reviews:[…], total, limit, offset}`. `limit≤100`. `aggregate` spans every rating; `reviews` lists only non-empty text, newest first. |
+
+Ratings run through a process-local `InMemoryRatingsStore`
+([`engine/marketplace/ratings.py`](../engine/marketplace/ratings.py),
+behind a `RatingsStore` Protocol so a DB backend can drop in later).
+**Not persisted — every restart loses them** (the store warns when
+instantiated outside pytest).
 
 ## Reference
 
@@ -436,38 +445,28 @@ still per-process, but event distribution is cross-replica.
 
 ### Second endpoint — `WS /api/v1/ws/events`
 
-A second streaming route, `WS /api/v1/ws/events` (source:
-[`ws/events.py`](../engine/api/ws/events.py)), shares the same
-`ConnectionManager`, `ChannelResolver`, `EventBusBridge`, and wire
-protocol as `/ws`, but authenticates **more strictly**: it validates
-the session token from a query param **before** `ws.accept()`, so a
-bad or missing token rejects the WebSocket handshake (close code
-`4401`, reason `invalid session token`) and the server never upgrades
-an unauthenticated socket. `/ws` deliberately relaxed this to permit
-an in-band first-message `auth`; `/ws/events` trades that flexibility
-for fail-closed auth at the handshake.
+A second route, `WS /api/v1/ws/events` ([`ws/events.py`](../engine/api/ws/events.py)),
+shares `/ws`'s `ConnectionManager`, `ChannelResolver`, `EventBusBridge`,
+and wire protocol, but authenticates **before** `ws.accept()`: a
+bad/missing query-param token rejects the handshake (close code `4401`,
+reason `invalid session token`). `/ws/events` trades `/ws`'s in-band
+first-message `auth` for fail-closed handshake auth.
 
-- **Token**: `?token=<jwt>` (alias `?session_token=`), validated with
-  the same `decode_token` the REST dependency uses; scopes via the
-  shared `extract_scopes`. **JWT-only** — no `nxs_*` API keys, same
-  as `/ws`.
-- **Server not ready**: if hit before `init_ws_events`, the socket is closed with code `1011` (`WS_CLOSE_SERVER_ERROR`, reason `server not ready`).
-- **Actionable inbound messages**: `subscribe`, `unsubscribe`, `ping`
-  (parsed by the shared `parse_inbound`). Mid-session token refresh is
-  **not** supported here — the token is bound to the handshake, so a
-  new token requires a new connection (re-connect rather than re-auth).
-- **Outbound**: same `ack` / `error` / `event` / `pong` / `close` set
-  as `/ws`; the channels, room shapes, and per-role scope rules in the
-  tables above apply unchanged.
-- **Wiring**: `init_ws_events(manager, resolver?, bridge?)` runs on
-  startup and captures the running loop first; a re-init cleanly
-  disconnects every existing client and stops the previous bridge
-  before installing the new one, so a config reload leaks no
-  connections or double event-bus subscriptions.
+- **Token**: `?token=<jwt>` (alias `?session_token=`), via the REST
+  `decode_token` and shared `extract_scopes`. **JWT-only** (no `nxs_*`
+  keys, same as `/ws`).
+- **Server not ready**: if hit before `init_ws_events`, the socket is closed with code `1011` (`server not ready`).
+- **Inbound**: `subscribe`, `unsubscribe`, `ping` (shared `parse_inbound`).
+  **No mid-session refresh** — the token is bound to the handshake, so
+  re-connect rather than re-auth.
+- **Outbound**: same `ack` / `error` / `event` / `pong` / `close`; the
+  channels, room shapes, and per-role scope rules above apply unchanged.
+- **Wiring**: `init_ws_events(manager, resolver?, bridge?)` captures the
+  running loop first; a re-init disconnects every client and stops the
+  prior bridge, so a reload leaks no connections or double bus subscriptions.
 
-Prefer `/ws/events` when the token can ride in the handshake query
-(fail-closed auth, fewer moving parts); prefer `/ws` when the token
-can only arrive after the socket opens (e.g. an in-band browser refresh).
+Prefer `/ws/events` for fail-closed handshake auth; `/ws` when the token
+can only arrive after the socket opens (in-band browser refresh).
 
 ## Errors
 

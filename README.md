@@ -187,7 +187,11 @@ on the public API surface or not production-validated.
       to a run route — read-only `AlpacaDataProvider` is the only reachable
       Alpaca surface today; see
       [known-limitations](docs/known-limitations.md))*
-- [ ] Strategy marketplace *(stub routes only — returns `not_implemented`)*
+- [~] Strategy marketplace *(partial — `browse`/`install`/`uninstall`
+      and legacy `/{id}/rate` are stubs; `ratings`
+      (`POST`/`GET /marketplace/strategies/{id}/ratings`) are real but
+      **in-memory only** — not persisted, lost on restart; see
+      [known-limitations](docs/known-limitations.md))*
 - [~] Multi-asset support *(partial — equity/ETF/crypto/forex/options
       primitives exist; asset-class inference on market-data route works)*
 - [~] WebSocket real-time streams *(partial — see
