@@ -199,7 +199,13 @@ async def rate_strategy(
     review: str = "",
     user: User = Depends(get_current_user),
 ):
-    """Rate and review a marketplace strategy (legacy stub)."""
+    """Rate and review a marketplace strategy (legacy stub).
+
+    Kept for backwards compatibility with existing clients that POST to the
+    ``/{strategy_id}/rate`` path with ``rating`` as a query parameter. This
+    path is distinct from the newer resource-oriented ``/strategies/{id}/``
+    "ratings`` endpoint below and does not shadow it.
+    """
     if not 1 <= rating <= 5:
         raise HTTPException(status_code=400, detail="Rating must be 1-5")
     return {"status": "not_implemented"}

@@ -25,12 +25,13 @@ Semantics
 from __future__ import annotations
 
 import logging
-import sys
 import threading
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
+
+from engine.config import settings
 
 _logger = logging.getLogger(__name__)
 
@@ -48,14 +49,23 @@ class InvalidRatingError(ValueError):
 
 
 def _is_test_environment() -> bool:
-    """Return ``True`` when the current process is running under pytest.
+    """Return ``True`` when the app is running in the test environment.
+
+    Detection is driven by the explicit ``NEXUS_APP_ENV`` setting (value
+    ``"test"``) via :func:`engine.config.Settings.is_test` — the same knob the
+    rest of the app relies on — rather than sniffing for ``pytest`` in
+    ``sys.modules``. Sniffing the import graph is fragile: any tool that
+    imports ``pytest`` for non-test reasons is misclassified, the detection
+    silently flips if a dependency lazy-imports the test runner, and it does
+    not generalise to alternative test runners. An explicit env-var check is
+    deterministic and operator-controllable.
 
     The in-memory store is deliberately loud about being instantiated in a
     production-shaped process: ratings are **not** persisted and would vanish
-    on the next process restart. Tests, however, instantiate the store
-    freely, so we stay quiet there.
+    on the next process restart. Tests instantiate the store freely, so we
+    stay quiet there.
     """
-    return "pytest" in sys.modules
+    return settings.is_test
 
 
 def _validate_stars(stars: int) -> int:
