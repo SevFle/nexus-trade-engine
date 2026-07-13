@@ -22,13 +22,21 @@ from typing import TYPE_CHECKING, Any
 
 from engine.core.cost_model import DefaultCostModel
 from engine.core.portfolio import Portfolio
+from engine.mcp.errors import AuthorizationError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
     from engine.data.feeds import MarketDataProvider
+    from engine.mcp.auth import AuthPrincipal
     from engine.plugins.registry import PluginRegistry
+
+
+# Minimum role that may inspect any portfolio regardless of ownership
+# (operator/support override). Kept as a module constant so policy stays
+# discoverable and adjustable in one place.
+_PORTFOLIO_OVERRIDE_ROLE = "quant_dev"
 
 
 class PortfolioStore:
@@ -38,21 +46,89 @@ class PortfolioStore:
     portfolio inspection (status / positions / orders) without coupling to the
     SQLAlchemy portfolio table. A single ``default`` portfolio seeded with
     ``$100,000`` is created on construction.
+
+    Ownership model
+    ---------------
+    Each portfolio optionally records an owning principal ``user_id``. A
+    portfolio seeded without an explicit owner (``owner=None``) is treated as
+    system/shared and is readable by any authenticated principal — this
+    preserves the legacy behaviour of the in-memory default portfolio. A
+    portfolio seeded with an explicit owner is readable only by that owner or
+    by a principal whose role meets/exceeds :data:`_PORTFOLIO_OVERRIDE_ROLE`.
     """
 
     def __init__(self, default_capital: float = 100_000.0) -> None:
         self._portfolios: dict[str, Portfolio] = {}
+        # portfolio_id -> owning principal user_id (None == system/shared).
+        self._owners: dict[str, str | None] = {}
         self.seed("default", default_capital)
 
-    def seed(self, portfolio_id: str, initial_cash: float) -> Portfolio:
+    def seed(
+        self,
+        portfolio_id: str,
+        initial_cash: float,
+        *,
+        owner: str | None = None,
+    ) -> Portfolio:
+        """Create (or overwrite) a portfolio and record its owner.
+
+        ``owner`` is the ``user_id`` of the :class:`AuthPrincipal` that owns
+        the portfolio; pass ``None`` for a system/shared portfolio readable
+        by any authenticated principal.
+        """
         portfolio = Portfolio(initial_cash=initial_cash, portfolio_id=None)
         self._portfolios[portfolio_id] = portfolio
+        self._owners[portfolio_id] = owner
         return portfolio
 
     def get(self, portfolio_id: str = "default") -> Portfolio:
         if portfolio_id not in self._portfolios:
             return self.seed(portfolio_id, 100_000.0)
         return self._portfolios[portfolio_id]
+
+    def find(self, portfolio_id: str) -> Portfolio | None:
+        """Strict lookup — returns ``None`` when the portfolio is absent.
+
+        Unlike :meth:`get`, this never auto-creates a portfolio, so callers
+        can distinguish "missing" from "empty" and raise a clean error.
+        """
+        return self._portfolios.get(portfolio_id)
+
+    def owner_of(self, portfolio_id: str) -> str | None:
+        """Return the owning principal ``user_id``, or ``None`` if shared/unknown."""
+        return self._owners.get(portfolio_id)
+
+    def can_access(self, principal: AuthPrincipal, portfolio_id: str) -> bool:
+        """Return ``True`` if ``principal`` may inspect ``portfolio_id``.
+
+        * A shared portfolio (``owner is None``) is readable by any
+          authenticated principal.
+        * An owned portfolio is readable by its owner, or by a principal
+          whose role meets/exceeds :data:`_PORTFOLIO_OVERRIDE_ROLE`.
+        * An anonymous principal never gains access to another user's
+          portfolio.
+        """
+        owner = self._owners.get(portfolio_id)
+        if owner is None:
+            return True
+        if principal.auth_method == "anonymous":
+            return False
+        if principal.user_id == owner:
+            return True
+        return principal.has_role(_PORTFOLIO_OVERRIDE_ROLE)
+
+    def assert_access(self, principal: AuthPrincipal, portfolio_id: str) -> None:
+        """Raise :class:`AuthorizationError` unless ``principal`` may read."""
+        if not self.can_access(principal, portfolio_id):
+            raise AuthorizationError(
+                f"Principal {principal.user_id!r} is not authorized to "
+                f"access portfolio {portfolio_id!r}",
+                data={
+                    "portfolio_id": portfolio_id,
+                    "principal": principal.user_id,
+                    "principal_role": principal.role,
+                },
+            )
 
     def list_ids(self) -> list[str]:
         return sorted(self._portfolios)
