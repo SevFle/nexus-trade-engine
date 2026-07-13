@@ -100,12 +100,27 @@ logger = structlog.get_logger()
 
 _BLOCKED_ATTRS: frozenset[str] = frozenset(
     {
+        # Introspection of the class/type hierarchy.
         "__subclasses__",
         "__bases__",
         "__mro__",
+        "__subclasshook__",
+        "__init_subclass__",
+        "__class_getitem__",
+        # Function/instance internals that leak code objects or namespaces.
         "__globals__",
         "__closure__",
         "__code__",
+        "__wrapped__",
+        "__dict__",
+        # Pickling / serialisation hooks — escape vectors via __reduce__.
+        "__reduce__",
+        "__reduce_ex__",
+        "__getstate__",
+        "__setstate__",
+        # Introspection helpers that enumerate reachable attributes/bases.
+        "__dir__",
+        "__format__",
     }
 )
 

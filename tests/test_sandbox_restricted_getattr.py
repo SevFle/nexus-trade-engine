@@ -504,7 +504,10 @@ class TestBlockedAttributeSet:
         assert isinstance(_BLOCKED_ATTRS, frozenset)
 
     def test_normal_dunder_not_blocked(self) -> None:
+        # Note: ``__dict__`` IS deliberately blocked (namespace-leak vector).
+        # Only the truly benign dunders below remain unblocked.
         assert "__init__" not in _BLOCKED_ATTRS
         assert "__class__" not in _BLOCKED_ATTRS
-        assert "__dict__" not in _BLOCKED_ATTRS
         assert "__name__" not in _BLOCKED_ATTRS
+        assert "__doc__" not in _BLOCKED_ATTRS
+        assert "__module__" not in _BLOCKED_ATTRS
