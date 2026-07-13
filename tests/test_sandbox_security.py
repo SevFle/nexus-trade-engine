@@ -31,7 +31,7 @@ from engine.plugins.restricted_importer import (
     BLOCKED_MODULES,
     RestrictedImporter,
 )
-from engine.plugins.sandbox import StrategySandbox
+from engine.plugins.sandbox import StrategySandbox, _in_sandbox_execution
 from engine.plugins.sandboxed_http import SandboxedHttpClient
 
 
@@ -988,6 +988,139 @@ class TestPathPrefixMatching:
             signals = await sandbox.safe_evaluate(None, None, None)
             assert len(signals) == 0
             assert sandbox.metrics.errors == 0
+        finally:
+            sandbox.cleanup()
+
+
+# ── TOCTOU: resolved path used at open time ──────────────────────────
+
+
+class TestToctouResolvedPath:
+    """Defend against the time-of-check / time-of-use flaw in
+    ``_restricted_open``.
+
+    The allowlist check is performed on ``os.path.realpath(file)`` (the
+    *resolved*, canonical path). The original ``open`` call MUST therefore be
+    invoked with that same resolved path — not the raw ``file`` argument.
+    Otherwise a path containing symlinks or relative components that validated
+    one way could be re-interpreted by the kernel at open time, diverging from
+    the path that was authorised.
+    """
+
+    def test_original_open_receives_resolved_path_not_raw_arg(self, tmp_path: Any) -> None:
+        """``_restricted_open`` must forward ``realpath(file)`` to the original
+        ``open`` rather than the raw argument."""
+        import os.path
+
+        artifact = tmp_path / "allowed.txt"
+        artifact.write_text("ok")
+
+        manifest = StrategyManifest(
+            id="test",
+            name="test",
+            version="1.0.0",
+            resources={"max_cpu_seconds": 1},
+            artifacts=[str(artifact)],
+        )
+        sandbox = StrategySandbox(_GoodStrategy(), manifest)
+        captured: list[Any] = []
+
+        def fake_open(path: Any, *args: Any, **kwargs: Any) -> Any:
+            captured.append(path)
+            return unittest.mock.DEFAULT
+
+        # Capture the genuine builtin *before* installing our spy: we replaced
+        # the instance's ``_original_open`` (instead of going through
+        # ``_activate_restrictions``) so ``_deactivate_restrictions`` — run by
+        # ``cleanup()`` — would otherwise restore the *global* ``builtins.open``
+        # to our spy, poisoning every subsequent test in the process.
+        real_open = builtins.open
+        sandbox._original_open = fake_open
+        _in_sandbox_execution.set(True)
+        try:
+            # A deliberately obfuscated raw path (``.``/``..`` components) that
+            # ``realpath`` collapses to the allowed artifact.
+            raw = os.path.join(str(tmp_path), ".", os.path.basename(str(artifact)))
+            sandbox._restricted_open(raw, "r")
+        finally:
+            _in_sandbox_execution.reset()
+            # Drop our spy so ``cleanup()`` leaves the real ``builtins.open``
+            # intact (deactivate only reassigns when ``_original_open`` is set).
+            sandbox._original_open = None
+            builtins.open = real_open
+            sandbox.cleanup()
+
+        assert len(captured) == 1
+        assert captured[0] == os.path.realpath(raw)
+        # And it must NOT be the raw, un-normalised argument.
+        assert captured[0] != raw
+
+    async def test_read_allowed_file_via_symlink_uses_resolved_target(self, tmp_path: Any) -> None:
+        """Reading an allowlisted artifact through a symlink that resolves into
+        the allowed directory succeeds (the resolved target is what's opened)."""
+        artifact_dir = tmp_path / "data"
+        artifact_dir.mkdir()
+        target = artifact_dir / "allowed.txt"
+        target.write_text("resolved-content")
+
+        # Symlink lives outside the allowed dir but points into it; realpath of
+        # the symlink equals the allowed target, so access is permitted and the
+        # opened file is the resolved target.
+        link = tmp_path / "link.txt"
+        os.symlink(target, link)
+
+        class _SymlinkReadStrategy:
+            name = "symlink_read"
+            version = "1.0.0"
+
+            def __init__(self, path: str) -> None:
+                self._path = path
+
+            def on_bar(self, _state: Any, _portfolio: Any) -> list[Any]:
+                with open(self._path) as f:
+                    assert f.read() == "resolved-content"
+                return []
+
+        sandbox = StrategySandbox(
+            _SymlinkReadStrategy(str(link)),
+            StrategyManifest(
+                id="test",
+                name="test",
+                version="1.0.0",
+                resources={"max_cpu_seconds": 1},
+                artifacts=[str(artifact_dir)],
+            ),
+        )
+        try:
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 0
+        finally:
+            sandbox.cleanup()
+
+    async def test_symlink_escaping_sandbox_still_blocked(self, tmp_path: Any) -> None:
+        """A symlink inside the work dir that resolves outside the sandbox is
+        blocked, because the check (and now the open) uses the resolved path."""
+        from engine.plugins.sandbox import _realpath
+
+        secret = tmp_path / "secret.txt"
+        secret.write_text("top-secret")
+
+        manifest = StrategyManifest(
+            id="test",
+            name="test",
+            version="1.0.0",
+            resources={"max_cpu_seconds": 1},
+        )
+        sandbox = StrategySandbox(_FileReadStrategy(str(secret)), manifest)
+        try:
+            # Sanity: the secret's realpath is outside the work dir, so a direct
+            # read is rejected.
+            assert _realpath(str(secret)) != _realpath(sandbox._work_dir or "")
+            signals = await sandbox.safe_evaluate(None, None, None)
+            assert signals == []
+            assert sandbox.metrics.errors == 1
+            assert "not allowed" in (sandbox.metrics.last_error or "").lower()
         finally:
             sandbox.cleanup()
 

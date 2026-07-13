@@ -340,7 +340,15 @@ class StrategySandbox:
         if any(c in mode for c in ("w", "a", "+")):
             raise PermissionError("Write access is not allowed in strategy sandbox")
 
-        return self._original_open(file, mode, *args, **kwargs)
+        # TOCTOU fix: open the *resolved* (validated) path rather than the raw
+        # ``file`` argument. ``resolved`` was produced by ``os.path.realpath`` —
+        # which collapses symlinks and relative components — and is the exact
+        # path that was checked against the allowlist above. Re-deriving the
+        # path from the raw argument at open time would let a symlink/relative
+        # path that validated one way be interpreted differently by the kernel
+        # (classic time-of-check/time-of-use). Using ``resolved`` guarantees
+        # the path that is opened is the path that was authorised.
+        return self._original_open(resolved, mode, *args, **kwargs)
 
     def _restricted_getattr(self, obj: Any, name: str, *default: Any) -> Any:
         if name in _BLOCKED_ATTRS:
