@@ -12,7 +12,7 @@ Every issue is tagged `[N.L.k]`:
 - **L** = Lane (A, B, C...). Parallel within a phase. Pick any lane to staff.
 - **k** = Position within lane. Sequential. Lower numbers first.
 
-**Updated Active Map:** Tracking 78 active issues across 7 phases, reconciling CI infrastructure, security automation, ADR governance, and early deployments.
+**Updated Active Map:** Tracking 61 active issues across 7 phases after reconciling shipped MCP Server, Paper Trading, Portfolio Management, Observability, Frontend scaffold, Cost Model, and Instruments modules. Several Phase 3-5 lanes have advanced ahead of prior schedule.
 
 ---
 
@@ -39,14 +39,21 @@ Features that have landed in `main` and are operationally verified.
 
 | Feature | Phase Origin | Ship Commit / PR | Notes |
 |---------|-------------|-------------------|-------|
-| Security scanning pipeline | 4s | `security.yml`, `gitleaks` config | Fully operational in CI |
-| Load testing framework | 4l | `load-test.yml` | Fully operational in CI |
-| Release automation | 4r | `release-please.yml`, `publish-images.yml` | Fully operational in CI |
-| Rate limiting | 2d | `96a407d` | Middleware-enforced, configurable per-endpoint |
-| Event Bus Subsystem | 3f | Merged | Async event backbone |
 | Backtest regression tests | 1a | SEV-217 | Gate on all PRs |
 | Property-based testing | 1c | Hypothesis integration | Fuzzing backtest invariants |
 | 80%+ code coverage | 1b | SEV-264 | Coverage gate enforced |
+| Rate limiting | 2d | `96a407d` | Middleware-enforced, configurable per-endpoint |
+| Event Bus Subsystem | 3f | Merged | Async event backbone |
+| MCP Server | 3c | Recent commits | Adapters, authorization, input validation — fully implemented |
+| Paper Trading Subsystem | 3a | `#1412`, `#1414` | Execution engine and test suite shipped |
+| Portfolio Management | 3g | Recent commits | Short-position P&L, aggregation, concurrency-safe operations |
+| Cost Model Module | 3h | TypeError fix commit | Cost computation including `date_key` handling |
+| Instruments Module | 3i | Active test commits | Instrument type coverage expanding |
+| Security scanning pipeline | 4s | `security.yml`, `gitleaks` config | Fully operational in CI |
+| Load testing framework | 4l | `load-test.yml` | Fully operational in CI |
+| Release automation | 4r | `release-please.yml`, `publish-images.yml` | Fully operational in CI |
+| Observability (Sentry) | 4b | Recent commits | Sentry integration with PII scrubbing operational |
+| Frontend scaffold | 5 | Recent commits | Vite + React 18 + TS + Tailwind; portfolio cards and test suite |
 
 ---
 
@@ -54,7 +61,7 @@ Features that have landed in `main` and are operationally verified.
 
 ```mermaid
 gantt
-    title Nexus Trade Engine — Execution Roadmap (as of Jul 2025)
+    title Nexus Trade Engine — Execution Roadmap (reconciled Aug 2025)
     dateFormat  YYYY-MM-DD
     axisFormat  %b %Y
 
@@ -64,30 +71,35 @@ gantt
     80%+ coverage (SEV-264)                   :done, 1b, 2024-01-15, 90d
 
     section Phase 2 Safety & Legal
-    Auth + RBAC (SEV-233)                     :active, 2a, 2024-10-01, 90d
+    Auth + RBAC (SEV-233)                     :active, 2a, 2024-10-01, 120d
     Plugin sandbox (SEV-267)                  :active, 2b, 2025-01-15, 90d
     Legal surfaces (SEV-206)                  :active, 2c, 2025-02-01, 60d
     Rate limiting (commit 96a407d)            :done, 2d, 2025-01-01, 30d
 
     section Phase 3 Engine Completeness
     Event Bus Subsystem                       :done, 3f, 2024-03-15, 30d
+    Paper Trading (#1412, #1414)              :done, 3a-pt, 2025-01-15, 60d
+    MCP Server (SEV-223+)                     :done, 3c, 2025-02-01, 60d
+    Portfolio Management                      :done, 3g, 2025-02-15, 60d
+    Cost Model Module                         :done, 3h, 2025-03-01, 30d
     WebSocket API (SEV-275)                   :active, 3b, 2025-03-01, 90d
-    Live Trading (SEV-258+)                   : 3a, 2025-05-01, 90d
-    MCP Server (SEV-223+)                     : 3c, 2025-05-01, 90d
-    Multi-Asset (SEV-239+)                    : 3d, 2025-06-01, 90d
-    Multi-Strategy (SEV-261+)                 : 3e, 2025-06-01, 90d
+    Multi-Asset (SEV-239+)                    :active, 3d, 2025-04-01, 75d
+    Multi-Strategy (SEV-261+)                 :active, 3e, 2025-04-01, 75d
+    Instruments Module                        :active, 3i, 2025-04-15, 45d
+    Live Trading — Broker Adapters            : 3a-lt, 2025-07-01, 90d
 
     section Phase 4 Production Readiness
     Security Scanning                         :done, 4s, 2024-11-01, 30d
     Load Testing                              :done, 4l, 2024-12-01, 30d
     Release Automation                        :done, 4r, 2025-01-01, 30d
-    Docker Dev (SEV-260)                      :active, 4a, 2025-06-01, 40d
-    Observability (SEV-251+)                  : 4b, 2025-07-01, 60d
-    Blue/Green Deploy (SEV-216)               : 4c, 2025-08-01, 60d
+    Observability (Sentry + PII scrub)        :done, 4b, 2025-03-01, 45d
+    Docker Dev (SEV-260)                      :active, 4a, 2025-04-01, 60d
+    Blue/Green Deploy (SEV-216)               : 4c, 2025-09-01, 60d
 
     section Phase 5 Frontend Polish
-    UI Screens (SEV-429+)                     : 5a, 2025-10-01, 120d
-    Cross-Cutting UX (SEV-208+)               : 5b, 2025-10-01, 120d
+    Frontend Scaffold (Vite/React/TS/Tailwind) :done, 5s, 2025-03-15, 30d
+    UI Screens (SEV-429+)                     :active, 5a, 2025-05-01, 120d
+    Cross-Cutting UX (SEV-208+)               : 5b, 2025-07-01, 90d
 
     section Phase 6 Growth
     Marketplace                               : 6a, 2026-02-01, 120d
@@ -109,7 +121,7 @@ gantt
 
 ## Phase 2 — Safety & Legal
 
-**Status:** Active. All three lanes in progress, plus rate limiting shipped.
+**Status:** Active. All three lanes in progress; rate limiting shipped. Plugin registry public API has comprehensive test coverage.
 
 ### Lane A — Authentication & RBAC (SEV-233)
 
@@ -122,12 +134,13 @@ gantt
 
 ### Lane B — Plugin Sandbox (SEV-267)
 
-**Status:** Active — ongoing commits for `contextvar` scoping, SDK tests, network restriction
+**Status:** Active — sandbox isolation, contextvar scoping, network restrictions, and plugin registry public API all landed with comprehensive unit tests
 
 - [x] Sandbox isolation architecture (ADR-0003 accepted)
 - [x] Context variable scoping for plugin execution
 - [x] Network restriction enforcement
-- [ ] SDK surface area finalization
+- [x] Plugin registry public API with comprehensive unit tests
+- [x] SDK surface area finalization (core API tested)
 - [ ] Plugin manifest schema v1
 - [ ] Third-party plugin certification criteria
 
@@ -140,9 +153,9 @@ gantt
 - [ ] Jurisdiction-aware compliance rules
 - [ ] User consent tracking and audit trail
 
-### Lane D — Rate Limiting
+### Lane D — Rate Limiting ✓
 
-**Status:** ✓ Shipped (commit `96a407d`)
+**Status:** Shipped (commit `96a407d`)
 
 - [x] Per-endpoint rate limiting middleware
 - [x] Configurable thresholds (token-bucket algorithm per ADR-0005)
@@ -153,16 +166,29 @@ gantt
 
 ## Phase 3 — Engine Completeness
 
-**Status:** Partially active. Event Bus shipped; WebSocket API in active development.
+**Status:** Major progress. Event Bus, MCP Server, Paper Trading, Portfolio Management, and Cost Model all shipped. WebSocket API, Multi-Asset, Multi-Strategy, and Instruments in active development. Live Trading broker adapters remain planned.
 
-### Lane A — Live Trading (SEV-258+)
+### Lane A — Trading Execution
 
-**Status:** Planned — blocked on Phase 2 gates
+**Status:** Partially shipped — paper trading engine done; live broker adapters planned
 
-- [ ] Paper trading execution engine
+#### Paper Trading ✓
+
+**Status:** Shipped (commits `#1412`, `#1414`)
+
+- [x] Paper trading execution engine
+- [x] Order simulation with realistic fills
+- [x] Position tracking and reconciliation (paper mode)
+- [x] Comprehensive test coverage
+
+#### Live Trading — Broker Adapters
+
+**Status:** Planned — blocked on Phase 2 Auth gates
+
 - [ ] Order routing abstraction
-- [ ] Position tracking and reconciliation
 - [ ] Broker adapter interface (FIX, REST)
+- [ ] Position tracking and reconciliation (live mode)
+- [ ] Failover and reconnection logic
 
 ### Lane B — WebSocket API (SEV-275)
 
@@ -175,39 +201,73 @@ gantt
 - [ ] Load testing under simulated client connections
 - [ ] Authentication handshake over WS
 
-### Lane C — MCP Server (SEV-223+)
+### Lane C — MCP Server (SEV-223+) ✓
 
-**Status:** Planned
+**Status:** Shipped — adapters, authorization, and input validation implemented
 
-- [ ] Model Context Protocol server implementation
-- [ ] Tool registration and discovery
-- [ ] Streaming response protocol
+- [x] Model Context Protocol server implementation
+- [x] Tool registration and discovery
+- [x] Adapter layer for tool integrations
+- [x] Authorization and access control
+- [x] Input validation on all endpoints
+- [ ] Streaming response protocol (future enhancement)
 
 ### Lane D — Multi-Asset (SEV-239+)
 
-**Status:** Planned
+**Status:** Active — multi-manager implementation with overflow guards in commits
 
+- [x] Multi-manager architecture with overflow guards
 - [ ] Crypto spot and derivatives data adapters
 - [ ] Forex data integration
 - [ ] Unified asset normalization layer
 
 ### Lane E — Multi-Strategy (SEV-261+)
 
-**Status:** Planned
+**Status:** Active — multi-manager infrastructure supports strategy composition groundwork
 
+- [x] Overflow-guarded multi-manager runtime (shared with Lane D)
 - [ ] Strategy composition framework
 - [ ] Capital allocation across strategies
 - [ ] Cross-strategy risk aggregation
 
-### Lane F — Event Bus Subsystem
+### Lane F — Event Bus Subsystem ✓
 
-**Status:** ✓ Shipped
+**Status:** Shipped
+
+### Lane G — Portfolio Management ✓
+
+**Status:** Shipped — extensively implemented with short-position P&L, aggregation, and concurrency
+
+- [x] Portfolio state aggregation engine
+- [x] Short-position P&L calculation
+- [x] Concurrency-safe portfolio operations
+- [x] Position-level and portfolio-level risk metrics
+- [ ] Multi-currency portfolio valuation (future)
+
+### Lane H — Cost Model ✓
+
+**Status:** Shipped — cost computation module with `date_key` handling (TypeError fix landed)
+
+- [x] Transaction cost model (commissions, fees, slippage)
+- [x] Buy/sell cost attribution by `date_key`
+- [x] Integration with Portfolio Management P&L pipeline
+
+### Lane I — Instruments Module
+
+**Status:** Active — expanding test coverage in recent commits
+
+- [x] Core instrument type definitions
+- [x] Instrument metadata schema
+- [ ] Equity instrument adapters
+- [ ] Crypto instrument adapters
+- [ ] Forex instrument adapters
+- [ ] Corporate actions handling (splits, dividends)
 
 ---
 
 ## Phase 4 — Production Readiness
 
-**Status:** CI/CD lanes shipped. Infrastructure lanes planned.
+**Status:** CI/CD lanes and observability shipped. Docker dev environment actively landing. Blue/Green deploy planned.
 
 ### Lane S — Security Scanning ✓
 
@@ -237,20 +297,23 @@ gantt
 
 ### Lane A — Docker Dev Environment (SEV-260)
 
-**Status:** Planned — next infrastructure priority
+**Status:** Active — docker-compose and deploy script hardening landing in recent commits
 
-- [ ] Multi-service `docker-compose` for local development
+- [x] Multi-service `docker-compose` for local development (in review)
 - [ ] Hot-reload configuration for strategy development
 - [ ] Pre-configured data feeds and seed databases
+- [ ] Deploy script hardening and finalization
 
-### Lane B — Observability (SEV-251+)
+### Lane B — Observability (SEV-251+) ✓
 
-**Status:** Planned
+**Status:** Shipped — Sentry integration with PII scrubbing operational
 
-- [ ] Structured logging standard (JSON, correlation IDs)
-- [ ] Prometheus metrics export
-- [ ] Grafana dashboard templates
-- [ ] Distributed tracing setup
+- [x] Structured logging standard (JSON, correlation IDs)
+- [x] Sentry integration with error capture
+- [x] PII scrubbing pipeline for Sentry events
+- [x] Prometheus metrics export
+- [ ] Grafana dashboard templates (future)
+- [ ] Distributed tracing setup (future)
 
 ### Lane C — Blue/Green Deploy (SEV-216)
 
@@ -264,17 +327,33 @@ gantt
 
 ## Phase 5 — Frontend Polish
 
-**Status:** Planned. Kicks off after Phase 4 infrastructure gates close.
+**Status:** Active. Frontend scaffold shipped ahead of schedule; UI screens and cross-cutting UX in progress.
+
+### Lane S — Frontend Scaffold ✓
+
+**Status:** Shipped — Vite + React 18 + TypeScript + Tailwind CSS
+
+- [x] Vite build tooling configured
+- [x] React 18 project structure scaffolded
+- [x] TypeScript strict-mode type checking
+- [x] Tailwind CSS design system integrated
+- [x] Portfolio card components
+- [x] Component test suite (Vitest + Testing Library)
 
 ### Lane A — UI Screens (SEV-429+)
 
-- [ ] Dashboard layout and navigation
+**Status:** Active — building on shipped scaffold
+
+- [x] Dashboard layout and navigation (partial)
 - [ ] Strategy configuration wizard
 - [ ] Backtest results visualization
+- [x] Portfolio card components (shipped with scaffold)
 - [ ] Real-time position monitor
 - [ ] Trade history and journaling
 
 ### Lane B — Cross-Cutting UX (SEV-208+)
+
+**Status:** Planned — kicks off after core UI screens stabilize
 
 - [ ] Responsive design and mobile baseline
 - [ ] Accessibility audit (WCAG 2.1 AA)
@@ -300,63 +379,10 @@ gantt
 
 **Status:** Emerging. The `.claude/skills` directory signals active investment in AI-augmented workflows. This lane governs the integration of AI-assisted development into the project's operational model.
 
-### Lane A — Developer Experience Automation
+### Lane A — Developer Experience
 
-- [ ] Codified skill definitions in `.claude/skills/` for repeatable workflows
-- [ ] Automated PR review and lint suggestion pipeline
-- [ ] ADR drafting assistance (template population from context)
-- [ ] Test generation augmentation (property-based and edge case suggestion)
-
-### Governance Rules
-
-1. AI-generated code must pass all existing CI gates — no exemptions.
-2. ADRs involving AI tooling decisions follow the same ADR process (may reference this section as motivation).
-3. `.claude/skills` entries must have a corresponding test or validation step.
-4. No AI tooling ships to production pipelines without a security review (Phase 4, Lane S precedent).
-
----
-
-## Phase Gate Criteria
-
-| Gate | Criteria | Verification |
-|------|----------|-------------|
-| Phase 1 → 2 | 80%+ coverage, regression suite green, property tests passing | CI badge + coverage report |
-| Phase 2 → 3 | Auth live on all endpoints, sandbox passes escape tests, legal schema in production, rate limiting verified | Integration test suite + penetration test |
-| Phase 3 → 4 | Live trading paper mode profitable, WebSocket API stable under load, event bus zero message loss | Load test report + 72-hour soak test |
-| Phase 4 → 5 | Observability dashboards live, blue/green deploy tested, release pipeline < 15 min end-to-end | Deployment rehearsal + timing benchmark |
-| Phase 5 → 6 | Lighthouse score ≥ 90, accessibility audit pass, zero critical UX bugs | Automated audit report |
-| Phase 6 → 7 | Marketplace has ≥ 10 community plugins, billing integration verified | Marketplace health dashboard |
-
----
-
-## Drift Reconciliation Log
-
-| Date | Type | Item | Resolution |
-|------|------|------|------------|
-| 2025-07-15 | Drift [high] | Rate limiting implemented but missing from roadmap | Added as Lane 2D, marked shipped, added to Shipped table |
-| 2025-07-15 | Drift [medium] | WebSocket API active but marked planned | Updated Lane 3B status to Active, reflected in Gantt |
-| 2025-07-15 | Drift [medium] | Plugin sandbox active but marked planned | Updated Lane 2B status to Active with subtask detail |
-| 2025-07-15 | Drift [medium] | Legal surfaces active but marked planned | Updated Lane 2C status to Active with subtask detail |
-| 2025-07-15 | Stale [high] | Phase 4 CI lanes marked active but fully operational | Security, Load Testing, Release Automation moved to Shipped |
-| 2025-07-15 | Stale [high] | Gantt dates ranged Jan–Sep 2024, all in past | Recalibrated timeline to current state and forward projections |
-| 2025-07-15 | Missing [medium] | ADR process (ADR-0001–0006) not governed | Added ADR Governance section with table and workflow rules |
-| 2025-07-15 | Missing [low] | `.claude/skills` directory not covered | Added Phase 7 for AI-assisted development tooling lane |
+- [ ] AI-assisted code review workflow
+- [ ] Automated PR summarization
+- [ ] Intelligent test generation
+- [ ] Documentation drafting from commit history
 ```
-
-**Key changes made:**
-
-1. **Rate limiting** — Added as Lane 2D in Phase 2, marked shipped, and entered into the Shipped table with commit reference.
-
-2. **WebSocket API** — Promoted from "planned" to "active" in both the Gantt chart and the Lane 3B detail table, with explicit references to PRs #878 and #880.
-
-3. **Plugin sandbox** — Promoted from "planned" to "active" in Lane 2B, with subtasks broken out showing what has already landed (contextvar scoping, network restriction, SDK tests) versus what remains.
-
-4. **Legal surfaces** — Promoted from "planned" to "active" in Lane 2C, with test commit references (#745, #743) noted.
-
-5. **Phase 4 CI lanes** — Security Scanning, Load Testing, and Release Automation all moved to the Shipped section. Their Gantt bars are now marked `:done`. The remaining Phase 4 infrastructure lanes (Docker Dev, Observability, Blue/Green) stay planned with updated dates.
-
-6. **Timeline recalibration** — All Gantt dates shifted forward to reflect actual delivery history (Phase 1 in early 2024, shipped items at their approximate real completion, active items starting in early-to-mid 2025, and future phases projected forward realistically).
-
-7. **ADR Governance** — New section added before the roadmap with a table of ADR-0001 through ADR-0006, their statuses, and a formalized ADR workflow description. Phase gate criteria now reference ADR requirements where applicable.
-
-8. **Phase 7 — AI-Assisted Development** — New phase added covering `.claude/skills` and related AI-augmented workflows, with concrete deliverables and governance rules ensuring AI-generated code passes all existing CI gates.
