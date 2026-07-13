@@ -98,6 +98,48 @@ _eval_lock, _wait_for, _iscoroutine = _capture_asyncio_helpers()
 
 logger = structlog.get_logger()
 
+# ── Layer 5: introspection-escape attribute denylist ──────────────────
+#
+# Attribute names that sandboxed strategy code must never read, because they
+# are the canonical escape vectors out of the sandbox's restricted namespace.
+# They are consulted by ``_restricted_getattr`` (the ``builtins.getattr``
+# override installed while a strategy is executing).
+#
+# Three attack categories are covered:
+#
+#   • Class-graph traversal — ``__subclasses__``, ``__bases__``, ``__mro__``
+#     let an attacker walk from a safe builtin (e.g. ``int``) to every loaded
+#     class in the interpreter, including wrappers around blocked modules
+#     (``os``, ``socket`` …) and engine internals.
+#
+#   • Function/method internals — ``__globals__``, ``__code__``,
+#     ``__closure__``, ``__func__`` leak the module globals a function was
+#     defined in (which typically contain a reference to every module the
+#     host imported, e.g. ``sys``/``os``), the raw bytecode, closed-over
+#     values, and — via ``__func__`` — the underlying function of a bound
+#     method (from which ``__globals__`` is then reachable).
+#
+#   • Frame / traceback objects — ``f_back``, ``f_code``, ``f_globals`` …
+#     and ``tb_frame``, ``tb_next`` allow walking the Python call stack out
+#     of the sandbox into the host's frames, reaching the engine's own
+#     globals/builtins.  This closes the
+#     ``except Exception as e: e.__traceback__.tb_frame.f_back…`` escape
+#     vector.
+#
+# How frames are *obtained* matters too.  The canonical frame-creating APIs
+# — ``sys._getframe``, ``sys._current_frames``, ``inspect.currentframe``,
+# ``inspect.stack`` — all live in modules (``sys``, ``inspect``, ``gc``) that
+# are import-blocked by :data:`~engine.plugins.allowlist.DENYLIST_MODULES`.
+# Strategy code therefore cannot reach the frame-creating APIs in the first
+# place; the attribute denylist below is defence-in-depth for the remaining
+# traceback-derived frame vector.  ``sys._getframe`` is deliberately NOT
+# monkey-patched at runtime because the host's own structured logging
+# (structlog) calls ``sys._getframe().f_back`` in the log-emission path —
+# including during ``logger.exception`` which runs *while* the sandbox is
+# active — so a global guard would break host logging.
+
+# Function/method/class-graph introspection vectors (the original denylist,
+# retained under this name for backward compatibility with tests and callers).
 _BLOCKED_ATTRS: frozenset[str] = frozenset(
     {
         "__subclasses__",
@@ -106,7 +148,42 @@ _BLOCKED_ATTRS: frozenset[str] = frozenset(
         "__globals__",
         "__closure__",
         "__code__",
+        "__func__",
     }
+)
+
+# Frame-object attributes — stack walking and namespace/code leakage.
+# Reaching any of these from a frame yields either the caller frame (``f_back``
+# → walk the stack toward the host), the raw code object (``f_code`` →
+# bytecode / ``co_consts``), or the frame's namespaces (``f_globals`` /
+# ``f_locals`` / ``f_builtins`` → every name visible in the host).
+_BLOCKED_FRAME_ATTRS: frozenset[str] = frozenset(
+    {
+        "f_back",
+        "f_code",
+        "f_globals",
+        "f_locals",
+        "f_builtins",
+    }
+)
+
+# Traceback-object attributes — the ``exc.__traceback__`` path to frames.
+# ``tb_frame`` yields the frame the exception was raised in; ``tb_next`` walks
+# up the call chain.  Together they are the entry point to the frame
+# attributes above, so blocking them at the source closes the vector before a
+# frame is ever dereferenced.
+_BLOCKED_TRACEBACK_ATTRS: frozenset[str] = frozenset(
+    {
+        "tb_frame",
+        "tb_next",
+    }
+)
+
+# The complete introspection denylist consulted by ``_restricted_getattr``.
+# Computed once at import time as the union of the three categories.  Exposed
+# publicly so tests can parametrise over the full blocked set.
+_FORBIDDEN_ATTRS: frozenset[str] = (
+    _BLOCKED_ATTRS | _BLOCKED_FRAME_ATTRS | _BLOCKED_TRACEBACK_ATTRS
 )
 
 
@@ -187,7 +264,9 @@ class StrategySandbox:
     - Whitelists network endpoints from the manifest
     - Enforces resource limits (memory, file descriptors, CPU timeout)
     - Isolates filesystem access to a temp directory
-    - Blocks dangerous introspection (``__subclasses__``, ``__globals__``, etc.)
+    - Blocks dangerous introspection (``__subclasses__``, ``__globals__``,
+      ``__func__``, frame attributes ``f_back``/``f_globals``/…, and
+      traceback attributes ``tb_frame``/``tb_next``)
     - Serialises concurrent evaluations to prevent global-state races
     - Tracks metrics for the dashboard
     """
@@ -351,7 +430,7 @@ class StrategySandbox:
         return self._original_open(resolved, mode, *args, **kwargs)
 
     def _restricted_getattr(self, obj: Any, name: str, *default: Any) -> Any:
-        if name in _BLOCKED_ATTRS:
+        if name in _FORBIDDEN_ATTRS:
             # Record the security violation *before* raising (or returning
             # the caller's default) so the attempt is visible in
             # ``metrics.errors`` / ``metrics.last_error`` even when the
