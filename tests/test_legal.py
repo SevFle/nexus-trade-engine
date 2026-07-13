@@ -494,6 +494,90 @@ class TestLegalServiceAcceptance:
         assert "semver-eq-doc" not in slugs
 
 
+class TestLegalPathTraversalGuard:
+    """Security: the ``is_relative_to`` containment guard in
+    :func:`get_document_content` must reject legal-document file paths that
+    traverse outside the configured ``legal_documents_dir``.
+
+    A database row whose ``file_path`` resolves outside the root — whether via
+    a ``..`` traversal sequence or an absolute escape — must yield ``None`` and
+    never expose the targeted file's contents.
+    """
+
+    @staticmethod
+    def _make_doc(slug: str, file_path: str) -> LegalDocument:
+        return LegalDocument(
+            slug=slug,
+            title=slug.replace("-", " ").title(),
+            current_version="1.0.0",
+            effective_date=datetime.date(2026, 4, 20),
+            requires_acceptance=False,
+            category="general",
+            display_order=0,
+            file_path=file_path,
+        )
+
+    async def test_blocks_dot_dot_traversal(
+        self, db_session: AsyncSession, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        legal_root = tmp_path / "legal"
+        legal_root.mkdir()
+        # Sensitive file living *outside* the legal root, reachable via ``..``.
+        secret = tmp_path / "secret.md"
+        secret.write_text("TOP SECRET PAYLOAD", encoding="utf-8")
+
+        # ``file_path`` traverses out of the legal root via ``..``.
+        traversal_path = str(legal_root / ".." / "secret.md")
+        resolved = pathlib.Path(traversal_path).resolve()
+        assert resolved == secret.resolve()  # sanity: it really escapes
+        assert not resolved.is_relative_to(legal_root.resolve())
+
+        db_session.add(self._make_doc("traversal-doc", traversal_path))
+        await db_session.flush()
+
+        monkeypatch.setattr(legal_service.settings, "legal_documents_dir", str(legal_root))
+        result = await legal_service.get_document_content(db_session, "traversal-doc")
+
+        # The guard returns None and never exposes the secret payload.
+        assert result is None
+
+    async def test_blocks_absolute_path_escape(
+        self, db_session: AsyncSession, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        legal_root = tmp_path / "legal"
+        legal_root.mkdir()
+        outside = tmp_path / "outside.md"
+        outside.write_text("OUTSIDE ROOT", encoding="utf-8")
+
+        db_session.add(self._make_doc("abs-escape", str(outside)))
+        await db_session.flush()
+
+        monkeypatch.setattr(legal_service.settings, "legal_documents_dir", str(legal_root))
+        result = await legal_service.get_document_content(db_session, "abs-escape")
+
+        assert result is None
+
+    async def test_allows_legitimate_in_root_file(
+        self, db_session: AsyncSession, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Positive control: a file genuinely inside the root is served."""
+        legal_root = tmp_path / "legal"
+        legal_root.mkdir()
+        doc_file = legal_root / "terms.md"
+        doc_file.write_text("# Terms\n\nlegit body", encoding="utf-8")
+
+        db_session.add(self._make_doc("legit-doc", str(doc_file)))
+        await db_session.flush()
+
+        monkeypatch.setattr(legal_service.settings, "legal_documents_dir", str(legal_root))
+        result = await legal_service.get_document_content(db_session, "legit-doc")
+
+        assert result is not None
+        doc, markdown = result
+        assert doc.slug == "legit-doc"
+        assert "legit body" in markdown
+
+
 class TestVersionHelpers:
     def test_version_lt_lexicographic_guard(self):
         assert _version_lt("9.0.0", "10.0.0") is True
