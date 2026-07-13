@@ -12,17 +12,64 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.mcp.adapters import EngineServices, to_jsonable
-from engine.mcp.errors import NotFoundError, ValidationError
+from engine.mcp.errors import AuthorizationError, NotFoundError, ValidationError
 
 if TYPE_CHECKING:
     from engine.mcp.auth import AuthPrincipal
 
 
-def _resolve_portfolio(services: EngineServices, arguments: dict[str, Any]):
-    portfolio_id = arguments.get("portfolio_id") or "default"
+def _resolve_portfolio(
+    services: EngineServices,
+    principal: AuthPrincipal,
+    arguments: dict[str, Any],
+):
+    """Resolve and authorize the portfolio referenced by ``arguments``.
+
+    Validation rules:
+
+    * ``portfolio_id`` defaults to ``"default"`` when absent. We avoid the
+      ``arguments.get('portfolio_id') or 'default'`` idiom because that would
+      silently coerce a falsy-but-present value (e.g. ``""``) into the
+      default, masking a malformed request.
+    * A non-string or empty/whitespace ``portfolio_id`` raises
+      :class:`ValidationError`.
+    * The principal must be authorised (:meth:`PortfolioStore.assert_access`)
+      *before* any portfolio data is read.
+    * A portfolio that the store reports as missing raises
+      :class:`ValidationError` rather than being silently auto-created.
+    """
+    portfolio_id = arguments.get("portfolio_id", "default")
     if not isinstance(portfolio_id, str):
         raise ValidationError("portfolio_id must be a string")
-    return services.portfolio_store.get(portfolio_id), portfolio_id
+    if not portfolio_id.strip():
+        raise ValidationError("portfolio_id must be a non-empty string")
+    portfolio_id = portfolio_id.strip()
+
+    # Resolve authorisation and existence together and normalise any failure
+    # to a single :class:`AuthorizationError`. Surfacing distinct error types
+    # for "not found" vs "not authorised" would let a caller enumerate valid
+    # portfolio ids, so both are collapsed into one opaque rejection. The
+    # input-validation cases above (non-string / blank id) are intentionally
+    # left as :class:`ValidationError` because they describe a malformed
+    # request, not a portfolio-access decision.
+    try:
+        services.portfolio_store.assert_access(principal, portfolio_id)
+        portfolio = services.portfolio_store.find(portfolio_id)
+    except (AuthorizationError, ValidationError) as exc:
+        raise AuthorizationError(
+            f"Portfolio {portfolio_id!r} is not available",
+            data={"portfolio_id": portfolio_id},
+        ) from exc
+    if portfolio is None:
+        # Defence-in-depth: ``PortfolioStore.can_access`` already rejects
+        # absent ids, so ``find()`` should never return ``None`` here.
+        # Normalise anyway so a future change cannot re-open the enumeration
+        # vector.
+        raise AuthorizationError(
+            f"Portfolio {portfolio_id!r} is not available",
+            data={"portfolio_id": portfolio_id},
+        )
+    return portfolio, portfolio_id
 
 
 def _unrealized_pnl(pos: dict[str, Any]) -> float:
@@ -86,10 +133,10 @@ def _position_row(
 
 async def get_portfolio_status(
     services: EngineServices,
-    _principal: AuthPrincipal,
+    principal: AuthPrincipal,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
-    portfolio, portfolio_id = _resolve_portfolio(services, arguments)
+    portfolio, portfolio_id = _resolve_portfolio(services, principal, arguments)
     snapshot = portfolio.snapshot()
     return to_jsonable(
         {
@@ -106,10 +153,10 @@ async def get_portfolio_status(
 
 async def get_positions(
     services: EngineServices,
-    _principal: AuthPrincipal,
+    principal: AuthPrincipal,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
-    portfolio, portfolio_id = _resolve_portfolio(services, arguments)
+    portfolio, portfolio_id = _resolve_portfolio(services, principal, arguments)
     snapshot = portfolio.snapshot()
     positions = [
         _position_row(symbol, pos, snapshot.allocation_weight(symbol))
@@ -126,7 +173,7 @@ async def get_positions(
 
 async def get_position(
     services: EngineServices,
-    _principal: AuthPrincipal,
+    principal: AuthPrincipal,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Return a single position looked up by symbol.
@@ -135,7 +182,7 @@ async def get_position(
     positions. An unknown symbol raises :class:`NotFoundError` so the
     assistant can distinguish "no such position" from a malformed request.
     """
-    portfolio, portfolio_id = _resolve_portfolio(services, arguments)
+    portfolio, portfolio_id = _resolve_portfolio(services, principal, arguments)
     symbol = arguments.get("symbol")
     if not isinstance(symbol, str) or not symbol.strip():
         raise ValidationError("symbol is required")
@@ -156,7 +203,7 @@ async def get_position(
 
 async def get_unrealized_pnl(
     services: EngineServices,
-    _principal: AuthPrincipal,
+    principal: AuthPrincipal,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Aggregate the open (unrealized) P&L across the whole portfolio.
@@ -170,7 +217,7 @@ async def get_unrealized_pnl(
     by :func:`get_portfolio_status` and the cost-basis valuation used for tax
     lots.
     """
-    portfolio, portfolio_id = _resolve_portfolio(services, arguments)
+    portfolio, portfolio_id = _resolve_portfolio(services, principal, arguments)
     snapshot = portfolio.snapshot()
 
     positions: list[dict[str, Any]] = []
@@ -208,10 +255,10 @@ async def get_unrealized_pnl(
 
 async def get_orders(
     services: EngineServices,
-    _principal: AuthPrincipal,
+    principal: AuthPrincipal,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
-    portfolio, portfolio_id = _resolve_portfolio(services, arguments)
+    portfolio, portfolio_id = _resolve_portfolio(services, principal, arguments)
     orders = [
         {
             "timestamp": tr.timestamp,

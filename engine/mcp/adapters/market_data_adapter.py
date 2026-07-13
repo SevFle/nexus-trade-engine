@@ -104,7 +104,17 @@ async def get_cost_model(
     if px <= 0:
         raise ValidationError("price must be > 0")
     side = arguments.get("side", "buy")
-    avg_volume = int(arguments.get("avg_volume", 0) or 0)
+    # Validate avg_volume explicitly rather than relying on
+    # ``int(arguments.get("avg_volume", 0) or 0)``: that idiom silently coerces
+    # any falsy/non-numeric value (empty string, None) to 0, masking a
+    # malformed request. ``0`` is a legitimate value here (the schema sets
+    # ``minimum: 0``), so it must survive validation unchanged.
+    avg_volume_raw = arguments.get("avg_volume", 0)
+    if not isinstance(avg_volume_raw, int) or isinstance(avg_volume_raw, bool):
+        raise ValidationError("avg_volume must be an integer")
+    if avg_volume_raw < 0:
+        raise ValidationError("avg_volume must be >= 0")
+    avg_volume = avg_volume_raw
 
     breakdown = services.cost_model.estimate_total(
         symbol=symbol, quantity=qty, price=px, side=side, avg_volume=avg_volume

@@ -327,7 +327,9 @@ not depend on the worker process for backtest isolation today.
 **Where**: [`engine/mcp/`](../engine/mcp/)
 
 The MCP module ships every component an MCP server needs — declarative
-[`tool_definitions.py`](../engine/mcp/tool_definitions.py) (9 tools),
+[`tool_definitions.py`](../engine/mcp/tool_definitions.py) (11 tools,
+including the portfolio `get_position` / `get_unrealized_pnl` inspection
+tools and the per-portfolio ownership model in `adapters/__init__.py`),
 [`handlers.py`](../engine/mcp/handlers.py) dispatch with schema validation +
 cursor pagination + result-size guards, [`auth.py`](../engine/mcp/auth.py)
 (JWT + static API-key table, reusing the REST `ROLE_HIERARCHY`), a

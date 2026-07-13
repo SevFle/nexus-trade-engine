@@ -57,19 +57,24 @@ SDK users). An LLM agent is a different consumer:
 
 ## Tools
 
-All nine tools are advertised with `read_only` MCP annotations. The
+All eleven tools are advertised with `read_only` MCP annotations. The
 default `required_role` is `viewer`; only `run_backtest` requires
 `quant_dev` because it is compute-intensive. Roles follow the same
 `ROLE_HIERARCHY` as the REST API
-([`api-reference.md`](api-reference.md#roles-rbac-hierarchy)).
+([`api-reference.md`](api-reference.md#roles-rbac-hierarchy)). Every
+portfolio tool also takes an optional `portfolio_id` (default
+`"default"`) and is gated by the ownership model in
+[Portfolio access control](#portfolio-access-control) below.
 
 | Tool | Required role | Paginated | Summary |
 |---|---|---|---|
 | `run_backtest` | `quant_dev` | — | Historical backtest of a strategy on one symbol over a date range. Compute-only, never places live orders. |
-| `get_portfolio_status` | `viewer` | — | Cash, total value, total return %, realized P&L. |
-| `get_positions` | `viewer` | — | Open positions: qty, avg cost, price, market value, weight. |
+| `get_portfolio_status` | `viewer` | — | Cash, total value, total return %, realized P&L, open-position count. |
+| `get_positions` | `viewer` | — | Open positions: qty, avg cost, price, market value, cost basis, unrealized P&L (abs + %), weight. |
+| `get_position` | `viewer` | — | One position by symbol (case-insensitive match). `NotFoundError` when the symbol is not held. |
+| `get_unrealized_pnl` | `viewer` | — | Net open (unrealized) P&L across the portfolio, abs + %, with a per-position breakdown. |
 | `get_orders` | `viewer` | ✅ | Chronological order history. |
-| `list_strategies` | `viewer` | — | Installed strategies: version, description, author, symbols, defaults. |
+| `list_strategies` | `viewer` | ✅ | Installed strategies: version, description, author, symbols, defaults. |
 | `get_strategy_details` | `viewer` | — | Full metadata for one strategy. |
 | `get_market_data` | `viewer` | ✅ | OHLCV bars for a symbol + period + interval. |
 | `get_cost_model` | `viewer` | — | Transaction-cost breakdown estimate (commission, spread, slippage, fee, tax). |
@@ -79,6 +84,7 @@ default `required_role` is `viewer`; only `run_backtest` requires
 
 - **`run_backtest`** — `strategy_name`, `symbol`, `start_date`,
   `end_date` (ISO-8601); optional `initial_capital` (default 100000).
+- **`get_position`** — `symbol` (required; matched case-insensitively).
 - **`get_strategy_details`** — `strategy_name`.
 - **`get_market_data`** — `symbol`; optional `interval`
   (`1m|5m|15m|1h|1d|1wk|1mo`, default `1d`), `period` (default `1y`).
@@ -87,8 +93,12 @@ default `required_role` is `viewer`; only `run_backtest` requires
 - **`get_performance_metrics`** — `equity_curve`
   (`[{timestamp,total_value}, …]`, ≥2 points); optional
   `initial_capital`.
-- **`get_orders` / `get_market_data`** accept pagination params
-  `limit` and `cursor` (the opaque cursor from a prior page).
+- **`get_orders` / `get_market_data` / `list_strategies`** accept
+  pagination params `limit` and `cursor` (the opaque cursor from a
+  prior page).
+- **`get_portfolio_status` / `get_positions` / `get_position` /
+  `get_unrealized_pnl` / `get_orders`** all take an optional
+  `portfolio_id` (default `"default"`).
 
 `dispatch_tool` validates required fields against the tool's
 `input_schema` before invoking the adapter, returning a
@@ -150,6 +160,69 @@ Token resolution, in order:
 user > viewer`), so a principal authenticated over MCP is
 indistinguishable from one authenticated over HTTP for authorization
 purposes.
+
+## Portfolio access control
+
+Beyond role gating, every portfolio tool (`get_portfolio_status`,
+`get_positions`, `get_position`, `get_unrealized_pnl`, `get_orders`)
+runs an **ownership** check before any portfolio data is read. The
+model lives on `PortfolioStore`
+([`adapters/__init__.py`](../engine/mcp/adapters/__init__.py)) and was
+hardened in response to two review findings (gh#1424, gh#11bd3b2):
+anonymous enumeration of shared portfolios and cross-principal access
+to owned portfolios.
+
+Each portfolio records one of two ownership states:
+
+- **Shared / system** — seeded with `owner=None`, recorded internally
+  as the `SHARED_OWNED` sentinel. Readable by any **authenticated**
+  principal. The legacy in-memory `default` portfolio (the one
+  `PortfolioStore()` seeds with $100,000) is shared, preserving the
+  pre-existing behaviour.
+- **Owned** — seeded with `owner=<user_id>`. Readable only by that
+  owner or by a principal whose role meets/exceeds the override role.
+
+The override role is **`quant_dev`** (`_PORTFOLIO_OVERRIDE_ROLE` in
+source). It sits deliberately *below* `portfolio_manager`/`admin` so
+support and quant operators can inspect a user's portfolio without
+escalating to an admin role, while a plain `retail_trader`/`user`
+cannot.
+
+`PortfolioStore.can_access(principal, portfolio_id)` enforces the
+rules in an order chosen to close enumeration and escalation vectors:
+
+1. **Existence first.** An id that was never seeded is *never*
+   accessible — checked before any owner comparison, so a missing id
+   cannot be confused with a shared one (which would otherwise let a
+   caller probe for valid ids).
+2. **Anonymous principals are denied outright** before any owner
+   logic. A shared portfolio is readable by any *authenticated*
+   principal, never by an anonymous one. When
+   `NEXUS_MCP_AUTH_REQUIRED=false`, `extract_principal` issues an
+   `auth_method="anonymous"` principal — so disabling auth also
+   disables portfolio reads. Local dev that needs portfolio data must
+   therefore enable auth (and seed an owned portfolio) rather than
+   flip the anonymous fast path.
+3. **Shared** → any authenticated principal may read.
+4. **Owned** → the owner, or a principal at/above `quant_dev`.
+
+`_resolve_portfolio` (in
+[`portfolio_adapter.py`](../engine/mcp/adapters/portfolio_adapter.py))
+takes this further by collapsing **both** "not found" and "not
+authorised" into a single opaque `AuthorizationError`. Surfacing a
+distinct `NotFoundError` for a missing portfolio would let a caller
+distinguish a valid-but-forbidden id from an invalid one — an
+enumeration oracle — so the two cases share one message
+(`"Portfolio '<id>' is not available"`). Malformed inputs (non-string
+or blank `portfolio_id`) stay as `ValidationError`, because those
+describe a malformed request rather than a portfolio-access decision.
+
+> **Implication for `server.py`.** When the transport entry point
+> lands, it must thread the `AuthPrincipal` from `extract_principal`
+> into every adapter call — the ownership checks assume a real
+> principal and reject `None`. The contract is already exercised by
+> [`tests/mcp/`](../tests/mcp/), including the enumeration and
+> anonymous-access cases.
 
 ## Rate limiting
 
@@ -241,10 +314,14 @@ through the `EngineServices` container
 holds:
 
 - `plugin_registry` — strategy discovery + loading.
-- `portfolio_store` — in-memory `Portfolio` objects (a `default`
-  portfolio seeded with $100,000 is created on construction). This is
-  *not* the SQLAlchemy portfolio table; it lets the server expose
-  portfolio inspection without a DB session.
+- `portfolio_store` — in-memory `Portfolio` objects behind the
+  [`PortfolioStore`](../engine/mcp/adapters/__init__.py) ownership
+  model (a `default` portfolio seeded with $100,000 is created as a
+  shared/system portfolio on construction). This is *not* the
+  SQLAlchemy portfolio table; it lets the server expose portfolio
+  inspection without a DB session. See
+  [Portfolio access control](#portfolio-access-control) for the
+  per-portfolio read rules.
 - `cost_model` — a `DefaultCostModel` for `get_cost_model`.
 - `market_data_provider_factory` — callable returning a fresh
   `MarketDataProvider` per backtest.
