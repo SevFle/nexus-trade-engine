@@ -2,12 +2,21 @@
 Marketplace API — browse, search, install, and rate community strategies.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 
 from engine.api.auth.dependency import get_current_user, require_role
 from engine.db.models import User
 from engine.legal.dependencies import require_legal_acceptance
+from engine.marketplace.ratings import (
+    InvalidRatingError,
+    RatingAggregate,
+    RatingRecord,
+    RatingsStore,
+    get_ratings_store,
+)
 
 router = APIRouter(dependencies=[Depends(require_legal_acceptance)])
 
@@ -29,6 +38,75 @@ class MarketplaceEntry(BaseModel):
 class InstallRequest(BaseModel):
     strategy_id: str
     version: str = "latest"
+
+
+class RatingRequest(BaseModel):
+    """Body for ``POST /strategies/{strategy_id}/ratings``."""
+
+    stars: int = Field(..., ge=1, le=5, description="Star rating, 1-5 inclusive.")
+    review: str | None = Field(
+        None, max_length=2000, description="Optional free-text review (<= 2000 chars)."
+    )
+
+
+class RatingResponse(BaseModel):
+    """A stored rating record, as returned to the submitting user."""
+
+    strategy_id: str
+    user_id: str
+    stars: int
+    review: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class AggregateResponse(BaseModel):
+    """Aggregate rating statistics for a strategy."""
+
+    strategy_id: str
+    average: float
+    count: int
+    distribution: dict[str, int]
+
+
+class ReviewItem(BaseModel):
+    """A single review in a public reviews listing."""
+
+    user_id: str
+    stars: int
+    review: str
+    updated_at: datetime
+
+
+class RatingsListResponse(BaseModel):
+    """Response body for ``GET /strategies/{strategy_id}/ratings``."""
+
+    strategy_id: str
+    aggregate: AggregateResponse
+    reviews: list[ReviewItem]
+    total: int
+    limit: int
+    offset: int
+
+
+def _record_to_response(record: RatingRecord) -> RatingResponse:
+    return RatingResponse(
+        strategy_id=record.strategy_id,
+        user_id=str(record.user_id),
+        stars=record.stars,
+        review=record.review,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+def _aggregate_to_response(agg: RatingAggregate) -> AggregateResponse:
+    return AggregateResponse(
+        strategy_id=agg.strategy_id,
+        average=agg.average,
+        count=agg.count,
+        distribution=dict(agg.distribution),
+    )
 
 
 @router.get("/browse")
@@ -121,7 +199,83 @@ async def rate_strategy(
     review: str = "",
     user: User = Depends(get_current_user),
 ):
-    """Rate and review a marketplace strategy."""
+    """Rate and review a marketplace strategy (legacy stub)."""
     if not 1 <= rating <= 5:
         raise HTTPException(status_code=400, detail="Rating must be 1-5")
     return {"status": "not_implemented"}
+
+
+@router.post(
+    "/strategies/{strategy_id}/ratings",
+    response_model=RatingResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def submit_rating(
+    strategy_id: str,
+    payload: RatingRequest,
+    user: User = Depends(get_current_user),
+    store: RatingsStore = Depends(get_ratings_store),
+):
+    """Submit (or update) the authenticated user's rating for a strategy.
+
+    One rating per ``(strategy_id, user_id)``: resubmitting updates the
+    existing record in place (upsert) and returns the new state. Star value
+    is clamped to ``[1, 5]`` at the schema layer; deeper validation errors
+    surface as HTTP 400.
+    """
+    try:
+        record = store.submit_rating(
+            strategy_id,
+            user.id,
+            payload.stars,
+            payload.review,
+        )
+    except InvalidRatingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return _record_to_response(record)
+
+
+@router.get(
+    "/strategies/{strategy_id}/ratings",
+    response_model=RatingsListResponse,
+)
+async def get_ratings(
+    strategy_id: str,
+    limit: int = Query(10, ge=0, le=100, description="Max reviews to return."),
+    offset: int = Query(0, ge=0, description="Reviews to skip."),
+    user: User = Depends(get_current_user),
+    store: RatingsStore = Depends(get_ratings_store),
+):
+    """Fetch aggregate rating stats plus a page of public reviews.
+
+    The aggregate covers every submitted rating (with or without review
+    text); the ``reviews`` list only includes records carrying non-empty
+    review text, most-recently-updated first.
+    """
+    try:
+        aggregate = store.get_aggregate(strategy_id)
+        page = store.list_reviews(strategy_id, limit=limit, offset=offset)
+    except InvalidRatingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return RatingsListResponse(
+        strategy_id=strategy_id,
+        aggregate=_aggregate_to_response(aggregate),
+        reviews=[
+            ReviewItem(
+                user_id=str(rec.user_id),
+                stars=rec.stars,
+                review=rec.review,
+                updated_at=rec.updated_at,
+            )
+            for rec in page.reviews
+        ],
+        total=page.total,
+        limit=page.limit,
+        offset=page.offset,
+    )
