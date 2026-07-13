@@ -17,19 +17,14 @@ Priority legend:
 <a id="rebalancer-merge-conflict"></a>
 ## P2 — No CI guard against committed merge-conflict markers
 
-**Background**: an uncommitted merge conflict in
+**Background**: an *uncommitted* merge conflict in
 [`engine/portfolio/rebalancer.py`](../engine/portfolio/rebalancer.py)
-once left an unterminated string literal that made the whole
-`engine.portfolio` package `SyntaxError` on import. The conflict was
-**never committed** — `HEAD` was clean and CI ran green — and the
-working tree has since been resolved (`engine.portfolio` now imports
-cleanly, the file is 441 lines, zero conflict markers). The incident
-is worth a durable guard because the failure mode is severe:
+once left an unterminated string literal that made `engine.portfolio`
+`SyntaxError` on import. It was never committed (HEAD clean, CI green)
+and is since resolved — but the failure mode is severe:
 `engine.api.router` imports `engine.portfolio` at app build time, so a
-single committed `<<<<<<<` / `=======` / `>>>>>>>` block would
-`SyntaxError` every web **and** worker process at startup — the app
-would not boot, and CI would only catch it *after* the bad commit
-landed.
+single committed `<<<<<<<`/`=======`/`>>>>>>>` block would `SyntaxError`
+every web **and** worker process at startup before CI could catch it.
 
 **Fix path**: add a one-line gate so merge markers can never ship on
 `main` silently — drop it into the lint stage of
@@ -167,18 +162,30 @@ are already in place — the missing piece is the route + worker glue.
 
 ---
 
-## P1 — Strategy Marketplace is a stub
+## P1 — Strategy Marketplace is mostly a stub (ratings landed, in-memory)
 
 **Where**: [`engine/api/routes/marketplace.py`](../engine/api/routes/marketplace.py)
 
-`browse`, `install`, `uninstall`, `rate` all return
-`{"status": "not_implemented"}`. The categories endpoint returns a
-hardcoded list. There is no marketplace registry (local or remote)
-behind the routes.
+`browse`, `install`, `uninstall`, and the legacy
+`{strategy_id}/rate` route still return `{"status":"not_implemented"}`;
+`categories` returns a hardcoded list. There is **no marketplace
+registry** (local or remote) behind those routes.
 
-**Workaround today**: install strategies by placing them under
-`engine/plugins/<kind>/<name>/` and reloading the plugin registry.
-The marketplace routes exist purely to lock the public API shape.
+The **ratings** surface landed (gh#1430): `POST` / `GET`
+`/api/v1/marketplace/strategies/{strategy_id}/ratings` are real (one
+upsert per `(strategy_id, user_id)`, aggregate + reviews). But they are
+backed by a process-local `InMemoryRatingsStore`
+([`engine/marketplace/ratings.py`](../engine/marketplace/ratings.py)) —
+**no DB model, no migration, no persistence**: ratings vanish on every
+restart and are invisible to other replicas. The store itself warns
+when instantiated outside pytest. That is a P0-grade data-loss risk
+hiding behind a "stub" router — treat ratings as non-production until
+a Postgres-backed `RatingsStore` replaces the in-memory default.
+
+**Workaround today**: install strategies under
+`engine/plugins/<kind>/<name>/` and reload the plugin registry. Do not
+rely on marketplace ratings surviving a restart or being visible across
+replicas.
 
 ---
 

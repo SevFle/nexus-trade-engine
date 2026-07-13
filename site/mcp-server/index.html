@@ -992,6 +992,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#portfolio-access-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Portfolio access control
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rate-limiting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2633,6 +2644,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#portfolio-access-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Portfolio access control
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rate-limiting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2837,11 +2859,14 @@ SDK users). An LLM agent is a different consumer:</p>
 </tbody>
 </table>
 <h2 id="tools">Tools<a class="headerlink" href="#tools" title="Permanent link">&para;</a></h2>
-<p>All nine tools are advertised with <code>read_only</code> MCP annotations. The
+<p>All eleven tools are advertised with <code>read_only</code> MCP annotations. The
 default <code>required_role</code> is <code>viewer</code>; only <code>run_backtest</code> requires
 <code>quant_dev</code> because it is compute-intensive. Roles follow the same
 <code>ROLE_HIERARCHY</code> as the REST API
-(<a href="../api-reference/#roles-rbac-hierarchy"><code>api-reference.md</code></a>).</p>
+(<a href="../api-reference/#roles-rbac-hierarchy"><code>api-reference.md</code></a>). Every
+portfolio tool also takes an optional <code>portfolio_id</code> (default
+<code>"default"</code>) and is gated by the ownership model in
+<a href="#portfolio-access-control">Portfolio access control</a> below.</p>
 <table>
 <thead>
 <tr>
@@ -2862,13 +2887,25 @@ default <code>required_role</code> is <code>viewer</code>; only <code>run_backte
 <td><code>get_portfolio_status</code></td>
 <td><code>viewer</code></td>
 <td>—</td>
-<td>Cash, total value, total return %, realized P&amp;L.</td>
+<td>Cash, total value, total return %, realized P&amp;L, open-position count.</td>
 </tr>
 <tr>
 <td><code>get_positions</code></td>
 <td><code>viewer</code></td>
 <td>—</td>
-<td>Open positions: qty, avg cost, price, market value, weight.</td>
+<td>Open positions: qty, avg cost, price, market value, cost basis, unrealized P&amp;L (abs + %), weight.</td>
+</tr>
+<tr>
+<td><code>get_position</code></td>
+<td><code>viewer</code></td>
+<td>—</td>
+<td>One position by symbol (case-insensitive match). <code>NotFoundError</code> when the symbol is not held.</td>
+</tr>
+<tr>
+<td><code>get_unrealized_pnl</code></td>
+<td><code>viewer</code></td>
+<td>—</td>
+<td>Net open (unrealized) P&amp;L across the portfolio, abs + %, with a per-position breakdown.</td>
 </tr>
 <tr>
 <td><code>get_orders</code></td>
@@ -2879,7 +2916,7 @@ default <code>required_role</code> is <code>viewer</code>; only <code>run_backte
 <tr>
 <td><code>list_strategies</code></td>
 <td><code>viewer</code></td>
-<td>—</td>
+<td>✅</td>
 <td>Installed strategies: version, description, author, symbols, defaults.</td>
 </tr>
 <tr>
@@ -2912,6 +2949,7 @@ default <code>required_role</code> is <code>viewer</code>; only <code>run_backte
 <ul>
 <li><strong><code>run_backtest</code></strong> — <code>strategy_name</code>, <code>symbol</code>, <code>start_date</code>,
   <code>end_date</code> (ISO-8601); optional <code>initial_capital</code> (default 100000).</li>
+<li><strong><code>get_position</code></strong> — <code>symbol</code> (required; matched case-insensitively).</li>
 <li><strong><code>get_strategy_details</code></strong> — <code>strategy_name</code>.</li>
 <li><strong><code>get_market_data</code></strong> — <code>symbol</code>; optional <code>interval</code>
   (<code>1m|5m|15m|1h|1d|1wk|1mo</code>, default <code>1d</code>), <code>period</code> (default <code>1y</code>).</li>
@@ -2920,8 +2958,12 @@ default <code>required_role</code> is <code>viewer</code>; only <code>run_backte
 <li><strong><code>get_performance_metrics</code></strong> — <code>equity_curve</code>
   (<code>[{timestamp,total_value}, …]</code>, ≥2 points); optional
   <code>initial_capital</code>.</li>
-<li><strong><code>get_orders</code> / <code>get_market_data</code></strong> accept pagination params
-  <code>limit</code> and <code>cursor</code> (the opaque cursor from a prior page).</li>
+<li><strong><code>get_orders</code> / <code>get_market_data</code> / <code>list_strategies</code></strong> accept
+  pagination params <code>limit</code> and <code>cursor</code> (the opaque cursor from a
+  prior page).</li>
+<li><strong><code>get_portfolio_status</code> / <code>get_positions</code> / <code>get_position</code> /
+  <code>get_unrealized_pnl</code> / <code>get_orders</code></strong> all take an optional
+  <code>portfolio_id</code> (default <code>"default"</code>).</li>
 </ul>
 <p><code>dispatch_tool</code> validates required fields against the tool's
 <code>input_schema</code> before invoking the adapter, returning a
@@ -2999,6 +3041,66 @@ priority order:</p>
 user &gt; viewer</code>), so a principal authenticated over MCP is
 indistinguishable from one authenticated over HTTP for authorization
 purposes.</p>
+<h2 id="portfolio-access-control">Portfolio access control<a class="headerlink" href="#portfolio-access-control" title="Permanent link">&para;</a></h2>
+<p>Beyond role gating, every portfolio tool (<code>get_portfolio_status</code>,
+<code>get_positions</code>, <code>get_position</code>, <code>get_unrealized_pnl</code>, <code>get_orders</code>)
+runs an <strong>ownership</strong> check before any portfolio data is read. The
+model lives on <code>PortfolioStore</code>
+(<a href="../engine/mcp/adapters/__init__.py"><code>adapters/__init__.py</code></a>) and was
+hardened in response to two review findings (gh#1424, gh#11bd3b2):
+anonymous enumeration of shared portfolios and cross-principal access
+to owned portfolios.</p>
+<p>Each portfolio records one of two ownership states:</p>
+<ul>
+<li><strong>Shared / system</strong> — seeded with <code>owner=None</code>, recorded internally
+  as the <code>SHARED_OWNED</code> sentinel. Readable by any <strong>authenticated</strong>
+  principal. The legacy in-memory <code>default</code> portfolio (the one
+  <code>PortfolioStore()</code> seeds with $100,000) is shared, preserving the
+  pre-existing behaviour.</li>
+<li><strong>Owned</strong> — seeded with <code>owner=&lt;user_id&gt;</code>. Readable only by that
+  owner or by a principal whose role meets/exceeds the override role.</li>
+</ul>
+<p>The override role is <strong><code>quant_dev</code></strong> (<code>_PORTFOLIO_OVERRIDE_ROLE</code> in
+source). It sits deliberately <em>below</em> <code>portfolio_manager</code>/<code>admin</code> so
+support and quant operators can inspect a user's portfolio without
+escalating to an admin role, while a plain <code>retail_trader</code>/<code>user</code>
+cannot.</p>
+<p><code>PortfolioStore.can_access(principal, portfolio_id)</code> enforces the
+rules in an order chosen to close enumeration and escalation vectors:</p>
+<ol>
+<li><strong>Existence first.</strong> An id that was never seeded is <em>never</em>
+   accessible — checked before any owner comparison, so a missing id
+   cannot be confused with a shared one (which would otherwise let a
+   caller probe for valid ids).</li>
+<li><strong>Anonymous principals are denied outright</strong> before any owner
+   logic. A shared portfolio is readable by any <em>authenticated</em>
+   principal, never by an anonymous one. When
+   <code>NEXUS_MCP_AUTH_REQUIRED=false</code>, <code>extract_principal</code> issues an
+   <code>auth_method="anonymous"</code> principal — so disabling auth also
+   disables portfolio reads. Local dev that needs portfolio data must
+   therefore enable auth (and seed an owned portfolio) rather than
+   flip the anonymous fast path.</li>
+<li><strong>Shared</strong> → any authenticated principal may read.</li>
+<li><strong>Owned</strong> → the owner, or a principal at/above <code>quant_dev</code>.</li>
+</ol>
+<p><code>_resolve_portfolio</code> (in
+<a href="../engine/mcp/adapters/portfolio_adapter.py"><code>portfolio_adapter.py</code></a>)
+takes this further by collapsing <strong>both</strong> "not found" and "not
+authorised" into a single opaque <code>AuthorizationError</code>. Surfacing a
+distinct <code>NotFoundError</code> for a missing portfolio would let a caller
+distinguish a valid-but-forbidden id from an invalid one — an
+enumeration oracle — so the two cases share one message
+(<code>"Portfolio '&lt;id&gt;' is not available"</code>). Malformed inputs (non-string
+or blank <code>portfolio_id</code>) stay as <code>ValidationError</code>, because those
+describe a malformed request rather than a portfolio-access decision.</p>
+<blockquote>
+<p><strong>Implication for <code>server.py</code>.</strong> When the transport entry point
+lands, it must thread the <code>AuthPrincipal</code> from <code>extract_principal</code>
+into every adapter call — the ownership checks assume a real
+principal and reject <code>None</code>. The contract is already exercised by
+<a href="../tests/mcp/"><code>tests/mcp/</code></a>, including the enumeration and
+anonymous-access cases.</p>
+</blockquote>
 <h2 id="rate-limiting">Rate limiting<a class="headerlink" href="#rate-limiting" title="Permanent link">&para;</a></h2>
 <p>A per-principal <strong>in-memory token bucket</strong>
 (<a href="../engine/mcp/rate_limiter.py"><code>rate_limiter.py</code></a>) gates every tool
@@ -3194,10 +3296,14 @@ through the <code>EngineServices</code> container
 holds:</p>
 <ul>
 <li><code>plugin_registry</code> — strategy discovery + loading.</li>
-<li><code>portfolio_store</code> — in-memory <code>Portfolio</code> objects (a <code>default</code>
-  portfolio seeded with $100,000 is created on construction). This is
-  <em>not</em> the SQLAlchemy portfolio table; it lets the server expose
-  portfolio inspection without a DB session.</li>
+<li><code>portfolio_store</code> — in-memory <code>Portfolio</code> objects behind the
+  <a href="../engine/mcp/adapters/__init__.py"><code>PortfolioStore</code></a> ownership
+  model (a <code>default</code> portfolio seeded with $100,000 is created as a
+  shared/system portfolio on construction). This is <em>not</em> the
+  SQLAlchemy portfolio table; it lets the server expose portfolio
+  inspection without a DB session. See
+  <a href="#portfolio-access-control">Portfolio access control</a> for the
+  per-portfolio read rules.</li>
 <li><code>cost_model</code> — a <code>DefaultCostModel</code> for <code>get_cost_model</code>.</li>
 <li><code>market_data_provider_factory</code> — callable returning a fresh
   <code>MarketDataProvider</code> per backtest.</li>

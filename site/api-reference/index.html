@@ -3616,8 +3616,9 @@ Requires legal acceptance.</p>
 </table>
 <h2 id="marketplace">Marketplace<a class="headerlink" href="#marketplace" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/marketplace/*</code>. Source: <a href="../engine/api/routes/marketplace.py"><code>routes/marketplace.py</code></a>.
-<strong>Most routes are stubs</strong> (<code>{status:"not_implemented"}</code>) — see
-<a href="../known-limitations/">known-limitations.md</a>.</p>
+The whole router requires legal acceptance. <strong>Discovery/install are
+stubs</strong> (<code>{status:"not_implemented"}</code>); <strong>ratings are real but
+in-memory only</strong> — see <a href="../known-limitations/">known-limitations.md</a>.</p>
 <table>
 <thead>
 <tr>
@@ -3656,10 +3657,27 @@ Requires legal acceptance.</p>
 <td>POST</td>
 <td><code>/api/v1/marketplace/{strategy_id}/rate?rating=&amp;review=</code></td>
 <td><code>user</code></td>
-<td>Stub. <code>400</code> if <code>rating ∉ [1,5]</code>.</td>
+<td><strong>Legacy stub</strong> (<code>400</code> if <code>rating ∉ [1,5]</code>); superseded by <code>/ratings</code>.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/marketplace/strategies/{strategy_id}/ratings</code></td>
+<td><code>user</code></td>
+<td><strong>Real.</strong> Body <code>{stars:int∈[1,5], review?:str≤2000}</code> → <code>201 RatingResponse</code>. One rating per <code>(strategy_id,user_id)</code>; resubmit <strong>upserts</strong> in place. <code>400</code> on <code>InvalidRatingError</code>.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/marketplace/strategies/{strategy_id}/ratings?limit=&amp;offset=</code></td>
+<td><code>user</code></td>
+<td><strong>Real.</strong> <code>200 RatingsListResponse{aggregate:{average,count,distribution:{"&lt;stars&gt;":tally}}, reviews:[…], total, limit, offset}</code>. <code>limit≤100</code>. <code>aggregate</code> spans every rating; <code>reviews</code> lists only non-empty text, newest first.</td>
 </tr>
 </tbody>
 </table>
+<p>Ratings run through a process-local <code>InMemoryRatingsStore</code>
+(<a href="../engine/marketplace/ratings.py"><code>engine/marketplace/ratings.py</code></a>,
+behind a <code>RatingsStore</code> Protocol so a DB backend can drop in later).
+<strong>Not persisted — every restart loses them</strong> (the store warns when
+instantiated outside pytest).</p>
 <h2 id="reference">Reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/reference/*</code>. Source: <a href="../engine/api/routes/reference.py"><code>routes/reference.py</code></a>.</p>
 <table>
@@ -4008,38 +4026,28 @@ published on <strong>any</strong> replica reach local WebSocket connections on
 <strong>every</strong> replica. The <code>ConnectionManager</code> (the live socket objects) is
 still per-process, but event distribution is cross-replica.</p>
 <h3 id="second-endpoint-ws-apiv1wsevents">Second endpoint — <code>WS /api/v1/ws/events</code><a class="headerlink" href="#second-endpoint-ws-apiv1wsevents" title="Permanent link">&para;</a></h3>
-<p>A second streaming route, <code>WS /api/v1/ws/events</code> (source:
-<a href="../engine/api/ws/events.py"><code>ws/events.py</code></a>), shares the same
-<code>ConnectionManager</code>, <code>ChannelResolver</code>, <code>EventBusBridge</code>, and wire
-protocol as <code>/ws</code>, but authenticates <strong>more strictly</strong>: it validates
-the session token from a query param <strong>before</strong> <code>ws.accept()</code>, so a
-bad or missing token rejects the WebSocket handshake (close code
-<code>4401</code>, reason <code>invalid session token</code>) and the server never upgrades
-an unauthenticated socket. <code>/ws</code> deliberately relaxed this to permit
-an in-band first-message <code>auth</code>; <code>/ws/events</code> trades that flexibility
-for fail-closed auth at the handshake.</p>
+<p>A second route, <code>WS /api/v1/ws/events</code> (<a href="../engine/api/ws/events.py"><code>ws/events.py</code></a>),
+shares <code>/ws</code>'s <code>ConnectionManager</code>, <code>ChannelResolver</code>, <code>EventBusBridge</code>,
+and wire protocol, but authenticates <strong>before</strong> <code>ws.accept()</code>: a
+bad/missing query-param token rejects the handshake (close code <code>4401</code>,
+reason <code>invalid session token</code>). <code>/ws/events</code> trades <code>/ws</code>'s in-band
+first-message <code>auth</code> for fail-closed handshake auth.</p>
 <ul>
-<li><strong>Token</strong>: <code>?token=&lt;jwt&gt;</code> (alias <code>?session_token=</code>), validated with
-  the same <code>decode_token</code> the REST dependency uses; scopes via the
-  shared <code>extract_scopes</code>. <strong>JWT-only</strong> — no <code>nxs_*</code> API keys, same
-  as <code>/ws</code>.</li>
-<li><strong>Server not ready</strong>: if hit before <code>init_ws_events</code>, the socket is closed with code <code>1011</code> (<code>WS_CLOSE_SERVER_ERROR</code>, reason <code>server not ready</code>).</li>
-<li><strong>Actionable inbound messages</strong>: <code>subscribe</code>, <code>unsubscribe</code>, <code>ping</code>
-  (parsed by the shared <code>parse_inbound</code>). Mid-session token refresh is
-  <strong>not</strong> supported here — the token is bound to the handshake, so a
-  new token requires a new connection (re-connect rather than re-auth).</li>
-<li><strong>Outbound</strong>: same <code>ack</code> / <code>error</code> / <code>event</code> / <code>pong</code> / <code>close</code> set
-  as <code>/ws</code>; the channels, room shapes, and per-role scope rules in the
-  tables above apply unchanged.</li>
-<li><strong>Wiring</strong>: <code>init_ws_events(manager, resolver?, bridge?)</code> runs on
-  startup and captures the running loop first; a re-init cleanly
-  disconnects every existing client and stops the previous bridge
-  before installing the new one, so a config reload leaks no
-  connections or double event-bus subscriptions.</li>
+<li><strong>Token</strong>: <code>?token=&lt;jwt&gt;</code> (alias <code>?session_token=</code>), via the REST
+  <code>decode_token</code> and shared <code>extract_scopes</code>. <strong>JWT-only</strong> (no <code>nxs_*</code>
+  keys, same as <code>/ws</code>).</li>
+<li><strong>Server not ready</strong>: if hit before <code>init_ws_events</code>, the socket is closed with code <code>1011</code> (<code>server not ready</code>).</li>
+<li><strong>Inbound</strong>: <code>subscribe</code>, <code>unsubscribe</code>, <code>ping</code> (shared <code>parse_inbound</code>).
+  <strong>No mid-session refresh</strong> — the token is bound to the handshake, so
+  re-connect rather than re-auth.</li>
+<li><strong>Outbound</strong>: same <code>ack</code> / <code>error</code> / <code>event</code> / <code>pong</code> / <code>close</code>; the
+  channels, room shapes, and per-role scope rules above apply unchanged.</li>
+<li><strong>Wiring</strong>: <code>init_ws_events(manager, resolver?, bridge?)</code> captures the
+  running loop first; a re-init disconnects every client and stops the
+  prior bridge, so a reload leaks no connections or double bus subscriptions.</li>
 </ul>
-<p>Prefer <code>/ws/events</code> when the token can ride in the handshake query
-(fail-closed auth, fewer moving parts); prefer <code>/ws</code> when the token
-can only arrive after the socket opens (e.g. an in-band browser refresh).</p>
+<p>Prefer <code>/ws/events</code> for fail-closed handshake auth; <code>/ws</code> when the token
+can only arrive after the socket opens (in-band browser refresh).</p>
 <h2 id="errors">Errors<a class="headerlink" href="#errors" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Auth</strong>: <code>401</code> for missing/invalid/expired credentials; <code>403</code> for
