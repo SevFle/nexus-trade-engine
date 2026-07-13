@@ -138,7 +138,47 @@ GET_POSITIONS = ToolDefinition(
     name="get_positions",
     description=(
         "List open positions in a portfolio with quantity, average cost, "
-        "current price, market value, and allocation weight. Read-only."
+        "current price, market value, cost basis, unrealized P&L "
+        "(absolute and percentage), and allocation weight. Read-only."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {"portfolio_id": _PORTFOLIO_ID_PROP},
+        "additionalProperties": False,
+    },
+)
+
+GET_POSITION = ToolDefinition(
+    name="get_position",
+    description=(
+        "Look up a single open position by symbol. Returns quantity, average "
+        "cost, current price, market value, cost basis, unrealized P&L "
+        "(absolute and percentage), and portfolio allocation weight. "
+        "Raises a not-found error when the symbol is not held. Read-only."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "portfolio_id": _PORTFOLIO_ID_PROP,
+            "symbol": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16,
+                "description": "Ticker / instrument symbol, e.g. 'AAPL'. Case-insensitive.",
+            },
+        },
+        "required": ["symbol"],
+        "additionalProperties": False,
+    },
+)
+
+GET_UNREALIZED_PNL = ToolDefinition(
+    name="get_unrealized_pnl",
+    description=(
+        "Aggregate the open (unrealized) profit & loss across a portfolio. "
+        "Returns the net total unrealized P&L in absolute and percentage "
+        "terms, plus a per-position breakdown. Useful for a quick 'how am "
+        "I doing right now' snapshot. Read-only."
     ),
     input_schema={
         "type": "object",
@@ -296,6 +336,8 @@ TOOL_DEFINITIONS: list[ToolDefinition] = [
     RUN_BACKTEST,
     GET_PORTFOLIO_STATUS,
     GET_POSITIONS,
+    GET_POSITION,
+    GET_UNREALIZED_PNL,
     GET_ORDERS,
     LIST_STRATEGIES,
     GET_STRATEGY_DETAILS,

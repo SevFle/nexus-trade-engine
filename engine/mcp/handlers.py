@@ -72,6 +72,20 @@ async def _positions(services, principal, arguments):  # type: ignore[no-untyped
     return await get_positions(services, principal, arguments)
 
 
+@_register("get_position")
+async def _position(services, principal, arguments):  # type: ignore[no-untyped-def]
+    from engine.mcp.adapters.portfolio_adapter import get_position
+
+    return await get_position(services, principal, arguments)
+
+
+@_register("get_unrealized_pnl")
+async def _unrealized_pnl(services, principal, arguments):  # type: ignore[no-untyped-def]
+    from engine.mcp.adapters.portfolio_adapter import get_unrealized_pnl
+
+    return await get_unrealized_pnl(services, principal, arguments)
+
+
 @_register("get_orders")
 async def _orders(services, principal, arguments):  # type: ignore[no-untyped-def]
     from engine.mcp.adapters.portfolio_adapter import get_orders
