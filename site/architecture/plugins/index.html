@@ -2674,8 +2674,12 @@ examples):</p>
 <h2 id="sandboxing">Sandboxing<a class="headerlink" href="#sandboxing" title="Permanent link">&para;</a></h2>
 <p>Strategies run inside a layered sandbox defined in
 <a href="../../engine/plugins/sandbox/__init__.py"><code>engine/plugins/sandbox/__init__.py</code></a>.
-Four of five layers are implemented today; process isolation is the
-production target and is tracked as a follow-up.</p>
+Five of six layers (0–4) are implemented in-process today; layer 5
+(process isolation) is the production security boundary and is tracked
+as a follow-up. The numbering is historical: layers 1–4 were the
+original in-process set; layer 0 (static AST validation) was added by
+<a href="../../adr/0010-static-ast-validation-toctou-loading/">ADR-0010</a>, and
+layer 5 remains the only true isolation boundary.</p>
 <blockquote>
 <p><strong>Important — threat model.</strong> Layers 0–4 are <strong>best-effort
 defense-in-depth, not a security boundary</strong>. They narrow the
@@ -2725,8 +2729,8 @@ something to stake a customer's data on.</p>
 <tr>
 <td>4. Filesystem isolation</td>
 <td>best-effort in-process</td>
-<td><strong>shipped</strong></td>
-<td>Each evaluation runs in a fresh <code>tempfile.TemporaryDirectory</code>; the strategy only sees its own declared artifacts (read-only).</td>
+<td><strong>shipped (active path) + reusable primitive landed, not yet wired</strong></td>
+<td>The active sandbox (<code>_setup_filesystem_isolation</code> / <code>_restricted_open</code> in <a href="../../engine/plugins/sandbox/__init__.py"><code>sandbox/__init__.py</code></a>) runs each evaluation in a fresh <code>tempfile.TemporaryDirectory</code>, wraps <code>builtins.open</code>, and rejects any path whose <code>os.path.realpath</code> canonical form falls outside the work dir or a declared <code>manifest.artifacts</code> root. Writes, append, and <code>+</code> modes are rejected; raw file-descriptor <code>open</code>s are rejected. The check opens the <strong>resolved</strong> path, not the raw argument, so a symlink/relative path can't be reinterpreted by the kernel between check and use (TOCTOU). Separately, <a href="../../engine/plugins/sandbox/filesystem.py"><code>engine/plugins/sandbox/filesystem.py</code></a> ships a host-side, framework-agnostic <a href="../../engine/plugins/sandbox/filesystem.py"><code>PathValidator</code></a> (whitelist canonicalisation with exact / <code>&lt;root&gt;{sep}</code> prefix matching, write gating, <code>make_open_hook</code> / <code>make_path_hook</code> factories) that closes both symlink-traversal and <code>..</code> traversal in one <code>realpath</code> step. <strong><code>PathValidator</code> landed (#1436) but is not yet imported by the active sandbox</strong> — the inline <code>_restricted_open</code> is what runs today. Unifying the two is a tracked follow-up.</td>
 </tr>
 <tr>
 <td>5. Process isolation</td>
@@ -2786,6 +2790,10 @@ for executors) is deferred until that work is sequenced.</p>
 <tr>
 <td><a href="../../engine/plugins/sandbox/__init__.py"><code>engine/plugins/sandbox/__init__.py</code></a></td>
 <td>Layered strategy sandbox (see below).</td>
+</tr>
+<tr>
+<td><a href="../../engine/plugins/sandbox/filesystem.py"><code>engine/plugins/sandbox/filesystem.py</code></a></td>
+<td>Reusable layer-4 <code>PathValidator</code> (whitelist + <code>realpath</code> canonicalisation, write gating, open/path hooks). Landed (#1436); <strong>not yet wired</strong> into the active sandbox, which uses the inline <code>_restricted_open</code> in <code>sandbox/__init__.py</code>.</td>
 </tr>
 <tr>
 <td><a href="../../engine/plugins/restricted_importer.py"><code>engine/plugins/restricted_importer.py</code></a></td>
