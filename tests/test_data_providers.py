@@ -755,6 +755,56 @@ def test_validate_symbol_rejects_path_traversal_and_separators(malicious: str):
 @pytest.mark.parametrize(
     "malicious",
     [
+        "../../etc/passwd",  # POSIX traversal to a system file
+        "..\\..\\win",  # Windows-style traversal
+        "EUR/USD",  # symbol containing a path separator
+        "A/B/C",  # multiple separators
+    ],
+)
+def test_validate_symbol_rejects_classic_traversal_vectors(malicious: str):
+    """Explicit regression for the canonical traversal/separator vectors.
+
+    These are the high-risk inputs an adversary probes first when trying to
+    break out of a URL path segment, so they are pinned independently of the
+    broader parametrised matrix above.
+    """
+    from engine.data.providers._http import validate_symbol
+
+    with pytest.raises(FatalProviderError):
+        validate_symbol(malicious)
+
+
+def test_symbol_pattern_regex_itself_rejects_slash_and_traversal():
+    """Defence-in-depth: the canonical SYMBOL_PATTERN (independent of the
+    explicit ``/``/``..`` guard in :func:`validate_symbol`) must reject any
+    symbol containing a path separator or a backslash.
+
+    The allow-list deliberately excludes ``/`` so that even a caller that
+    forgets the explicit guard can never interpolate a separator into a URL.
+    """
+    import re
+
+    from engine.data.providers.base import SYMBOL_PATTERN
+
+    rx = re.compile(SYMBOL_PATTERN)
+    # Every input here contains a character outside the allow-list
+    # (``/`` or ``\``), so the regex alone rejects them.
+    for malicious in (
+        "../../etc/passwd",
+        "..\\..\\win",
+        "EUR/USD",
+        "A/B",
+        "/etc/passwd",
+    ):
+        assert rx.fullmatch(malicious) is None, malicious
+    # Legitimate symbols still match the regex.
+    for ok in ("AAPL", "BRK.B", "EUR_USD", "EURUSD=X", "BTC-USD", "^GSPC"):
+        assert rx.fullmatch(ok) is not None, ok
+
+
+@pytest.mark.parametrize(
+    "malicious",
+    [
         "A/B",
         "..\\",
         "...//",

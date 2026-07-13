@@ -96,7 +96,13 @@ class CapabilityNotSupportedError(FatalProviderError):
     """
 
 
-SYMBOL_PATTERN = r"^[A-Za-z0-9._\-/=^]{1,32}$"
+# The canonical symbol allow-list deliberately excludes ``/`` (a URL path
+# separator) so that, even without the explicit path-segment guard in
+# :func:`engine.data.providers._http.validate_symbol`, a hostile symbol can
+# never be interpolated into a provider URL path. ``..`` traversal is also
+# blocked there. The character class permits alphanumerics plus ``.``,
+# ``_``, ``=``, ``^`` and ``-`` (placed last so it is a literal hyphen).
+SYMBOL_PATTERN = r"^[A-Za-z0-9._=^-]{1,32}$"
 
 
 class IDataProvider(ABC):
