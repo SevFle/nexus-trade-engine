@@ -37,7 +37,11 @@ from engine.mcp.adapters.portfolio_adapter import (
     get_unrealized_pnl,
 )
 from engine.mcp.auth import AuthPrincipal
-from engine.mcp.errors import MCPError, NotFoundError, ValidationError
+from engine.mcp.errors import (
+    MCPError,
+    NotFoundError,
+    ValidationError,
+)
 from engine.mcp.handlers import dispatch_tool
 
 # ── Shared principal ─────────────────────────────────────────────────────── #

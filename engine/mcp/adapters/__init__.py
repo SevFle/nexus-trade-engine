@@ -39,6 +39,25 @@ if TYPE_CHECKING:
 _PORTFOLIO_OVERRIDE_ROLE = "quant_dev"
 
 
+class _SharedOwnedSentinel:
+    """Type of the :data:`SHARED_OWNED` sentinel (see there for rationale)."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "<SHARED_OWNED>"
+
+
+#: Sentinel owner value marking a portfolio as system/shared — i.e. readable
+#: by any *authenticated* principal and owned by no single user. It is
+#: deliberately distinct from ``None`` so that an *absent* entry in
+#: :attr:`PortfolioStore._owners` (a portfolio id that was never seeded) is
+#: unambiguously distinguishable from an *intentionally shared* one. Without
+#: this distinction a missing id would be treated as shared, letting a caller
+#: probe for portfolio existence — an enumeration vector.
+SHARED_OWNED: _SharedOwnedSentinel = _SharedOwnedSentinel()
+
+
 class PortfolioStore:
     """In-memory store of :class:`~engine.core.portfolio.Portfolio` objects.
 
@@ -59,8 +78,10 @@ class PortfolioStore:
 
     def __init__(self, default_capital: float = 100_000.0) -> None:
         self._portfolios: dict[str, Portfolio] = {}
-        # portfolio_id -> owning principal user_id (None == system/shared).
-        self._owners: dict[str, str | None] = {}
+        # portfolio_id -> owning principal user_id, or SHARED_OWNED for a
+        # system/shared portfolio. An *absent* key means the portfolio was
+        # never seeded (see :meth:`can_access`).
+        self._owners: dict[str, str | _SharedOwnedSentinel] = {}
         self.seed("default", default_capital)
 
     def seed(
@@ -74,11 +95,11 @@ class PortfolioStore:
 
         ``owner`` is the ``user_id`` of the :class:`AuthPrincipal` that owns
         the portfolio; pass ``None`` for a system/shared portfolio readable
-        by any authenticated principal.
+        by any authenticated principal (stored as :data:`SHARED_OWNED`).
         """
         portfolio = Portfolio(initial_cash=initial_cash, portfolio_id=None)
         self._portfolios[portfolio_id] = portfolio
-        self._owners[portfolio_id] = owner
+        self._owners[portfolio_id] = owner if owner is not None else SHARED_OWNED
         return portfolio
 
     def get(self, portfolio_id: str = "default") -> Portfolio:
@@ -95,24 +116,43 @@ class PortfolioStore:
         return self._portfolios.get(portfolio_id)
 
     def owner_of(self, portfolio_id: str) -> str | None:
-        """Return the owning principal ``user_id``, or ``None`` if shared/unknown."""
-        return self._owners.get(portfolio_id)
+        """Return the owning principal ``user_id``, or ``None`` if shared/absent.
+
+        A shared/system portfolio is reported as ``None`` to preserve the
+        public contract even though internally it is stored as
+        :data:`SHARED_OWNED`.
+        """
+        owner = self._owners.get(portfolio_id)
+        return None if owner is SHARED_OWNED else owner
 
     def can_access(self, principal: AuthPrincipal, portfolio_id: str) -> bool:
         """Return ``True`` if ``principal`` may inspect ``portfolio_id``.
 
-        * A shared portfolio (``owner is None``) is readable by any
+        The checks are deliberately ordered to close enumeration and
+        privilege-escalation vectors:
+
+        * A portfolio that does not exist is never accessible. This is the
+          *first* check so a missing id can never be confused with a shared
+          one (which would otherwise let a caller probe for valid ids).
+        * An anonymous (unauthenticated) principal is denied *before* any
+          owner comparison — a shared portfolio is readable by any
+          *authenticated* principal, never by an anonymous one.
+        * A shared portfolio (:data:`SHARED_OWNED`) is readable by any
           authenticated principal.
         * An owned portfolio is readable by its owner, or by a principal
           whose role meets/exceeds :data:`_PORTFOLIO_OVERRIDE_ROLE`.
-        * An anonymous principal never gains access to another user's
-          portfolio.
         """
-        owner = self._owners.get(portfolio_id)
-        if owner is None:
-            return True
+        # 1. Existence: an absent id is never accessible (enumeration guard).
+        if portfolio_id not in self._portfolios:
+            return False
+        # 2. Anonymous principals never read any portfolio, shared or owned.
         if principal.auth_method == "anonymous":
             return False
+        owner = self._owners.get(portfolio_id)
+        # 3. Shared/system portfolio: any authenticated principal may read.
+        if owner is SHARED_OWNED:
+            return True
+        # 4. Owned portfolio: the owner or an override-role principal.
         if principal.user_id == owner:
             return True
         return principal.has_role(_PORTFOLIO_OVERRIDE_ROLE)
@@ -235,4 +275,4 @@ def to_jsonable(obj: Any) -> Any:
     return obj
 
 
-__all__ = ["EngineServices", "PortfolioStore", "to_jsonable"]
+__all__ = ["SHARED_OWNED", "EngineServices", "PortfolioStore", "to_jsonable"]

@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.mcp.adapters import EngineServices, to_jsonable
-from engine.mcp.errors import NotFoundError, ValidationError
+from engine.mcp.errors import AuthorizationError, NotFoundError, ValidationError
 
 if TYPE_CHECKING:
     from engine.mcp.auth import AuthPrincipal
@@ -45,11 +45,30 @@ def _resolve_portfolio(
         raise ValidationError("portfolio_id must be a non-empty string")
     portfolio_id = portfolio_id.strip()
 
-    services.portfolio_store.assert_access(principal, portfolio_id)
-
-    portfolio = services.portfolio_store.find(portfolio_id)
+    # Resolve authorisation and existence together and normalise any failure
+    # to a single :class:`AuthorizationError`. Surfacing distinct error types
+    # for "not found" vs "not authorised" would let a caller enumerate valid
+    # portfolio ids, so both are collapsed into one opaque rejection. The
+    # input-validation cases above (non-string / blank id) are intentionally
+    # left as :class:`ValidationError` because they describe a malformed
+    # request, not a portfolio-access decision.
+    try:
+        services.portfolio_store.assert_access(principal, portfolio_id)
+        portfolio = services.portfolio_store.find(portfolio_id)
+    except (AuthorizationError, ValidationError) as exc:
+        raise AuthorizationError(
+            f"Portfolio {portfolio_id!r} is not available",
+            data={"portfolio_id": portfolio_id},
+        ) from exc
     if portfolio is None:
-        raise ValidationError(f"Portfolio {portfolio_id!r} not found")
+        # Defence-in-depth: ``PortfolioStore.can_access`` already rejects
+        # absent ids, so ``find()`` should never return ``None`` here.
+        # Normalise anyway so a future change cannot re-open the enumeration
+        # vector.
+        raise AuthorizationError(
+            f"Portfolio {portfolio_id!r} is not available",
+            data={"portfolio_id": portfolio_id},
+        )
     return portfolio, portfolio_id
 
 
