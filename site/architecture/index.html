@@ -520,6 +520,8 @@
       
         
       
+        
+      
     
     
     
@@ -676,6 +678,34 @@
     
   
     Multi-strategy coordination
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="data-providers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data providers
   
 
     
@@ -2405,6 +2435,10 @@ components exist, how they fit together, and where to add new code.</p>
    <code>PerformanceReport</code>), composite strategy scoring, lifecycle/version
    governance, and the parameter optimizer. Split out of
    <code>core-domains.md</code> to stay under the 500-line cap.</li>
+<li><strong><a href="data-providers/">data-providers.md</a></strong> — the market-data provider
+   layer: the <code>DataProviderRegistry</code> routing/fail-over model, the
+   <code>IDataProvider</code> capability contract, the six concrete vendors, and
+   the layered symbol-validation security invariant.</li>
 <li><strong><a href="database/">database.md</a></strong> — table inventory, migration policy,
    data ownership.</li>
 <li><strong><a href="plugins/">plugins.md</a></strong> — plugin SDK and the registry that
@@ -2425,8 +2459,8 @@ components in our docs site:</p>
   the registry.</li>
 </ul>
 <p>The flat-markdown architecture docs (<code>overview.md</code>, <code>core-domains.md</code>,
-<code>analytics.md</code>, <code>database.md</code>, <code>plugins.md</code>) are the source of truth;
-the diagrams are a presentation layer on top.</p>
+<code>analytics.md</code>, <code>data-providers.md</code>, <code>database.md</code>, <code>plugins.md</code>) are
+the source of truth; the diagrams are a presentation layer on top.</p>
 <h2 id="conventions">Conventions<a class="headerlink" href="#conventions" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Markdown files in this directory describe the <strong>current</strong> state.

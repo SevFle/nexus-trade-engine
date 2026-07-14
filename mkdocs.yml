@@ -172,6 +172,7 @@ nav:
       - Core domains: architecture/core-domains.md
       - Analytics & optimization: architecture/analytics.md
       - Multi-strategy coordination: architecture/multi-strategy.md
+      - Data providers: architecture/data-providers.md
       - Database & migrations: architecture/database.md
       - Plugin system: architecture/plugins.md
   - Reference:

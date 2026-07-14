@@ -66,6 +66,7 @@ we explain *why*, not *what*.
 | Get a 10-minute mental model of the system | [`architecture/overview.md`](architecture/overview.md) |
 | Understand the decision/execution domain layer (instruments, orchestration, cost & risk, execution, accounting) | [`architecture/core-domains.md`](architecture/core-domains.md) |
 | Understand the 86-KPI analytics + scoring + optimization internals | [`architecture/analytics.md`](architecture/analytics.md) |
+| Understand how market data is routed, failed over, and validated | [`architecture/data-providers.md`](architecture/data-providers.md) |
 | Understand every table and its constraints | [`data-model.md`](data-model.md) |
 | Pick the right multi-strategy coordinator (voters vs. capital-aware) | [`architecture/multi-strategy.md`](architecture/multi-strategy.md) |
 | Call the REST / WebSocket API | [`api-reference.md`](api-reference.md) |
@@ -90,6 +91,7 @@ docs/
 │   ├── core-domains.md             ← domain view (instruments, orchestration, cost & risk, execution)
 │   ├── analytics.md                ← analytics, scoring & optimization (split out of core-domains)
 │   ├── multi-strategy.md           ← the five strategy coordinators (voters + capital-aware)
+│   ├── data-providers.md           ← market-data provider layer: registry routing, fail-over, symbol validation
 │   ├── database.md                 ← migration policy, table inventory
 │   └── plugins.md                  ← plugin SDK + registry
 ├── adr/                            ← architecture decision records (why we chose X)
