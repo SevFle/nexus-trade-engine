@@ -12,9 +12,16 @@ from httpx import ASGITransport, AsyncClient
 
 from engine.observability import context as ctx
 from engine.observability.middleware import (
+    CORRELATION_HEADER,
+    MAX_CORRELATION_ID_LENGTH,
     CorrelationIdMiddleware,
     safe_correlation_id,
 )
+
+# Lowercased header name exactly as the middleware stores it internally
+# (``self._header_name_bytes``); constructing scopes with this keeps the
+# tests tied to the real configured header rather than a hardcoded literal.
+_HEADER_NAME_BYTES = CORRELATION_HEADER.lower().encode("latin-1")
 
 
 def _build_app() -> FastAPI:
@@ -149,7 +156,6 @@ class TestSafeCorrelationId:
     def test_none_generates_uuid(self):
         out = safe_correlation_id(None)
         uuid.UUID(out)  # raises if not a valid uuid
-        assert out != ""
 
     def test_empty_string_generates_uuid(self):
         out = safe_correlation_id("")
@@ -167,7 +173,24 @@ class TestSafeCorrelationId:
 
     def test_oversized_header_is_replaced(self):
         out = safe_correlation_id("x" * 10_000)
-        assert len(out) <= 128
+        assert len(out) <= MAX_CORRELATION_ID_LENGTH
+
+    def test_boundary_length_at_cap_is_accepted(self):
+        # Exactly MAX_CORRELATION_ID_LENGTH valid chars is the last length
+        # the regex ({1,128}) accepts — it must be preserved verbatim.
+        candidate = "a" * MAX_CORRELATION_ID_LENGTH
+        out = safe_correlation_id(candidate)
+        assert out == candidate
+        assert len(out) == MAX_CORRELATION_ID_LENGTH
+
+    def test_boundary_length_cap_plus_one_is_regenerated(self):
+        # One char over the cap is the first length the regex rejects — the
+        # value must be discarded and a fresh UUID minted instead.
+        candidate = "a" * (MAX_CORRELATION_ID_LENGTH + 1)
+        out = safe_correlation_id(candidate)
+        assert out != candidate
+        uuid.UUID(out)
+        assert len(out) <= MAX_CORRELATION_ID_LENGTH
 
     def test_control_chars_rejected(self):
         out = safe_correlation_id("\x1b[31mred")
@@ -205,25 +228,157 @@ class TestSafeCorrelationId:
         assert _safe_correlation_id("ok-1") == "ok-1"
 
 
-class TestHeaderInjectionDefense:
-    @pytest.mark.asyncio
-    async def test_crlf_in_header_is_rejected(self, client: AsyncClient):
-        # httpx blocks CRLF in raw headers, so we drive a manually
-        # constructed value through the validator instead.
-        out = safe_correlation_id("legit\r\nSet-Cookie: pwn=1")
-        assert "\r" not in out
-        assert "\n" not in out
-        assert "Set-Cookie" not in out
+class TestHeaderInjectionDefenseASGI:
+    """Drive the middleware with raw ASGI scopes whose ``scope['headers']``
+    carry malicious byte values.
+
+    httpx and Starlette sanitise header *values* before they ever reach the
+    ASGI scope, so an httpx-based e2e test can never deliver a CRLF / NUL /
+    control byte to the middleware — it is forced to call the validator
+    directly, which proves nothing about the middleware's own defence in
+    depth and just duplicates the unit tests above (tautological).
+
+    Instead we build the scope dict by hand and inject the exact raw bytes an
+    attacker would deliver through a buggy/lenient HTTP parser, or — for the
+    shared taskiq path — a crafted Redis label value. The middleware reads
+    those bytes off ``scope['headers']`` itself, so this is a genuine
+    end-to-end check that every malicious payload is rejected and replaced
+    with a clean UUID on both the response header and the bound
+    observability context.
+    """
+
+    @staticmethod
+    async def _drive(header_bytes: bytes | None) -> tuple[str | None, str | None]:
+        """Run ``CorrelationIdMiddleware`` against a minimal http scope whose
+        ``X-Correlation-Id`` header is set to ``header_bytes`` (raw, so CRLF /
+        NUL / control chars survive — httpx would strip them).
+
+        Returns ``(response_header_cid, context_cid)`` — the value the
+        middleware actually wrote back on the response header and the value
+        it bound to the observability context for the downstream app.
+        """
+        captured: dict[str, str | None] = {"ctx": None}
+
+        async def downstream(scope, receive, send):
+            captured["ctx"] = ctx.get_correlation_id()
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b""})
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        sent: list[dict] = []
+
+        async def send(message):
+            sent.append(message)
+
+        headers = []
+        if header_bytes is not None:
+            headers.append((_HEADER_NAME_BYTES, header_bytes))
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/",
+            "raw_path": b"/",
+            "query_string": b"",
+            "headers": headers,
+            "client": ("127.0.0.1", 60000),
+            "server": ("test", 80),
+        }
+
+        mw = CorrelationIdMiddleware(downstream)
+        await mw(scope, receive, send)
+
+        resp_cid: str | None = None
+        for message in sent:
+            if message["type"] == "http.response.start":
+                for name, value in message["headers"]:
+                    if name == _HEADER_NAME_BYTES:
+                        resp_cid = value.decode("latin-1")
+        return resp_cid, captured["ctx"]
 
     @pytest.mark.asyncio
-    async def test_oversized_header_is_replaced(self, client: AsyncClient):
-        out = safe_correlation_id("x" * 10_000)
-        assert len(out) <= 128
+    async def test_crlf_injection_is_sanitized(self):
+        # Classic response-splitting / header-smuggling attempt via raw CRLF.
+        resp_cid, ctx_cid = await self._drive(b"legit\r\nSet-Cookie: pwn=1")
+        assert "\r" not in resp_cid
+        assert "\n" not in resp_cid
+        assert "Set-Cookie" not in resp_cid
+        uuid.UUID(resp_cid)  # a fresh id was minted, not the attacker's prefix
+        assert ctx_cid == resp_cid  # response header and bound context agree
 
     @pytest.mark.asyncio
-    async def test_control_chars_rejected(self, client: AsyncClient):
-        out = safe_correlation_id("\x1b[31mred")
-        assert "\x1b" not in out
+    async def test_nul_byte_is_sanitized(self):
+        resp_cid, ctx_cid = await self._drive(b"bad\x00id")
+        assert "\x00" not in resp_cid
+        uuid.UUID(resp_cid)
+        assert ctx_cid == resp_cid
+
+    @pytest.mark.asyncio
+    async def test_ansi_escape_control_chars_are_sanitized(self):
+        # ESC [ 31m (terminal colour sequence) plus BEL.
+        resp_cid, ctx_cid = await self._drive(b"\x07\x1b[31mred")
+        assert "\x07" not in resp_cid
+        assert "\x1b" not in resp_cid
+        uuid.UUID(resp_cid)
+        assert ctx_cid == resp_cid
+
+    @pytest.mark.asyncio
+    async def test_all_c0_and_del_control_bytes_are_sanitized(self):
+        # Sweep the entire C0 range 0x00-0x1f plus DEL (0x7f). None may leak.
+        payload = bytes(range(0x20)) + b"\x7f"
+        resp_cid, _ = await self._drive(payload)
+        for byte in payload:
+            assert chr(byte) not in resp_cid
+        uuid.UUID(resp_cid)
+
+    @pytest.mark.asyncio
+    async def test_nonascii_bytes_are_sanitized(self):
+        # Bytes >= 0x80 are outside the visible-ASCII range the regex allows.
+        resp_cid, _ = await self._drive(b"caf\xc3\xa9-\xff")
+        assert resp_cid.isascii()
+        uuid.UUID(resp_cid)
+
+    @pytest.mark.asyncio
+    async def test_space_byte_is_sanitized(self):
+        # Space (0x20) sits just below the 0x21 lower bound of the charset.
+        resp_cid, _ = await self._drive(b"has space")
+        assert " " not in resp_cid
+        uuid.UUID(resp_cid)
+
+    @pytest.mark.asyncio
+    async def test_oversized_bytes_are_sanitized(self):
+        resp_cid, _ = await self._drive(b"x" * 10_000)
+        assert len(resp_cid) <= MAX_CORRELATION_ID_LENGTH
+        uuid.UUID(resp_cid)
+
+    @pytest.mark.asyncio
+    async def test_boundary_length_at_cap_accepted_through_asgi(self):
+        candidate = b"a" * MAX_CORRELATION_ID_LENGTH
+        resp_cid, ctx_cid = await self._drive(candidate)
+        assert resp_cid == candidate.decode()
+        assert ctx_cid == candidate.decode()
+        assert len(resp_cid) == MAX_CORRELATION_ID_LENGTH
+
+    @pytest.mark.asyncio
+    async def test_boundary_length_cap_plus_one_regenerated_through_asgi(self):
+        candidate = b"a" * (MAX_CORRELATION_ID_LENGTH + 1)
+        resp_cid, _ = await self._drive(candidate)
+        assert resp_cid != candidate.decode()
+        uuid.UUID(resp_cid)
+        assert len(resp_cid) <= MAX_CORRELATION_ID_LENGTH
+
+    @pytest.mark.asyncio
+    async def test_valid_header_is_preserved_through_asgi(self):
+        # Sanity check: a benign value must round-trip unchanged end-to-end,
+        # confirming the sanitiser does not over-reach onto clean input.
+        resp_cid, ctx_cid = await self._drive(b"abc-123-from-client")
+        assert resp_cid == "abc-123-from-client"
+        assert ctx_cid == "abc-123-from-client"
 
 
 class TestNonHttpPassthrough:
