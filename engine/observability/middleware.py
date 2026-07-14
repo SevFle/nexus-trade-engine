@@ -66,6 +66,13 @@ if TYPE_CHECKING:
 
 CORRELATION_HEADER = "X-Correlation-Id"
 MAX_CORRELATION_ID_LENGTH = 128
+# Canonical lowercased-bytes form of the default header name. ASGI
+# guarantees header names arrive lowercased on ``scope['headers']``, so the
+# middleware compares against exactly these bytes. Exposed at module level
+# as the single source of truth so tests can import the real attribute
+# instead of re-deriving it (which risks drifting from the middleware's
+# own casing).
+_HEADER_NAME_BYTES = CORRELATION_HEADER.lower().encode("latin-1")
 # Visible ASCII only — blocks CR/LF (response splitting), control chars
 # (terminal-control corruption), non-ASCII (header smuggling).
 _VALID_CORRELATION_ID = re.compile(r"^[\x21-\x7e]{1,128}$")
@@ -97,7 +104,15 @@ class CorrelationIdMiddleware:
     def __init__(self, app: ASGIApp, header_name: str = CORRELATION_HEADER) -> None:
         self.app = app
         self.header_name = header_name
-        self._header_name_bytes = header_name.lower().encode("latin-1")
+        # Reuse the module-level canonical bytes for the default header so the
+        # middleware and any external consumer (tests, other middleware) share
+        # one vetted byte string. A custom ``header_name`` still gets its own
+        # lowercased form.
+        self._header_name_bytes = (
+            _HEADER_NAME_BYTES
+            if header_name == CORRELATION_HEADER
+            else header_name.lower().encode("latin-1")
+        )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -181,6 +196,7 @@ class CorrelationIdMiddleware:
 
 __all__ = [
     "CORRELATION_HEADER",
+    "_HEADER_NAME_BYTES",
     "CorrelationIdMiddleware",
     "_safe_correlation_id",
     "safe_correlation_id",
