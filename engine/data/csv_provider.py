@@ -12,6 +12,10 @@ from typing import Any
 import polars as pl
 import structlog
 
+from engine.data.historical_cache import (
+    HistoricalDataCache,
+    fingerprint_kwargs,
+)
 from engine.data.provider import (
     OHLCV_COLUMNS,
     DataValidationError,
@@ -80,9 +84,15 @@ class CSVHistoricalDataProvider(IDataProvider):
         *,
         timestamp_format: str | None = None,
         timestamp_unit: str | None = "auto",
+        cache: HistoricalDataCache | None = None,
     ) -> None:
         self.timestamp_format = timestamp_format
         self.timestamp_unit = self._normalise_unit(timestamp_unit)
+        #: Optional LRU cache for parsed frames. When set, repeated loads of
+        #: an unchanged file are served from memory; editing the file changes
+        #: its on-disk fingerprint and forces a refresh. ``None`` (the default)
+        #: preserves the historic always-read-from-disk behaviour.
+        self._cache = cache
 
     # -- IDataProvider ---------------------------------------------------
 
@@ -116,7 +126,20 @@ class CSVHistoricalDataProvider(IDataProvider):
         Validates the header first, reads the full file, lowercases column
         names, coerces ``timestamp`` to a tz-aware ``Datetime``, and sorts
         ascending. Extra ``**kwargs`` are forwarded to :func:`polars.read_csv`.
+
+        When a :class:`~engine.data.historical_cache.HistoricalDataCache` was
+        supplied at construction, a hit returns a *clone* of the cached frame
+        and the file is not re-read; a miss loads, normalises, stores, and
+        returns the frame. The cache key folds in the file's on-disk
+        fingerprint plus this provider's options and ``kwargs``, so a file
+        edited on disk or reloaded with different options always misses.
         """
+        cache_key = self._cache_key(source, kwargs)
+        if cache_key is not None:
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                return cached
+
         self.validate(source, **kwargs)
         df = pl.read_csv(source, **kwargs)
 
@@ -126,7 +149,34 @@ class CSVHistoricalDataProvider(IDataProvider):
             df = df.rename(rename_map)
 
         df = self._coerce_timestamp(df)
-        return df.sort("timestamp")
+        df = df.sort("timestamp")
+
+        if cache_key is not None:
+            self._cache.put(cache_key, df)
+        return df
+
+    def _cache_key(
+        self,
+        source: str | Path,
+        kwargs: dict[str, Any],
+    ) -> str | None:
+        """Return the cache key for this load, or ``None`` when caching is off.
+
+        The key is sensitive to everything that affects the parsed output:
+        the resolved file path + its mtime/size fingerprint, the provider's
+        ``timestamp_unit`` / ``timestamp_format``, and a stable digest of the
+        forwarded ``kwargs`` (folded through :func:`fingerprint_kwargs` because
+        values like ``schema_overrides`` are not JSON-primitives).
+        """
+        if self._cache is None:
+            return None
+        return HistoricalDataCache.make_key(
+            self.name,
+            source,
+            unit=self.timestamp_unit,
+            fmt=self.timestamp_format,
+            kw=fingerprint_kwargs(kwargs),
+        )
 
     # -- helpers ---------------------------------------------------------
 
@@ -317,4 +367,8 @@ def _is_numeric(dtype: pl.DataType) -> bool:
     return bool(getattr(dtype, "is_numeric", lambda: False)())
 
 
-__all__ = ["TIMESTAMP_UNITS", "CSVHistoricalDataProvider"]
+__all__ = [
+    "TIMESTAMP_UNITS",
+    "CSVHistoricalDataProvider",
+    "HistoricalDataCache",
+]
