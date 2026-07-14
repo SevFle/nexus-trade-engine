@@ -22,14 +22,18 @@ For *why* we made specific structural choices, see
    `PerformanceReport`), composite strategy scoring, lifecycle/version
    governance, and the parameter optimizer. Split out of
    `core-domains.md` to stay under the 500-line cap.
-4. **[database.md](database.md)** — table inventory, migration policy,
+4. **[data-providers.md](data-providers.md)** — the market-data provider
+   layer: the `DataProviderRegistry` routing/fail-over model, the
+   `IDataProvider` capability contract, the six concrete vendors, and
+   the layered symbol-validation security invariant.
+5. **[database.md](database.md)** — table inventory, migration policy,
    data ownership.
-5. **[plugins.md](plugins.md)** — plugin SDK and the registry that
+6. **[plugins.md](plugins.md)** — plugin SDK and the registry that
    loads strategies / data providers / execution backends at runtime.
-6. **[`docs/operations/`](../operations/)** — how the running system is
+7. **[`docs/operations/`](../operations/)** — how the running system is
    monitored, backed up, and recovered. Lives next to the runbooks
    that on-call uses.
-7. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
+8. **[`docs/adr/`](../adr/README.md)** — architecture decision records.
    Read these before proposing a change that contradicts them.
 
 ## Existing diagrams
@@ -43,8 +47,8 @@ components in our docs site:
   the registry.
 
 The flat-markdown architecture docs (`overview.md`, `core-domains.md`,
-`analytics.md`, `database.md`, `plugins.md`) are the source of truth;
-the diagrams are a presentation layer on top.
+`analytics.md`, `data-providers.md`, `database.md`, `plugins.md`) are
+the source of truth; the diagrams are a presentation layer on top.
 
 ## Conventions
 

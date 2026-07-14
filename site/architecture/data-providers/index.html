@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/operations/dr-drill-checklist/">
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/architecture/data-providers/">
       
       
-        <link rel="prev" href="../backup-and-recovery/">
+        <link rel="prev" href="../multi-strategy/">
       
       
-        <link rel="next" href="../load-testing/">
+        <link rel="next" href="../database/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>DR drill checklist - Nexus Trade Engine</title>
+        <title>Data providers - Nexus Trade Engine</title>
       
     
     
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#dr-drill-checklist" class="md-skip">
+        <a href="#data-providers" class="md-skip">
           Skip to content
         </a>
       
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              DR drill checklist
+              Data providers
             
           </span>
         </div>
@@ -247,11 +247,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../architecture/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -335,13 +337,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../slos/" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../operations/slos/" class="md-tabs__link">
           
   
   
@@ -497,6 +497,8 @@
       
   
   
+    
+  
   
   
     
@@ -524,22 +526,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../architecture/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -557,13 +560,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -583,7 +586,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/overview/" class="md-nav__link">
+      <a href="../overview/" class="md-nav__link">
         
   
   
@@ -611,7 +614,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/core-domains/" class="md-nav__link">
+      <a href="../core-domains/" class="md-nav__link">
         
   
   
@@ -639,7 +642,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/analytics/" class="md-nav__link">
+      <a href="../analytics/" class="md-nav__link">
         
   
   
@@ -667,7 +670,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/multi-strategy/" class="md-nav__link">
+      <a href="../multi-strategy/" class="md-nav__link">
         
   
   
@@ -692,10 +695,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../architecture/data-providers/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data providers
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -711,6 +741,186 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-a-provider-layer-at-all" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why a provider layer at all
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#module-map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Module map
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-a-request-is-routed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How a request is routed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#capability-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Capability model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#provider-inventory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provider inventory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-cutting-infrastructure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-cutting infrastructure
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cross-cutting infrastructure">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resilience-_resiliencepy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resilience (_resilience.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#response-cache-_cachepy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Response cache (_cache.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shared-http-client-_httppy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared HTTP client (_http.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#symbol-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Symbol validation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#health-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Health checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-to-put-new-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where to put new code
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -723,7 +933,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/database/" class="md-nav__link">
+      <a href="../database/" class="md-nav__link">
         
   
   
@@ -751,7 +961,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/plugins/" class="md-nav__link">
+      <a href="../plugins/" class="md-nav__link">
         
   
   
@@ -1555,8 +1765,6 @@
       
   
   
-    
-  
   
   
     
@@ -1580,23 +1788,22 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../runbooks/" class="md-nav__link ">
+            <a href="../../operations/runbooks/" class="md-nav__link ">
               
   
   
@@ -1614,13 +1821,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1638,7 +1845,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../slos/" class="md-nav__link">
+      <a href="../../operations/slos/" class="md-nav__link">
         
   
   
@@ -1666,7 +1873,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../backup-and-recovery/" class="md-nav__link">
+      <a href="../../operations/backup-and-recovery/" class="md-nav__link">
         
   
   
@@ -1691,37 +1898,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    DR drill checklist
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../operations/dr-drill-checklist/" class="md-nav__link">
         
   
   
@@ -1737,131 +1917,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#pre-drill-t-1-day" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Pre-Drill (T-1 day)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#drill-t0" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Drill (T+0)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Drill (T+0)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#1-restore-from-logical-dump-15-min-target" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        1. Restore from logical dump (15 min target)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#2-point-in-time-recovery-45-min-target" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2. Point-in-time recovery (45 min target)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#3-application-bring-up" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3. Application bring-up
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#4-tear-down" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        4. Tear down
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#post-drill-t1-day" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Post-Drill (T+1 day)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-to-practice-quarterly" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What to Practice Quarterly
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#failure-modes-to-force" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Failure Modes to Force
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1874,7 +1929,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../load-testing/" class="md-nav__link">
+      <a href="../../operations/load-testing/" class="md-nav__link">
         
   
   
@@ -1926,13 +1981,10 @@
       
       
         
-          
-          
-        
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
@@ -1941,7 +1993,7 @@
         <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_6" >
         
           
-          <label class="md-nav__link" for="__nav_6_6" id="__nav_6_6_label" tabindex="">
+          <label class="md-nav__link" for="__nav_6_6" id="__nav_6_6_label" tabindex="0">
             
   
   
@@ -1977,7 +2029,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../runbooks/api-availability/" class="md-nav__link">
+      <a href="../../operations/runbooks/api-availability/" class="md-nav__link">
         
   
   
@@ -2005,7 +2057,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../runbooks/api-latency/" class="md-nav__link">
+      <a href="../../operations/runbooks/api-latency/" class="md-nav__link">
         
   
   
@@ -2033,7 +2085,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../runbooks/auth-mfa/" class="md-nav__link">
+      <a href="../../operations/runbooks/auth-mfa/" class="md-nav__link">
         
   
   
@@ -2061,7 +2113,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../runbooks/backtest-submit/" class="md-nav__link">
+      <a href="../../operations/runbooks/backtest-submit/" class="md-nav__link">
         
   
   
@@ -2089,7 +2141,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../runbooks/webhook-delivery/" class="md-nav__link">
+      <a href="../../operations/runbooks/webhook-delivery/" class="md-nav__link">
         
   
   
@@ -2117,7 +2169,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../runbooks/task-pipeline/" class="md-nav__link">
+      <a href="../../operations/runbooks/task-pipeline/" class="md-nav__link">
         
   
   
@@ -2145,7 +2197,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../runbooks/common-issues/" class="md-nav__link">
+      <a href="../../operations/runbooks/common-issues/" class="md-nav__link">
         
   
   
@@ -2517,10 +2569,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#pre-drill-t-1-day" class="md-nav__link">
+  <a href="#why-a-provider-layer-at-all" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Pre-Drill (T-1 day)
+        Why a provider layer at all
       
     </span>
   </a>
@@ -2528,22 +2580,66 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#drill-t0" class="md-nav__link">
+  <a href="#module-map" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Drill (T+0)
+        Module map
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Drill (T+0)">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-a-request-is-routed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How a request is routed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#capability-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Capability model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#provider-inventory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provider inventory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-cutting-infrastructure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-cutting infrastructure
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cross-cutting infrastructure">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#1-restore-from-logical-dump-15-min-target" class="md-nav__link">
+  <a href="#resilience-_resiliencepy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Restore from logical dump (15 min target)
+        Resilience (_resilience.py)
       
     </span>
   </a>
@@ -2551,10 +2647,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#2-point-in-time-recovery-45-min-target" class="md-nav__link">
+  <a href="#response-cache-_cachepy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Point-in-time recovery (45 min target)
+        Response cache (_cache.py)
       
     </span>
   </a>
@@ -2562,21 +2658,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#3-application-bring-up" class="md-nav__link">
+  <a href="#shared-http-client-_httppy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Application bring-up
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#4-tear-down" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        4. Tear down
+        Shared HTTP client (_http.py)
       
     </span>
   </a>
@@ -2589,10 +2674,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#post-drill-t1-day" class="md-nav__link">
+  <a href="#symbol-validation" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Post-Drill (T+1 day)
+        Symbol validation
       
     </span>
   </a>
@@ -2600,10 +2685,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-to-practice-quarterly" class="md-nav__link">
+  <a href="#configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What to Practice Quarterly
+        Configuration
       
     </span>
   </a>
@@ -2611,10 +2696,32 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#failure-modes-to-force" class="md-nav__link">
+  <a href="#health-checks" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Failure Modes to Force
+        Health checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-to-put-new-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where to put new code
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
       
     </span>
   </a>
@@ -2641,103 +2748,420 @@
   
 
 
-<h1 id="dr-drill-checklist">DR Drill Checklist<a class="headerlink" href="#dr-drill-checklist" title="Permanent link">&para;</a></h1>
-<p>Run this drill <strong>at least once per quarter</strong>. The goal is not to "pass" — it
-is to find the gap before a real incident does. Record every drill (date,
-operator, observations, RTO actually achieved) in your operations log.</p>
-<h2 id="pre-drill-t-1-day">Pre-Drill (T-1 day)<a class="headerlink" href="#pre-drill-t-1-day" title="Permanent link">&para;</a></h2>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Pick a date with at least one other engineer available as a co-pilot.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Notify stakeholders that a drill will run. State that <strong>no production
-      writes will be affected</strong> — the drill restores into a sandbox.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Confirm the latest base backup is &lt; 36 hours old.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Confirm WAL archive is current (no <code>archive_failures_total</code>).</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Confirm the Fernet key version in the secrets vault matches what
-      production is using.</li>
-</ul>
-<h2 id="drill-t0">Drill (T+0)<a class="headerlink" href="#drill-t0" title="Permanent link">&para;</a></h2>
-<h3 id="1-restore-from-logical-dump-15-min-target">1. Restore from logical dump (15 min target)<a class="headerlink" href="#1-restore-from-logical-dump-15-min-target" title="Permanent link">&para;</a></h3>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Pull the most recent logical dump from the bucket.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Restore into a sandbox Postgres at the same major version.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Run <code>alembic current</code> and confirm the schema head matches production.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Run a representative read query (e.g. <code>SELECT count(*) FROM users</code>).</li>
-</ul>
-<h3 id="2-point-in-time-recovery-45-min-target">2. Point-in-time recovery (45 min target)<a class="headerlink" href="#2-point-in-time-recovery-45-min-target" title="Permanent link">&para;</a></h3>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Pick a recovery target ~30 minutes in the past (real-clock-aligned).</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Run <code>scripts/ops/pg_pitr_restore.sh</code> against the sandbox.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Confirm Postgres reaches <code>recovery_target</code> and is promoted.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Verify the recovered DB does <strong>not</strong> contain rows committed after
-      the recovery target. Pick a row inserted between the target and
-      "now" and confirm its absence.</li>
-</ul>
-<h3 id="3-application-bring-up">3. Application bring-up<a class="headerlink" href="#3-application-bring-up" title="Permanent link">&para;</a></h3>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Repoint a sandbox engine instance at the recovered DB.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Hit <code>/health</code> — expect <code>200 {status:"ok"}</code>.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Log in with an MFA-enabled test user. Confirm the code is accepted
-      (verifies the Fernet key recovery path).</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Hit a representative read (e.g. <code>GET /api/v1/strategies</code>) and a
-      representative write (e.g. <code>POST /api/v1/webhooks</code>) and confirm the
-      write lands.</li>
-</ul>
-<h3 id="4-tear-down">4. Tear down<a class="headerlink" href="#4-tear-down" title="Permanent link">&para;</a></h3>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Drop the sandbox database and instance.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Remove the temporary IAM credentials used for the drill.</li>
-</ul>
-<h2 id="post-drill-t1-day">Post-Drill (T+1 day)<a class="headerlink" href="#post-drill-t1-day" title="Permanent link">&para;</a></h2>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Record actual RTO measured during the drill.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Open issues for every gap found (missing alerts, slow steps, broken
-      docs, undocumented manual steps). Tag them <code>priority-high</code> if they
-      would have extended RTO during a real incident.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Update <code>docs/operations/backup-and-recovery.md</code> with anything you
-      learned.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Confirm no production resources were left running.</li>
-</ul>
-<h2 id="what-to-practice-quarterly">What to Practice Quarterly<a class="headerlink" href="#what-to-practice-quarterly" title="Permanent link">&para;</a></h2>
-<p>Rotate the scenario each quarter so the team hits every failure mode
-within a year:</p>
+<h1 id="data-providers">Data providers<a class="headerlink" href="#data-providers" title="Permanent link">&para;</a></h1>
+<p>The data layer is the one subsystem that talks to the outside world on
+the read path. Every OHLCV bar, quote, options chain, and order book
+the engine ever sees comes through it. This document describes how that
+layer is structured, how a request is routed, and the invariants it
+guarantees — including the security-critical symbol-validation rule.</p>
+<p>All of this lives under <a href="../../engine/data/providers/"><code>engine/data/providers/</code></a>.
+The trading-domain side of market data (the <code>MarketState</code> handed to
+strategies) is covered in <a href="../core-domains/"><code>core-domains.md</code></a>; this
+doc is the <em>provider</em> view.</p>
+<h2 id="why-a-provider-layer-at-all">Why a provider layer at all<a class="headerlink" href="#why-a-provider-layer-at-all" title="Permanent link">&para;</a></h2>
+<p>Three forces shape the design:</p>
+<ol>
+<li><strong>Vendor lock-in is the enemy of a backtest engine.</strong> A strategy
+   that backtests on Yahoo data must be runnable against Polygon in
+   production without touching strategy code. The <code>IDataProvider</code>
+   abstract base (<a href="../../engine/data/providers/base.py"><code>base.py</code></a>) is
+   the seam: every concrete adapter returns the <em>same</em> canonical shape
+   (a <code>pandas.DataFrame</code> with lowercase <code>open/high/low/close/volume</code>
+   on an ascending UTC <code>DatetimeIndex</code>), so callers never branch on
+   "which vendor am I talking to".</li>
+<li><strong>Every vendor fails differently.</strong> A rate-limit is transient; a
+   bad symbol is fatal. The error hierarchy
+   (<code>TransientProviderError</code> / <code>FatalProviderError</code> /
+   <code>CapabilityNotSupportedError</code>) lets the registry make an
+   <em>automated</em> fail-over decision instead of a <code>try/except: pass</code>.</li>
+<li><strong>Vendors are untrusted input handlers.</strong> Symbols are user-supplied
+   and interpolated into provider URL paths and cache keys. The layer
+   enforces a single symbol grammar <em>before</em> any network call so a
+   hostile symbol can never become a path-traversal or URL-injection
+   vector. See <a href="#symbol-validation">Symbol validation</a> below.</li>
+</ol>
+<h2 id="module-map">Module map<a class="headerlink" href="#module-map" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Quarter</th>
-<th>Scenario</th>
+<th>File</th>
+<th>Responsibility</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Q1</td>
-<td>Logical dump restore to fresh DB.</td>
+<td><a href="../../engine/data/providers/base.py"><code>base.py</code></a></td>
+<td><code>IDataProvider</code> ABC, <code>DataProviderCapability</code>, <code>AssetClass</code> enum, <code>RateLimit</code>, the <code>ProviderError</code> hierarchy, <code>HealthCheckResult</code>. The canonical OHLCV column tuple and the symbol grammar live here.</td>
 </tr>
 <tr>
-<td>Q2</td>
-<td>PITR to a timestamp.</td>
+<td><a href="../../engine/data/providers/registry.py"><code>registry.py</code></a></td>
+<td><code>DataProviderRegistry</code> — holds configured providers, routes a call to the right one(s) by asset class + capability + priority, and implements fail-over.</td>
 </tr>
 <tr>
-<td>Q3</td>
-<td>PITR to a transaction id (read from logs).</td>
+<td><a href="../../engine/data/providers/config.py"><code>config.py</code></a></td>
+<td>YAML loader (<code>configure_from_file</code>) + <code>build_provider</code> factory. Resolves <code>${VAR}</code> placeholders and <code>NEXUS_&lt;PROVIDER&gt;_&lt;KEY&gt;</code> overrides.</td>
 </tr>
 <tr>
-<td>Q4</td>
-<td>Full DR — primary destroyed, restore in a different region.</td>
+<td><a href="../../engine/data/providers/_http.py"><code>_http.py</code></a></td>
+<td>Shared async HTTP client: <code>validate_symbol</code> / <code>encode_path_segment</code>, response-size guard, redaction of bearer-like strings from logs.</td>
+</tr>
+<tr>
+<td><a href="../../engine/data/providers/_resilience.py"><code>_resilience.py</code></a></td>
+<td><code>TokenBucket</code> (per-provider throttle) + <code>call_with_retry</code> (exponential backoff + jitter on transient errors).</td>
+</tr>
+<tr>
+<td><a href="../../engine/data/providers/_cache.py"><code>_cache.py</code></a></td>
+<td><code>ProviderCache</code> — optional Valkey/Redis response cache with an 8 MiB per-payload cap.</td>
+</tr>
+<tr>
+<td><a href="../../engine/data/providers/yahoo.py"><code>yahoo.py</code></a>, <a href="../../engine/data/providers/polygon.py"><code>polygon.py</code></a>, <a href="../../engine/data/providers/alpaca_data.py"><code>alpaca_data.py</code></a>, <a href="../../engine/data/providers/binance.py"><code>binance.py</code></a>, <a href="../../engine/data/providers/coingecko.py"><code>coingecko.py</code></a>, <a href="../../engine/data/providers/oanda.py"><code>oanda.py</code></a></td>
+<td>Concrete adapters.</td>
 </tr>
 </tbody>
 </table>
-<p>If you only ever rehearse Q1, you have not actually tested PITR.</p>
-<h2 id="failure-modes-to-force">Failure Modes to Force<a class="headerlink" href="#failure-modes-to-force" title="Permanent link">&para;</a></h2>
-<p>When you have time, deliberately introduce these and verify the runbook
-still works:</p>
+<h2 id="how-a-request-is-routed">How a request is routed<a class="headerlink" href="#how-a-request-is-routed" title="Permanent link">&para;</a></h2>
+<p>The registry is the only thing the API and backtest runner talk to —
+they never import a concrete provider. A <code>get_ohlcv(symbol, …)</code> call
+walks this path (mirrored for quote / chain / orderbook):</p>
+<pre class="mermaid"><code>flowchart TD
+    REQ["caller&lt;br/&gt;(route or backtest runner)"] --&gt; REG["DataProviderRegistry.get_ohlcv"]
+    REG --&gt; CAND["candidates_for(asset_class, capability)&lt;br/&gt;ordered by priority"]
+    CAND --&gt; TRY{"try provider N"}
+    TRY --&gt;|TransientProviderError / TimeoutError| RETRY["call_with_retry&lt;br/&gt;backoff + jitter"]
+    RETRY --&gt; TRY
+    TRY --&gt;|FatalProviderError / empty frame| NEXT["fail-over to N+1"]
+    NEXT --&gt; TRY
+    TRY --&gt;|ok| RES["return canonical DataFrame"]
+    TRY --&gt;|all candidates exhausted| NOPE["NoProviderAvailableError"]</code></pre>
+<p>Routing rules (see the registry module docstring for the canonical
+statement):</p>
+<ol>
+<li><strong>Candidate set</strong> = providers whose <code>asset_classes</code> contains the
+   requested class, whose <code>DataProviderCapability</code> advertises the
+   requested operation, and that are <code>enabled</code>. Ordered by <code>priority</code>
+   ascending (lower number = higher priority); ties break
+   alphabetically by name for determinism.</li>
+<li><strong>Try in order.</strong> Each adapter runs through <code>call_with_retry</code>, which
+   retries only <code>TransientProviderError</code> / <code>TimeoutError</code> with
+   exponential backoff + jitter (the <code>TokenBucket</code> throttles the
+   <em>outbound</em> call rate below the vendor's quota so retries don't make
+   rate-limiting worse).</li>
+<li><strong>Fail-over on fatal or empty.</strong> A <code>FatalProviderError</code> (bad symbol,
+   bad credentials, unsupported asset) or a <code>CapabilityNotSupportedError</code>
+   skips to the next candidate. A <strong>non-error but empty</strong> OHLCV frame
+   is treated as a <em>soft miss</em> and also fails over — e.g. Yahoo
+   returning <code>[]</code> for a delisted symbol still lets Polygon try. This is
+   why the empty check (<code>_is_empty_dataframe</code>) exists in the registry
+   rather than in the adapter.</li>
+<li><strong>Surface the cause.</strong> The final <code>NoProviderAvailableError</code> chains
+   the last exception as its <code>__cause__</code> so the operator can see <em>why</em>
+   every candidate failed, not just <em>that</em> they did.</li>
+</ol>
+<p>This fail-over posture is also what the REST error mapping in
+<a href="../../api-reference/#market-data"><code>api-reference.md</code></a> reflects:
+<code>TransientProviderError</code>/<code>TimeoutError</code> → <code>503</code>,
+<code>NoProviderAvailableError</code> → <code>503</code>, <code>CapabilityNotSupportedError</code> →
+<code>501</code>, <code>FatalProviderError</code> → <code>400</code>.</p>
+<h2 id="capability-model">Capability model<a class="headerlink" href="#capability-model" title="Permanent link">&para;</a></h2>
+<p><code>DataProviderCapability</code> (a frozen dataclass) is the static contract a
+provider advertises. The registry consults it <strong>before</strong> dispatching so
+an adapter that doesn't declare <code>supports_options_chain</code> is never asked
+for one:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>Provider identity (matches the YAML key).</td>
+</tr>
+<tr>
+<td><code>asset_classes</code></td>
+<td><code>frozenset[AssetClass]</code> it can serve.</td>
+</tr>
+<tr>
+<td><code>supports_realtime</code> / <code>supports_options_chain</code> / <code>supports_orderbook</code> / <code>supports_streaming</code></td>
+<td>Capability flags used as registry predicates.</td>
+</tr>
+<tr>
+<td><code>max_history_days</code></td>
+<td>Hard ceiling the route clamps the <code>period</code> to.</td>
+</tr>
+<tr>
+<td><code>min_interval</code></td>
+<td>Smallest bar interval the vendor offers (<code>1d</code>, <code>1m</code>, …).</td>
+</tr>
+<tr>
+<td><code>rate_limit</code></td>
+<td><code>RateLimit(requests_per_minute, burst)</code>; <code>0</code> = unlimited. Feeds the <code>TokenBucket</code>.</td>
+</tr>
+<tr>
+<td><code>requires_api_key</code></td>
+<td>Whether the config builder should warn if no key is present.</td>
+</tr>
+</tbody>
+</table>
+<p><code>AssetClass</code> is a <code>StrEnum</code> with six members: <code>equity</code>, <code>etf</code>,
+<code>options</code>, <code>forex</code>, <code>crypto</code>, <code>futures</code>. A request pins one explicitly
+via the <code>asset_class</code> query param; if omitted, the route infers it from
+the symbol shape in <a href="../../engine/api/routes/market_data.py"><code>market_data.py:detect_asset_class</code></a>
+(<code>EURUSD=X → FOREX</code>, <code>BTC/USD → CRYPTO</code>, default <code>EQUITY</code>).</p>
+<h2 id="provider-inventory">Provider inventory<a class="headerlink" href="#provider-inventory" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Asset classes</th>
+<th>API key?</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>yahoo</code></td>
+<td>equity, etf</td>
+<td>no</td>
+<td>The free, no-key default. Lowest trust for production market data but perfect for backtests and dev.</td>
+</tr>
+<tr>
+<td><code>polygon</code></td>
+<td>equity, options, forex</td>
+<td>yes</td>
+<td>REST aggregator; rich options chain.</td>
+</tr>
+<tr>
+<td><code>alpaca</code></td>
+<td>equity</td>
+<td>yes (key + secret)</td>
+<td>Read-only market data sibling of the <code>AlpacaTradingClient</code> broker adapter.</td>
+</tr>
+<tr>
+<td><code>binance</code></td>
+<td>crypto</td>
+<td>optional (key + secret)</td>
+<td>Public endpoints work without a key; authenticated endpoints raise the rate ceiling.</td>
+</tr>
+<tr>
+<td><code>coingecko</code></td>
+<td>crypto</td>
+<td>no</td>
+<td>No key; heavily rate-limited, so it sits at a low priority.</td>
+</tr>
+<tr>
+<td><code>oanda</code></td>
+<td>forex</td>
+<td>yes</td>
+<td><code>environment: practice</code> for the sandbox.</td>
+</tr>
+</tbody>
+</table>
+<p>Adapters are constructed by the <code>build_provider</code> factory in
+<a href="../../engine/data/providers/config.py"><code>config.py</code></a>, which is the
+single place that maps a YAML provider name to a constructor. Adding a
+new provider therefore means: (1) a new <code>*DataProvider(IDataProvider)</code>
+module, (2) one branch in <code>build_provider</code>, (3) an entry in the YAML.
+The registry and routing code never change.</p>
+<blockquote>
+<p><strong>The "CSV provider" in commit messages.</strong> Several recent security
+commits (gh#1440) reference a "CSV provider". That work hardened the
+<em>shared</em> symbol grammar and column map in <code>base.py</code> that any
+local-file provider (CSV included) inherits — there is no separate
+<code>csv.py</code> adapter registered in the factory today. If you add one,
+route its file access through the same <code>validate_symbol</code> guard so a
+symbol like <code>../../etc/passwd</code> can never reach the filesystem.</p>
+</blockquote>
+<h2 id="cross-cutting-infrastructure">Cross-cutting infrastructure<a class="headerlink" href="#cross-cutting-infrastructure" title="Permanent link">&para;</a></h2>
+<h3 id="resilience-_resiliencepy">Resilience (<code>_resilience.py</code>)<a class="headerlink" href="#resilience-_resiliencepy" title="Permanent link">&para;</a></h3>
+<p>Every adapter wraps its network calls in <code>call_with_retry</code>:</p>
 <ul>
-<li>The Fernet key version differs between the running engine and what is
-  in the vault.</li>
-<li>The latest base backup is corrupt — fall back to the prior one.</li>
-<li>The WAL bucket is missing a segment — confirm the alert fires before
-  you have to recover.</li>
-<li>Alembic head differs between dump and code — confirm the operator
-  knows whether to upgrade or downgrade.</li>
+<li><strong>Retry only on transient failures</strong> — <code>TransientProviderError</code>,
+  <code>TimeoutError</code>. A <code>FatalProviderError</code> (bad credentials, 4xx) is
+  returned immediately; retrying a fatal error would just burn quota.</li>
+<li><strong>Exponential backoff + jitter</strong> — the sleep grows exponentially and
+  is perturbed by jitter so a cohort of retries doesn't synchronise
+  into a thundering herd against the vendor.</li>
+<li><strong>Outbound throttling</strong> — a per-provider <code>TokenBucket</code> (capacity =
+  <code>burst</code>, refill = <code>requests_per_minute</code>) caps the outbound rate
+  <em>below</em> the vendor's published limit, so the engine never trips the
+  vendor's own limiter. <code>rate_limit.requests_per_minute=0</code> disables
+  the bucket.</li>
+</ul>
+<h3 id="response-cache-_cachepy">Response cache (<code>_cache.py</code>)<a class="headerlink" href="#response-cache-_cachepy" title="Permanent link">&para;</a></h3>
+<p><code>ProviderCache</code> is an <em>optional</em> Valkey/Redis-backed cache. Adapters
+opt in per call. Design choices worth knowing:</p>
+<ul>
+<li><strong>Keyed by a hash of the call parameters</strong>, not the raw string, so
+  <code>("1", 1)</code> and <code>(1, 1)</code> can't collide and a long symbol can't blow
+  up the key size.</li>
+<li><strong>8 MiB per-payload cap</strong> (<code>_MAX_PAYLOAD_BYTES</code>). An oversized frame
+  is refused (<code>cache.refuse_oversized_set</code>) rather than cached — a
+  hostile or malformed vendor reply can never OOM the cache node.</li>
+<li><strong>Graceful degradation.</strong> If Valkey is unreachable, the cache logs
+  <code>cache.redis_unavailable</code> and the adapter proceeds uncached. The
+  <em>trading path</em> must never depend on the cache being up.</li>
+</ul>
+<h3 id="shared-http-client-_httppy">Shared HTTP client (<code>_http.py</code>)<a class="headerlink" href="#shared-http-client-_httppy" title="Permanent link">&para;</a></h3>
+<p>One async <code>httpx</code>-based client backs the REST adapters. Two
+defensive behaviours live here for <em>every</em> vendor call:</p>
+<ul>
+<li><strong>Response-size guard.</strong> The client streams the body and bails once
+  it exceeds the cap, so a hostile/malformed vendor reply can't buffer
+  into memory.</li>
+<li><strong>Log redaction.</strong> Long alphanumeric runs (bearer tokens, HMAC
+  signatures) are scrubbed from structured logs so a leaked header
+  can't land in the log sink.</li>
+</ul>
+<h2 id="symbol-validation">Symbol validation<a class="headerlink" href="#symbol-validation" title="Permanent link">&para;</a></h2>
+<p>Symbols are the single user-controlled value that flows deep into the
+data path — into provider URL paths (<code>f"/v2/aggs/ticker/{symbol}/..."</code>)
+and into cache keys. The layer therefore enforces <strong>one</strong> symbol
+grammar, in two places, so a hostile value can never reach a network or
+filesystem boundary unsanitised.</p>
+<p><strong>The grammar</strong> (<a href="../../engine/data/providers/base.py"><code>base.py:SYMBOL_PATTERN</code></a>):</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>^[A-Za-z0-9._=^-]{1,32}$
+</span></code></pre></div>
+<p>The character class is deliberately <em>narrow</em>. It permits alphanumerics
+plus <code>.</code> (share classes like <code>BRK.B</code>), <code>_</code>, <code>=</code> (Yahoo forex like
+<code>EURUSD=X</code>), <code>^</code> (Yahoo indices like <code>^GSPC</code>), and <code>-</code> (placed last so
+it is a literal hyphen, not a range). Critically, it <strong>excludes <code>/</code></strong>
+(a URL path separator) and therefore rejects any <code>..</code> traversal by
+construction — a symbol like <code>../../etc/passwd</code> cannot match.</p>
+<p><strong>Enforcement is layered:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Where</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Route edge</td>
+<td><a href="../../engine/api/routes/market_data.py"><code>market_data.py:_validate_symbol</code></a></td>
+<td>Strips whitespace, rejects <code>..</code>, then <code>re.fullmatch</code> (not <code>match</code>) against the pattern so a trailing newline can't satisfy the <code>$</code> anchor and slip an unsanitised value into logs or response echoes. Returns <code>400 Invalid symbol format</code>.</td>
+</tr>
+<tr>
+<td>Provider edge</td>
+<td><a href="../../engine/data/providers/_http.py"><code>_http.py:validate_symbol</code></a></td>
+<td>Rejects non-strings, rejects any symbol containing <code>/</code> or <code>..</code> <em>before</em> cosmetic rewriting, then <code>fullmatch</code>. Raises <code>FatalProviderError</code>.</td>
+</tr>
+<tr>
+<td>Path encoding</td>
+<td><a href="../../engine/data/providers/_http.py"><code>_http.py:encode_path_segment</code></a></td>
+<td><code>quote(validate_symbol(symbol), safe="")</code> — the single source of truth for how a symbol becomes a URL path segment.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Why two layers.</strong> Defence in depth. The route check protects the
+public API and produces a clean <code>400</code>; the provider check protects
+any <em>internal</em> caller (the MCP server, the backtest runner, a future
+CLI) that might construct a request without going through the HTTP
+route. The recent hardening (gh#1440) closed the gap where the
+pattern once admitted <code>/</code>, which would have let a symbol break out
+of its URL path segment. Both checks now run <code>fullmatch</code> so a
+partial-match bypass is impossible.</p>
+</blockquote>
+<p>This is the same class of "validate before you interpolate" invariant
+the strategy sandbox applies to filesystem paths
+(<a href="../plugins/"><code>plugins.md</code></a> layer 4). User input never reaches a
+filesystem or URL path without passing through a frozen grammar.</p>
+<h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
+<p>Providers are declared in a YAML file pointed at by
+<code>NEXUS_DATA_PROVIDERS_CONFIG</code> (see
+<a href="../../config/data_providers.example.yaml"><code>config/data_providers.example.yaml</code></a>).
+<code>configure_from_file</code> loads it at startup and registers every
+<code>enabled</code> provider with its priority and asset classes.</p>
+<p>Resolution order for each value (see the <code>config.py</code> module docstring):</p>
+<ol>
+<li><strong><code>${VAR}</code> placeholders</strong> inside the YAML are substituted from the
+   environment. A reference to an <em>unset</em> variable raises — silent
+   expansion to <code>""</code> would mask a forgotten <code>POLYGON_API_KEY</code> and was
+   flagged as security-relevant. Only keys in <code>EXPANDABLE_OPTION_KEYS</code>
+   (<code>api_key</code>, <code>api_secret</code>, <code>environment</code>, <code>passphrase</code>,
+   <code>account_id</code>) are eligible; structural fields (<code>priority</code>,
+   <code>asset_classes</code>) can never come from an arbitrary env var.</li>
+<li><strong><code>NEXUS_&lt;PROVIDER&gt;_&lt;KEY&gt;</code> override</strong> — an adapter-specific env var
+   wins over the YAML value, so secrets never need to live on disk.</li>
+<li>Lower <code>priority</code> wins; identical priorities tie-break alphabetically.
+   <code>enabled: false</code> keeps the entry visible to operators but skips
+   registration.</li>
+</ol>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">data_providers</span><span class="p">:</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">polygon</span><span class="p">:</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="nt">priority</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="nt">asset_classes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">equity</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">options</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">forex</span><span class="p p-Indicator">]</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${POLYGON_API_KEY}</span><span class="w">      </span><span class="c1"># resolved from the environment</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span><span class="nt">yahoo</span><span class="p">:</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">    </span><span class="nt">priority</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">99</span><span class="w">                     </span><span class="c1"># free, no key → fallback</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="nt">asset_classes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">equity</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">etf</span><span class="p p-Indicator">]</span>
+</span></code></pre></div>
+<blockquote>
+<p><strong>Secrets caveat.</strong> This is the same P1 noted in
+<a href="../../known-limitations/"><code>known-limitations.md</code></a>: provider secrets
+live in a file on disk read by the engine process. There is no
+Vault / Secrets Manager integration and no per-tenant secrets.
+Render the YAML at deploy time from your secrets manager and ship it
+as a read-only bind mount.</p>
+</blockquote>
+<p>The registry is async-safe and mutable at runtime, so a future
+hot-reload of the YAML (operator edits priorities, enables a new
+provider) can take effect without a restart — readers snapshot the
+registration dict before iterating, so a concurrent mutation never
+exposes a torn view.</p>
+<h2 id="health-checks">Health checks<a class="headerlink" href="#health-checks" title="Permanent link">&para;</a></h2>
+<p><code>IDataProvider.health_check()</code> returns a <code>HealthCheckResult(name,
+status, latency_ms, detail)</code> with <code>status ∈ {up, degraded, down}</code>. The
+<code>GET /health/providers</code> route (see
+<a href="../../api-reference/#health--observability"><code>api-reference.md</code></a>) fans
+this out across every registered provider so an operator can tell at a
+glance which vendor is degraded — the registry's fail-over hides a
+single degraded provider from callers, so <code>/health/providers</code> is often
+the <em>only</em> signal that a vendor is struggling.</p>
+<h2 id="where-to-put-new-code">Where to put new code<a class="headerlink" href="#where-to-put-new-code" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Adding…</th>
+<th>Goes in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A new vendor adapter</td>
+<td><code>engine/data/providers/&lt;vendor&gt;.py</code> implementing <code>IDataProvider</code>; one branch in <code>config.py:build_provider</code>; a YAML entry. Register its <code>DataProviderCapability</code> so the routing predicates work.</td>
+</tr>
+<tr>
+<td>A new capability (e.g. futures greeks)</td>
+<td>A flag on <code>DataProviderCapability</code> + a predicate the registry passes to <code>candidates_for</code>. Don't special-case by provider name in the registry.</td>
+</tr>
+<tr>
+<td>A new asset class</td>
+<td>A member of the <code>AssetClass</code> enum; update <code>detect_asset_class</code> if it should be inferable from a symbol shape.</td>
+</tr>
+<tr>
+<td>A cached endpoint</td>
+<td>Call <code>ProviderCache.set_dataframe</code>/<code>get_dataframe</code> from the adapter, with a TTL proportional to how stale the data may be. Keep the trading path uncached-degradable.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../core-domains/"><code>core-domains.md</code></a> — the <code>MarketState</code> and <code>MarketView</code>
+  types that consume provider output on the strategy path.</li>
+<li><a href="../../api-reference/#market-data"><code>api-reference.md</code></a> — the REST error
+  mapping for provider exceptions.</li>
+<li><a href="../plugins/"><code>plugins.md</code></a> — the (target) model where data providers
+  are a plugin kind; today they're YAML-registered, not filesystem-discovered.</li>
+<li><a href="../../known-limitations/"><code>known-limitations.md</code></a> — the secrets-on-disk
+  caveat and the "data providers" roadmap item.</li>
 </ul>
 
 
@@ -2776,7 +3200,7 @@ still works:</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../backup-and-recovery/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Backup &amp; recovery">
+          <a href="../multi-strategy/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Multi-strategy coordination">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -2786,20 +3210,20 @@ still works:</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Backup & recovery
+                Multi-strategy coordination
               </div>
             </div>
           </a>
         
         
           
-          <a href="../load-testing/" class="md-footer__link md-footer__link--next" aria-label="Next: Load testing">
+          <a href="../database/" class="md-footer__link md-footer__link--next" aria-label="Next: Database &amp; migrations">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Load testing
+                Database & migrations
               </div>
             </div>
             <div class="md-footer__button md-icon">
