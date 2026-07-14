@@ -1296,6 +1296,8 @@
       
         
       
+        
+      
     
     
     
@@ -1619,6 +1621,34 @@
     
   
     0010 — Static AST validation + TOCTOU-safe loading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0011-runtime-introspection-blocking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0011 — Runtime introspection / dunder blocking
   
 
     
@@ -2739,6 +2769,12 @@ something to stake a customer's data on.</p>
 <td><a href="../../engine/plugins/restricted_importer.py"><code>ImportValidator</code></a> walks the strategy's AST <strong>before</strong> compile/exec and rejects <code>import</code> of a blocked module, plus bare calls to <code>__import__</code>/<code>exec</code>/<code>eval</code>/<code>compile</code> and <code>importlib.import_module(…)</code>. An exact match in the blocked set can never be overridden by the allowlist. See <a href="../../adr/0010-static-ast-validation-toctou-loading/">ADR-0010</a>.</td>
 </tr>
 <tr>
+<td>0a. Runtime introspection blocking</td>
+<td>best-effort in-process</td>
+<td><strong>shipped</strong></td>
+<td><code>_BLOCKED_ATTRS</code> + <code>_restricted_getattr</code> (installed over <code>builtins.getattr</code> per evaluation) refuse the dynamic <code>getattr(obj, name)</code> form of every sandbox-escape dunder — type traversal (<code>__class__</code>/<code>__base__</code>/<code>__subclasses__</code>), function introspection (<code>__globals__</code>/<code>__code__</code>/<code>__closure__</code>), namespace access (<code>__builtins__</code>/<code>__dict__</code>), pickle gadget chains (<code>__reduce__</code>), module loading (<code>__loader__</code>/<code>__spec__</code>). <code>builtins.object</code> is swapped for <code>_RestrictedObject</code> so <code>object.__subclasses__()</code> raises. The 3-argument <code>getattr(obj, name, default)</code> contract is honoured (returns the caller's default, never the blocked value) so <code>inspect</code>/<code>dataclasses</code>/<code>pydantic</code> keep working. Direct dotted access (<code>obj.__class__</code>) is <strong>not</strong> intercepted — that is layer 5's job. See <a href="../../adr/0011-runtime-introspection-blocking/">ADR-0011</a>.</td>
+</tr>
+<tr>
 <td>1. Import restrictions</td>
 <td>best-effort in-process</td>
 <td><strong>shipped</strong></td>
@@ -2785,7 +2821,8 @@ their trusted deployment surface today:</p>
 <p>Layer 5 is the production architecture — see the module docstring in
 <a href="../../engine/plugins/sandbox/__init__.py"><code>sandbox/__init__.py</code></a>.
 <a href="../../adr/0010-static-ast-validation-toctou-loading/">ADR-0010</a> covers
-the static-AST Layer 0 + the validate-then-exec loader; an ADR covering
+the static-AST Layer 0 + the validate-then-exec loader; <a href="../../adr/0011-runtime-introspection-blocking/">ADR-0011</a>
+covers the runtime introspection guard (Layer 0a). An ADR covering
 the final isolation choice (likely WASI for strategies, separate process
 for executors) is deferred until that work is sequenced.</p>
 <h2 id="where-the-code-lives">Where the code lives<a class="headerlink" href="#where-the-code-lives" title="Permanent link">&para;</a></h2>
