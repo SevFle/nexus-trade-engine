@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from typing import TYPE_CHECKING
 
 import pytest
+import structlog
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from httpx import ASGITransport, AsyncClient
@@ -15,6 +17,42 @@ from engine.observability.middleware import (
     CorrelationIdMiddleware,
     safe_correlation_id,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+
+def _reset_logging_context() -> None:
+    """Reset all per-request observability state.
+
+    Clears both the structlog contextvars (bound by the
+    ``BaseHTTPMiddleware`` variant) and the engine ``contextvars``
+    context (bound by the raw-ASGI variant and read directly by the
+    test app routes). Calling this before *and* after every test keeps
+    one test's bindings from leaking into a later test that happens to
+    run in the same asyncio task.
+    """
+    structlog.contextvars.clear_contextvars()
+    ctx.clear_context()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_logging_context() -> Iterator[None]:
+    """Guarantee a clean logging/correlation context around every test.
+
+    Several tests in this module bind ids into shared contextvars (either
+    directly via ``ctx`` or indirectly through the middleware). Without an
+    explicit reset, a binding made in one test could be observed by a
+    later test running in the same task, producing flaky, order-dependent
+    failures. We reset before yielding *and* again in teardown so the
+    next test always starts (and we always leave) a blank slate even if
+    a test raises or forgets to clean up after itself.
+    """
+    _reset_logging_context()
+    try:
+        yield
+    finally:
+        _reset_logging_context()
 
 
 def _build_app() -> FastAPI:
@@ -140,6 +178,44 @@ class TestConcurrentRequests:
         assert tuple(results) == ids
 
 
+class TestConcurrentIsolation:
+    """Fire N simultaneous requests through the real middleware and verify
+    each response carries exactly its own correlation id — no
+    cross-contamination in the response headers, the in-request
+    observability context, or the per-request ``request_id``."""
+
+    @pytest.mark.asyncio
+    async def test_many_concurrent_requests_stay_isolated(self, client: AsyncClient):
+        n = 32
+        sent_ids = [f"cid-{i:03d}-distinct" for i in range(n)]
+
+        async def fire(cid: str) -> tuple[str, str, str]:
+            resp = await client.get("/echo", headers={"X-Correlation-Id": cid})
+            assert resp.status_code == 200
+            body = resp.json()
+            return (
+                resp.headers["X-Correlation-Id"],
+                body["correlation_id"],
+                body["request_id"],
+            )
+
+        results = await asyncio.gather(*(fire(c) for c in sent_ids))
+
+        header_ids = [hdr for hdr, _, _ in results]
+        body_ids = [bid for _, bid, _ in results]
+        request_ids = [rid for _, _, rid in results]
+
+        # Header + body must echo back exactly the id each client sent, in
+        # order, with no scrambling between concurrent requests.
+        assert header_ids == sent_ids
+        assert body_ids == sent_ids
+        # Per-request ids are all distinct (no sharing across requests).
+        assert len(set(request_ids)) == n
+        # Nothing leaked into the outer test task's context.
+        assert ctx.get_correlation_id() is None
+        assert structlog.contextvars.get_contextvars() == {}
+
+
 class TestSafeCorrelationId:
     """Unit tests for the public ``safe_correlation_id`` validator."""
 
@@ -203,6 +279,76 @@ class TestSafeCorrelationId:
 
         assert _safe_correlation_id is safe_correlation_id
         assert _safe_correlation_id("ok-1") == "ok-1"
+
+
+class TestUnsafeHeaderRegeneration:
+    """Every unsafe/malformed incoming id must be discarded and replaced
+    with a fresh UUID4 — never echoed or partially passed through. These
+    payloads could otherwise enable response-splitting (CRLF), header
+    smuggling (NUL/control bytes), terminal-control corruption (ANSI
+    escapes / vertical tab / form feed), or log injection."""
+
+    # Every entry pairs a human-readable label with a concrete attack
+    # payload. The validator must reject *all* of them.
+    _UNSAFE: tuple[tuple[str, str], ...] = (
+        ("crlf", "legit\r\nSet-Cookie: pwn=1"),
+        ("bare_cr", "abc\rdef"),
+        ("bare_lf", "abc\ndef"),
+        ("nul", "abc\x00def"),
+        ("del", "bad\x7fid"),
+        ("vertical_tab", "abc\x0bdef"),
+        ("form_feed", "abc\x0cdef"),
+        ("ansi_red", "\x1b[31mred\x1b[0m"),
+        ("ansi_clear_screen", "\x1b[2J\x1b[H"),
+        ("ansi_cursor_up", "abc\x1b[1Adef"),
+    )
+
+    @pytest.mark.parametrize(("label", "value"), _UNSAFE, ids=[lbl for lbl, _ in _UNSAFE])
+    def test_unsafe_value_is_regenerated_to_uuid4(self, label: str, value: str):
+        out = safe_correlation_id(value)
+        # Must be a genuine UUID4 — never the raw input, never empty.
+        parsed = uuid.UUID(out)
+        assert parsed.version == 4, f"{label}: expected UUID4, got {out!r}"
+        assert out != value, f"{label}: unsafe value was passed through"
+        # Must not contain *any* control / CRLF byte from the payload set,
+        # even ones this particular value did not use.
+        for bad in ("\r", "\n", "\x00", "\x7f", "\x0b", "\x0c", "\x1b"):
+            assert bad not in out, f"{label}: output contains {bad!r}: {out!r}"
+        # And the whole thing must remain within the documented cap.
+        assert len(out) <= 128
+
+    @pytest.mark.asyncio
+    async def test_unsafe_value_regenerated_end_to_end(self, client: AsyncClient):
+        # Even when delivered as a real request, the CRLF payload must be
+        # replaced by a fresh UUID4 on both the header and the bound
+        # context — never smuggled through.
+        resp = await client.get("/echo", headers={"X-Correlation-Id": "a\r\nb\x00c"})
+        out = resp.headers["X-Correlation-Id"]
+        parsed = uuid.UUID(out)
+        assert parsed.version == 4
+        assert resp.json()["correlation_id"] == out
+
+
+class TestOverlongHeaderRegeneration:
+    """Values exceeding the 128-char cap — including multi-KB payloads that
+    could be used for memory-exhaustion or log-flooding — must be rejected
+    and replaced with a fresh, short UUID4."""
+
+    @pytest.mark.parametrize(
+        "size",
+        [1025, 10_241],
+        ids=["just_over_1kb", "just_over_10kb"],
+    )
+    def test_overlong_value_is_regenerated_to_uuid4(self, size: int):
+        value = "a" * size
+        out = safe_correlation_id(value)
+        # Regenerated -> a real UUID4 well under the cap.
+        parsed = uuid.UUID(out)
+        assert parsed.version == 4
+        assert len(out) <= 128
+        # The giant payload must never survive into the output.
+        assert out != value
+        assert "a" * 128 not in out
 
 
 class TestHeaderInjectionDefense:
