@@ -3644,9 +3644,9 @@ are lost on process restart.</p>
 </tr>
 </tbody>
 </table>
-<p>The <code>metrics</code> object is <code>MetricsSummary</code> (24 fields including rolling
-windows); see source for the canonical schema. The full list is also
-served via OpenAPI.</p>
+<p>The <code>metrics</code> object is <code>MetricsSummary</code> — 24 scalar metrics plus a
+<code>rolling_metrics</code> list (25 fields total); see source for the canonical
+schema. The full list is also served via OpenAPI.</p>
 <h2 id="scoring">Scoring<a class="headerlink" href="#scoring" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/scoring/*</code>. Source: <a href="../engine/api/routes/scoring.py"><code>routes/scoring.py</code></a>.
 Requires legal acceptance.</p>

@@ -234,9 +234,9 @@ are lost on process restart.
 | POST | `/api/v1/backtest/run` | `{strategy_name, symbol, start_date, end_date, initial_capital?, config?}` | Returns `202 {status:"accepted", backtest_id}`. Computation runs as a `BackgroundTasks` job (not TaskIQ — see [known-limitations.md](known-limitations.md)). |
 | GET | `/api/v1/backtest/results/{backtest_id}` | — | `202 {status:"running"}` · `200 {status:"completed", metrics, equity_curve, drawdown_curve, evaluation?}` · `200 {status:"failed", error}` · `404` · `403`. |
 
-The `metrics` object is `MetricsSummary` (24 fields including rolling
-windows); see source for the canonical schema. The full list is also
-served via OpenAPI.
+The `metrics` object is `MetricsSummary` — 24 scalar metrics plus a
+`rolling_metrics` list (25 fields total); see source for the canonical
+schema. The full list is also served via OpenAPI.
 
 ## Scoring
 

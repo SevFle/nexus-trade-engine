@@ -2789,8 +2789,8 @@ something to stake a customer's data on.</p>
 <tr>
 <td>3. Resource limits</td>
 <td>best-effort in-process</td>
-<td><strong>shipped</strong></td>
-<td><code>resource.setrlimit</code> for memory / file descriptors on Linux.</td>
+<td><strong>shipped (partial)</strong></td>
+<td><code>resource.setrlimit</code> enforces <code>RLIMIT_AS</code> (memory, from <code>manifest.resources.max_memory</code>) and <code>RLIMIT_NOFILE</code> (file descriptors) on Linux. <code>manifest.resources.max_cpu_seconds</code> is enforced as an <strong>asyncio wall-clock</strong> <code>wait_for</code> timeout that raises plain <code>TimeoutError</code> — <strong>not</strong> <code>RLIMIT_CPU</code>/<code>SIGXCPU</code>. A dedicated <code>ResourceLimitExceededError</code> + <code>CpuTimeLimiter</code> (SIGXCPU) are scaffolded in <a href="../../engine/plugins/exceptions.py"><code>exceptions.py</code></a> (#1404) but <strong>unwired</strong>: no <code>CpuTimeLimiter</code> class exists in the sandbox, <code>RLIMIT_CPU</code> is never set, and the exception is never imported or raised anywhere.</td>
 </tr>
 <tr>
 <td>4. Filesystem isolation</td>
@@ -2861,6 +2861,10 @@ for executors) is deferred until that work is sequenced.</p>
 <tr>
 <td><a href="../../engine/plugins/sandbox/filesystem.py"><code>engine/plugins/sandbox/filesystem.py</code></a></td>
 <td>Reusable layer-4 <code>PathValidator</code> (whitelist + <code>realpath</code> canonicalisation, write gating, open/path hooks). Landed (#1436); <strong>not yet wired</strong> into the active sandbox, which uses the inline <code>_restricted_open</code> in <code>sandbox/__init__.py</code>.</td>
+</tr>
+<tr>
+<td><a href="../../engine/plugins/exceptions.py"><code>engine/plugins/exceptions.py</code></a></td>
+<td><code>ResourceLimitExceededError</code> — the intended signal for a strategy blowing a <code>RLIMIT_CPU</code>/<code>SIGXCPU</code> budget. Defined (#1404) but currently <strong>dead code</strong>: the <code>CpuTimeLimiter</code> its docstring references is unimplemented, and the active CPU guard is the asyncio <code>TimeoutError</code> in layer 3 above.</td>
 </tr>
 <tr>
 <td><a href="../../engine/plugins/restricted_importer.py"><code>engine/plugins/restricted_importer.py</code></a></td>
