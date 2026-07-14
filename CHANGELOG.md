@@ -13,6 +13,7 @@ edit this file by hand — it is regenerated as part of every release PR.
 ## [Unreleased]
 
 ### Fixed
+- (fix) Fix critical sandbox security bypasses: add `__dict__` and missing escape primitives (`__reduce__`, `__reduce_ex__`, `__wrapped__`, `__self__`, `__loader__`, `__spec__`, `__objclass__`, `__defaults__`, `__kwdefaults__`) to `_BLOCKED_ATTRS` in `engine/plugins/sandbox/__init__.py`; add `@pytest.mark.asyncio` to async tests in `tests/test_sandbox_blocked_attrs.py`.
 - (write_tests) Add a no-retry guard in `LiveExecutionBackend._request` so a transport error on the non-idempotent `POST /v2/orders` (order submission) raises `BrokerConnectionError` immediately instead of retrying, preventing duplicate orders; add unit tests covering the guard and confirming reads still retry.
 - (fix) Fix check ordering in `engine/core/execution/live.py` `execute()` and the two failing tests in `tests/test_execution_backends.py`
 
@@ -50,4 +51,4 @@ edit this file by hand — it is regenerated as part of every release PR.
 
 
 The initial public 0.1.0 release line. Entries below this point are appended
-automatically once release-please starts cutting tagged releases.
+automatically once release-please starts cutting tagged rele

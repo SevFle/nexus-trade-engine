@@ -108,9 +108,21 @@ logger = structlog.get_logger()
 #   * function introspection: ``__globals__`` (module namespace) / ``__code__``
 #     (mutable code object) / ``__closure__`` (captured cell vars) / ``__func__``
 #     (unwraps a bound method to its underlying function, re-exposing the
-#     previous three).
+#     previous three) / ``__self__`` (the bound instance) / ``__defaults__`` /
+#     ``__kwdefaults__`` (default argument values).
 #   * namespace access: ``__builtins__`` (the builtins module/dict — grants
-#     ``__import__`` and every builtin).
+#     ``__import__`` and every builtin) / ``__dict__`` (instance/class/module
+#     namespace) / ``__wrapped__`` (unwraps a ``functools.wraps``-decorated
+#     function back to the underlying callable).
+#   * object-graph reconstruction: ``__reduce__`` / ``__reduce_ex__`` drive the
+#     pickle protocol and are the classic entry point for deserialization
+#     gadget chains.
+#   * module loading: ``__loader__`` / ``__spec__`` (module loader/spec objects
+#     that can import/load arbitrary modules) / ``__objclass__`` (the class that
+#     owns a descriptor or method, a type-traversal shortcut).
+#   * subclass hooks: ``__init_subclass__`` (invoked on subclass creation, can be
+#     abused to run attacker code) / ``__subclasshook__`` (controls ABC
+#     ``isinstance`` semantics and can mask type traversal).
 #
 # ``getattr`` is the only builtin we can hook from pure Python, so this is
 # defense-in-depth: it stops the dynamic ``getattr(obj, name)`` form that
@@ -129,8 +141,23 @@ _BLOCKED_ATTRS: frozenset[str] = frozenset(
         "__closure__",
         "__code__",
         "__func__",
+        "__self__",
+        "__defaults__",
+        "__kwdefaults__",
         # --- namespace / builtins access ---
         "__builtins__",
+        "__dict__",
+        "__wrapped__",
+        # --- object-graph reconstruction (pickle gadget chains) ---
+        "__reduce__",
+        "__reduce_ex__",
+        # --- module loading ---
+        "__loader__",
+        "__spec__",
+        "__objclass__",
+        # --- subclass hooks ---
+        "__init_subclass__",
+        "__subclasshook__",
     }
 )
 

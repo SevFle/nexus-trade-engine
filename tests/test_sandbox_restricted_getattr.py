@@ -514,16 +514,56 @@ class TestBlockedAttributeSet:
     def test_func_is_blocked(self) -> None:
         assert "__func__" in _BLOCKED_ATTRS
 
+    # --- second wave of escape primitives (object-graph / module loading) ---
+
+    def test_dict_is_blocked(self) -> None:
+        # ``__dict__`` exposes an object's/module's live namespace, which is a
+        # direct route to dangerous module references (``os``, ``builtins`` …).
+        assert "__dict__" in _BLOCKED_ATTRS
+
+    def test_reduce_is_blocked(self) -> None:
+        assert "__reduce__" in _BLOCKED_ATTRS
+
+    def test_reduce_ex_is_blocked(self) -> None:
+        assert "__reduce_ex__" in _BLOCKED_ATTRS
+
+    def test_wrapped_is_blocked(self) -> None:
+        assert "__wrapped__" in _BLOCKED_ATTRS
+
+    def test_self_is_blocked(self) -> None:
+        assert "__self__" in _BLOCKED_ATTRS
+
+    def test_loader_is_blocked(self) -> None:
+        assert "__loader__" in _BLOCKED_ATTRS
+
+    def test_spec_is_blocked(self) -> None:
+        assert "__spec__" in _BLOCKED_ATTRS
+
+    def test_objclass_is_blocked(self) -> None:
+        assert "__objclass__" in _BLOCKED_ATTRS
+
+    def test_defaults_is_blocked(self) -> None:
+        assert "__defaults__" in _BLOCKED_ATTRS
+
+    def test_kwdefaults_is_blocked(self) -> None:
+        assert "__kwdefaults__" in _BLOCKED_ATTRS
+
+    def test_init_subclass_is_blocked(self) -> None:
+        assert "__init_subclass__" in _BLOCKED_ATTRS
+
+    def test_subclasshook_is_blocked(self) -> None:
+        assert "__subclasshook__" in _BLOCKED_ATTRS
+
     def test_blocked_set_is_frozen(self) -> None:
         assert isinstance(_BLOCKED_ATTRS, frozenset)
 
     def test_normal_dunder_not_blocked(self) -> None:
-        # ``__init__`` / ``__dict__`` / ``__name__`` are deliberately left
-        # reachable: they are ubiquitous in legitimate code and are not, on
-        # their own, sufficient to escape the sandbox (the traversal chain
-        # above is what is blocked).  ``__class__`` was promoted into the
-        # blocked set because it is the canonical entry point for the
-        # type-traversal escape chain.
+        # ``__init__`` / ``__name__`` are deliberately left reachable: they are
+        # ubiquitous in legitimate code and are not, on their own, sufficient to
+        # escape the sandbox (the traversal chain above is what is blocked).
+        # ``__class__`` was promoted into the blocked set because it is the
+        # canonical entry point for the type-traversal escape chain, and
+        # ``__dict__`` was subsequently blocked because it exposes an object's
+        # live namespace (a direct route to dangerous module references).
         assert "__init__" not in _BLOCKED_ATTRS
-        assert "__dict__" not in _BLOCKED_ATTRS
         assert "__name__" not in _BLOCKED_ATTRS
