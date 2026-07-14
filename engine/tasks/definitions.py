@@ -37,7 +37,7 @@ from functools import wraps
 from typing import Any, TypeVar
 
 import structlog
-from taskiq import TaskiqEvents
+from taskiq import AsyncTaskiqTask, TaskiqEvents
 
 from engine.observability.context import (
     ensure_correlation_id,
@@ -427,12 +427,247 @@ async def run_strategy_evaluation(
     }
 
 
+# --------------------------------------------------------------------------- #
+# Job submission / result collection
+#
+# The tasks above (``run_backtest`` / ``run_strategy_evaluation``) execute
+# synchronously: the caller awaits the whole run and gets the final payload.
+# The pair below completes the Taskiq integration by adding the canonical
+# fire-and-forget *job* pattern — submit a backtest, get back a task id, and
+# collect the outcome later — which is what long-running backtests need so
+# they don't hold an HTTP/RPC slot open for minutes at a time.
+# --------------------------------------------------------------------------- #
+def _build_result_task(task_id: str) -> AsyncTaskiqTask[Any]:
+    """Rebind a previously-submitted ``task_id`` to the broker's result backend.
+
+    Taskiq stores results against the task id in the (Redis) result backend
+    rather than against the decorated task object, so to poll a job
+    submitted by :func:`submit_backtest_job` we reconstruct a bare
+    :class:`~taskiq.AsyncTaskiqTask` bound to the shared
+    :attr:`broker.result_backend`. No ``return_type`` is supplied, so the
+    stored payload (the dict produced by :func:`run_backtest`) is returned
+    verbatim without a pydantic re-parse.
+
+    Factored as a named helper rather than inlined so tests can swap it for
+    a stub and drive :func:`collect_backtest_result` without a live result
+    backend.
+    """
+    return AsyncTaskiqTask(task_id=task_id, result_backend=broker.result_backend)
+
+
+@broker.task
+async def submit_backtest_job(
+    strategy_name: str,
+    symbol: str,
+    start_date: str,
+    end_date: str,
+    initial_capital: float = 100_000.0,
+) -> dict[str, Any]:
+    """Enqueue a backtest for asynchronous execution and return its task id.
+
+    This is the *fire* half of the submit/collect pair. Rather than
+    awaiting :func:`run_backtest` inline (which blocks the caller for the
+    full backtest duration), it kicks the work onto the broker via
+    ``run_backtest.kiq(...)`` and returns immediately with the Taskiq task
+    id. The caller then polls :func:`collect_backtest_result` with that id
+    to retrieve the outcome.
+
+    Returns a JSON-serialisable dict: ``status == "submitted"`` with the
+    ``task_id`` on success, or ``status == "failed"`` (with
+    ``error``/``error_type``) when the broker rejects the enqueue — e.g.
+    the broker is down, or the payload cannot be serialised.
+    """
+    ensure_correlation_id()
+    cid = get_correlation_id()
+    logger.info(
+        "submit_backtest_job.start",
+        strategy=strategy_name,
+        symbol=symbol,
+        start=start_date,
+        end=end_date,
+        initial_capital=initial_capital,
+        correlation_id=cid,
+    )
+    try:
+        task = await run_backtest.kiq(
+            strategy_name,
+            symbol,
+            start_date,
+            end_date,
+            initial_capital,
+        )
+    except Exception as exc:
+        logger.exception(
+            "submit_backtest_job.failed",
+            strategy=strategy_name,
+            symbol=symbol,
+            error=str(exc),
+            error_type=type(exc).__name__,
+            correlation_id=cid,
+            traceback=traceback.format_exc(),
+        )
+        return {
+            "status": "failed",
+            "strategy_name": strategy_name,
+            "symbol": symbol,
+            "error": str(exc),
+            "error_type": type(exc).__name__,
+            "correlation_id": cid,
+        }
+
+    task_id = getattr(task, "task_id", None)
+    logger.info(
+        "submit_backtest_job.submitted",
+        strategy=strategy_name,
+        symbol=symbol,
+        task_id=task_id,
+        correlation_id=cid,
+    )
+    return {
+        "status": "submitted",
+        "task_id": task_id,
+        "strategy_name": strategy_name,
+        "symbol": symbol,
+        "start_date": start_date,
+        "end_date": end_date,
+        "initial_capital": initial_capital,
+        "correlation_id": cid,
+    }
+
+
+@broker.task
+async def collect_backtest_result(task_id: str) -> dict[str, Any]:
+    """Collect the outcome of a backtest job previously submitted.
+
+    This is the *collect* half of the submit/collect pair. Given the
+    ``task_id`` returned by :func:`submit_backtest_job`, it rebuilds a
+    result handle via :func:`_build_result_task` and consults the result
+    backend:
+
+    * **not ready** → ``status == "pending"`` so the caller can poll again.
+    * **ready, success** → ``status == "completed"`` with the full
+      :func:`run_backtest` payload under ``result`` plus ``execution_time``.
+    * **ready, error** → ``status == "failed"`` with the worker-side error.
+
+    Any failure to reach the result backend (e.g. ``ResultGetError``, a
+    dropped Redis connection) is caught and surfaced as a ``failed``
+    envelope so the caller always receives a JSON-serialisable dict rather
+    than an exception. The worker-side ``error`` is a ``BaseException`` and
+    therefore not JSON-serialisable, so it is stringified via ``repr``
+    before it can reach the result backend.
+    """
+    ensure_correlation_id()
+    cid = get_correlation_id()
+    logger.info(
+        "collect_backtest_result.start",
+        task_id=task_id,
+        correlation_id=cid,
+    )
+    try:
+        task = _build_result_task(task_id)
+        ready = await task.is_ready()
+    except Exception as exc:
+        logger.exception(
+            "collect_backtest_result.failed",
+            task_id=task_id,
+            error=str(exc),
+            error_type=type(exc).__name__,
+            correlation_id=cid,
+            traceback=traceback.format_exc(),
+        )
+        return {
+            "status": "failed",
+            "task_id": task_id,
+            "error": str(exc),
+            "error_type": type(exc).__name__,
+            "correlation_id": cid,
+        }
+
+    if not ready:
+        logger.info(
+            "collect_backtest_result.pending",
+            task_id=task_id,
+            correlation_id=cid,
+        )
+        return {
+            "status": "pending",
+            "task_id": task_id,
+            "correlation_id": cid,
+        }
+
+    try:
+        result = await task.get_result()
+    except Exception as exc:
+        logger.exception(
+            "collect_backtest_result.failed",
+            task_id=task_id,
+            error=str(exc),
+            error_type=type(exc).__name__,
+            correlation_id=cid,
+            traceback=traceback.format_exc(),
+        )
+        return {
+            "status": "failed",
+            "task_id": task_id,
+            "error": str(exc),
+            "error_type": type(exc).__name__,
+            "correlation_id": cid,
+        }
+
+    execution_time = getattr(result, "execution_time", 0.0)
+    is_err = bool(getattr(result, "is_err", False))
+    # The worker-side error is a BaseException and therefore not
+    # JSON-serialisable; stringify it before it can reach the result backend.
+    raw_error = getattr(result, "error", None)
+    error_str = repr(raw_error) if raw_error is not None else None
+
+    if is_err:
+        logger.warning(
+            "collect_backtest_result.task_error",
+            task_id=task_id,
+            error=error_str,
+            execution_time=execution_time,
+            correlation_id=cid,
+        )
+        return {
+            "status": "failed",
+            "task_id": task_id,
+            "error": error_str or "Task reported an error",
+            "error_type": type(raw_error).__name__
+            if raw_error is not None
+            else "TaskError",
+            "execution_time": execution_time,
+            "correlation_id": cid,
+        }
+
+    return_value = getattr(result, "return_value", None)
+    result_status = (
+        return_value.get("status") if isinstance(return_value, dict) else None
+    )
+    logger.info(
+        "collect_backtest_result.complete",
+        task_id=task_id,
+        execution_time=execution_time,
+        result_status=result_status,
+        correlation_id=cid,
+    )
+    return {
+        "status": "completed",
+        "task_id": task_id,
+        "result": return_value,
+        "execution_time": execution_time,
+        "correlation_id": cid,
+    }
+
+
 __all__ = [
     "TaskExecutionError",
     "broker",
+    "collect_backtest_result",
     "on_worker_shutdown",
     "on_worker_startup",
     "run_backtest",
     "run_strategy_evaluation",
+    "submit_backtest_job",
     "with_retry",
 ]
