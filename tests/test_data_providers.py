@@ -7,8 +7,16 @@ from typing import Any
 
 import httpx
 import pandas as pd
+import polars as pl
 import pytest
 
+from engine.data.csv_provider import CSVHistoricalDataProvider
+from engine.data.provider import (
+    OHLCV_COLUMNS as HISTORICAL_OHLCV_COLUMNS,
+)
+from engine.data.provider import (
+    IDataProvider as IHistoricalDataProvider,
+)
 from engine.data.providers import (
     AssetClass,
     DataProviderRegistry,
@@ -1349,3 +1357,37 @@ async def test_read_capped_lenient_truncates():
 
     out = await http_mod._read_capped(_FakeResp(), 1000, strict=False, provider="t")
     assert len(out) == 1000
+
+
+# ---------- CSV historical-data provider (polars) ----------
+
+
+def test_csv_historical_provider_loads_ohlcv_fixture(tmp_path):
+    """Happy path: CSVHistoricalDataProvider loads a small OHLCV CSV.
+
+    The fixture is written out-of-order to prove the provider sorts ascending.
+    Asserts the returned polars DataFrame is a valid ``IDataProvider`` result:
+    correct shape, canonical OHLCV columns (timestamp-first), a parsed
+    ``Datetime`` timestamp, and ascending row order.
+    """
+    csv = tmp_path / "aapl_daily.csv"
+    csv.write_text(
+        "timestamp,open,high,low,close,volume\n"
+        "2026-01-03,101.5,103.0,101.0,102.5,3000\n"
+        "2026-01-01,100.0,101.0,99.0,100.5,1000\n"
+        "2026-01-02,100.5,102.0,100.0,101.5,2000\n"
+    )
+
+    provider = CSVHistoricalDataProvider()
+    assert isinstance(provider, IHistoricalDataProvider)
+
+    df = provider.load_data(csv)
+
+    assert isinstance(df, pl.DataFrame)
+    assert df.shape == (3, 6)
+    assert list(df.columns) == list(HISTORICAL_OHLCV_COLUMNS)
+    # timestamp was parsed from string into a polars Datetime.
+    assert isinstance(df.schema["timestamp"], pl.Datetime)
+    # Rows were re-sorted ascending by timestamp despite the shuffled fixture.
+    assert df["close"].to_list() == [100.5, 101.5, 102.5]
+    assert df["volume"].to_list() == [1000, 2000, 3000]
