@@ -121,6 +121,7 @@ class _BaseTraversalStrategy:
 class TestEscapeChainIntegration:
     """End-to-end: each canonical escape chain must be broken and counted."""
 
+    @pytest.mark.asyncio
     async def test_class_chain_blocked(self, manifest: StrategyManifest) -> None:
         """The ``__class__`` -> ``__bases__`` -> ``__subclasses__`` chain is
         broken at the first ``getattr`` and the violation is recorded."""
@@ -136,6 +137,7 @@ class TestEscapeChainIntegration:
         finally:
             sandbox.cleanup()
 
+    @pytest.mark.asyncio
     async def test_func_unwrap_blocked(self, manifest: StrategyManifest) -> None:
         """The bound-method ``__func__`` unwrap is denied before ``__globals__``
         can be reached."""
@@ -150,6 +152,7 @@ class TestEscapeChainIntegration:
         finally:
             sandbox.cleanup()
 
+    @pytest.mark.asyncio
     async def test_base_traversal_blocked(self, manifest: StrategyManifest) -> None:
         """The ``__class__`` -> ``__base__`` -> ``__subclasses__`` walk is
         denied at the first step."""
@@ -167,6 +170,7 @@ class TestEscapeChainIntegration:
 
     # ── Regression: legitimate code is unaffected ──────────────────────
 
+    @pytest.mark.asyncio
     async def test_isinstance_still_works(self, manifest: StrategyManifest) -> None:
         """``isinstance`` / ``type`` checks use the C-level type machinery, not
         the ``getattr`` hook, so blocking ``__class__`` must not break them.
