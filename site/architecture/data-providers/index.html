@@ -1390,6 +1390,8 @@
       
         
       
+        
+      
     
     
     
@@ -1713,6 +1715,34 @@
     
   
     0010 — Static AST validation + TOCTOU-safe loading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0011-runtime-introspection-blocking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0011 — Runtime introspection / dunder blocking
   
 
     
@@ -3120,7 +3150,7 @@ exposes a torn view.</p>
 <p><code>IDataProvider.health_check()</code> returns a <code>HealthCheckResult(name,
 status, latency_ms, detail)</code> with <code>status ∈ {up, degraded, down}</code>. The
 <code>GET /health/providers</code> route (see
-<a href="../../api-reference/#health--observability"><code>api-reference.md</code></a>) fans
+<a href="../../api-reference/#health-observability"><code>api-reference.md</code></a>) fans
 this out across every registered provider so an operator can tell at a
 glance which vendor is degraded — the registry's fail-over hides a
 single degraded provider from callers, so <code>/health/providers</code> is often

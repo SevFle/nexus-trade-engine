@@ -150,6 +150,7 @@ layer 5 remains the only true isolation boundary.
 | Layer | Kind | Status | Mechanism |
 |---|---|---|---|
 | 0. Static source validation | best-effort in-process | **shipped** | [`ImportValidator`](../../engine/plugins/restricted_importer.py) walks the strategy's AST **before** compile/exec and rejects `import` of a blocked module, plus bare calls to `__import__`/`exec`/`eval`/`compile` and `importlib.import_module(…)`. An exact match in the blocked set can never be overridden by the allowlist. See [ADR-0010](../adr/0010-static-ast-validation-toctou-loading.md). |
+| 0a. Runtime introspection blocking | best-effort in-process | **shipped** | `_BLOCKED_ATTRS` + `_restricted_getattr` (installed over `builtins.getattr` per evaluation) refuse the dynamic `getattr(obj, name)` form of every sandbox-escape dunder — type traversal (`__class__`/`__base__`/`__subclasses__`), function introspection (`__globals__`/`__code__`/`__closure__`), namespace access (`__builtins__`/`__dict__`), pickle gadget chains (`__reduce__`), module loading (`__loader__`/`__spec__`). `builtins.object` is swapped for `_RestrictedObject` so `object.__subclasses__()` raises. The 3-argument `getattr(obj, name, default)` contract is honoured (returns the caller's default, never the blocked value) so `inspect`/`dataclasses`/`pydantic` keep working. Direct dotted access (`obj.__class__`) is **not** intercepted — that is layer 5's job. See [ADR-0011](../adr/0011-runtime-introspection-blocking.md). |
 | 1. Import restrictions | best-effort in-process | **shipped** | Default-deny **allowlist** (`FROZEN_ALLOWED_MODULES` in [`allowlist.py`](../../engine/plugins/allowlist.py)): a strategy may import a module only if its root name is in the frozen set. Enforced by [`RestrictedImporter`](../../engine/plugins/restricted_importer.py) at both `sys.meta_path` and `builtins.__import__`. The old denylist (`DENYLIST_MODULES`) is retained as defence-in-depth and as the test-suite's escape-vector oracle, but enforcement is purely allowlist-based. Adding a module requires a security review (see [ADR-0007](../adr/0007-strategy-sandbox-allowlist-imports.md)). |
 | 2. Network whitelist | best-effort in-process | **shipped** | `SandboxedHttpClient` proxies every outbound call through an allowlist declared in the manifest (`requires_network: true` + URL prefixes). |
 | 3. Resource limits | best-effort in-process | **shipped** | `resource.setrlimit` for memory / file descriptors on Linux. |
@@ -171,7 +172,8 @@ their trusted deployment surface today:
 Layer 5 is the production architecture — see the module docstring in
 [`sandbox/__init__.py`](../../engine/plugins/sandbox/__init__.py).
 [ADR-0010](../adr/0010-static-ast-validation-toctou-loading.md) covers
-the static-AST Layer 0 + the validate-then-exec loader; an ADR covering
+the static-AST Layer 0 + the validate-then-exec loader; [ADR-0011](../adr/0011-runtime-introspection-blocking.md)
+covers the runtime introspection guard (Layer 0a). An ADR covering
 the final isolation choice (likely WASI for strategies, separate process
 for executors) is deferred until that work is sequenced.
 
