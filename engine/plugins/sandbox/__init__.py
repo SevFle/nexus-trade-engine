@@ -98,14 +98,39 @@ _eval_lock, _wait_for, _iscoroutine = _capture_asyncio_helpers()
 
 logger = structlog.get_logger()
 
+# Comprehensive set of dunder attributes that constitute sandbox-escape
+# primitives.  Each one is a recognised step on the classic CPython sandbox-escape
+# chain:
+#
+#   * type-traversal: ``__class__`` -> ``__base__`` / ``__bases__`` / ``__mro__``
+#     -> ``__subclasses__``  (walks the type hierarchy to reach arbitrary types
+#     such as ``subprocess.Popen`` / ``os._wrap_close``).
+#   * function introspection: ``__globals__`` (module namespace) / ``__code__``
+#     (mutable code object) / ``__closure__`` (captured cell vars) / ``__func__``
+#     (unwraps a bound method to its underlying function, re-exposing the
+#     previous three).
+#   * namespace access: ``__builtins__`` (the builtins module/dict — grants
+#     ``__import__`` and every builtin).
+#
+# ``getattr`` is the only builtin we can hook from pure Python, so this is
+# defense-in-depth: it stops the dynamic ``getattr(obj, name)`` form that
+# attacker code (and some introspection helpers) use.  Direct dotted access
+# (``obj.__class__``) is governed separately by Layer-5 process isolation.
 _BLOCKED_ATTRS: frozenset[str] = frozenset(
     {
-        "__subclasses__",
+        # --- type-hierarchy traversal ---
+        "__class__",
+        "__base__",
         "__bases__",
         "__mro__",
+        "__subclasses__",
+        # --- function / closure introspection ---
         "__globals__",
         "__closure__",
         "__code__",
+        "__func__",
+        # --- namespace / builtins access ---
+        "__builtins__",
     }
 )
 

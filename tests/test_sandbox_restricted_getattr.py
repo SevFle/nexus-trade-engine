@@ -500,11 +500,30 @@ class TestBlockedAttributeSet:
     def test_code_is_blocked(self) -> None:
         assert "__code__" in _BLOCKED_ATTRS
 
+    # --- newly-added escape primitives ---
+
+    def test_class_is_blocked(self) -> None:
+        assert "__class__" in _BLOCKED_ATTRS
+
+    def test_base_is_blocked(self) -> None:
+        assert "__base__" in _BLOCKED_ATTRS
+
+    def test_builtins_is_blocked(self) -> None:
+        assert "__builtins__" in _BLOCKED_ATTRS
+
+    def test_func_is_blocked(self) -> None:
+        assert "__func__" in _BLOCKED_ATTRS
+
     def test_blocked_set_is_frozen(self) -> None:
         assert isinstance(_BLOCKED_ATTRS, frozenset)
 
     def test_normal_dunder_not_blocked(self) -> None:
+        # ``__init__`` / ``__dict__`` / ``__name__`` are deliberately left
+        # reachable: they are ubiquitous in legitimate code and are not, on
+        # their own, sufficient to escape the sandbox (the traversal chain
+        # above is what is blocked).  ``__class__`` was promoted into the
+        # blocked set because it is the canonical entry point for the
+        # type-traversal escape chain.
         assert "__init__" not in _BLOCKED_ATTRS
-        assert "__class__" not in _BLOCKED_ATTRS
         assert "__dict__" not in _BLOCKED_ATTRS
         assert "__name__" not in _BLOCKED_ATTRS
