@@ -651,3 +651,143 @@ class TestMarketplaceSearchValidation:
         client, _catalog = search_client
         response = await client.get("/api/v1/marketplace/search", params={"limit": 101})
         assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+
+class TestMarketplaceSearchNullCoalescing:
+    """``_hit_to_item`` must never crash on ``None`` optional fields.
+
+    Listings may be sourced from external systems (DB rows, remote APIs,
+    hand-built fixtures) where a field the dataclass declares as a non-null
+    ``str``/``float``/``int`` still arrives as ``None``. The route must
+    coalesce these to sane defaults and — crucially — preserve legitimate
+    falsy values (a real ``0.0`` rating, ``0`` downloads) instead of
+    conflating them with "missing".
+    """
+
+    async def test_all_optional_fields_none_coerced_to_defaults(
+        self, search_client: tuple[AsyncClient, InMemoryStrategyCatalog]
+    ):
+        client, catalog = search_client
+        # Build the listing by hand (the ``_listing`` helper would pre-coerce
+        # some fields), explicitly setting every optional field to ``None``.
+        catalog.add(
+            StrategyListing(
+                id="nulls",
+                name="Nullable Fields",
+                version="1.0.0",
+                author=None,
+                description=None,
+                category=None,
+                tags=None,
+                rating=None,
+                downloads=None,
+                backtest_sharpe=None,
+                min_capital=None,
+                created_at=None,
+            )
+        )
+        # An empty query returns every listing without keyword scoring, which
+        # would otherwise call ``.lower()`` on the None description/author.
+        response = await client.get("/api/v1/marketplace/search")
+        assert response.status_code == HTTPStatus.OK
+        item = response.json()["results"][0]
+        assert item["id"] == "nulls"
+        assert item["author"] == ""
+        assert item["description"] == ""
+        assert item["category"] == ""
+        assert item["tags"] == []
+        assert item["rating"] == 0.0
+        assert item["downloads"] == 0
+        assert item["backtest_sharpe"] is None
+        assert item["min_capital"] == 0.0
+        assert item["created_at"] is None
+
+    @pytest.mark.parametrize(
+        ("field", "default"),
+        [
+            ("author", ""),
+            ("description", ""),
+            ("category", ""),
+            ("rating", 0.0),
+            ("downloads", 0),
+            ("min_capital", 0.0),
+        ],
+    )
+    async def test_each_optional_field_none_individually(
+        self,
+        search_client: tuple[AsyncClient, InMemoryStrategyCatalog],
+        field: str,
+        default,
+    ):
+        client, catalog = search_client
+        catalog.reset()
+        catalog.add(_listing("x", "Probe", **{field: None}))
+        response = await client.get("/api/v1/marketplace/search")
+        assert response.status_code == HTTPStatus.OK
+        assert response.json()["results"][0][field] == default
+
+    async def test_backtest_sharpe_none_round_trips(
+        self, search_client: tuple[AsyncClient, InMemoryStrategyCatalog]
+    ):
+        client, catalog = search_client
+        catalog.add(_listing("x", "Probe", backtest_sharpe=None))
+        response = await client.get("/api/v1/marketplace/search")
+        assert response.json()["results"][0]["backtest_sharpe"] is None
+
+    async def test_backtest_sharpe_value_round_trips(
+        self, search_client: tuple[AsyncClient, InMemoryStrategyCatalog]
+    ):
+        client, catalog = search_client
+        catalog.add(_listing("x", "Probe", backtest_sharpe=2.5))
+        response = await client.get("/api/v1/marketplace/search")
+        assert response.json()["results"][0]["backtest_sharpe"] == 2.5
+
+    async def test_legitimate_zero_values_are_preserved(
+        self, search_client: tuple[AsyncClient, InMemoryStrategyCatalog]
+    ):
+        """A real 0.0 rating is NOT the same as "unrated" and must survive.
+
+        Guards the medium-severity ``rating or 0.0`` regression: ``or`` would
+        silently rewrite a legitimate ``0.0`` to the default, hiding the
+        distinction between "rated zero" and "unrated".
+        """
+        client, catalog = search_client
+        catalog.add(
+            StrategyListing(
+                id="zeros",
+                name="Zero Rated",
+                version="1.0.0",
+                author="Tester",
+                description="",
+                category="algorithmic",
+                rating=0.0,
+                downloads=0,
+                min_capital=0.0,
+            )
+        )
+        response = await client.get("/api/v1/marketplace/search")
+        assert response.status_code == HTTPStatus.OK
+        item = response.json()["results"][0]
+        assert item["rating"] == 0.0
+        assert item["downloads"] == 0
+        assert item["min_capital"] == 0.0
+
+    async def test_none_tags_coerced_to_empty_list(
+        self, search_client: tuple[AsyncClient, InMemoryStrategyCatalog]
+    ):
+        client, catalog = search_client
+        # ``list(None)`` would raise TypeError; the route must guard it.
+        catalog.add(
+            StrategyListing(
+                id="x",
+                name="Probe",
+                version="1.0.0",
+                author="Tester",
+                description="",
+                category="algorithmic",
+                tags=None,
+            )
+        )
+        response = await client.get("/api/v1/marketplace/search")
+        assert response.status_code == HTTPStatus.OK
+        assert response.json()["results"][0]["tags"] == []

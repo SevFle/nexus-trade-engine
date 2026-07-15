@@ -133,18 +133,26 @@ class RatingsListResponse(BaseModel):
 
 def _hit_to_item(hit: SearchHit) -> SearchResultItem:
     listing: StrategyListing = hit.listing
+    # Defensively coalesce nullable fields. Listings may originate from
+    # external systems (DB rows, remote APIs, hand-built fixtures) where a
+    # field declared ``str``/``float``/``int`` in the dataclass can still
+    # arrive as ``None``. We use explicit ``is None`` checks rather than
+    # ``or`` so a *legitimate* falsy value — e.g. a 0.0 rating or 0
+    # downloads — is preserved instead of being conflated with "missing".
+    # (``rating or 0.0`` would silently rewrite a real 0.0 to the default,
+    # masking the distinction between "rated zero" and "unrated".)
     return SearchResultItem(
         id=listing.id,
         name=listing.name,
         version=listing.version,
-        author=listing.author,
-        description=listing.description,
-        category=listing.category,
-        tags=list(listing.tags),
-        rating=listing.rating,
-        downloads=listing.downloads,
-        backtest_sharpe=listing.backtest_sharpe,
-        min_capital=listing.min_capital,
+        author=listing.author if listing.author is not None else "",
+        description=listing.description if listing.description is not None else "",
+        category=listing.category if listing.category is not None else "",
+        tags=list(listing.tags) if listing.tags is not None else [],
+        rating=listing.rating if listing.rating is not None else 0.0,
+        downloads=listing.downloads if listing.downloads is not None else 0,
+        backtest_sharpe=getattr(listing, "backtest_sharpe", None),
+        min_capital=listing.min_capital if listing.min_capital is not None else 0.0,
         created_at=listing.created_at,
         # Round to 4dp so the API surface is stable and free of float noise.
         score=round(hit.score, 4),
