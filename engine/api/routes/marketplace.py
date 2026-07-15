@@ -17,6 +17,18 @@ from engine.marketplace.ratings import (
     RatingsStore,
     get_ratings_store,
 )
+from engine.marketplace.search import (
+    ALLOWED_SORTS,
+    DEFAULT_LIMIT,
+    EMPTY_QUERY_FALLBACK_SORT,
+    MAX_LIMIT,
+    MIN_LIMIT,
+    SearchError,
+    SearchHit,
+    StrategyCatalog,
+    StrategyListing,
+    get_strategy_catalog,
+)
 
 router = APIRouter(dependencies=[Depends(require_legal_acceptance)])
 
@@ -33,6 +45,36 @@ class MarketplaceEntry(BaseModel):
     downloads: int = 0
     backtest_sharpe: float | None = None
     min_capital: float = 0.0
+
+
+class SearchResultItem(BaseModel):
+    """A single strategy in a search result page."""
+
+    id: str
+    name: str
+    version: str
+    author: str
+    description: str
+    category: str
+    tags: list[str]
+    rating: float
+    downloads: int
+    backtest_sharpe: float | None = None
+    min_capital: float
+    created_at: datetime | None = None
+    score: float = 0.0
+
+
+class SearchResponse(BaseModel):
+    """Response body for ``GET /search``."""
+
+    query: str
+    sort: str
+    results: list[SearchResultItem]
+    total: int
+    page: int
+    limit: int
+    has_more: bool
 
 
 class InstallRequest(BaseModel):
@@ -89,6 +131,26 @@ class RatingsListResponse(BaseModel):
     offset: int
 
 
+def _hit_to_item(hit: SearchHit) -> SearchResultItem:
+    listing: StrategyListing = hit.listing
+    return SearchResultItem(
+        id=listing.id,
+        name=listing.name,
+        version=listing.version,
+        author=listing.author,
+        description=listing.description,
+        category=listing.category,
+        tags=list(listing.tags),
+        rating=listing.rating,
+        downloads=listing.downloads,
+        backtest_sharpe=listing.backtest_sharpe,
+        min_capital=listing.min_capital,
+        created_at=listing.created_at,
+        # Round to 4dp so the API surface is stable and free of float noise.
+        score=round(hit.score, 4),
+    )
+
+
 def _record_to_response(record: RatingRecord) -> RatingResponse:
     return RatingResponse(
         strategy_id=record.strategy_id,
@@ -127,6 +189,80 @@ async def browse_marketplace(
         "per_page": per_page,
         "filters": {"category": category, "search": search, "sort_by": sort_by},
     }
+
+
+@router.get("/search", response_model=SearchResponse)
+async def search_strategies(
+    q: str | None = Query(
+        None,
+        description="Keyword query; matched (case-insensitively) against "
+        "strategy name, description, tags, and author.",
+    ),
+    category: str | None = Query(
+        None, description="Restrict results to this category id (exact, case-insensitive)."
+    ),
+    tag: str | None = Query(
+        None, description="Restrict results to strategies carrying this tag (case-insensitive)."
+    ),
+    sort: str = Query(
+        "relevance",
+        description=f"Result ordering. One of: {', '.join(ALLOWED_SORTS)}. "
+        "Defaults to 'relevance' (falls back to 'downloads' when 'q' is empty).",
+    ),
+    page: int = Query(1, ge=1, description="1-indexed page number."),
+    limit: int = Query(
+        DEFAULT_LIMIT,
+        ge=MIN_LIMIT,
+        le=MAX_LIMIT,
+        description=f"Page size ({MIN_LIMIT}-{MAX_LIMIT}).",
+    ),
+    user: User = Depends(get_current_user),
+    catalog: StrategyCatalog = Depends(get_strategy_catalog),
+):
+    """Keyword search & filter across marketplace strategies.
+
+    Matches ``q`` against each strategy's name, description, tags, and author
+    (case-insensitive). Results are ranked by a weighted relevance score and
+    returned one page at a time with a ``total`` match count and a
+    ``has_more`` flag.
+
+    An empty/absent ``q`` performs no keyword filtering — every (optionally
+    category/tag-filtered) listing is a candidate, ordered by ``sort``. When
+    ``sort`` is left at its ``"relevance"`` default *and* no query is supplied
+    (where relevance is meaningless), the ordering transparently falls back to
+    ``"downloads"`` so callers always get a sensible default.
+    """
+    query = (q or "").strip()
+    effective_sort = sort
+    if not query and effective_sort == "relevance":
+        # Relevance is undefined without a query (every score is 0); fall back
+        # to a meaningful default rather than returning an arbitrary order.
+        effective_sort = EMPTY_QUERY_FALLBACK_SORT
+
+    try:
+        page_result = catalog.search(
+            query,
+            category=category,
+            tag=tag,
+            sort=effective_sort,
+            page=page,
+            limit=limit,
+        )
+    except SearchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    return SearchResponse(
+        query=query,
+        sort=effective_sort,
+        results=[_hit_to_item(hit) for hit in page_result.results],
+        total=page_result.total,
+        page=page_result.page,
+        limit=page_result.limit,
+        has_more=page_result.has_more,
+    )
 
 
 @router.get("/categories")
