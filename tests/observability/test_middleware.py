@@ -12,16 +12,17 @@ from httpx import ASGITransport, AsyncClient
 
 from engine.observability import context as ctx
 from engine.observability.middleware import (
-    CORRELATION_HEADER,
+    _HEADER_NAME_BYTES,
     MAX_CORRELATION_ID_LENGTH,
     CorrelationIdMiddleware,
     safe_correlation_id,
 )
 
-# Lowercased header name exactly as the middleware stores it internally
-# (``self._header_name_bytes``); constructing scopes with this keeps the
-# tests tied to the real configured header rather than a hardcoded literal.
-_HEADER_NAME_BYTES = CORRELATION_HEADER.lower().encode("latin-1")
+# The canonical lowercased-bytes header name the middleware matches against
+# on ``scope['headers']`` and writes back on the response. Imported directly
+# from the middleware module (single source of truth) instead of being
+# re-derived here, so the tests can never drift from the middleware's own
+# casing/encoding of the header name.
 
 
 def _build_app() -> FastAPI:
@@ -155,6 +156,7 @@ class TestSafeCorrelationId:
 
     def test_none_generates_uuid(self):
         out = safe_correlation_id(None)
+        assert out != ""
         uuid.UUID(out)  # raises if not a valid uuid
 
     def test_empty_string_generates_uuid(self):
@@ -299,12 +301,20 @@ class TestHeaderInjectionDefenseASGI:
                 for name, value in message["headers"]:
                     if name == _HEADER_NAME_BYTES:
                         resp_cid = value.decode("latin-1")
-        return resp_cid, captured["ctx"]
+        # The middleware must always emit a correlation header on the
+        # response and bind a value to the observability context. Fail
+        # loudly here — before any caller does string/uuid work on the
+        # result — instead of handing a silent ``None`` downstream.
+        ctx_cid = captured["ctx"]
+        assert resp_cid is not None
+        assert ctx_cid is not None
+        return resp_cid, ctx_cid
 
     @pytest.mark.asyncio
     async def test_crlf_injection_is_sanitized(self):
         # Classic response-splitting / header-smuggling attempt via raw CRLF.
         resp_cid, ctx_cid = await self._drive(b"legit\r\nSet-Cookie: pwn=1")
+        assert resp_cid is not None
         assert "\r" not in resp_cid
         assert "\n" not in resp_cid
         assert "Set-Cookie" not in resp_cid
@@ -314,6 +324,7 @@ class TestHeaderInjectionDefenseASGI:
     @pytest.mark.asyncio
     async def test_nul_byte_is_sanitized(self):
         resp_cid, ctx_cid = await self._drive(b"bad\x00id")
+        assert resp_cid is not None
         assert "\x00" not in resp_cid
         uuid.UUID(resp_cid)
         assert ctx_cid == resp_cid
@@ -322,6 +333,7 @@ class TestHeaderInjectionDefenseASGI:
     async def test_ansi_escape_control_chars_are_sanitized(self):
         # ESC [ 31m (terminal colour sequence) plus BEL.
         resp_cid, ctx_cid = await self._drive(b"\x07\x1b[31mred")
+        assert resp_cid is not None
         assert "\x07" not in resp_cid
         assert "\x1b" not in resp_cid
         uuid.UUID(resp_cid)
@@ -332,6 +344,7 @@ class TestHeaderInjectionDefenseASGI:
         # Sweep the entire C0 range 0x00-0x1f plus DEL (0x7f). None may leak.
         payload = bytes(range(0x20)) + b"\x7f"
         resp_cid, _ = await self._drive(payload)
+        assert resp_cid is not None
         for byte in payload:
             assert chr(byte) not in resp_cid
         uuid.UUID(resp_cid)
@@ -340,6 +353,7 @@ class TestHeaderInjectionDefenseASGI:
     async def test_nonascii_bytes_are_sanitized(self):
         # Bytes >= 0x80 are outside the visible-ASCII range the regex allows.
         resp_cid, _ = await self._drive(b"caf\xc3\xa9-\xff")
+        assert resp_cid is not None
         assert resp_cid.isascii()
         uuid.UUID(resp_cid)
 
@@ -347,12 +361,14 @@ class TestHeaderInjectionDefenseASGI:
     async def test_space_byte_is_sanitized(self):
         # Space (0x20) sits just below the 0x21 lower bound of the charset.
         resp_cid, _ = await self._drive(b"has space")
+        assert resp_cid is not None
         assert " " not in resp_cid
         uuid.UUID(resp_cid)
 
     @pytest.mark.asyncio
     async def test_oversized_bytes_are_sanitized(self):
         resp_cid, _ = await self._drive(b"x" * 10_000)
+        assert resp_cid is not None
         assert len(resp_cid) <= MAX_CORRELATION_ID_LENGTH
         uuid.UUID(resp_cid)
 
@@ -360,6 +376,7 @@ class TestHeaderInjectionDefenseASGI:
     async def test_boundary_length_at_cap_accepted_through_asgi(self):
         candidate = b"a" * MAX_CORRELATION_ID_LENGTH
         resp_cid, ctx_cid = await self._drive(candidate)
+        assert resp_cid is not None
         assert resp_cid == candidate.decode()
         assert ctx_cid == candidate.decode()
         assert len(resp_cid) == MAX_CORRELATION_ID_LENGTH
@@ -368,6 +385,7 @@ class TestHeaderInjectionDefenseASGI:
     async def test_boundary_length_cap_plus_one_regenerated_through_asgi(self):
         candidate = b"a" * (MAX_CORRELATION_ID_LENGTH + 1)
         resp_cid, _ = await self._drive(candidate)
+        assert resp_cid is not None
         assert resp_cid != candidate.decode()
         uuid.UUID(resp_cid)
         assert len(resp_cid) <= MAX_CORRELATION_ID_LENGTH
@@ -377,6 +395,7 @@ class TestHeaderInjectionDefenseASGI:
         # Sanity check: a benign value must round-trip unchanged end-to-end,
         # confirming the sanitiser does not over-reach onto clean input.
         resp_cid, ctx_cid = await self._drive(b"abc-123-from-client")
+        assert resp_cid is not None
         assert resp_cid == "abc-123-from-client"
         assert ctx_cid == "abc-123-from-client"
 
