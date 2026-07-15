@@ -29,10 +29,13 @@ Design notes
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import random
+import re
 import traceback
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from functools import wraps
 from typing import Any, TypeVar
 
@@ -74,6 +77,13 @@ _DEFAULT_RETRYABLE: tuple[type[BaseException], ...] = (
     TimeoutError,
     asyncio.TimeoutError,
 )
+
+# C0 + C1 control characters and DEL. Stripped (not rejected) from free-text
+# fields like ``strategy_name`` / ``symbol`` so a pasted value with a stray
+# tab/newline is normalised rather than rejected outright; an all-control-char
+# value still fails the subsequent emptiness check.
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
 
 
 class TaskExecutionError(RuntimeError):
@@ -276,6 +286,106 @@ async def _evaluate_strategy(*, strategy: Any, market: Any, portfolio: Any, cost
 
 
 # --------------------------------------------------------------------------- #
+# Input validation
+#
+# The public backtest tasks accept untrusted, user-supplied parameters that
+# travel through the Redis result backend (JSON). Rather than letting bad
+# inputs surface as opaque downstream failures (or, worse, burn retry budget
+# on a value that can never succeed), every public entry point validates and
+# normalises its arguments via :func:`_validate_backtest_inputs` *before*
+# enqueueing/executing. The helper raises :class:`TypeError` for invalid
+# types and :class:`ValueError` for invalid values; neither is in
+# :data:`_DEFAULT_RETRYABLE`, so both fail fast and the public tasks translate
+# them into a ``failed`` result envelope.
+# --------------------------------------------------------------------------- #
+def _parse_iso_date(value: str, field: str) -> datetime:
+    """Parse a strict ``YYYY-MM-DD`` date, raising ``TypeError``/``ValueError`` on failure.
+
+    :param value: the raw date string supplied by the caller.
+    :param field: logical field name (``"start_date"`` / ``"end_date"``)
+        used to build a helpful error message.
+    :returns: the parsed :class:`~datetime.datetime` (midnight UTC).
+    :raises TypeError: if ``value`` is not a string.
+    :raises ValueError: if ``value`` is not parseable as an ISO calendar date.
+    """
+    if not isinstance(value, str):
+        raise TypeError(
+            f"{field} must be a string in YYYY-MM-DD format, got "
+            f"{type(value).__name__}"
+        )
+    try:
+        return datetime.strptime(value.strip(), "%Y-%m-%d").replace(tzinfo=UTC)
+    except ValueError as exc:
+        raise ValueError(
+            f"{field} {value!r} is not a valid YYYY-MM-DD date: {exc}"
+        ) from exc
+
+
+def _validate_backtest_inputs(
+    *,
+    strategy_name: str,
+    symbol: str,
+    start_date: str,
+    end_date: str,
+    initial_capital: float,
+) -> tuple[str, str, str, str, float]:
+    """Validate and normalise the inputs to a backtest task.
+
+    Applied at the top of every public task (:func:`run_backtest` and
+    :func:`submit_backtest_job`) so invalid input is rejected at the API
+    boundary rather than mid-run. The function both *validates* (raising
+    :class:`TypeError` for non-string/non-number inputs and
+    :class:`ValueError` for NaN/inf/negative capital, unparseable or
+    reversed dates, or empty identifiers) and *normalises* (stripping C0/C1
+    control characters and surrounding whitespace from ``strategy_name``
+    and ``symbol``).
+
+    :returns: the cleaned ``(strategy_name, symbol, start_date, end_date,
+        initial_capital)`` tuple. ``start_date`` / ``end_date`` are returned
+        verbatim (already validated as ISO strings) and ``initial_capital``
+        is coerced to a plain ``float``.
+    :raises TypeError: when an argument has an unexpected type.
+    :raises ValueError: with a descriptive message for any invalid value.
+    """
+    # Strategy name / symbol: strip control chars + whitespace, reject empty.
+    if not isinstance(strategy_name, str):
+        raise TypeError("strategy_name must be a string")
+    cleaned_strategy = _CONTROL_CHARS.sub("", strategy_name).strip()
+    if not cleaned_strategy:
+        raise ValueError("strategy_name must not be empty after cleaning")
+
+    if not isinstance(symbol, str):
+        raise TypeError("symbol must be a string")
+    cleaned_symbol = _CONTROL_CHARS.sub("", symbol).strip()
+    if not cleaned_symbol:
+        raise ValueError("symbol must not be empty after cleaning")
+
+    # initial_capital: reject non-numbers, booleans, NaN, inf and negatives.
+    if isinstance(initial_capital, bool) or not isinstance(
+        initial_capital, (int, float)
+    ):
+        raise TypeError(
+            f"initial_capital must be a number, got "
+            f"{type(initial_capital).__name__}"
+        )
+    if math.isnan(initial_capital) or math.isinf(initial_capital):
+        raise ValueError("initial_capital must be a finite number")
+    if initial_capital < 0:
+        raise ValueError("initial_capital must not be negative")
+
+    # Dates: parse strictly, then enforce a non-empty window.
+    start_dt = _parse_iso_date(start_date, "start_date")
+    end_dt = _parse_iso_date(end_date, "end_date")
+    if start_dt >= end_dt:
+        raise ValueError(
+            f"start_date {start_date!r} must be strictly before "
+            f"end_date {end_date!r}"
+        )
+
+    return cleaned_strategy, cleaned_symbol, start_date, end_date, float(initial_capital)
+
+
+# --------------------------------------------------------------------------- #
 # Public tasks
 # --------------------------------------------------------------------------- #
 @broker.task
@@ -304,6 +414,17 @@ async def run_backtest(
         correlation_id=cid,
     )
     try:
+        # Validate + normalise before execution so bad input fails fast
+        # (ValueError is non-retryable) instead of burning retry budget.
+        strategy_name, symbol, start_date, end_date, initial_capital = (
+            _validate_backtest_inputs(
+                strategy_name=strategy_name,
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+                initial_capital=initial_capital,
+            )
+        )
         result = await _execute_backtest(
             strategy_name=strategy_name,
             symbol=symbol,
@@ -479,6 +600,36 @@ async def submit_backtest_job(
     """
     ensure_correlation_id()
     cid = get_correlation_id()
+    try:
+        # Reject bad input at submit time so the caller gets immediate
+        # feedback rather than discovering it later from the worker.
+        strategy_name, symbol, start_date, end_date, initial_capital = (
+            _validate_backtest_inputs(
+                strategy_name=strategy_name,
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+                initial_capital=initial_capital,
+            )
+        )
+    except (ValueError, TypeError) as exc:
+        logger.exception(
+            "submit_backtest_job.invalid_input",
+            strategy=strategy_name,
+            symbol=symbol,
+            error=str(exc),
+            error_type=type(exc).__name__,
+            correlation_id=cid,
+            traceback=traceback.format_exc(),
+        )
+        return {
+            "status": "failed",
+            "strategy_name": strategy_name,
+            "symbol": symbol,
+            "error": str(exc),
+            "error_type": type(exc).__name__,
+            "correlation_id": cid,
+        }
     logger.info(
         "submit_backtest_job.start",
         strategy=strategy_name,
@@ -516,6 +667,25 @@ async def submit_backtest_job(
         }
 
     task_id = getattr(task, "task_id", None)
+    if task_id is None:
+        # The broker accepted the enqueue but returned no task_id. This is
+        # an unexpected broker state (every ListQueueBroker task is assigned
+        # an id on kiq), so surface it as a failed envelope rather than
+        # handing the caller an id they can never poll.
+        logger.error(
+            "submit_backtest_job.no_task_id",
+            strategy=strategy_name,
+            symbol=symbol,
+            correlation_id=cid,
+        )
+        return {
+            "status": "failed",
+            "strategy_name": strategy_name,
+            "symbol": symbol,
+            "error": "Broker accepted the task but returned no task_id",
+            "error_type": "RuntimeError",
+            "correlation_id": cid,
+        }
     logger.info(
         "submit_backtest_job.submitted",
         strategy=strategy_name,
@@ -662,6 +832,7 @@ async def collect_backtest_result(task_id: str) -> dict[str, Any]:
 
 __all__ = [
     "TaskExecutionError",
+    "_validate_backtest_inputs",
     "broker",
     "collect_backtest_result",
     "on_worker_shutdown",
