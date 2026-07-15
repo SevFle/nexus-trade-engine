@@ -48,7 +48,15 @@ class MarketplaceEntry(BaseModel):
 
 
 class SearchResultItem(BaseModel):
-    """A single strategy in a search result page."""
+    """A single strategy in a search result page.
+
+    The catalog-sourced numeric fields (``rating``, ``downloads``,
+    ``min_capital``) are Optional and default to ``None`` rather than a masked
+    ``0``/``0.0`` placeholder, so genuinely-missing catalog data serializes to
+    the JSON literal ``null`` instead of a misleading zero. ``_hit_to_item``
+    only forwards keys whose source value is present (non-None); missing keys
+    then resolve to these model-level defaults.
+    """
 
     id: str
     name: str
@@ -57,10 +65,10 @@ class SearchResultItem(BaseModel):
     description: str
     category: str
     tags: list[str]
-    rating: float
-    downloads: int
+    rating: float | None = None
+    downloads: int | None = None
     backtest_sharpe: float | None = None
-    min_capital: float
+    min_capital: float | None = None
     created_at: datetime | None = None
     score: float = 0.0
 
@@ -133,21 +141,28 @@ class RatingsListResponse(BaseModel):
 
 def _hit_to_item(hit: SearchHit) -> SearchResultItem:
     listing: StrategyListing = hit.listing
-    return SearchResultItem(
-        id=listing.id,
-        name=listing.name,
-        version=listing.version,
-        author=listing.author,
-        description=listing.description,
-        category=listing.category,
-        tags=list(listing.tags),
-        rating=listing.rating,
-        downloads=listing.downloads,
-        backtest_sharpe=listing.backtest_sharpe,
-        min_capital=listing.min_capital,
-        created_at=listing.created_at,
+    present = {
+        "id": listing.id,
+        "name": listing.name,
+        "version": listing.version,
+        "author": listing.author,
+        "description": listing.description,
+        "category": listing.category,
+        "tags": list(listing.tags),
+        "rating": listing.rating,
+        "downloads": listing.downloads,
+        "backtest_sharpe": listing.backtest_sharpe,
+        "min_capital": listing.min_capital,
+        "created_at": listing.created_at,
         # Round to 4dp so the API surface is stable and free of float noise.
-        score=round(hit.score, 4),
+        "score": round(hit.score, 4),
+    }
+    # Forward only keys whose source value is actually present (non-None) so
+    # genuinely-missing catalog data resolves to the model's own field defaults
+    # (Optional fields -> None / JSON ``null``) rather than being masked by a
+    # zero placeholder or tripping a spurious validation error.
+    return SearchResultItem(
+        **{key: value for key, value in present.items() if value is not None}
     )
 
 
