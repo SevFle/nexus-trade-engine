@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     operator_url: str = "https://example.com"
     jurisdiction: str = "United States"
     platform_fee_percent: int = 30
+    # Comma-separated list of trusted reverse-proxy addresses / CIDR ranges
+    # (e.g. "10.0.0.0/8,127.0.0.1"). Used by client-IP resolution to decide
+    # whether to trust the X-Forwarded-For header. Empty (default) means no
+    # peer is trusted and the raw TCP peer is always used as the client IP.
+    trusted_proxies: str = ""
 
     # Auth
     secret_key: str = ""
@@ -154,6 +159,17 @@ class Settings(BaseSettings):
     @property
     def enabled_providers(self) -> list[str]:
         return [p.strip() for p in self.auth_providers.split(",") if p.strip()]
+
+    @property
+    def trusted_proxies_set(self) -> set[str]:
+        """Parse ``trusted_proxies`` into a de-duplicated set of entries.
+
+        Blank entries are dropped so the empty default yields an empty set
+        (=> no peer is trusted, X-Forwarded-For is never consulted). Each
+        entry may be a bare IP or a CIDR range; parsing/containment is done
+        downstream in :mod:`engine.api.ip_utils`.
+        """
+        return {p.strip() for p in self.trusted_proxies.split(",") if p.strip()}
 
     @property
     def rate_limit_role_tiers_map(self) -> dict[str, tuple[int, int]]:

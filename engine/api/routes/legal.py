@@ -5,10 +5,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.api.auth.dependency import get_current_user
+from engine.api.ip_utils import resolve_client_ip
 from engine.config import settings
 from engine.db.models import User
 from engine.deps import get_db
@@ -213,17 +214,40 @@ async def record_legal_gate_acceptance(
 ) -> GateAcceptResponse:
     """Record the authenticated user's acceptance of a legal document version.
 
+    The submitted ``document_version`` must match the current version
+    (``settings.legal_terms_version``); a mismatch is rejected with HTTP 422
+    so a client cannot record acceptance of a stale or future document. On a
+    match the *server-authoritative* current version is what is persisted —
+    never the client-supplied string — so the audit trail can never be
+    polluted by a crafted payload.
+
+    The client IP is resolved via :func:`resolve_client_ip`, which honors the
+    configured ``trusted_proxies`` (CIDR-aware) and ``X-Forwarded-For``, so
+    the recorded address is the real end user even behind a reverse proxy.
+
     Appends a new audit row (every acceptance is retained for a lossless
     audit trail). The transaction is committed by the ``get_db`` dependency
     after the route returns; here we only ``flush`` (via the repository) so
     the row is visible to any same-request follow-up read.
     """
-    ip = request.client.host if request.client else "unknown"
-    record = await record_acceptance(db, str(user.id), body.document_version, ip)
+    current_version = settings.legal_terms_version
+    if body.document_version != current_version:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "LEGAL_VERSION_MISMATCH",
+                "message": "Submitted version does not match the current document version.",
+                "current_version": current_version,
+                "submitted_version": body.document_version,
+            },
+        )
+
+    ip = resolve_client_ip(request, settings.trusted_proxies_set)
+    record = await record_acceptance(db, str(user.id), current_version, ip)
     logger.info(
         "legal.gate_acceptance_recorded",
         user_id=str(user.id),
-        document_version=body.document_version,
+        document_version=current_version,
     )
     return GateAcceptResponse(
         accepted=True,
