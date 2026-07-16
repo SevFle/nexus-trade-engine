@@ -584,6 +584,35 @@ class TestGetRemoteIp:
         )
         assert _get_remote_ip(ws) == "10.0.0.1"
 
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_trusted_proxy_cidr_uses_x_real_ip(self):
+        # A peer *inside* the trusted CIDR range must be treated as a proxy,
+        # so X-Real-IP is honored even though the peer host is not a literal
+        # member of the frozenset.
+        ws = _FakeWebSocket(
+            client_host="10.255.42.1",
+            headers={"x-real-ip": "9.8.7.6"},
+        )
+        assert _get_remote_ip(ws) == "9.8.7.6"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_trusted_proxy_cidr_uses_x_forwarded_for(self):
+        ws = _FakeWebSocket(
+            client_host="10.0.7.7",
+            headers={"x-forwarded-for": "9.8.7.6"},
+        )
+        assert _get_remote_ip(ws) == "9.8.7.6"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_untrusted_proxy_outside_cidr_uses_direct(self):
+        # A peer *outside* the trusted CIDR range must NOT be trusted, so the
+        # spoofable X-Forwarded-For header is ignored and the direct peer wins.
+        ws = _FakeWebSocket(
+            client_host="11.0.0.1",
+            headers={"x-forwarded-for": "9.8.7.6"},
+        )
+        assert _get_remote_ip(ws) == "11.0.0.1"
+
 
 # ---------------------------------------------------------------------------
 # auth.py — authenticate_websocket

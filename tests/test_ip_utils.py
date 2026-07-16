@@ -54,6 +54,7 @@ from engine.api.ip_utils import (
     _ip_in_networks,
     _normalize_proxy_entries,
     _parse_proxy_networks_cached,
+    is_trusted_proxy,
     parse_proxy_networks,
     resolve_client_ip,
 )
@@ -351,6 +352,56 @@ class TestIpInNetworks:
         assert _ip_in_networks(ip_utils.ipaddress.ip_address("172.31.255.255"), nets)
         assert _ip_in_networks(ip_utils.ipaddress.ip_address("10.255.255.255"), nets)
         assert not _ip_in_networks(ip_utils.ipaddress.ip_address("8.8.8.8"), nets)
+
+
+# ===========================================================================
+# is_trusted_proxy — CIDR-aware single-peer membership check
+# ===========================================================================
+
+
+class TestIsTrustedProxy:
+    """Pin the CIDR-aware contract used by the WS auth path.
+
+    A plain ``peer in trusted_proxies`` string check misses CIDR ranges, which
+    is exactly the regression that opened SEV-507 in the WS auth helper.
+    These tests ensure ``is_trusted_proxy`` matches a peer that lives inside a
+    trusted CIDR range and rejects one that does not.
+    """
+
+    def test_peer_inside_cidr_is_trusted(self) -> None:
+        assert is_trusted_proxy("10.255.42.1", ["10.0.0.0/8"])
+
+    def test_peer_outside_cidr_is_untrusted(self) -> None:
+        assert not is_trusted_proxy("11.0.0.1", ["10.0.0.0/8"])
+
+    def test_bare_host_exact_match(self) -> None:
+        assert is_trusted_proxy("10.0.0.1", ["10.0.0.1"])
+        assert not is_trusted_proxy("10.0.0.2", ["10.0.0.1"])
+
+    def test_mapped_ipv6_matches_ipv4_network(self) -> None:
+        # Dual-stack proxy reached over IPv6 must still match an IPv4 entry.
+        assert is_trusted_proxy("::ffff:10.0.0.5", ["10.0.0.0/8"])
+
+    def test_empty_trusted_set_is_never_trusted(self) -> None:
+        # Short-circuits so callers can drop a manual emptiness guard.
+        assert not is_trusted_proxy("10.0.0.1", [])
+        assert not is_trusted_proxy("10.0.0.1", [""])
+
+    def test_none_or_blank_peer_is_never_trusted(self) -> None:
+        assert not is_trusted_proxy(None, ["10.0.0.0/8"])
+        assert not is_trusted_proxy("", ["10.0.0.0/8"])
+        assert not is_trusted_proxy("   ", ["10.0.0.0/8"])
+
+    def test_non_ip_peer_is_never_trusted(self) -> None:
+        # A UDS hostname / garbage peer cannot be reasoned about.
+        assert not is_trusted_proxy("unix:/var/run/app.sock", ["10.0.0.0/8"])
+        assert not is_trusted_proxy("not-an-ip", ["10.0.0.0/8"])
+
+    def test_multiple_networks_any_match(self) -> None:
+        trusted = ["10.0.0.0/8", "172.16.0.0/12"]
+        assert is_trusted_proxy("172.31.0.1", trusted)
+        assert is_trusted_proxy("10.1.2.3", trusted)
+        assert not is_trusted_proxy("8.8.8.8", trusted)
 
 
 # ===========================================================================
