@@ -10,6 +10,13 @@ without speaking HTTP.
 
 Everything here lives under [`engine/mcp/`](../engine/mcp/).
 
+> **Companion references.** The whole-surface review lives in
+> [`mcp/capability-audit.md`](mcp/capability-audit.md); the per-tool
+> reference in [`mcp/tool-catalog.md`](mcp/tool-catalog.md); and the
+> machine-readable inventory (generated from this code) in
+> [`mcp/api-surface-map.yaml`](mcp/api-surface-map.yaml). This page is
+> the *why*; those are the *what*.
+
 > **Status: partial.** Every component below is implemented and
 > unit-tested, but the transport-binding entry point
 > (`engine/mcp/server.py`) that wires these components to the `mcp`
@@ -43,7 +50,7 @@ SDK users). An LLM agent is a different consumer:
 | File | Responsibility |
 |---|---|
 | [`config.py`](../engine/mcp/config.py) | `MCPServerSettings` — every `NEXUS_MCP_*` knob. Kept **separate** from `engine/config.py` so the server can run as a standalone stdio process without the full API/DB surface. |
-| [`tool_definitions.py`](../engine/mcp/tool_definitions.py) | Declarative tool catalog: name, description, JSON-Schema `input_schema`, RBAC `required_role`, MCP `ToolAnnotations`. The single source of truth for what tools exist. |
+| [`tool_definitions.py`](../engine/mcp/tool_definitions.py) | Declarative tool catalog: name, description, JSON-Schema `input_schema`, RBAC `required_role`, MCP `ToolAnnotations`. The single source of truth for what tools exist — see [`mcp/tool-catalog.md`](mcp/tool-catalog.md) and the generated [`mcp/api-surface-map.yaml`](mcp/api-surface-map.yaml). |
 | [`handlers.py`](../engine/mcp/handlers.py) | `dispatch_tool(name, args, services, principal, progress)` — routes a tool call to its adapter, validates args against the schema, applies pagination, guards result size. |
 | [`adapters/`](../engine/mcp/adapters/) | One module per tool family: `portfolio_adapter`, `strategy_adapter`, `market_data_adapter`, `backtest_adapter`. Pure async functions `(services, principal, arguments) -> dict`. |
 | [`adapters/__init__.py`](../engine/mcp/adapters/__init__.py) | `EngineServices` (injectable capabilities) + `PortfolioStore` (in-memory portfolios) + `to_jsonable` (Decimal/datetime/dataclass → JSON). |
