@@ -613,6 +613,29 @@ class TestGetRemoteIp:
         )
         assert _get_remote_ip(ws) == "11.0.0.1"
 
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_untrusted_proxy_mapped_ipv6_outside_cidr_uses_direct(self):
+        # An IPv4-mapped IPv6 peer (``::ffff:11.0.0.1``) whose IPv4 form is
+        # OUTSIDE the trusted CIDR must not be treated as a proxy, so the
+        # spoofable header is ignored. Guards against the dual-stack listener
+        # accidentally widening trust via mapped-address collapsing.
+        ws = _FakeWebSocket(
+            client_host="::ffff:11.0.0.1",
+            headers={"x-forwarded-for": "9.8.7.6"},
+        )
+        assert _get_remote_ip(ws) == "::ffff:11.0.0.1"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_trusted_proxy_mapped_ipv6_in_cidr_honors_forwarded(self):
+        # Symmetric counterpart: a dual-stack IPv4-mapped IPv6 peer whose IPv4
+        # form (``10.0.0.1``) is INSIDE the trusted CIDR must still be trusted,
+        # so X-Forwarded-For is honored.
+        ws = _FakeWebSocket(
+            client_host="::ffff:10.0.0.1",
+            headers={"x-forwarded-for": "9.8.7.6"},
+        )
+        assert _get_remote_ip(ws) == "9.8.7.6"
+
 
 # ---------------------------------------------------------------------------
 # auth.py — authenticate_websocket
