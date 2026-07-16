@@ -20,6 +20,8 @@ client can trivially spoof its address by setting the header.
   the real client. This is the standard, spoof-resistant interpretation: each
   trusted proxy appends the previous hop, so the rightmost untrusted entry is
   the genuine origin.
+* The right-to-left walk is capped at :data:`MAX_XFF_HOPS` entries so a
+  maliciously long header cannot be used to degrade resolution.
 
 This module is intentionally dependency-free (no FastAPI imports at runtime) so
 it can be unit-tested in isolation with lightweight request doubles.
@@ -28,7 +30,10 @@ it can be unit-tested in isolation with lightweight request doubles.
 from __future__ import annotations
 
 import ipaddress
+from functools import lru_cache
 from typing import TYPE_CHECKING
+
+import structlog
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -39,19 +44,28 @@ if TYPE_CHECKING:
 #: (e.g. the ASGI ``client`` tuple is missing).
 UNKNOWN_CLIENT = "unknown"
 
+#: Maximum number of ``X-Forwarded-For`` hops inspected when walking the chain
+#: right-to-left. A well-formed deployment has a handful of proxies; any chain
+#: longer than this is either misconfigured or a deliberate attempt to exhaust
+#: the resolver, so the walk is truncated and we fall back to the trusted peer.
+MAX_XFF_HOPS = 16
+
+_logger = structlog.get_logger(__name__)
+
 _IPvXAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 _IPvXNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
 
 
-def parse_proxy_networks(
-    trusted_proxies: Iterable[str],
-) -> list[_IPvXNetwork]:
-    """Parse an iterable of trusted-proxy entries into IP networks.
+@lru_cache(maxsize=128)
+def _parse_proxy_networks_cached(
+    trusted_proxies: tuple[str, ...],
+) -> tuple[_IPvXNetwork, ...]:
+    """Cached core of :func:`parse_proxy_networks`.
 
-    Each entry may be a bare address (``"10.0.0.1"``) or a CIDR range
-    (``"10.0.0.0/8"``). Blank entries are ignored and unparseable values are
-    skipped rather than raising, so a malformed operator config cannot break
-    IP resolution for the whole service.
+    The cache is keyed by a sorted, de-duplicated tuple of the raw proxy
+    entries (see :func:`parse_proxy_networks`) so repeated per-request parsing
+    of the same static configuration is avoided. Returns an immutable tuple so
+    callers cannot mutate a shared cached value.
     """
     networks: list[_IPvXNetwork] = []
     for raw in trusted_proxies:
@@ -64,9 +78,39 @@ def parse_proxy_networks(
             # ip_network accepts both bare hosts (-> /32 or /128) and CIDR
             # ranges. ``strict=False`` tolerates host bits set in a CIDR.
             networks.append(ipaddress.ip_network(entry, strict=False))
-        except ValueError:
+        except ValueError as exc:
+            # Log malformed operator config rather than silently swallowing it,
+            # so misconfigurations surface in observability tooling.
+            _logger.warning(
+                "ip_utils.invalid_proxy_entry",
+                entry=entry,
+                error=str(exc),
+            )
             continue
-    return networks
+    return tuple(networks)
+
+
+def parse_proxy_networks(
+    trusted_proxies: Iterable[str],
+) -> list[_IPvXNetwork]:
+    """Parse an iterable of trusted-proxy entries into IP networks.
+
+    Each entry may be a bare address (``"10.0.0.1"``) or a CIDR range
+    (``"10.0.0.0/8"``). Blank entries are ignored and unparseable values emit
+    a structured warning (via :data:`_logger`) and are skipped rather than
+    raising, so a malformed operator config cannot break IP resolution for the
+    whole service.
+
+    Parsing is memoized via :func:`_parse_proxy_networks_cached`, keyed by a
+    sorted, de-duplicated tuple of the (stripped) entries, so the same trusted
+    proxy set is only parsed once per process.
+    """
+    # Normalize to a hashable, deterministic cache key. Sorting the de-duplicated
+    # set makes the key order-independent, so a set input (e.g.
+    # ``settings.trusted_proxies_set``) hits the cache regardless of iteration
+    # order.
+    key = tuple(sorted({str(p).strip() for p in trusted_proxies if p and str(p).strip()}))
+    return list(_parse_proxy_networks_cached(key))
 
 
 def _collapse_mapped(
@@ -118,7 +162,8 @@ def resolve_client_ip(
     str
         The best-effort real client IP. Falls back to the raw peer (or
         :data:`UNKNOWN_CLIENT`) when no trusted proxy is in play or the
-        ``X-Forwarded-For`` chain is absent / entirely trusted.
+        ``X-Forwarded-For`` chain is absent / entirely trusted / longer than
+        :data:`MAX_XFF_HOPS`.
     """
     peer: str | None = None
     if request.client is not None:
@@ -146,7 +191,13 @@ def resolve_client_ip(
     # genuine client. Each trusted proxy appends the prior hop, so the
     # rightmost *untrusted* entry cannot have been injected by the client.
     forwarded = request.headers.get("x-forwarded-for", "")
+    hops_examined = 0
     for raw in reversed(forwarded.split(",")):
+        # Cap the walk: a chain longer than MAX_XFF_HOPS is either misconfigured
+        # or an attempt to exhaust the resolver. Truncate and fall back.
+        if hops_examined >= MAX_XFF_HOPS:
+            break
+        hops_examined += 1
         candidate = raw.strip()
         if not candidate:
             continue
@@ -158,6 +209,7 @@ def resolve_client_ip(
             continue
         return candidate
 
-    # Either no XFF header was present or every hop was a trusted proxy
-    # (e.g. a single-hop proxy with no client info). Fall back to the peer.
+    # Either no XFF header was present, every hop was a trusted proxy, or the
+    # chain exceeded MAX_XFF_HOPS before an untrusted hop was found. Fall back
+    # to the peer.
     return peer
