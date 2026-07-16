@@ -19,16 +19,26 @@ client can trivially spoof its address by setting the header.
   right-to-left and the first hop that is *not* a trusted proxy is reported as
   the real client. This is the standard, spoof-resistant interpretation: each
   trusted proxy appends the previous hop, so the rightmost untrusted entry is
-  the genuine origin.
+  the genuine origin. The walk is bounded by :data:`MAX_XFF_HOPS` so a
+  pathologically long header cannot force unbounded work.
 
-This module is intentionally dependency-free (no FastAPI imports at runtime) so
-it can be unit-tested in isolation with lightweight request doubles.
+* Trusted-proxy parsing is memoized (:func:`_parse_proxy_networks_cached`) so
+  the :func:`ipaddress.ip_network` calls happen at most once per distinct
+  proxy set, and each malformed entry is surfaced via a structured ``warning``
+  log rather than being silently dropped.
+
+This module only needs :mod:`ipaddress` and :mod:`structlog` (no FastAPI
+imports at runtime) so it can be unit-tested in isolation with lightweight
+request doubles.
 """
 
 from __future__ import annotations
 
 import ipaddress
+from functools import lru_cache
 from typing import TYPE_CHECKING
+
+import structlog
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -39,8 +49,66 @@ if TYPE_CHECKING:
 #: (e.g. the ASGI ``client`` tuple is missing).
 UNKNOWN_CLIENT = "unknown"
 
+#: Maximum number of ``X-Forwarded-For`` hops to inspect when walking the
+#: chain right-to-left. Bounds the cost of processing a pathologically long
+#: (or hostile) header so a single request cannot force unbounded parsing of
+#: an attacker-controlled value. Each trusted proxy appends exactly one hop,
+#: so any legitimate chain fits comfortably within this cap.
+MAX_XFF_HOPS = 16
+
+_log = structlog.get_logger(__name__)
+
 _IPvXAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 _IPvXNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
+
+
+def _normalize_proxy_entries(
+    trusted_proxies: Iterable[str],
+) -> frozenset[str]:
+    """Normalize proxy entries into a hashable, deduplicated key.
+
+    ``None`` and blank/whitespace-only entries are dropped and the remaining
+    entries are stripped and de-duplicated. The result is a ``frozenset`` so
+    two calls whose inputs merely differ in iteration order or repetition
+    collapse to the same cache key (see :func:`_parse_proxy_networks_cached`).
+    """
+    entries: set[str] = set()
+    for raw in trusted_proxies:
+        if raw is None:
+            continue
+        entry = raw.strip()
+        if entry:
+            entries.add(entry)
+    return frozenset(entries)
+
+
+@lru_cache(maxsize=256)
+def _parse_proxy_networks_cached(
+    entries: frozenset[str],
+) -> tuple[_IPvXNetwork, ...]:
+    """Parse a normalized set of proxy entries into IP networks (cached).
+
+    The expensive :func:`ipaddress.ip_network` calls run at most once per
+    distinct entry-set. Malformed entries are skipped after emitting a
+    structured ``warning`` carrying the offending entry and the parser error,
+    so a bad operator config is observable rather than silently ignored.
+
+    An immutable ``tuple`` is returned (and cached) so callers can never
+    mutate the shared cached value.
+    """
+    networks: list[_IPvXNetwork] = []
+    for entry in entries:
+        try:
+            # ip_network accepts both bare hosts (-> /32 or /128) and CIDR
+            # ranges. ``strict=False`` tolerates host bits set in a CIDR.
+            networks.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError as exc:
+            _log.warning(
+                "ip_utils.invalid_proxy_entry",
+                entry=entry,
+                error=str(exc),
+            )
+    return tuple(networks)
 
 
 def parse_proxy_networks(
@@ -49,24 +117,18 @@ def parse_proxy_networks(
     """Parse an iterable of trusted-proxy entries into IP networks.
 
     Each entry may be a bare address (``"10.0.0.1"``) or a CIDR range
-    (``"10.0.0.0/8"``). Blank entries are ignored and unparseable values are
-    skipped rather than raising, so a malformed operator config cannot break
-    IP resolution for the whole service.
+    (``"10.0.0.0/8"``). Blank/``None`` entries are ignored and unparseable
+    values are skipped — after emitting a structured warning — rather than
+    raising, so a malformed operator config cannot break IP resolution for the
+    whole service. Parsing is memoized via :func:`_parse_proxy_networks_cached`
+    so repeated calls with the same proxy set reuse the cached result.
+
+    A fresh list is returned on every call so cached state stays intact even
+    if a caller mutates the result.
     """
-    networks: list[_IPvXNetwork] = []
-    for raw in trusted_proxies:
-        if raw is None:
-            continue
-        entry = raw.strip()
-        if not entry:
-            continue
-        try:
-            # ip_network accepts both bare hosts (-> /32 or /128) and CIDR
-            # ranges. ``strict=False`` tolerates host bits set in a CIDR.
-            networks.append(ipaddress.ip_network(entry, strict=False))
-        except ValueError:
-            continue
-    return networks
+    return list(
+        _parse_proxy_networks_cached(_normalize_proxy_entries(trusted_proxies))
+    )
 
 
 def _collapse_mapped(
@@ -146,7 +208,14 @@ def resolve_client_ip(
     # genuine client. Each trusted proxy appends the prior hop, so the
     # rightmost *untrusted* entry cannot have been injected by the client.
     forwarded = request.headers.get("x-forwarded-for", "")
-    for raw in reversed(forwarded.split(",")):
+    # Walk the chain right-to-left, but cap the number of inspected hops so a
+    # pathologically long (or hostile) XFF header cannot force unbounded work.
+    # Each trusted proxy appends exactly one hop, so legitimate chains stay
+    # well within MAX_XFF_HOPS; a client lying past the cap cannot be reached
+    # within the trusted prefix, so we fall back to the peer address.
+    for index, raw in enumerate(reversed(forwarded.split(","))):
+        if index >= MAX_XFF_HOPS:
+            break
         candidate = raw.strip()
         if not candidate:
             continue
