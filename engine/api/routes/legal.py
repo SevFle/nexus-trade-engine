@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from pydantic import BaseModel, ConfigDict, Field
 
 from engine.api.auth.dependency import get_current_user
 from engine.config import settings
 from engine.db.models import User
 from engine.deps import get_db
 from engine.legal import service as legal_service
+from engine.legal.repository import get_latest_acceptance, record_acceptance
 from engine.legal.schemas import (
     AcceptanceListResponse,
     AcceptRequest,
@@ -156,3 +159,102 @@ async def list_attributions(
 ) -> AttributionListResponse:
     items = await legal_service.list_attributions(db, context=context)
     return AttributionListResponse(attributions=items)
+
+
+# --------------------------------------------------------------------------- #
+# Legal Gate acceptance-tracking slice
+# --------------------------------------------------------------------------- #
+# Lean, append-only acceptance log keyed by user. Distinct from the document-
+# management ``/api/v1/legal/*`` surface above: no document body storage,
+# just the audit facts (who / which version / when / from where).
+# Persistence: engine.legal.models.LegalAcceptance (table legal_gate_acceptances).
+# These routes are registered automatically because this ``router`` is already
+# included by the API gateway (engine.api.router.api_router).
+class GateAcceptRequest(BaseModel):
+    """Request body for ``POST /api/legal/accept``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    document_version: str = Field(
+        ...,
+        min_length=1,
+        description="Version of the legal document being accepted.",
+    )
+
+
+class GateAcceptanceOut(BaseModel):
+    """Serialized acceptance record returned by the accept endpoint."""
+
+    user_id: str
+    document_version: str
+    accepted_at: datetime
+    ip_address: str
+
+
+class GateAcceptResponse(BaseModel):
+    accepted: bool
+    acceptance: GateAcceptanceOut
+
+
+class GateStatusResponse(BaseModel):
+    accepted: bool = Field(description="True iff the user accepted the current version.")
+    current_version: str
+    accepted_version: str | None = None
+    accepted_at: datetime | None = None
+    needs_acceptance: bool
+
+
+@router.post("/api/legal/accept", response_model=GateAcceptResponse)
+async def record_legal_gate_acceptance(
+    request: Request,
+    body: GateAcceptRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> GateAcceptResponse:
+    """Record the authenticated user's acceptance of a legal document version.
+
+    Appends a new audit row (every acceptance is retained for a lossless
+    audit trail). The transaction is committed by the ``get_db`` dependency
+    after the route returns; here we only ``flush`` (via the repository) so
+    the row is visible to any same-request follow-up read.
+    """
+    ip = request.client.host if request.client else "unknown"
+    record = await record_acceptance(db, str(user.id), body.document_version, ip)
+    logger.info(
+        "legal.gate_acceptance_recorded",
+        user_id=str(user.id),
+        document_version=body.document_version,
+    )
+    return GateAcceptResponse(
+        accepted=True,
+        acceptance=GateAcceptanceOut(
+            user_id=record.user_id,
+            document_version=record.document_version,
+            accepted_at=record.accepted_at,
+            ip_address=record.ip_address,
+        ),
+    )
+
+
+@router.get("/api/legal/status", response_model=GateStatusResponse)
+async def get_legal_gate_status(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> GateStatusResponse:
+    """Report the authenticated user's current legal-gate acceptance status.
+
+    ``accepted`` is ``True`` only when the user's most recent acceptance
+    matches ``settings.legal_terms_version``; otherwise re-acceptance is
+    required (``needs_acceptance=True``).
+    """
+    current_version = settings.legal_terms_version
+    latest = await get_latest_acceptance(db, str(user.id))
+    accepted_version = latest.document_version if latest is not None else None
+    accepted = accepted_version == current_version
+    return GateStatusResponse(
+        accepted=accepted,
+        current_version=current_version,
+        accepted_version=accepted_version,
+        accepted_at=latest.accepted_at if latest is not None else None,
+        needs_acceptance=not accepted,
+    )
