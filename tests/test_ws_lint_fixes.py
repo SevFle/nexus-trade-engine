@@ -576,6 +576,70 @@ class TestGetRemoteIp:
         )
         assert _get_remote_ip(ws) == "9.8.7.6"
 
+    # --- multi-hop chains with trusted intermediate proxies -----------------
+    # These pin the headline fix: ``_get_remote_ip`` now delegates the XFF
+    # walk to ``resolve_client_ip``, which walks right-to-left and skips hops
+    # that are themselves trusted proxies. The previous inline
+    # ``forwarded.rsplit(",", 1)[-1]`` only ever read the rightmost hop — i.e.
+    # the *last proxy* — so on a multi-proxy deployment it reported a proxy
+    # address as the client. Below, every hop except the genuine client is a
+    # trusted proxy, so the resolver must return the client, never the
+    # rightmost (last) proxy.
+
+    @patch(
+        "engine.api.ws.auth._TRUSTED_PROXIES",
+        frozenset({"10.0.0.1", "10.0.0.2", "10.0.0.3"}),
+    )
+    def test_multi_hop_xff_resolves_to_client_not_last_proxy(self):
+        # Chain (oldest-first): client -> 10.0.0.2 -> 10.0.0.3 -> peer 10.0.0.1.
+        # The rightmost hop is 10.0.0.3 (a proxy). The buggy behavior returned
+        # 10.0.0.3; the correct, spoof-resistant result is the client.
+        ws = _FakeWebSocket(
+            client_host="10.0.0.1",
+            headers={"x-forwarded-for": "203.0.113.9, 10.0.0.2, 10.0.0.3"},
+        )
+        result = _get_remote_ip(ws)
+        assert result == "203.0.113.9"
+        assert result != "10.0.0.3"  # must not report the last proxy
+
+    @patch(
+        "engine.api.ws.auth._TRUSTED_PROXIES",
+        frozenset({"10.0.0.1", "10.0.0.2", "10.0.0.3"}),
+    )
+    def test_multi_hop_xff_client_flanked_by_trusted_proxies(self):
+        # Client sits at the left edge; everything to its right is trusted.
+        ws = _FakeWebSocket(
+            client_host="10.0.0.1",
+            headers={"x-forwarded-for": "198.51.100.42, 10.0.0.3, 10.0.0.2"},
+        )
+        assert _get_remote_ip(ws) == "198.51.100.42"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_multi_hop_xff_with_cidr_trusted_range(self):
+        # Trusted proxies expressed as a CIDR range are also skipped during
+        # the walk (CIDR support comes free from ``resolve_client_ip``).
+        ws = _FakeWebSocket(
+            client_host="10.1.2.3",
+            headers={"x-forwarded-for": "203.0.113.7, 10.4.5.6, 10.7.8.9"},
+        )
+        result = _get_remote_ip(ws)
+        assert result == "203.0.113.7"
+        assert result not in {"10.4.5.6", "10.7.8.9"}
+
+    @patch(
+        "engine.api.ws.auth._TRUSTED_PROXIES",
+        frozenset({"10.0.0.1", "10.0.0.2"}),
+    )
+    def test_multi_hop_rightmost_untrusted_hop_wins(self):
+        # Two untrusted hops with a trusted proxy between them: the rightmost
+        # *untrusted* hop (closest to the trusted chain) wins, not the
+        # rightmost hop overall and not the leftmost client.
+        ws = _FakeWebSocket(
+            client_host="10.0.0.1",
+            headers={"x-forwarded-for": "198.51.100.7, 203.0.113.9, 10.0.0.2"},
+        )
+        assert _get_remote_ip(ws) == "203.0.113.9"
+
     @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset())
     def test_empty_trusted_proxies(self):
         ws = _FakeWebSocket(

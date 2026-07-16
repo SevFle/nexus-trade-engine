@@ -37,6 +37,7 @@ import structlog
 from sqlalchemy import select
 
 from engine.api.auth.jwt import decode_token
+from engine.api.ip_utils import resolve_client_ip
 from engine.api.ws.metrics import ws_metrics
 from engine.api.ws.protocol import (
     WS_CLOSE_AUTH_FORBIDDEN,
@@ -395,20 +396,36 @@ def validate_refresh_token(token) -> AuthResult | None:
 
 
 def _get_remote_ip(ws: WebSocket) -> str:
-    if _TRUSTED_PROXIES and ws.client and ws.client.host in _TRUSTED_PROXIES:
-        forwarded = ws.headers.get("x-forwarded-for")
-        if forwarded:
-            # ``rsplit`` with a maxsplit of 1 yields at most two elements, so a
-            # pathologically long (or hostile) XFF header cannot force the
-            # allocation of a multi-million-entry list just to read the
-            # rightmost (proxy-appended) hop.
-            ip_str = forwarded.rsplit(",", 1)[-1].strip()
-            try:
-                ipaddress.ip_address(ip_str)
-            except ValueError:
-                pass
-            else:
-                return ip_str
+    """Resolve the real client IP behind trusted reverse proxies.
+
+    The spoof-resistant ``X-Forwarded-For`` chain walk is delegated to
+    :func:`resolve_client_ip`: it walks the chain right-to-left, skipping hops
+    that are themselves trusted proxies, and returns the first untrusted hop —
+    the genuine client. This is the *correct* multi-hop interpretation: the
+    previous inline ``rsplit(",", 1)[-1]`` only ever read the rightmost hop
+    (the last proxy that appended to the chain), reporting a proxy as the
+    client on any multi-hop deployment.
+
+    :func:`resolve_client_ip` also short-circuits when the immediate peer is
+    *not* a trusted proxy (ignoring a client-supplied header so the address
+    cannot be spoofed) and falls back to the peer / ``"unknown"``.
+
+    ``X-Real-IP`` is honored only as a legacy back-compat fallback, when the
+    peer is trusted but the XFF chain yields no client (absent or entirely
+    trusted). It is never consulted for an untrusted peer.
+    """
+    resolved = resolve_client_ip(ws, _TRUSTED_PROXIES)
+
+    # ``resolve_client_ip`` returns the raw peer both when the peer is
+    # untrusted (XFF must be ignored to prevent spoofing) and when a trusted
+    # peer has no usable XFF chain. Only the latter is safe to override with
+    # the proxy-supplied ``X-Real-IP`` header, so gate on the peer actually
+    # being a configured trusted proxy and the XFF walk having come up empty.
+    if (
+        ws.client
+        and ws.client.host in _TRUSTED_PROXIES
+        and resolved == ws.client.host
+    ):
         real_ip = ws.headers.get("x-real-ip")
         if real_ip:
             ip_str = real_ip.strip()
@@ -418,6 +435,4 @@ def _get_remote_ip(ws: WebSocket) -> str:
                 pass
             else:
                 return ip_str
-    if ws.client:
-        return ws.client.host
-    return "unknown"
+    return resolved
