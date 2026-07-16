@@ -37,6 +37,7 @@ import structlog
 from sqlalchemy import select
 
 from engine.api.auth.jwt import decode_token
+from engine.api.ip_utils import is_trusted_proxy
 from engine.api.ws.metrics import ws_metrics
 from engine.api.ws.protocol import (
     WS_CLOSE_AUTH_FORBIDDEN,
@@ -395,10 +396,18 @@ def validate_refresh_token(token) -> AuthResult | None:
 
 
 def _get_remote_ip(ws: WebSocket) -> str:
-    if _TRUSTED_PROXIES and ws.client and ws.client.host in _TRUSTED_PROXIES:
+    # CIDR-aware check: a ``_TRUSTED_PROXIES`` entry like ``"10.0.0.0/8"`` must
+    # match any peer in that range, not just a literal string match. Falls
+    # through (returns ``False``) for an empty proxy set, so the guard below
+    # doubles as the emptiness check the old ``if _TRUSTED_PROXIES`` did.
+    if ws.client and is_trusted_proxy(ws.client.host, _TRUSTED_PROXIES):
         forwarded = ws.headers.get("x-forwarded-for")
         if forwarded:
-            ip_str = forwarded.split(",")[-1].strip()
+            # ``rsplit`` with a maxsplit of 1 yields at most two elements, so a
+            # pathologically long (or hostile) XFF header cannot force the
+            # allocation of a multi-million-entry list just to read the
+            # rightmost (proxy-appended) hop.
+            ip_str = forwarded.rsplit(",", 1)[-1].strip()
             try:
                 ipaddress.ip_address(ip_str)
             except ValueError:

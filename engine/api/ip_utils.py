@@ -131,6 +131,35 @@ def parse_proxy_networks(
     )
 
 
+def is_trusted_proxy(
+    peer: str | None,
+    trusted_proxies: Iterable[str],
+) -> bool:
+    """Return True iff ``peer`` is a trusted proxy address.
+
+    Unlike a plain ``peer in trusted_proxies`` membership test, this performs a
+    *CIDR-aware* comparison via :func:`parse_proxy_networks` +
+    :func:`_ip_in_networks`, so an entry like ``"10.0.0.0/8"`` matches any
+    peer in that range (and IPv4-mapped IPv6 peers are collapsed first).
+
+    ``peer`` is treated as a single host address — a CIDR range never makes
+    sense for an actual peer — and an unparseable / blank / ``None`` peer is
+    never considered trusted. An empty ``trusted_proxies`` set short-circuits
+    to ``False`` so callers can drop the manual emptiness guard.
+    """
+    if not peer:
+        return False
+    try:
+        peer_ip: _IPvXAddress = ipaddress.ip_address(peer)
+    except ValueError:
+        # Non-IP peer (e.g. a UDS hostname) can never be a trusted proxy.
+        return False
+    networks = parse_proxy_networks(trusted_proxies)
+    if not networks:
+        return False
+    return _ip_in_networks(peer_ip, networks)
+
+
 def _collapse_mapped(
     ip: _IPvXAddress,
 ) -> _IPvXAddress:
@@ -210,10 +239,18 @@ def resolve_client_ip(
     forwarded = request.headers.get("x-forwarded-for", "")
     # Walk the chain right-to-left, but cap the number of inspected hops so a
     # pathologically long (or hostile) XFF header cannot force unbounded work.
-    # Each trusted proxy appends exactly one hop, so legitimate chains stay
-    # well within MAX_XFF_HOPS; a client lying past the cap cannot be reached
-    # within the trusted prefix, so we fall back to the peer address.
-    for index, raw in enumerate(reversed(forwarded.split(","))):
+    #
+    # ``rsplit`` (not ``split``) caps the result list at ``MAX_XFF_HOPS + 1``
+    # elements *by construction*, so a multi-million-comma header can never
+    # force the allocation of a multi-million-entry list before the loop even
+    # runs — a DoS vector for the attacker-controlled ``split`` path. The
+    # leftmost element may be a leftover concatenation of the untrusted hops
+    # beyond the cap; the ``index >= MAX_XFF_HOPS`` guard skips it (and bounds
+    # the inspected-hop count at ``MAX_XFF_HOPS``) so we never parse it. Each
+    # trusted proxy appends exactly one hop, so legitimate chains stay well
+    # within MAX_XFF_HOPS; a client lying past the cap cannot be reached within
+    # the trusted prefix, so we fall back to the peer address.
+    for index, raw in enumerate(reversed(forwarded.rsplit(",", MAX_XFF_HOPS))):
         if index >= MAX_XFF_HOPS:
             break
         candidate = raw.strip()
