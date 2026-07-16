@@ -11,6 +11,19 @@ Each :class:`ToolDefinition` bundles:
 * ``required_role`` — the minimum RBAC role needed to invoke the tool. The
   default for every tool is the read-only ``viewer`` role; ``run_backtest``
   requires ``quant_dev`` because it is compute-intensive.
+
+Schema fragments
+----------------
+The reusable JSON-Schema snippets (symbol, portfolio id, date range,
+pagination) are produced by small factory functions rather than shared
+module-level dicts. Two reasons:
+
+* **No duplication** — every tool that takes a ``symbol`` property gets the
+  same ``minLength``/``maxLength``/description via one call.
+* **No aliasing** — returning a fresh dict per call avoids the latent bug
+  where several tool schemas pointed at the *same* dict object, so a future
+  in-place edit of one tool's fragment would silently mutate every other
+  tool that aliased it.
 """
 
 from __future__ import annotations
@@ -19,6 +32,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from mcp import types
+
+_DEFAULT_SYMBOL_DESCRIPTION = "Ticker / instrument symbol, e.g. 'AAPL'."
 
 
 @dataclass(frozen=True)
@@ -45,40 +60,68 @@ class ToolDefinition:
         )
 
 
-# ── Reusable schema fragments ──
+# ── Reusable schema-fragment factories ──
+# Each returns a NEW dict so tool schemas never alias one another.
 
-_PAGINATION_PROPS: dict[str, Any] = {
-    "limit": {
-        "type": "integer",
-        "minimum": 1,
-        "maximum": 500,
-        "default": 50,
-        "description": "Maximum number of items to return in one page.",
-    },
-    "cursor": {
-        "type": "string",
-        "description": "Opaque cursor returned by a previous page (base64 offset).",
-    },
-}
 
-_PORTFOLIO_ID_PROP: dict[str, Any] = {
-    "type": "string",
-    "default": "default",
-    "description": "Portfolio identifier. Defaults to the in-memory default portfolio.",
-}
+def _symbol_prop(
+    description: str | None = _DEFAULT_SYMBOL_DESCRIPTION,
+) -> dict[str, Any]:
+    """A ticker symbol property: non-empty, ≤16 chars.
 
-_DATE_RANGE_PROPS: dict[str, Any] = {
-    "start_date": {
+    Pass ``description=None`` to omit the ``description`` key entirely
+    (preserved for tools whose original schema carried none).
+    """
+    prop: dict[str, Any] = {
         "type": "string",
-        "format": "date",
-        "description": "Inclusive start date (ISO-8601, e.g. 2023-01-01).",
-    },
-    "end_date": {
+        "minLength": 1,
+        "maxLength": 16,
+    }
+    if description is not None:
+        prop["description"] = description
+    return prop
+
+
+def _portfolio_id_prop() -> dict[str, Any]:
+    return {
         "type": "string",
-        "format": "date",
-        "description": "Inclusive end date (ISO-8601, e.g. 2024-01-01).",
-    },
-}
+        "default": "default",
+        "description": "Portfolio identifier. Defaults to the in-memory default portfolio.",
+    }
+
+
+def _date_range_props() -> dict[str, dict[str, Any]]:
+    """Inclusive ISO-8601 ``start_date`` / ``end_date`` pair."""
+    return {
+        "start_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Inclusive start date (ISO-8601, e.g. 2023-01-01).",
+        },
+        "end_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Inclusive end date (ISO-8601, e.g. 2024-01-01).",
+        },
+    }
+
+
+def _pagination_props() -> dict[str, dict[str, Any]]:
+    """``limit`` + opaque ``cursor`` for list-heavy tools."""
+    return {
+        "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 50,
+            "description": "Maximum number of items to return in one page.",
+        },
+        "cursor": {
+            "type": "string",
+            "description": "Opaque cursor returned by a previous page (base64 offset).",
+        },
+    }
+
 
 # ── Tool catalog ──
 
@@ -101,14 +144,8 @@ RUN_BACKTEST = ToolDefinition(
                 "type": "string",
                 "description": "Name of an installed strategy (see list_strategies).",
             },
-            "symbol": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 16,
-                "description": "Ticker / instrument symbol, e.g. 'AAPL'.",
-            },
-            "start_date": _DATE_RANGE_PROPS["start_date"],
-            "end_date": _DATE_RANGE_PROPS["end_date"],
+            "symbol": _symbol_prop(),
+            **_date_range_props(),
             "initial_capital": {
                 "type": "number",
                 "exclusiveMinimum": 0,
@@ -129,7 +166,7 @@ GET_PORTFOLIO_STATUS = ToolDefinition(
     ),
     input_schema={
         "type": "object",
-        "properties": {"portfolio_id": _PORTFOLIO_ID_PROP},
+        "properties": {"portfolio_id": _portfolio_id_prop()},
         "additionalProperties": False,
     },
 )
@@ -143,7 +180,7 @@ GET_POSITIONS = ToolDefinition(
     ),
     input_schema={
         "type": "object",
-        "properties": {"portfolio_id": _PORTFOLIO_ID_PROP},
+        "properties": {"portfolio_id": _portfolio_id_prop()},
         "additionalProperties": False,
     },
 )
@@ -159,13 +196,10 @@ GET_POSITION = ToolDefinition(
     input_schema={
         "type": "object",
         "properties": {
-            "portfolio_id": _PORTFOLIO_ID_PROP,
-            "symbol": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 16,
-                "description": "Ticker / instrument symbol, e.g. 'AAPL'. Case-insensitive.",
-            },
+            "portfolio_id": _portfolio_id_prop(),
+            "symbol": _symbol_prop(
+                "Ticker / instrument symbol, e.g. 'AAPL'. Case-insensitive."
+            ),
         },
         "required": ["symbol"],
         "additionalProperties": False,
@@ -182,7 +216,7 @@ GET_UNREALIZED_PNL = ToolDefinition(
     ),
     input_schema={
         "type": "object",
-        "properties": {"portfolio_id": _PORTFOLIO_ID_PROP},
+        "properties": {"portfolio_id": _portfolio_id_prop()},
         "additionalProperties": False,
     },
 )
@@ -197,8 +231,8 @@ GET_ORDERS = ToolDefinition(
     input_schema={
         "type": "object",
         "properties": {
-            "portfolio_id": _PORTFOLIO_ID_PROP,
-            **_PAGINATION_PROPS,
+            "portfolio_id": _portfolio_id_prop(),
+            **_pagination_props(),
         },
         "additionalProperties": False,
     },
@@ -243,12 +277,7 @@ GET_MARKET_DATA = ToolDefinition(
     input_schema={
         "type": "object",
         "properties": {
-            "symbol": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 16,
-                "description": "Ticker / instrument symbol, e.g. 'AAPL'.",
-            },
+            "symbol": _symbol_prop(),
             "interval": {
                 "type": "string",
                 "enum": ["1m", "5m", "15m", "1h", "1d", "1wk", "1mo"],
@@ -260,7 +289,7 @@ GET_MARKET_DATA = ToolDefinition(
                 "default": "1y",
                 "description": "Lookback period, e.g. '1y', '6mo', '3mo', '1mo'.",
             },
-            **_PAGINATION_PROPS,
+            **_pagination_props(),
         },
         "required": ["symbol"],
         "additionalProperties": False,
@@ -277,11 +306,7 @@ GET_COST_MODEL = ToolDefinition(
     input_schema={
         "type": "object",
         "properties": {
-            "symbol": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 16,
-            },
+            "symbol": _symbol_prop(description=None),
             "quantity": {"type": "integer", "minimum": 1},
             "price": {"type": "number", "exclusiveMinimum": 0},
             "side": {"type": "string", "enum": ["buy", "sell"], "default": "buy"},

@@ -70,7 +70,7 @@ we explain *why*, not *what*.
 | Understand every table and its constraints | [`data-model.md`](data-model.md) |
 | Pick the right multi-strategy coordinator (voters vs. capital-aware) | [`architecture/multi-strategy.md`](architecture/multi-strategy.md) |
 | Call the REST / WebSocket API | [`api-reference.md`](api-reference.md) |
-| Drive the engine from an LLM agent (MCP) | [`mcp-server.md`](mcp-server.md) |
+| Drive the engine from an LLM agent (MCP) | [`mcp-server.md`](mcp-server.md) · [`mcp/capability-audit.md`](mcp/capability-audit.md) · [`mcp/tool-catalog.md`](mcp/tool-catalog.md) |
 | Run the engine locally | [`development.md`](development.md) |
 | Ship a release | [`deployment.md`](deployment.md) · [`RELEASING.md`](RELEASING.md) |
 | Write a strategy plugin | [`PLUGIN_DEV_GUIDE.md`](PLUGIN_DEV_GUIDE.md) · [`architecture/plugins.md`](architecture/plugins.md) |
@@ -108,6 +108,10 @@ docs/
 │   └── 0011-runtime-introspection-blocking.md
 ├── api-reference.md                ← every HTTP/WS route, auth, schemas
 ├── mcp-server.md                   ← MCP tools/resources/auth (LLM agent surface)
+├── mcp/                            ← MCP surface audit + catalog (generated map)
+│   ├── capability-audit.md         ← whole-surface review (findings, inventory)
+│   ├── api-surface-map.yaml        ← GENERATED tool/resource/auth inventory
+│   └── tool-catalog.md             ← per-tool reference (roles, args, pagination)
 ├── data-model.md                   ← entities, relationships, invariants
 ├── deployment.md                   ← infra requirements, env, rollout
 ├── development.md                  ← local setup, test suite, lint loop
