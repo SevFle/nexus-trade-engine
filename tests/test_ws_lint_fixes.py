@@ -613,6 +613,35 @@ class TestGetRemoteIp:
         )
         assert _get_remote_ip(ws) == "11.0.0.1"
 
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_untrusted_proxy_outside_cidr_ignores_xreal_ip_and_xff(self):
+        # HIGH-severity security gap (SEV-507 follow-up): the X-Real-IP code
+        # path must be gated by the trusted-proxy CIDR check. A peer *outside*
+        # the trusted range (11.0.0.1 is not in 10.0.0.0/8) must NOT have its
+        # spoofable X-Real-IP / X-Forwarded-For headers honored — otherwise a
+        # client can impersonate arbitrary addresses. Both headers are set to
+        # the same attacker value to exercise both the XFF and the X-Real-IP
+        # branches; the direct peer must still win.
+        ws = _FakeWebSocket(
+            client_host="11.0.0.1",
+            headers={"x-real-ip": "9.8.7.6", "x-forwarded-for": "9.8.7.6"},
+        )
+        assert _get_remote_ip(ws) == "11.0.0.1"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_untrusted_proxy_outside_cidr_ignores_xreal_ip_only(self):
+        # HIGH-severity security gap: the X-Real-IP code path (reached only
+        # when X-Forwarded-For is absent) must also be gated by the
+        # trusted-proxy check. With X-Real-IP set alone and the peer outside
+        # the trusted CIDR, the spoofed value must be ignored and the direct
+        # peer returned. If this test fails, the X-Real-IP branch is not
+        # properly gated and a client can forge its address via X-Real-IP.
+        ws = _FakeWebSocket(
+            client_host="11.0.0.1",
+            headers={"x-real-ip": "9.8.7.6"},
+        )
+        assert _get_remote_ip(ws) == "11.0.0.1"
+
 
 # ---------------------------------------------------------------------------
 # auth.py — authenticate_websocket
