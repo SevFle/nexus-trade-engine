@@ -10,19 +10,21 @@ Contract under test
 -------------------
 The reviewer enumerated a superset of fields — ``backtest_sharpe``,
 ``created_at``, ``rating``, ``downloads``, ``min_capital``, ``description``.
-Of these, only ``backtest_sharpe`` and ``created_at`` are *genuinely Optional*
-(``float | None`` / ``datetime | None``) on both the source dataclass
-(:class:`StrategyListing`) and the response model (:class:`SearchResultItem`).
-They default to ``None``, accept ``None`` without error, and serialize to the
-JSON literal ``null``.
+Of these, ``backtest_sharpe``, ``created_at``, ``rating``, ``downloads`` and
+``min_capital`` are *genuinely Optional* (``float | None`` / ``int | None`` /
+``datetime | None``) on both the source dataclass (:class:`StrategyListing`)
+and the response model (:class:`SearchResultItem`). They default to ``None``,
+accept ``None`` without error, and serialize to the JSON literal ``null``.
+``_hit_to_item`` only forwards keys whose source value is present (non-None),
+so missing catalog data surfaces as the model's ``None`` default rather than
+a masked ``0``/``0.0`` placeholder.
 
-The remaining four (``rating``, ``downloads``, ``min_capital``, ``description``)
-are *required, non-nullable* types on the model. They reject ``None`` with a
-``pydantic.ValidationError``; at the data layer they carry sane defaults
-(``0.0`` / ``0`` / ``0.0``) or are a required ``str``. This suite locks in that
-contract precisely so any future relaxation (e.g. making them Optional to
-tolerate missing catalog data) is a deliberate, reviewed change rather than a
-silent API-shape drift — and so the null-handling that *does* exist is covered.
+The remaining field (``description``) is a *required, non-nullable* ``str`` on
+the model. It rejects ``None`` with a ``pydantic.ValidationError``; at the
+data layer it is a required ``str``. This suite locks in that contract
+precisely so any future relaxation (e.g. making it Optional to tolerate
+missing catalog data) is a deliberate, reviewed change rather than a silent
+API-shape drift — and so the null-handling that *does* exist is covered.
 """
 
 from __future__ import annotations
@@ -36,13 +38,19 @@ from pydantic import ValidationError
 from engine.api.routes.marketplace import SearchResultItem, _hit_to_item
 from engine.marketplace.search import SearchHit, StrategyListing
 
-# The two fields that are genuinely Optional on SearchResultItem. These are the
+# Fields that are genuinely Optional on SearchResultItem. These are the
 # ones where None genuinely flows end-to-end and must render as JSON ``null``.
-OPTIONAL_FIELDS: tuple[str, ...] = ("backtest_sharpe", "created_at")
+OPTIONAL_FIELDS: tuple[str, ...] = (
+    "backtest_sharpe",
+    "created_at",
+    "rating",
+    "downloads",
+    "min_capital",
+)
 
 # Fields the review enumerated that are actually *required* (non-nullable) on
 # the model. They must NOT silently swallow None.
-REQUIRED_FIELDS: tuple[str, ...] = ("rating", "downloads", "min_capital", "description")
+REQUIRED_FIELDS: tuple[str, ...] = ("description",)
 
 
 def _minimal_listing(listing_id: str = "sparse-1") -> StrategyListing:
@@ -255,7 +263,9 @@ class TestFieldPassthrough:
         # Optional fields: None passes through.
         assert item.backtest_sharpe is None
         assert item.created_at is None
-        # Required numeric/str fields: their (default) values pass through.
+        # Now-Optional numeric fields: their (default, non-None) values still
+        # pass through unchanged because they are genuinely present in the
+        # source data.
         assert item.rating == 0.0
         assert item.downloads == 0
         assert item.min_capital == 0.0
@@ -266,6 +276,44 @@ class TestFieldPassthrough:
         assert parsed["downloads"] == 0
         assert parsed["min_capital"] == 0.0
         assert parsed["description"] == ""
+
+    def test_missing_source_data_yields_none_not_zero(self):
+        """When a listing carries None for the now-Optional numeric fields,
+        ``_hit_to_item`` must surface ``None`` (the model default) — NOT a
+        masked ``0``/``0.0`` placeholder.
+
+        This is the core behavioural change behind making ``rating`` /
+        ``downloads`` / ``min_capital`` Optional: genuinely-missing catalog
+        data must serialize to the JSON literal ``null`` rather than a
+        misleading zero that looks indistinguishable from a real zero value.
+        """
+        listing = StrategyListing(
+            id="missing-1",
+            name="Missing Strategy",
+            version="0.1.0",
+            author="Anonymous",
+            description="d",
+            category="algorithmic",
+            tags=[],
+            rating=None,
+            downloads=None,
+            backtest_sharpe=None,
+            min_capital=None,
+            created_at=None,
+        )
+        item = _hit_to_item(_hit(listing, score=0.0))
+
+        # None source data -> None on the item (model default), never a zero.
+        assert item.rating is None
+        assert item.downloads is None
+        assert item.min_capital is None
+        assert item.backtest_sharpe is None
+        assert item.created_at is None
+        # And it serializes to JSON ``null``, not a masked 0 / 0.0.
+        parsed = json.loads(item.model_dump_json())
+        assert parsed["rating"] is None
+        assert parsed["downloads"] is None
+        assert parsed["min_capital"] is None
 
     def test_backtest_sharpe_none_vs_real_value_both_round_trip(self):
         none_item = _hit_to_item(_hit(_minimal_listing()))
@@ -297,13 +345,13 @@ class TestFieldPassthrough:
 class TestNullabilityContract:
     """Pin down precisely which fields tolerate ``None``.
 
-    ``backtest_sharpe`` and ``created_at`` are Optional and must accept None.
-    The remaining review-enumerated fields (``rating``, ``downloads``,
-    ``min_capital``, ``description``) are required on the model and reject
-    None — at the data layer they carry defaults (``0.0``/``0``/``0.0``) or are
-    a required ``str``. If a future change relaxes these to Optional (e.g. to
-    tolerate missing catalog rows), these tests must be updated *deliberately*
-    so the API shape change is reviewed, not accidental.
+    ``backtest_sharpe``, ``created_at``, ``rating``, ``downloads`` and
+    ``min_capital`` are Optional and must accept None. The remaining
+    review-enumerated field (``description``) is required on the model and
+    rejects None — at the data layer it is a required ``str``. If a future
+    change relaxes ``description`` to Optional (e.g. to tolerate missing
+    catalog rows), these tests must be updated *deliberately* so the API
+    shape change is reviewed, not accidental.
     """
 
     @pytest.mark.parametrize("field", OPTIONAL_FIELDS)
