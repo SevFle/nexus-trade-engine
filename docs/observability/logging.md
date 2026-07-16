@@ -52,6 +52,41 @@ Where it gets bound:
 - **taskiq workers** — `engine/observability/taskiq_middleware.py::CorrelationMiddleware` copies the bound id into `message.labels` on `pre_send`, restores it from labels on `pre_execute`, clears on `post_execute`.
 - **Outbound HTTP** — use `correlated_async_client(...)` from `engine/observability/http_client.py`. It registers a request hook that injects `X-Correlation-Id` from `ctx.get_correlation_id()` if the header is unset.
 
+## Client IP resolution & audit
+
+When the API runs behind a load balancer / reverse proxy,
+`request.client.host` is the *proxy's* address, not the end user's.
+[`resolve_client_ip`](../../engine/api/ip_utils.py) recovers the real
+client from `X-Forwarded-For` — but only when the immediate peer is a
+*trusted* proxy, so a client can't spoof its address by setting the
+header. It is the single helper used wherever a record's `ip_address`
+must be the genuine origin.
+
+- **Config**: `NEXUS_TRUSTED_PROXIES` (CSV of hosts / CIDRs, default
+  `""` = trust nobody → always reports the raw peer). Parsed once and
+  memoized via `parse_proxy_networks`; IPv4-mapped IPv6
+  (`::ffff:1.2.3.4`) is collapsed before matching so a dual-stack
+  listener doesn't defeat an IPv4 trust entry.
+- **Walk**: when the peer is trusted, the XFF chain is walked
+  right-to-left and the first hop that is *not* a trusted proxy is
+  reported (the spoof-resistant reading — each proxy appends the
+  previous hop, so the rightmost untrusted entry is the origin).
+- **DoS bound** (gh#1491): the walk inspects at most `MAX_XFF_HOPS`
+  (16) entries, so a pathologically long, attacker-controlled header
+  can't force unbounded parsing. Malformed proxy entries emit a
+  structured `warning`, never a silent drop.
+
+The resolved IP is an **audit field, not a log default**. Today the
+consumer is **legal acceptance**: the `/api/v1/legal/accept` handlers
+resolve the IP and store it on the immutable `LegalAcceptance` row
+([`routes/legal.py`](../../engine/api/routes/legal.py) →
+[`LegalAcceptance.ip_address`](../../engine/legal/models.py)), giving
+consent records a defensible provenance. Auth events still record the
+*raw peer* (`request.client.host`) — they are security signals, not
+consent proofs, so trusting XFF there would weaken rather than
+strengthen them. Don't add a new `ip_address` consumer without going
+through `resolve_client_ip`.
+
 ## Level policy
 
 | Level      | Use for                                                  |

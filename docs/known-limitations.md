@@ -162,30 +162,30 @@ are already in place — the missing piece is the route + worker glue.
 
 ---
 
-## P1 — Strategy Marketplace is mostly a stub (ratings landed, in-memory)
+## P1 — Strategy Marketplace is mostly a stub (search + ratings landed, in-memory)
 
 **Where**: [`engine/api/routes/marketplace.py`](../engine/api/routes/marketplace.py)
 
-`browse`, `install`, `uninstall`, and the legacy
-`{strategy_id}/rate` route still return `{"status":"not_implemented"}`;
-`categories` returns a hardcoded list. There is **no marketplace
-registry** (local or remote) behind those routes.
+`browse`, `install`, `uninstall`, and the legacy `{strategy_id}/rate` route
+still return `{"status":"not_implemented"}`; `categories` returns a hardcoded
+list. There is **no marketplace registry** (local or remote) backing
+install/uninstall.
 
-The **ratings** surface landed (gh#1430): `POST` / `GET`
-`/api/v1/marketplace/strategies/{strategy_id}/ratings` are real (one
-upsert per `(strategy_id, user_id)`, aggregate + reviews). But they are
-backed by a process-local `InMemoryRatingsStore`
-([`engine/marketplace/ratings.py`](../engine/marketplace/ratings.py)) —
-**no DB model, no migration, no persistence**: ratings vanish on every
-restart and are invisible to other replicas. The store itself warns
-when instantiated outside pytest. That is a P0-grade data-loss risk
-hiding behind a "stub" router — treat ratings as non-production until
-a Postgres-backed `RatingsStore` replaces the in-memory default.
+Two surfaces **are** real — both process-local with **no DB model, no
+migration, no persistence** (vanish on restart, invisible across replicas):
 
-**Workaround today**: install strategies under
-`engine/plugins/<kind>/<name>/` and reload the plugin registry. Do not
-rely on marketplace ratings surviving a restart or being visible across
-replicas.
+- **Ratings** (gh#1430) — `POST`/`GET /marketplace/strategies/{id}/ratings`
+  (one upsert per `(strategy_id,user_id)`, aggregate + reviews),
+  [`InMemoryRatingsStore`](../engine/marketplace/ratings.py).
+- **Search** (gh#1476) — `GET /marketplace/search`, ranked keyword search over
+  name/description/tags/author ([`engine/marketplace/search.py`](../engine/marketplace/search.py))
+  on an `InMemoryStrategyCatalog` seeded only for demo/tests — **not**
+  populated from installed strategies.
+
+Both warn when instantiated outside pytest — a P0 data-loss risk behind a
+"stub" router. **Workaround**: install under `engine/plugins/<kind>/<name>/`
+and reload the registry; treat search + ratings as non-production until a
+Postgres backend lands.
 
 ---
 

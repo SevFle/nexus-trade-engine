@@ -98,6 +98,7 @@ Naming convention: field `foo_bar` → env `NEXUS_FOO_BAR`.
 | `NEXUS_RATE_LIMIT_PER_MINUTE` / `_BURST` | 600 / 60 | Per-IP. Tune for known frontends. |
 | `NEXUS_RATE_LIMIT_VALKEY_ENABLED` | `false` | **Set `true` for multi-replica.** When on, limits are enforced globally via Valkey instead of per-pod (otherwise the effective limit becomes `per_minute × replica_count`). |
 | `NEXUS_RATE_LIMIT_ROLE_TIERS` | `""` | JSON `{role:[per_minute,burst]}` for per-role overrides when a Bearer JWT is present (e.g. `{"viewer":[120,30],"admin":[6000,200]}`). |
+| `NEXUS_TRUSTED_PROXIES` | `""` | CSV of trusted proxy hosts/CIDRs (e.g. `10.0.0.0/8,172.16.0.0/12`). **Required behind a LB/CDN** for correct client-IP audit records (legal acceptance stores the resolved IP); empty trusts nobody and reports the raw peer. See [logging — client IP](observability/logging.md#client-ip-resolution--audit). |
 | `NEXUS_DATABASE_POOL_SIZE` / `_MAX_OVERFLOW` | 5 / 10 | SQLAlchemy asyncpg pool sizing. Raise for high-concurrency replicas; each backtest/long query holds a connection. |
 | `NEXUS_DATA_PROVIDERS_CONFIG` | `""` | Path to a YAML provider registration (see `config/data_providers.example.yaml`). |
 | `NEXUS_LOG_FORMAT` | `console` | Switch to `json` for production log pipelines. |

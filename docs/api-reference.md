@@ -251,12 +251,13 @@ Requires legal acceptance.
 ## Marketplace
 
 `/api/v1/marketplace/*`. Source: [`routes/marketplace.py`](../engine/api/routes/marketplace.py).
-The whole router requires legal acceptance. **Discovery/install are
-stubs** (`{status:"not_implemented"}`); **ratings are real but
-in-memory only** — see [known-limitations.md](known-limitations.md).
+The whole router requires legal acceptance. **`browse`/`install`/`uninstall`
+and the legacy `{id}/rate` are stubs** (`{status:"not_implemented"}`); **`/search`
+and the `/ratings` endpoints are real** — both in-memory (see [known-limitations.md](known-limitations.md)).
 
 | Method | Path | Auth | Status |
 |---|---|---|---|
+| GET | `/api/v1/marketplace/search?q=&category=&tag=&sort=&page=&limit=` | `user` | **Real.** Ranked keyword search over name/description/tags/author. `sort ∈ relevance\|downloads\|rating\|name\|newest`; an empty `q` flips the default from `relevance`→`downloads`. `limit` clamped 1–100, `page` 1-indexed; `200 SearchResponse{results,total,page,limit,has_more}`. Numeric catalog fields serialize `null` when absent (not `0`); `400` on bad `sort`/`limit`/`page`. Scoring + pagination detail in [`engine/marketplace/search.py`](../engine/marketplace/search.py). |
 | GET | `/api/v1/marketplace/browse?category=&search=&sort_by=&page=&per_page=` | `user` | Returns empty list (stub). |
 | GET | `/api/v1/marketplace/categories` | `user` | Static category list (algorithmic, ml, llm, hybrid, income, macro). |
 | POST | `/api/v1/marketplace/install` | `developer` | Stub. |
