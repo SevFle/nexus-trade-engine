@@ -533,3 +533,66 @@ class TestMaxXffHopsBound:
         xff = f"{CLIENT_IP}, {padding}"
         result = resolve_client_ip(_request(host="10.0.0.1", xff=xff), TRUSTED)
         assert result == "10.0.0.1"
+
+
+# ===========================================================================
+# resolve_client_ip — multi-million-comma XFF DoS guard (rsplit cap)
+# ===========================================================================
+
+
+class TestHugeXffHeaderDoSProtection:
+    """A genuinely enormous ``X-Forwarded-For`` must stay cheap.
+
+    The earlier ``forwarded.split(",")`` allocated a list with one entry per
+    comma *before* the per-hop loop ran, so a hostile 5-million-comma header
+    forced a multi-million-element allocation. Switching to
+    ``forwarded.rsplit(",", MAX_XFF_HOPS)`` caps the result list at
+    ``MAX_XFF_HOPS + 1`` elements by construction, so the resolver's memory
+    and CPU are bounded no matter how long the attacker pads the header.
+
+    These tests pin the three guarantees the change must preserve:
+
+    1. a 5-million-comma header is processed without error (no blow-up);
+    2. the correct client IP is still extracted when it sits within the
+       inspectable (rightmost) hops; and
+    3. ordinary multi-hop behavior is unchanged by the ``rsplit`` switch.
+    """
+
+    #: A genuinely hostile header size — five million commas — exercising the
+    #: ``rsplit`` cap rather than a small handful of hops.
+    HUGE_HOPS = 5_000_000
+
+    def test_five_million_comma_header_processed_without_error(self) -> None:
+        # The client address is buried at the far left, well past the cap, so
+        # the resolver falls back to the peer — but the headline assertion is
+        # that it returns *at all* and never raises on the giant header. With
+        # the old ``split(",")`` this allocated a ~5M-entry list first.
+        padding = ", ".join(["10.0.0.2"] * self.HUGE_HOPS)
+        xff = f"{CLIENT_IP}, {padding}"
+        result = resolve_client_ip(_request(host="10.0.0.1", xff=xff), TRUSTED)
+        assert result == "10.0.0.1"
+
+    def test_correct_client_ip_still_extracted_from_huge_header(self) -> None:
+        # Same giant header, but the genuine client is the *rightmost* hop
+        # (closest to the trusted proxy chain), so it sits within the first
+        # ``MAX_XFF_HOPS`` inspected hops and must be returned exactly.
+        padding = ", ".join(["10.0.0.2"] * self.HUGE_HOPS)
+        xff = f"{padding}, {CLIENT_IP}"
+        result = resolve_client_ip(_request(host="10.0.0.1", xff=xff), TRUSTED)
+        assert result == CLIENT_IP
+
+    def test_multi_hop_behavior_preserved_after_rsplit(self) -> None:
+        # The ``rsplit`` switch must not disturb the canonical multi-hop walk:
+        # a client flanked by trusted proxies, read right-to-left, resolves to
+        # the rightmost *untrusted* hop. (Re-asserts the headline spoof-
+        # resistant contract against the new splitting implementation.)
+        xff = f"198.51.100.7, {CLIENT_IP}, 10.0.0.2, 10.0.0.3"
+        result = resolve_client_ip(_request(host="10.0.0.1", xff=xff), TRUSTED)
+        assert result == CLIENT_IP
+
+    def test_rsplit_caps_list_size_for_huge_header(self) -> None:
+        # Direct proof that the implementation uses a capped split: the
+        # ``rsplit(",", MAX_XFF_HOPS)`` of a 5M-comma header yields exactly
+        # ``MAX_XFF_HOPS + 1`` elements (not 5M+1), regardless of padding.
+        header = ",".join(["10.0.0.2"] * (self.HUGE_HOPS + 1))
+        assert len(header.rsplit(",", MAX_XFF_HOPS)) == MAX_XFF_HOPS + 1

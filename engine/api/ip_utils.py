@@ -210,10 +210,18 @@ def resolve_client_ip(
     forwarded = request.headers.get("x-forwarded-for", "")
     # Walk the chain right-to-left, but cap the number of inspected hops so a
     # pathologically long (or hostile) XFF header cannot force unbounded work.
-    # Each trusted proxy appends exactly one hop, so legitimate chains stay
-    # well within MAX_XFF_HOPS; a client lying past the cap cannot be reached
-    # within the trusted prefix, so we fall back to the peer address.
-    for index, raw in enumerate(reversed(forwarded.split(","))):
+    #
+    # ``rsplit`` (not ``split``) caps the result list at ``MAX_XFF_HOPS + 1``
+    # elements *by construction*, so a multi-million-comma header can never
+    # force the allocation of a multi-million-entry list before the loop even
+    # runs — a DoS vector for the attacker-controlled ``split`` path. The
+    # leftmost element may be a leftover concatenation of the untrusted hops
+    # beyond the cap; the ``index >= MAX_XFF_HOPS`` guard skips it (and bounds
+    # the inspected-hop count at ``MAX_XFF_HOPS``) so we never parse it. Each
+    # trusted proxy appends exactly one hop, so legitimate chains stay well
+    # within MAX_XFF_HOPS; a client lying past the cap cannot be reached within
+    # the trusted prefix, so we fall back to the peer address.
+    for index, raw in enumerate(reversed(forwarded.rsplit(",", MAX_XFF_HOPS))):
         if index >= MAX_XFF_HOPS:
             break
         candidate = raw.strip()

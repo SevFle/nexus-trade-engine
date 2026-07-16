@@ -398,7 +398,11 @@ def _get_remote_ip(ws: WebSocket) -> str:
     if _TRUSTED_PROXIES and ws.client and ws.client.host in _TRUSTED_PROXIES:
         forwarded = ws.headers.get("x-forwarded-for")
         if forwarded:
-            ip_str = forwarded.split(",")[-1].strip()
+            # ``rsplit`` with a maxsplit of 1 yields at most two elements, so a
+            # pathologically long (or hostile) XFF header cannot force the
+            # allocation of a multi-million-entry list just to read the
+            # rightmost (proxy-appended) hop.
+            ip_str = forwarded.rsplit(",", 1)[-1].strip()
             try:
                 ipaddress.ip_address(ip_str)
             except ValueError:
