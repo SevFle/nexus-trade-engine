@@ -182,3 +182,77 @@ class TestDefaultBackend:
             assert _counter_total(recording, "oms.risk.approved") == 1
         finally:
             set_metrics(NullBackend())
+
+
+class TestExplicitBackendPrecedence:
+    def test_injected_metrics_shadows_get_metrics_singleton(self):
+        # Issue #300: an explicit ``metrics=`` backend must win over the
+        # process singleton. Even when ``set_metrics()`` has installed a
+        # live backend, every emission lands on the injected one and the
+        # global backend records nothing.
+        from engine.observability.metrics import NullBackend, set_metrics
+
+        global_backend = RecordingBackend()
+        set_metrics(global_backend)
+        try:
+            injected = RecordingBackend()
+            ks = KillSwitch()
+            gate = RiskGate(
+                checks=[
+                    KillSwitchCheck(switch=ks),
+                    MaxOrderQuantity(limit=Decimal("100")),
+                ],
+                metrics=injected,
+            )
+
+            result = gate.evaluate(_market_buy())
+
+            assert isinstance(result, Approve)
+            # All emissions land on the injected backend only.
+            assert _counter_total(injected, "oms.risk.check") == 2
+            assert _counter_total(injected, "oms.risk.approved") == 1
+            # The process singleton is never consulted.
+            assert _counter_total(global_backend, "oms.risk.check") == 0
+            assert _counter_total(global_backend, "oms.risk.approved") == 0
+            assert _counter_total(global_backend, "oms.risk.rejected") == 0
+        finally:
+            set_metrics(NullBackend())
+
+    def test_reject_path_still_respects_injected_backend(self):
+        # First-reject-wins metrics must also respect precedence: the
+        # rejecting rows land on the injected backend, never the singleton.
+        from engine.observability.metrics import NullBackend, set_metrics
+
+        global_backend = RecordingBackend()
+        set_metrics(global_backend)
+        try:
+            injected = RecordingBackend()
+            gate = RiskGate(
+                checks=[MaxOrderQuantity(limit=Decimal("5"))],  # rejects qty 10
+                metrics=injected,
+            )
+
+            result = gate.evaluate(_market_buy())
+
+            assert isinstance(result, Reject)
+            assert (
+                _counter_with(
+                    injected,
+                    "oms.risk.check",
+                    {"check": "MaxOrderQuantity", "outcome": "reject", "symbol": "AAPL"},
+                )
+                == 1
+            )
+            assert (
+                _counter_with(
+                    injected,
+                    "oms.risk.rejected",
+                    {"check": "MaxOrderQuantity", "symbol": "AAPL"},
+                )
+                == 1
+            )
+            assert _counter_total(injected, "oms.risk.approved") == 0
+            assert _counter_total(global_backend, "oms.risk.check") == 0
+            assert _counter_total(global_backend, "oms.risk.rejected") == 0
+        finally:
+            set_metrics(NullBackend())
