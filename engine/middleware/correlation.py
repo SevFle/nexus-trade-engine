@@ -90,6 +90,8 @@ if TYPE_CHECKING:
 
 __all__ = ["CORRELATION_HEADER", "BaseHTTPCorrelationIdMiddleware"]
 
+logger = structlog.get_logger(__name__)
+
 
 def _new_span_id() -> str:
     """Return a short, opaque span id derived from a fresh UUID4."""
@@ -128,17 +130,48 @@ class BaseHTTPCorrelationIdMiddleware(BaseHTTPMiddleware):
             request_id=request_id,
         )
 
-        context_tokens = ctx.bind_request_scope(
-            correlation_id=correlation_id,
-            request_id=request_id,
-            span_id=span_id,
-        )
+        try:
+            # ``bind_request_scope`` binds correlation_id, request_id and
+            # span_id in sequence. If the request_id / span_id ``set`` fails
+            # *after* correlation_id was already bound, the structlog binding
+            # above would leak into the next request sharing this asyncio
+            # task. structlog binds correlation_id + request_id as a single
+            # atomic call, so there is no partial token to selectively reset
+            # — fall back to clearing everything as a catch-all rollback.
+            context_tokens = ctx.bind_request_scope(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                span_id=span_id,
+            )
+        except Exception:
+            structlog.contextvars.clear_contextvars()
+            raise
 
         try:
             response = await call_next(request)
         finally:
-            structlog.contextvars.reset_contextvars(**structlog_tokens)
-            ctx.reset_tokens(context_tokens)
+            # Both resets are guarded so a single un-restorable token (created
+            # in a different Context, or already reset by a nested context
+            # manager / test teardown) cannot propagate and short-circuit the
+            # *other* reset — which would leak observability context. Each
+            # guard mirrors the other; a failed reset is logged at debug and
+            # the remaining reset still runs.
+            try:
+                structlog.contextvars.reset_contextvars(**structlog_tokens)
+            except (KeyError, ValueError) as exc:
+                logger.debug(
+                    "correlation middleware: failed to reset structlog "
+                    "contextvars token",
+                    error=repr(exc),
+                )
+            try:
+                ctx.reset_tokens(context_tokens)
+            except (KeyError, ValueError) as exc:
+                logger.debug(
+                    "correlation middleware: failed to reset observability "
+                    "context tokens",
+                    error=repr(exc),
+                )
 
         response.headers[self.header_name] = correlation_id
         return response
