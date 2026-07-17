@@ -2985,7 +2985,13 @@ of submission, from the same replica. Operators running behind a load
 balancer need sticky sessions on <code>/api/v1/backtest/*</code>.</p>
 <p><strong>Fix path</strong>: switch <code>_run_backtest_background</code> to write to
 <code>backtest_results</code> and the GET handler to query by <code>id</code> + <code>user_id</code>.
-The <code>BackgroundTasks</code> call should become a TaskIQ enqueue.</p>
+The TaskIQ enqueue half already exists — <code>submit_backtest_job</code> /
+<code>collect_backtest_result</code> in
+<a href="../engine/tasks/definitions.py"><code>engine/tasks/definitions.py</code></a> (gh#1472,
+with submit-time input validation from gh#1474) — so the remaining work
+is to point <code>POST /run</code> at them instead of
+<code>BackgroundTasks.add_task(...)</code>, and to persist the completed payload
+rather than stuffing it into <code>_backtest_results</code>.</p>
 <hr />
 <p><a id="privacy-tables-no-migration"></a></p>
 <h2 id="p0-consent_records-deletion_schedules-have-models-but-no-migration">P0 — <code>consent_records</code> &amp; <code>deletion_schedules</code> have models but no migration<a class="headerlink" href="#p0-consent_records-deletion_schedules-have-models-but-no-migration" title="Permanent link">&para;</a></h2>
@@ -3196,19 +3202,39 @@ use that for WS. If long-lived WS access for automation is needed, port
 the API-key branch from the legacy endpoint into <code>ws/auth.py</code>.</p>
 <hr />
 <h2 id="p1-taskiq-plumbing-incomplete">P1 — TaskIQ plumbing incomplete<a class="headerlink" href="#p1-taskiq-plumbing-incomplete" title="Permanent link">&para;</a></h2>
-<p><code>engine/tasks/worker.py</code> defines the broker; the compose file runs
-it. But:</p>
+<p>The broker lives in <a href="../engine/tasks/broker.py"><code>engine/tasks/broker.py</code></a>
+(a <code>ListQueueBroker</code> over the same Valkey instance as the cache / event
+bus; <code>worker.py</code> is now a re-export shim for backwards compat) and the
+compose file runs the worker process. The submit/collect handler pair
+landed in gh#1472 / #1474:</p>
 <ul>
-<li><code>POST /backtest/run</code> uses FastAPI <code>BackgroundTasks</code>, not TaskIQ —
-  so backtests run in the <em>web</em> process, not the worker. A long
-  backtest stalls the uvicorn worker pool.</li>
+<li><code>submit_backtest_job</code> — fire-and-forget enqueue. Runs
+  <code>_validate_backtest_inputs</code> up front so a bad payload fails at submit
+  (gh#1474) and never reaches the worker, then <code>run_backtest.kiq(...)</code>
+  and returns <code>{status:"submitted", task_id}</code> immediately.</li>
+<li><code>collect_backtest_result</code> — the poll half. Rebuilds the result handle,
+  surfaces <code>pending</code> / <code>completed</code> / <code>failed</code> envelopes, and catches
+  <code>ResultGetError</code> / dropped-Redis so the caller always gets a
+  JSON-serialisable dict.</li>
+</ul>
+<p>What is <strong>still missing</strong> is the one line that ties them to the API:</p>
+<ul>
+<li><code>POST /api/v1/backtest/run</code> (and its <code>POST /api/v1/backtest</code> alias)
+  still use FastAPI <code>BackgroundTasks</code> + the in-process <code>_backtest_results</code>
+  dict, <strong>not</strong> <code>submit_backtest_job</code> / <code>collect_backtest_result</code>
+  (<a href="../engine/api/routes/backtest.py#L229"><code>routes/backtest.py</code></a>). So in
+  production a long backtest stalls the uvicorn worker pool and results
+  neither survive a restart nor cross replicas.</li>
 <li>The task-pipeline SLO in <a href="../operations/slos/"><code>operations/slos.md</code></a>
   is defined but has no emitter yet — <code>nexus.task.runs_total</code> is the
   intended metric name.</li>
 </ul>
-<p><strong>Workaround today</strong>: run uvicorn with <code>--workers N</code> and tune
-<code>NEXUS_WORKER_CONCURRENCY</code> high enough to absorb long backtests. Do
-not depend on the worker process for backtest isolation today.</p>
+<p><strong>Workaround today</strong>: for isolation, call <code>submit_backtest_job.kiq(...)</code>
+and <code>collect_backtest_result(...)</code> directly against the worker broker
+from a script or test (this is what <code>tests/</code> exercises). From the public
+REST API you still need <code>uvicorn --workers N</code> plus a high
+<code>NEXUS_WORKER_CONCURRENCY</code> to absorb long backtests; do not depend on
+the worker process for backtest isolation today.</p>
 <hr />
 <p><a id="mcp"></a></p>
 <h2 id="p1-mcp-server-is-a-library-not-a-runnable-process">P1 — MCP server is a library, not a runnable process<a class="headerlink" href="#p1-mcp-server-is-a-library-not-a-runnable-process" title="Permanent link">&para;</a></h2>

@@ -62,7 +62,13 @@ balancer need sticky sessions on `/api/v1/backtest/*`.
 
 **Fix path**: switch `_run_backtest_background` to write to
 `backtest_results` and the GET handler to query by `id` + `user_id`.
-The `BackgroundTasks` call should become a TaskIQ enqueue.
+The TaskIQ enqueue half already exists — `submit_backtest_job` /
+`collect_backtest_result` in
+[`engine/tasks/definitions.py`](../engine/tasks/definitions.py) (gh#1472,
+with submit-time input validation from gh#1474) — so the remaining work
+is to point `POST /run` at them instead of
+`BackgroundTasks.add_task(...)`, and to persist the completed payload
+rather than stuffing it into `_backtest_results`.
 
 ---
 
@@ -321,19 +327,39 @@ the API-key branch from the legacy endpoint into `ws/auth.py`.
 
 ## P1 — TaskIQ plumbing incomplete
 
-`engine/tasks/worker.py` defines the broker; the compose file runs
-it. But:
+The broker lives in [`engine/tasks/broker.py`](../engine/tasks/broker.py)
+(a `ListQueueBroker` over the same Valkey instance as the cache / event
+bus; `worker.py` is now a re-export shim for backwards compat) and the
+compose file runs the worker process. The submit/collect handler pair
+landed in gh#1472 / #1474:
 
-- `POST /backtest/run` uses FastAPI `BackgroundTasks`, not TaskIQ —
-  so backtests run in the *web* process, not the worker. A long
-  backtest stalls the uvicorn worker pool.
+- `submit_backtest_job` — fire-and-forget enqueue. Runs
+  `_validate_backtest_inputs` up front so a bad payload fails at submit
+  (gh#1474) and never reaches the worker, then `run_backtest.kiq(...)`
+  and returns `{status:"submitted", task_id}` immediately.
+- `collect_backtest_result` — the poll half. Rebuilds the result handle,
+  surfaces `pending` / `completed` / `failed` envelopes, and catches
+  `ResultGetError` / dropped-Redis so the caller always gets a
+  JSON-serialisable dict.
+
+What is **still missing** is the one line that ties them to the API:
+
+- `POST /api/v1/backtest/run` (and its `POST /api/v1/backtest` alias)
+  still use FastAPI `BackgroundTasks` + the in-process `_backtest_results`
+  dict, **not** `submit_backtest_job` / `collect_backtest_result`
+  ([`routes/backtest.py`](../engine/api/routes/backtest.py#L229)). So in
+  production a long backtest stalls the uvicorn worker pool and results
+  neither survive a restart nor cross replicas.
 - The task-pipeline SLO in [`operations/slos.md`](operations/slos.md)
   is defined but has no emitter yet — `nexus.task.runs_total` is the
   intended metric name.
 
-**Workaround today**: run uvicorn with `--workers N` and tune
-`NEXUS_WORKER_CONCURRENCY` high enough to absorb long backtests. Do
-not depend on the worker process for backtest isolation today.
+**Workaround today**: for isolation, call `submit_backtest_job.kiq(...)`
+and `collect_backtest_result(...)` directly against the worker broker
+from a script or test (this is what `tests/` exercises). From the public
+REST API you still need `uvicorn --workers N` plus a high
+`NEXUS_WORKER_CONCURRENCY` to absorb long backtests; do not depend on
+the worker process for backtest isolation today.
 
 ---
 
