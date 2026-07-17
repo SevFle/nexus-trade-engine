@@ -54,13 +54,19 @@ bound correlation id while their generators / callbacks run.
 
 from __future__ import annotations
 
+import contextlib
 import re
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+import structlog
+from starlette.datastructures import State
 
 from engine.observability import context as ctx
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 
@@ -114,26 +120,58 @@ class CorrelationIdMiddleware:
             else header_name.lower().encode("latin-1")
         )
 
+    def _extract_incoming_cid(self, scope: Scope) -> str | None:
+        """Return the configured correlation-id header from the ASGI scope, if present.
+
+        The raw value is decoded best-effort; an undecodable header yields
+        ``None`` so :func:`safe_correlation_id` mints a fresh UUID4 instead.
+        """
+        for raw_name, raw_value in scope.get("headers", []):
+            if raw_name == self._header_name_bytes:
+                try:
+                    return raw_value.decode("latin-1")
+                except UnicodeDecodeError:
+                    return None
+        return None
+
+    def _ensure_request_state(self, scope: Scope) -> State:
+        """Return a Starlette ``State`` on the scope for uniform attribute access.
+
+        We install a ``State`` rather than a bare dict so the contract matches
+        Starlette's own request/app state. If an outer component already
+        installed a ``State`` we reuse it; if it installed a bare dict
+        (Starlette's own lazy ``Request.state`` does this on first access) we
+        migrate its contents into a fresh ``State`` so nothing is silently
+        dropped.
+        """
+        existing_state = scope.get("state")
+        if isinstance(existing_state, State):
+            return existing_state
+        request_state = State(
+            dict(existing_state) if isinstance(existing_state, dict) else {}
+        )
+        scope["state"] = request_state
+        return request_state
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
-        incoming: str | None = None
-        for raw_name, raw_value in scope.get("headers", []):
-            if raw_name == self._header_name_bytes:
-                try:
-                    incoming = raw_value.decode("latin-1")
-                except UnicodeDecodeError:
-                    incoming = None
-                break
+        cid = safe_correlation_id(self._extract_incoming_cid(scope))
+        request_id = uuid.uuid4().hex
+        span_id = uuid.uuid4().hex[:16]
 
-        cid = safe_correlation_id(incoming)
-        tokens = ctx.bind_request_scope(
-            correlation_id=cid,
-            request_id=uuid.uuid4().hex,
-            span_id=uuid.uuid4().hex[:16],
-        )
+        request_state = self._ensure_request_state(scope)
+        request_state.correlation_id = cid
+        request_state.request_id = request_id
+        request_state.span_id = span_id
+
+        # Initialize both token handles up front so the ``finally`` is
+        # safe even if one of the bind calls raises partway through — a
+        # half-bound context must still be torn down cleanly.
+        tokens: list[Any] | None = None
+        structlog_tokens: Mapping[str, Any] | None = None
 
         # Tracks whether *any* ``http.response.start`` has already been
         # pushed downstream. Used both to avoid duplicate headers on the
@@ -151,47 +189,73 @@ class CorrelationIdMiddleware:
             await send(message)
 
         try:
-            await self.app(scope, receive, send_wrapper)
-        except Exception:
-            # An exception escaped the inner app. If it is an
-            # ``HTTPException`` / validation error it has *already* been
-            # turned into a 4xx/5xx response by Starlette's
-            # ``ExceptionMiddleware`` (which sits inside us), so that
-            # response's ``http.response.start`` flowed through
-            # ``send_wrapper`` and already carries the header and set
-            # ``response_started`` — nothing more to do.
-            #
-            # An *unhandled* exception, however, propagates past
-            # ``ExceptionMiddleware`` and would be caught by Starlette's
-            # outer ``ServerErrorMiddleware`` (which sits *outside* us) to
-            # produce a 500. That 500 is generated outside this middleware,
-            # so it would bypass ``send_wrapper`` and ship **without** the
-            # correlation header. To guarantee the header is present on
-            # every response — success, client-error, and server-error —
-            # we synthesize a minimal 500 here (with the header) when no
-            # response has started yet, then re-raise so
-            # ``ServerErrorMiddleware`` can still log the traceback.
-            # ``ServerErrorMiddleware`` records ``response_started`` from
-            # our synthesized response and therefore suppresses its own
-            # (duplicate) 500, avoiding a double-response.
-            if not response_started:
-                # Imported lazily so importing this module never pulls in
-                # the full Starlette response stack (keeps the validator
-                # usable from contexts that only need ``safe_correlation_id``).
-                from starlette.responses import JSONResponse  # noqa: PLC0415
+            tokens = ctx.bind_request_scope(
+                correlation_id=cid,
+                request_id=request_id,
+                span_id=span_id,
+            )
+            # Mirror the binding into structlog's own contextvars so the
+            # ``structlog.contextvars.merge_contextvars`` processor (see
+            # ``engine.observability.logging``) picks up the same ids
+            # without having to route through ``ctx.snapshot``.
+            structlog_tokens = structlog.contextvars.bind_contextvars(
+                correlation_id=cid,
+                request_id=request_id,
+                span_id=span_id,
+            )
 
-                error_response = JSONResponse(
-                    status_code=500,
-                    content={"detail": "Internal Server Error"},
-                )
-                await error_response(scope, receive, send_wrapper)
-            raise
+            try:
+                await self.app(scope, receive, send_wrapper)
+            except Exception:
+                # An exception escaped the inner app. If it is an
+                # ``HTTPException`` / validation error it has *already* been
+                # turned into a 4xx/5xx response by Starlette's
+                # ``ExceptionMiddleware`` (which sits inside us), so that
+                # response's ``http.response.start`` flowed through
+                # ``send_wrapper`` and already carries the header and set
+                # ``response_started`` — nothing more to do.
+                #
+                # An *unhandled* exception, however, propagates past
+                # ``ExceptionMiddleware`` and would be caught by Starlette's
+                # outer ``ServerErrorMiddleware`` (which sits *outside* us) to
+                # produce a 500. That 500 is generated outside this middleware,
+                # so it would bypass ``send_wrapper`` and ship **without** the
+                # correlation header. To guarantee the header is present on
+                # every response — success, client-error, and server-error —
+                # we synthesize a minimal 500 here (with the header) when no
+                # response has started yet, then re-raise so
+                # ``ServerErrorMiddleware`` can still log the traceback.
+                # ``ServerErrorMiddleware`` records ``response_started`` from
+                # our synthesized response and therefore suppresses its own
+                # (duplicate) 500, avoiding a double-response.
+                if not response_started:
+                    # Imported lazily so importing this module never pulls in
+                    # the full Starlette response stack (keeps the validator
+                    # usable from contexts that only need ``safe_correlation_id``).
+                    from starlette.responses import JSONResponse  # noqa: PLC0415
+
+                    error_response = JSONResponse(
+                        status_code=500,
+                        content={"detail": "Internal Server Error"},
+                    )
+                    await error_response(scope, receive, send_wrapper)
+                raise
         finally:
             # By the time `await self.app(...)` returns (or the exception
             # propagates) all body chunks have been sent — including
             # streaming responses. Reset is therefore safe and prevents
             # leakage in inlined-caller tests.
-            ctx.reset_tokens(tokens)
+            #
+            # Each binding is torn down independently and guarded:
+            # ``reset_contextvars`` raises ``ValueError`` if a token was
+            # already invalidated (e.g. by a nested context that reset it
+            # first, or by test teardown); swallowing that keeps the
+            # custom-context reset below from being skipped.
+            if structlog_tokens is not None:
+                with contextlib.suppress(LookupError, ValueError):
+                    structlog.contextvars.reset_contextvars(**structlog_tokens)
+            if tokens is not None:
+                ctx.reset_tokens(tokens)
 
 
 __all__ = [
