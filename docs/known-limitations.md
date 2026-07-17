@@ -182,6 +182,18 @@ when instantiated outside pytest. That is a P0-grade data-loss risk
 hiding behind a "stub" router — treat ratings as non-production until
 a Postgres-backed `RatingsStore` replaces the in-memory default.
 
+The **search** surface landed alongside ratings (gh#1476): `GET
+/api/v1/marketplace/search` is a real keyword + category/tag filter
+endpoint over a `StrategyCatalog` protocol
+([`engine/marketplace/search.py`](../engine/marketplace/search.py)). The
+default `InMemoryStrategyCatalog` is seeded at startup with a **small
+built-in demo catalog** (covering every `/categories` entry — *not* the
+strategies you installed under `engine/plugins/`) and, like ratings, is
+**process-local and non-persistent**: no registry backend exists yet, so
+it is useful for local dev and smoke-testing only. Do not treat its
+contents as a production strategy catalog, and do not expect search
+results to survive a restart or be consistent across replicas.
+
 **Workaround today**: install strategies under
 `engine/plugins/<kind>/<name>/` and reload the plugin registry. Do not
 rely on marketplace ratings surviving a restart or being visible across

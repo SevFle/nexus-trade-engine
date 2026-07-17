@@ -258,6 +258,7 @@ in-memory only** — see [known-limitations.md](known-limitations.md).
 | Method | Path | Auth | Status |
 |---|---|---|---|
 | GET | `/api/v1/marketplace/browse?category=&search=&sort_by=&page=&per_page=` | `user` | Returns empty list (stub). |
+| GET | `/api/v1/marketplace/search?q=&category=&tag=&sort=&page=&limit=` | `user` | **Real.** Keyword search + category/tag filter over the strategy catalog. See [Marketplace search](#marketplace-search) below. |
 | GET | `/api/v1/marketplace/categories` | `user` | Static category list (algorithmic, ml, llm, hybrid, income, macro). |
 | POST | `/api/v1/marketplace/install` | `developer` | Stub. |
 | DELETE | `/api/v1/marketplace/uninstall/{strategy_id}` | `developer` | Stub. |
@@ -270,6 +271,75 @@ Ratings run through a process-local `InMemoryRatingsStore`
 behind a `RatingsStore` Protocol so a DB backend can drop in later).
 **Not persisted — every restart loses them** (the store warns when
 instantiated outside pytest).
+
+### Marketplace search
+
+`GET /api/v1/marketplace/search` (gh#1476) is the one real *discovery*
+surface in an otherwise-stubbed router. Source:
+[`routes/marketplace.py`](../engine/api/routes/marketplace.py), service:
+[`engine/marketplace/search.py`](../engine/marketplace/search.py). It is
+intentionally persistence-agnostic — the public contract is the
+`StrategyCatalog` protocol, with a thread-safe `InMemoryStrategyCatalog`
+default that is **seeded at startup with a small built-in demo catalog**
+(one listing per `/categories` entry, staggered `created_at` values).
+There is no DB backend yet, so — like ratings — results are
+**process-local and non-persistent**; a real registry can drop in behind
+the protocol without touching the route.
+
+**Matching model.** `q` is tokenised on non-alphanumeric boundaries and
+lower-cased, then matched case-insensitively against `name`, `tags`,
+`author`, and `description`. A listing is kept iff its total score is
+`> 0` (OR-semantics across tokens); field weights are
+`name 10 · tags 5 · author 3 · description 1`, plus a `+5` exact-name
+bonus. An empty/absent `q` applies **no keyword filter** — every
+(optionally category/tag-filtered) listing is a candidate.
+
+**Query params.** `q`; `category` (exact, case-insensitive); `tag`
+(case-insensitive); `sort` ∈ `{relevance, downloads, rating, name,
+newest}` (default `relevance`, which transparently falls back to
+`downloads` when `q` is empty, because a relevance score of `0` for
+everything would be a meaningless no-op ordering); `page` (1-indexed,
+`≥ 1`); `limit` (`1`–`100`, default `20`). Every ordering falls back to
+a stable case-insensitive name tiebreak so equal-keyed listings never
+flip between pages.
+
+**Response** — `SearchResponse`:
+
+```json
+{
+  "query": "momentum",
+  "sort": "relevance",
+  "results": [
+    {
+      "id": "momentum-1d",
+      "name": "Momentum 1D",
+      "version": "1.0.0",
+      "author": "nexus",
+      "description": "Trend-following on 1-day returns.",
+      "category": "algorithmic",
+      "tags": ["trend"],
+      "rating": 4.5,
+      "downloads": 1200,
+      "backtest_sharpe": 1.8,
+      "min_capital": 1000.0,
+      "created_at": "2024-01-03T00:00:00Z",
+      "score": 15.0
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "limit": 20,
+  "has_more": false
+}
+```
+
+`SearchResultItem`'s catalog-sourced numerics (`rating`, `downloads`,
+`min_capital`, `backtest_sharpe`, `created_at`) are `Optional` and
+default to `None` so genuinely-missing catalog data serialises to the
+JSON literal `null` rather than a masked `0`; `description` is the one
+required, non-nullable field. `score` is always present (`0.0` when
+there is no query). An invalid `sort`, or a `limit` outside `1`–`100`,
+raises `400` from a `SearchError`.
 
 ## Reference
 
@@ -351,122 +421,13 @@ DSR rows are auditable under GDPR Art. 12 (one-month SLA tracked in
 
 ## WebSocket
 
-`WS /api/v1/ws`. The active implementation is the `engine/api/ws/`
-package:
+Two routes: `WS /api/v1/ws` (in-band first-message auth) and
+`WS /api/v1/ws/events` (fail-closed handshake auth). Both are
+JWT-only, share the `engine/api/ws/` package, and fan out
+`EventBus` events cross-replica via the Valkey pub/sub bridge.
 
-| File | Role |
-|---|---|
-| [`ws/router.py`](../engine/api/ws/router.py) | Endpoint + message dispatch loop |
-| [`ws/connection_manager.py`](../engine/api/ws/connection_manager.py) | Connection registry, room-based fan-out, heartbeat, backpressure |
-| [`ws/channels.py`](../engine/api/ws/channels.py) | Resolves `subscribe` requests to rooms with permission checks |
-| [`ws/permissions.py`](../engine/api/ws/permissions.py) | Channel access control + room-name resolution |
-| [`ws/protocol.py`](../engine/api/ws/protocol.py) | Pydantic wire schemas + valid channel set |
-| [`ws/event_bridge.py`](../engine/api/ws/event_bridge.py) | Subscribes to the `EventBus` and broadcasts events to rooms |
-| [`ws/auth.py`](../engine/api/ws/auth.py) | In-band token validation + per-IP auth rate limiting |
-
-> Note: `engine/api/routes/websocket.py` and
-> `engine/api/websocket/manager.py` are a **legacy** implementation
-> that is no longer mounted by [`router.py`](../engine/api/router.py).
-> The active route comes from `ws/router.py`. Do not extend the legacy
-> files.
-
-Auth is JWT-only (the active `ws/auth.py` calls `decode_token`; unlike the
-legacy endpoint it does **not** accept `nxs_*` API keys). The token is
-delivered either as a `?token=` query param or as the first JSON message
-within `NEXUS_WS_AUTH_TIMEOUT_SECONDS` (default 5 s). The handshake:
-
-```
-client                                   server
-  │── accept ────────────────────────────────▶│
-  │── {"type":"auth","token":"<jwt>"} ────────▶│   (5 s window)
-  │                                          │── {"type":"ack","status":"ok","message":"connected"}
-  │── {"type":"subscribe","channel":"portfolio","params":{...}}─▶│
-  │◀──── {"type":"ack","status":"ok","room":"portfolio:..."} ──│
-  │◀──── {"type":"event","channel":...,"room":...,"payload":{...},"seq":N} ──│  (broadcasts)
-  │── {"type":"ping","ref":"1"} ─────────────▶│── {"type":"pong","ref":"1"}
-```
-
-Inbound message types (see `protocol.py`): `auth`, `subscribe`,
-`unsubscribe`, `ping`. Every message accepts an optional `ref` that
-the server echoes back in the matching `ack`/`pong`.
-
-Outbound message types: `ack`, `error`, `event`, `pong`, `close`.
-
-### Channels (valid subscriptions)
-
-| Channel | Sub-keyed by | Room shape |
-|---|---|---|
-| `portfolio` | account / strategy id | `portfolio:account:<id>`, `portfolio:strategy:<id>` |
-| `orders` | symbol / status | `orders:symbol:<sym>`, `orders:status:<status>` |
-| `strategies` | strategy id | `strategies:strategy:<id>` |
-
-Each connection is also auto-joined to a private `user:<user_id>` room
-on registration, so user-scoped events can be targeted directly.
-
-### Auth & scopes
-
-`authenticate_websocket` (`ws/auth.py`) accepts the JWT from either a
-`?token=` query parameter or the first `auth` message. Prefer the
-first-message form — query strings are recorded by reverse proxies and
-log aggregators. Auth attempts are rate-limited per IP
-(`NEXUS_WS_AUTH_RATE_LIMIT_PER_MINUTE`, default 10) via a token bucket.
-
-Connection scopes are derived from the JWT `role` claim (see
-[`ws/auth.py:_extract_scopes`](../engine/api/ws/auth.py#L80)):
-
-| Role | Scopes granted |
-|---|---|
-| `admin`, `portfolio_manager` | base + `:all` for every channel |
-| all others (`viewer` … `quant_dev`) | base `read:<channel>` only |
-
-Permission checks (`ws/permissions.py`) run on every `subscribe`:
-
-- `:all` scope → unrestricted access to the channel.
-- base scope only → **owner-based** access: the channel's owner param
-  (`account_id` / `strategy_id`) in `params` must equal the caller's
-  `user_id`, else `403`.
-- neither → `403`. Unknown channel → `error_code:"404"`. Subscription
-  cap exceeded (`NEXUS_WS_MAX_SUBSCRIPTIONS_PER_CONNECTION`) → `429`.
-
-Mid-session, a client can send `{"type":"auth","token":"<new JWT>"}` to
-refresh an expiring token; the server re-derives scopes on the live
-connection.
-
-### Event delivery
-
-[`ws/event_bridge.py`](../engine/api/ws/event_bridge.py)
-(`EventBusBridge`) subscribes to the [`EventBus`](../engine/events/bus.py)
-for portfolio / order / strategy event types and broadcasts each to the
-matching room(s) as an `event` message with a per-room `seq`. Because
-the `EventBus` itself publishes over Redis/Valkey pub/sub, events
-published on **any** replica reach local WebSocket connections on
-**every** replica. The `ConnectionManager` (the live socket objects) is
-still per-process, but event distribution is cross-replica.
-
-### Second endpoint — `WS /api/v1/ws/events`
-
-A second route, `WS /api/v1/ws/events` ([`ws/events.py`](../engine/api/ws/events.py)),
-shares `/ws`'s `ConnectionManager`, `ChannelResolver`, `EventBusBridge`,
-and wire protocol, but authenticates **before** `ws.accept()`: a
-bad/missing query-param token rejects the handshake (close code `4401`,
-reason `invalid session token`). `/ws/events` trades `/ws`'s in-band
-first-message `auth` for fail-closed handshake auth.
-
-- **Token**: `?token=<jwt>` (alias `?session_token=`), via the REST
-  `decode_token` and shared `extract_scopes`. **JWT-only** (no `nxs_*`
-  keys, same as `/ws`).
-- **Server not ready**: if hit before `init_ws_events`, the socket is closed with code `1011` (`server not ready`).
-- **Inbound**: `subscribe`, `unsubscribe`, `ping` (shared `parse_inbound`).
-  **No mid-session refresh** — the token is bound to the handshake, so
-  re-connect rather than re-auth.
-- **Outbound**: same `ack` / `error` / `event` / `pong` / `close`; the
-  channels, room shapes, and per-role scope rules above apply unchanged.
-- **Wiring**: `init_ws_events(manager, resolver?, bridge?)` captures the
-  running loop first; a re-init disconnects every client and stops the
-  prior bridge, so a reload leaks no connections or double bus subscriptions.
-
-Prefer `/ws/events` for fail-closed handshake auth; `/ws` when the token
-can only arrive after the socket opens (in-band browser refresh).
+The full wire protocol, channel/room model, role-derived scope rules,
+and handshake sequence live in **[websockets.md](websockets.md)**.
 
 ## Errors
 
