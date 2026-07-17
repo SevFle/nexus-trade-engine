@@ -638,6 +638,117 @@ class TestGetRemoteIp:
 
 
 # ---------------------------------------------------------------------------
+# auth.py — _get_remote_ip rsplit DoS bound & validation fall-through
+# ---------------------------------------------------------------------------
+
+
+class TestGetRemoteIpRsplitAndFallthrough:
+    """Pin the recent ``_get_remote_ip`` hardening (commit 84c87883).
+
+    Two security/correctness-relevant behaviors changed in the most recent
+    edit of the WS auth IP resolver and are not otherwise pinned:
+
+    1. **Bounded XFF split** — ``forwarded.rsplit(",", 1)`` (maxsplit=1)
+       reads only the rightmost hop, so a pathologically long (hostile)
+       ``X-Forwarded-For`` header cannot force a multi-million-element
+       allocation the way the old ``forwarded.split(",")`` did. The DoS
+       guard's payoff is that the function returns the rightmost valid hop
+       without raising, no matter how long the header is.
+    2. **Validation fall-through** — when a header is present but its
+       rightmost value is not a parseable IP (or is blank after stripping),
+       the helper must *fall through* to the next source (``X-Real-IP``, then
+       the raw peer) rather than returning garbage or raising.
+    """
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_rsplit_bounds_huge_xff_header(self):
+        # A one-million-comma header whose rightmost hop is a valid IP must
+        # resolve to that hop without raising. With the old ``split(",")``
+        # this allocated a ~1M-entry list before the lookup ran; ``rsplit``
+        # with maxsplit=1 caps the result at two elements by construction.
+        padding = ", 10.0.0.2" * 1_000_000
+        ws = _FakeWebSocket(
+            client_host="10.0.0.1",
+            headers={"x-forwarded-for": f"9.8.7.6{padding}"},
+        )
+        assert _get_remote_ip(ws) == "10.0.0.2"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_forwarded_rightmost_valid_ipv6_returned(self):
+        ws = _FakeWebSocket(
+            client_host="10.0.0.1",
+            headers={"x-forwarded-for": "2001:db8::42"},
+        )
+        assert _get_remote_ip(ws) == "2001:db8::42"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_forwarded_empty_rightmost_falls_through_to_real_ip(self):
+        # XFF is truthy but its rightmost entry strips to empty -> not a valid
+        # IP -> the helper falls through to X-Real-IP rather than returning
+        # the empty string.
+        ws = _FakeWebSocket(
+            client_host="10.0.0.1",
+            headers={"x-forwarded-for": "9.8.7.6, ", "x-real-ip": "203.0.113.5"},
+        )
+        assert _get_remote_ip(ws) == "203.0.113.5"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_forwarded_whitespace_only_rightmost_falls_through_to_peer(self):
+        # XFF rightmost is whitespace-only -> falls through; no X-Real-IP is
+        # present, so the trusted peer address is returned.
+        ws = _FakeWebSocket(
+            client_host="10.0.0.1",
+            headers={"x-forwarded-for": "   "},
+        )
+        assert _get_remote_ip(ws) == "10.0.0.1"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_real_ip_valid_ipv6_returned(self):
+        ws = _FakeWebSocket(
+            client_host="10.0.0.1",
+            headers={"x-real-ip": "::1"},
+        )
+        assert _get_remote_ip(ws) == "::1"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_real_ip_empty_after_strip_falls_through_to_peer(self):
+        # X-Real-IP is truthy but strips to empty -> not a valid IP -> the
+        # helper falls through to the raw peer.
+        ws = _FakeWebSocket(
+            client_host="10.0.0.1",
+            headers={"x-real-ip": "   "},
+        )
+        assert _get_remote_ip(ws) == "10.0.0.1"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_forwarded_takes_priority_over_real_ip_for_cidr_peer(self):
+        # Both headers valid and the peer is inside the trusted CIDR: XFF
+        # wins, X-Real-IP is never consulted.
+        ws = _FakeWebSocket(
+            client_host="10.5.5.5",
+            headers={
+                "x-forwarded-for": "9.8.7.6",
+                "x-real-ip": "203.0.113.9",
+            },
+        )
+        assert _get_remote_ip(ws) == "9.8.7.6"
+
+    @patch("engine.api.ws.auth._TRUSTED_PROXIES", frozenset({"10.0.0.0/8"}))
+    def test_untrusted_cidr_peer_ignores_all_forwarded_headers(self):
+        # Peer outside the trusted CIDR must not honor any forwarded header,
+        # even when both XFF and X-Real-IP are present and valid — otherwise a
+        # client could spoof its address by setting the header.
+        ws = _FakeWebSocket(
+            client_host="11.0.0.1",
+            headers={
+                "x-forwarded-for": "9.8.7.6",
+                "x-real-ip": "203.0.113.9",
+            },
+        )
+        assert _get_remote_ip(ws) == "11.0.0.1"
+
+
+# ---------------------------------------------------------------------------
 # auth.py — authenticate_websocket
 # ---------------------------------------------------------------------------
 

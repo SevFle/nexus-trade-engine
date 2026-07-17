@@ -40,11 +40,11 @@ full ASGI app — keeping the suite hermetic and fast.
 
 from __future__ import annotations
 
-import logging
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import structlog.testing
 
 from engine.api import ip_utils
 from engine.api.ip_utils import (
@@ -254,39 +254,61 @@ class TestParseProxyNetworksCaching:
 
 
 class TestInvalidProxyEntryWarning:
-    """Malformed entries now emit a structured warning (was silent before)."""
+    """Malformed entries now emit a structured warning (was silent before).
 
-    def test_invalid_entry_emits_warning_with_context(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        with caplog.at_level(logging.WARNING, logger="engine.api.ip_utils"):
+    The module emits via structlog. The app configures structlog with a
+    ``ConsoleRenderer`` + ``PrintLoggerFactory``, which renders to stdout and
+    does *not* propagate through stdlib :mod:`logging` — so a stdlib
+    ``caplog`` never captures the event and these tests previously failed.
+    :func:`structlog.testing.capture_logs` swaps in a capturing processor
+    chain and returns the structured event dicts regardless of the configured
+    renderer, which is the correct way to assert on structlog output here.
+
+    The :func:`lru_cache` on :func:`_parse_proxy_networks_cached` is cleared
+    before every test so each run observes a genuine cache miss and the
+    per-entry warning loop runs afresh (the cache is keyed on the whole
+    normalized entry-set, so without clearing the second test to parse a
+    given set would see a hit and emit no warning).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clear_proxy_cache(self) -> None:
+        _parse_proxy_networks_cached.cache_clear()
+
+    def test_invalid_entry_emits_warning_with_context(self) -> None:
+        with structlog.testing.capture_logs() as captured:
             parse_proxy_networks(["@@bogus@@"])
-        # structlog routes through stdlib logging; the rendered event name
-        # appears in the record message.
-        matching = [r for r in caplog.records if "ip_utils.invalid_proxy_entry" in r.getMessage()]
-        assert matching, "expected an ip_utils.invalid_proxy_entry warning to be emitted"
+        warnings = [e for e in captured if e["event"] == "ip_utils.invalid_proxy_entry"]
+        assert warnings, "expected an ip_utils.invalid_proxy_entry warning to be emitted"
+        w = warnings[0]
+        assert w["log_level"] == "warning"
+        assert w["entry"] == "@@bogus@@"
+        assert "does not appear to be an IPv4 or IPv6 network" in w["error"]
 
-    def test_valid_entries_emit_no_warning(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        with caplog.at_level(logging.WARNING, logger="engine.api.ip_utils"):
+    def test_valid_entries_emit_no_warning(self) -> None:
+        with structlog.testing.capture_logs() as captured:
             parse_proxy_networks(["10.0.0.0/8", "172.16.0.0/12"])
-        bogus = [
-            r for r in caplog.records if "ip_utils.invalid_proxy_entry" in r.getMessage()
-        ]
+        bogus = [e for e in captured if e["event"] == "ip_utils.invalid_proxy_entry"]
         assert bogus == []
 
-    def test_warning_fires_once_per_distinct_bad_entry(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_warning_fires_once_per_distinct_bad_entry(self) -> None:
         # Two *distinct* malformed entries -> two warnings (cache is keyed on
         # the whole normalized set, so this exercises the per-entry loop).
-        with caplog.at_level(logging.WARNING, logger="engine.api.ip_utils"):
+        with structlog.testing.capture_logs() as captured:
             parse_proxy_networks(["@@one@@", "@@two@@"])
-        warnings = [
-            r for r in caplog.records if "ip_utils.invalid_proxy_entry" in r.getMessage()
-        ]
+        warnings = [e for e in captured if e["event"] == "ip_utils.invalid_proxy_entry"]
         assert len(warnings) == 2
+        assert {w["entry"] for w in warnings} == {"@@one@@", "@@two@@"}
+
+    def test_mixed_valid_and_invalid_warns_only_for_bad_entry(self) -> None:
+        # A single bad entry among valid ones still warns exactly once, so a
+        # partially-misconfigured operator deployment is diagnosable.
+        with structlog.testing.capture_logs() as captured:
+            parse_proxy_networks(["10.0.0.0/8", "@@nope@@", "172.16.0.0/12"])
+        warnings = [e for e in captured if e["event"] == "ip_utils.invalid_proxy_entry"]
+        assert len(warnings) == 1
+        assert warnings[0]["entry"] == "@@nope@@"
+        assert "does not appear to be an IPv4 or IPv6 network" in warnings[0]["error"]
 
 
 # ===========================================================================
@@ -444,9 +466,7 @@ class TestResolveClientIpSpoofResistance:
 
     def test_untrusted_peer_with_spoofed_trusted_hop_ignored(self) -> None:
         # Attacker tries to look like a trusted proxy chain.
-        result = resolve_client_ip(
-            _request(host="8.8.8.8", xff="10.0.0.1, 10.0.0.2"), TRUSTED
-        )
+        result = resolve_client_ip(_request(host="8.8.8.8", xff="10.0.0.1, 10.0.0.2"), TRUSTED)
         assert result == "8.8.8.8"
 
     def test_untrusted_peer_no_xff(self) -> None:
@@ -509,9 +529,7 @@ class TestResolveClientIpTrustedProxy:
 
     def test_dual_stack_mapped_peer_trusted(self) -> None:
         # IPv4 proxy reached over a dual-stack IPv6 socket -> still trusted.
-        result = resolve_client_ip(
-            _request(host="::ffff:10.0.0.1", xff=CLIENT_IP), TRUSTED
-        )
+        result = resolve_client_ip(_request(host="::ffff:10.0.0.1", xff=CLIENT_IP), TRUSTED)
         assert result == CLIENT_IP
 
     def test_dual_stack_mapped_hop_trusted(self) -> None:
