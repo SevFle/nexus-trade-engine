@@ -45,21 +45,33 @@ def _get(field: str) -> str | None:
 def bind_request_scope(*, correlation_id: str, request_id: str, span_id: str) -> list[Any]:
     """Bind the per-request triple and return tokens for later
     :func:`reset_tokens`. Use this when you must restore the prior context
-    (e.g., from raw ASGI middleware running inside an inlined caller)."""
-    return [
-        _VARS["correlation_id"].set(correlation_id),
-        _VARS["request_id"].set(request_id),
-        _VARS["span_id"].set(span_id),
-    ]
+    (e.g., from raw ASGI middleware running inside an inlined caller).
+
+    Tokens are appended one at a time so a partial bind still returns the
+    tokens captured so far, letting callers reset what was bound and avoid
+    leaking context into a subsequent request sharing the same task."""
+    tokens: list[Any] = []
+    tokens.append(_VARS["correlation_id"].set(correlation_id))
+    tokens.append(_VARS["request_id"].set(request_id))
+    tokens.append(_VARS["span_id"].set(span_id))
+    return tokens
 
 
 def reset_tokens(tokens: list[Any]) -> None:
-    """Reset previously captured contextvars tokens in reverse order."""
+    """Reset previously captured contextvars tokens in reverse order.
+
+    Each reset is isolated so a token that cannot be restored (created in a
+    different Context, or already reset by a nested context manager or test
+    teardown) does not prevent the remaining tokens from being reset."""
     for tok in reversed(tokens):
         try:
             tok.var.reset(tok)
-        except (LookupError, ValueError):
-            # token may already have been reset, e.g., test teardown
+        except (LookupError, ValueError, RuntimeError):
+            # ``LookupError`` / ``ValueError``: token created in a different
+            # Context (e.g. a sub-task). ``RuntimeError``: token already
+            # reset -- the classic double-reset from a nested context
+            # manager or test teardown. Either way it is no longer
+            # restorable; skip it and continue with the remaining tokens.
             continue
 
 

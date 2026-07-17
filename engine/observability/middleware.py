@@ -56,7 +56,9 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from starlette.datastructures import State
 
 from engine.observability import context as ctx
 
@@ -119,6 +121,17 @@ class CorrelationIdMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # Starlette's ``Request.state`` is backed by ``scope['state']``.
+        # Normalise it to a real ``State`` up front: if an upstream raw-ASGI
+        # component left a plain ``dict`` there (or nothing at all), attribute
+        # access via ``request.state.<attr>`` downstream would raise
+        # ``AttributeError`` (a ``dict`` is not subscriptable by attribute).
+        # A ``State`` guarantees every downstream consumer -- including
+        # raw-ASGI middleware that reads ``scope['state']`` directly -- sees a
+        # proper attribute bag.
+        if not isinstance(scope.get("state"), State):
+            scope["state"] = State()
+
         incoming: str | None = None
         for raw_name, raw_value in scope.get("headers", []):
             if raw_name == self._header_name_bytes:
@@ -129,11 +142,18 @@ class CorrelationIdMiddleware:
                 break
 
         cid = safe_correlation_id(incoming)
-        tokens = ctx.bind_request_scope(
-            correlation_id=cid,
-            request_id=uuid.uuid4().hex,
-            span_id=uuid.uuid4().hex[:16],
-        )
+        request_id = uuid.uuid4().hex
+        span_id = uuid.uuid4().hex[:16]
+
+        # Tokens are captured into a list so the ``finally`` cleanup is safe
+        # even if binding fails partway through: a partially-bound context
+        # must still be reset, and ``reset_tokens`` isolates each reset so a
+        # single un-restorable token cannot short-circuit the rest.
+        # ``bind_request_scope`` appends each token as it binds, so a
+        # mid-bind exception cannot lose the tokens already captured, which
+        # would leak context into the next request sharing this asyncio
+        # task.
+        tokens: list[Any] = []
 
         # Tracks whether *any* ``http.response.start`` has already been
         # pushed downstream. Used both to avoid duplicate headers on the
@@ -151,6 +171,11 @@ class CorrelationIdMiddleware:
             await send(message)
 
         try:
+            tokens = ctx.bind_request_scope(
+                correlation_id=cid,
+                request_id=request_id,
+                span_id=span_id,
+            )
             await self.app(scope, receive, send_wrapper)
         except Exception:
             # An exception escaped the inner app. If it is an
@@ -190,7 +215,12 @@ class CorrelationIdMiddleware:
             # By the time `await self.app(...)` returns (or the exception
             # propagates) all body chunks have been sent — including
             # streaming responses. Reset is therefore safe and prevents
-            # leakage in inlined-caller tests.
+            # leakage in inlined-caller tests. ``reset_tokens`` resets in
+            # reverse-set order to mirror the natural unwinding, and isolates
+            # each reset so a token that cannot be restored (created in a
+            # different Context, or already reset by a nested context manager
+            # or test teardown) cannot short-circuit the remaining resets
+            # and leak observability context.
             ctx.reset_tokens(tokens)
 
 
