@@ -73,6 +73,7 @@ to :class:`BaseHTTPCorrelationIdMiddleware` or the raw-ASGI
 
 from __future__ import annotations
 
+import logging
 import uuid
 import warnings
 from typing import TYPE_CHECKING, Any
@@ -89,6 +90,8 @@ if TYPE_CHECKING:
     from starlette.types import ASGIApp
 
 __all__ = ["CORRELATION_HEADER", "BaseHTTPCorrelationIdMiddleware"]
+
+logger = logging.getLogger(__name__)
 
 
 def _new_span_id() -> str:
@@ -123,22 +126,48 @@ class BaseHTTPCorrelationIdMiddleware(BaseHTTPMiddleware):
         request_id = uuid.uuid4().hex
         span_id = _new_span_id()
 
-        structlog_tokens = structlog.contextvars.bind_contextvars(
-            correlation_id=correlation_id,
-            request_id=request_id,
-        )
-
-        context_tokens = ctx.bind_request_scope(
-            correlation_id=correlation_id,
-            request_id=request_id,
-            span_id=span_id,
-        )
+        # Initialize the token handles up front so the ``finally`` cleanup
+        # is safe even if a bind call fails partway through. Without these
+        # sentinels, a ``NameError`` (or a partial-bind leak) would escape
+        # from the ``finally`` whenever ``bind_contextvars`` or
+        # ``bind_request_scope`` raised -- and the context already bound by
+        # the *first* call would never be reset, leaking correlation /
+        # request ids into the next request sharing this task. ``None``
+        # lets the ``finally`` guard each reset independently.
+        structlog_tokens: dict[str, Any] | None = None
+        tokens: list[Any] | None = None
 
         try:
+            structlog_tokens = structlog.contextvars.bind_contextvars(
+                correlation_id=correlation_id,
+                request_id=request_id,
+            )
+
+            tokens = ctx.bind_request_scope(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                span_id=span_id,
+            )
+
             response = await call_next(request)
         finally:
-            structlog.contextvars.reset_contextvars(**structlog_tokens)
-            ctx.reset_tokens(context_tokens)
+            # structlog's ``reset_contextvars`` raises ``KeyError`` (token
+            # whose backing ContextVar was never registered) or
+            # ``ValueError`` (token created in a different Context, or
+            # already reset -- e.g. by a nested context manager or test
+            # teardown). Wrap it so a single un-restorable token cannot
+            # short-circuit the legacy context reset below, which would
+            # leak that context into the next request.
+            if structlog_tokens is not None:
+                try:
+                    structlog.contextvars.reset_contextvars(**structlog_tokens)
+                except (KeyError, ValueError):
+                    logger.debug(
+                        "structlog contextvars already reset; skipping",
+                        exc_info=True,
+                    )
+            if tokens is not None:
+                ctx.reset_tokens(tokens)
 
         response.headers[self.header_name] = correlation_id
         return response
