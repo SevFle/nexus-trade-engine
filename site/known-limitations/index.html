@@ -794,6 +794,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -884,6 +888,62 @@
     
   
     MCP server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/capability-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP capability audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/tool-catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP tool catalog
   
 
     
@@ -2413,10 +2473,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#p1-strategy-marketplace-is-mostly-a-stub-ratings-landed-in-memory" class="md-nav__link">
+  <a href="#p1-strategy-marketplace-is-mostly-a-stub-search-ratings-real-in-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
-        P1 — Strategy Marketplace is mostly a stub (ratings landed, in-memory)
+        P1 — Strategy Marketplace is mostly a stub (search + ratings real, in-memory)
       
     </span>
   </a>
@@ -2692,10 +2752,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#p1-strategy-marketplace-is-mostly-a-stub-ratings-landed-in-memory" class="md-nav__link">
+  <a href="#p1-strategy-marketplace-is-mostly-a-stub-search-ratings-real-in-memory" class="md-nav__link">
     <span class="md-ellipsis">
       
-        P1 — Strategy Marketplace is mostly a stub (ratings landed, in-memory)
+        P1 — Strategy Marketplace is mostly a stub (search + ratings real, in-memory)
       
     </span>
   </a>
@@ -3008,12 +3068,19 @@ strategy-lifecycle <code>live</code> gate and the <code>RiskEngine</code> kill-s
 broker-direct helpers, error mapping, and <code>client_order_id</code> idempotency
 are already in place — the missing piece is the route + worker glue.</p>
 <hr />
-<h2 id="p1-strategy-marketplace-is-mostly-a-stub-ratings-landed-in-memory">P1 — Strategy Marketplace is mostly a stub (ratings landed, in-memory)<a class="headerlink" href="#p1-strategy-marketplace-is-mostly-a-stub-ratings-landed-in-memory" title="Permanent link">&para;</a></h2>
+<h2 id="p1-strategy-marketplace-is-mostly-a-stub-search-ratings-real-in-memory">P1 — Strategy Marketplace is mostly a stub (search + ratings real, in-memory)<a class="headerlink" href="#p1-strategy-marketplace-is-mostly-a-stub-search-ratings-real-in-memory" title="Permanent link">&para;</a></h2>
 <p><strong>Where</strong>: <a href="../engine/api/routes/marketplace.py"><code>engine/api/routes/marketplace.py</code></a></p>
 <p><code>browse</code>, <code>install</code>, <code>uninstall</code>, and the legacy
 <code>{strategy_id}/rate</code> route still return <code>{"status":"not_implemented"}</code>;
-<code>categories</code> returns a hardcoded list. There is <strong>no marketplace
-registry</strong> (local or remote) behind those routes.</p>
+<code>categories</code> returns a hardcoded list. There is <strong>no installable
+marketplace registry</strong> (local or remote) behind those routes.</p>
+<p>The <strong>search</strong> surface landed (gh#1476):
+<code>GET /api/v1/marketplace/search?q=&amp;category=&amp;tag=&amp;sort=&amp;page=&amp;limit=</code>
+is real (keyword + filter, weighted relevance ranking, paginated) but
+resolves against the same kind of process-local store — an
+<code>InMemoryStrategyCatalog</code> (<a href="../engine/marketplace/search.py"><code>engine/marketplace/search.py</code></a>)
+seeded with demo strategies. No DB model, no persistence, no
+cross-replica visibility — a browse/UX preview, not a source of truth.</p>
 <p>The <strong>ratings</strong> surface landed (gh#1430): <code>POST</code> / <code>GET</code>
 <code>/api/v1/marketplace/strategies/{strategy_id}/ratings</code> are real (one
 upsert per <code>(strategy_id, user_id)</code>, aggregate + reviews). But they are
@@ -3025,9 +3092,10 @@ when instantiated outside pytest. That is a P0-grade data-loss risk
 hiding behind a "stub" router — treat ratings as non-production until
 a Postgres-backed <code>RatingsStore</code> replaces the in-memory default.</p>
 <p><strong>Workaround today</strong>: install strategies under
-<code>engine/plugins/&lt;kind&gt;/&lt;name&gt;/</code> and reload the plugin registry. Do not
-rely on marketplace ratings surviving a restart or being visible across
-replicas.</p>
+<code>engine/plugins/&lt;kind&gt;/&lt;name&gt;/</code> and reload the plugin registry. Treat
+marketplace <code>/search</code> as a UX/browse preview and do not rely on
+ratings or catalog contents surviving a restart or being visible
+across replicas.</p>
 <hr />
 <p><a id="react-dashboard"></a></p>
 <h2 id="p1-react-dashboard-is-real-but-not-production-built">P1 — React dashboard is real but not production-built<a class="headerlink" href="#p1-react-dashboard-is-real-but-not-production-built" title="Permanent link">&para;</a></h2>

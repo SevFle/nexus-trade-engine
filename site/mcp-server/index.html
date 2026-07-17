@@ -16,7 +16,7 @@
         <link rel="prev" href="../api-reference/">
       
       
-        <link rel="next" href="../data-model/">
+        <link rel="next" href="../mcp/capability-audit/">
       
       
         
@@ -796,6 +796,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1124,6 +1128,62 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/capability-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP capability audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/tool-catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP tool catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -2832,6 +2892,12 @@ transaction costs, compute performance metrics, and run backtests
 without speaking HTTP.</p>
 <p>Everything here lives under <a href="../engine/mcp/"><code>engine/mcp/</code></a>.</p>
 <blockquote>
+<p><strong>Companion references.</strong> The whole-surface review lives in
+<a href="../mcp/capability-audit/"><code>mcp/capability-audit.md</code></a>; the per-tool
+reference in <a href="../mcp/tool-catalog/"><code>mcp/tool-catalog.md</code></a>; and the
+machine-readable inventory (generated from this code) in
+<a href="../mcp/api-surface-map.yaml"><code>mcp/api-surface-map.yaml</code></a>. This page is
+the <em>why</em>; those are the <em>what</em>.</p>
 <p><strong>Status: partial.</strong> Every component below is implemented and
 unit-tested, but the transport-binding entry point
 (<code>engine/mcp/server.py</code>) that wires these components to the <code>mcp</code>
@@ -2874,7 +2940,7 @@ SDK users). An LLM agent is a different consumer:</p>
 </tr>
 <tr>
 <td><a href="../engine/mcp/tool_definitions.py"><code>tool_definitions.py</code></a></td>
-<td>Declarative tool catalog: name, description, JSON-Schema <code>input_schema</code>, RBAC <code>required_role</code>, MCP <code>ToolAnnotations</code>. The single source of truth for what tools exist.</td>
+<td>Declarative tool catalog: name, description, JSON-Schema <code>input_schema</code>, RBAC <code>required_role</code>, MCP <code>ToolAnnotations</code>. The single source of truth for what tools exist — see <a href="../mcp/tool-catalog/"><code>mcp/tool-catalog.md</code></a> and the generated <a href="../mcp/api-surface-map.yaml"><code>mcp/api-surface-map.yaml</code></a>.</td>
 </tr>
 <tr>
 <td><a href="../engine/mcp/handlers.py"><code>handlers.py</code></a></td>
@@ -3474,13 +3540,13 @@ internal classes or SQL) never reach the model.</p>
         
         
           
-          <a href="../data-model/" class="md-footer__link md-footer__link--next" aria-label="Next: Data model">
+          <a href="../mcp/capability-audit/" class="md-footer__link md-footer__link--next" aria-label="Next: MCP capability audit">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Data model
+                MCP capability audit
               </div>
             </div>
             <div class="md-footer__button md-icon">

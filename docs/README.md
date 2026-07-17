@@ -143,8 +143,17 @@ docs/
 - **Linking**: relative paths only (`../architecture/overview.md`), so
   links work both on GitHub and in any local Markdown viewer.
 - **Per-file length cap**: 500 lines. Split a file rather than letting
-  it accrete. (`api-reference.md` is the largest at ~450 lines and is
-  split by domain; everything else is well under.)
+  it accrete. Two exhaustive reference docs intentionally run a little
+  over because they grow monotonically with the surface they describe
+  and are heavily cross-linked by anchor — splitting them would fragment
+  navigation more than it helps:
+  - [`api-reference.md`](api-reference.md) (~520 lines) is the full HTTP/WS
+    route catalog, split by domain *within* the file; it has 9 inbound
+    anchor links from other docs.
+  - [`known-limitations.md`](known-limitations.md) (~510 lines) is the
+    ranked tech-debt inventory; anchor-linked from the README roadmap
+    and runbooks.
+  Everything else is well under the cap.
 - **No marketing copy.** The README at the repo root is the public
   face; everything under `docs/` is engineering-grade.
 

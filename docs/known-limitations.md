@@ -162,14 +162,22 @@ are already in place — the missing piece is the route + worker glue.
 
 ---
 
-## P1 — Strategy Marketplace is mostly a stub (ratings landed, in-memory)
+## P1 — Strategy Marketplace is mostly a stub (search + ratings real, in-memory)
 
 **Where**: [`engine/api/routes/marketplace.py`](../engine/api/routes/marketplace.py)
 
 `browse`, `install`, `uninstall`, and the legacy
 `{strategy_id}/rate` route still return `{"status":"not_implemented"}`;
-`categories` returns a hardcoded list. There is **no marketplace
-registry** (local or remote) behind those routes.
+`categories` returns a hardcoded list. There is **no installable
+marketplace registry** (local or remote) behind those routes.
+
+The **search** surface landed (gh#1476):
+`GET /api/v1/marketplace/search?q=&category=&tag=&sort=&page=&limit=`
+is real (keyword + filter, weighted relevance ranking, paginated) but
+resolves against the same kind of process-local store — an
+`InMemoryStrategyCatalog` ([`engine/marketplace/search.py`](../engine/marketplace/search.py))
+seeded with demo strategies. No DB model, no persistence, no
+cross-replica visibility — a browse/UX preview, not a source of truth.
 
 The **ratings** surface landed (gh#1430): `POST` / `GET`
 `/api/v1/marketplace/strategies/{strategy_id}/ratings` are real (one
@@ -183,9 +191,10 @@ hiding behind a "stub" router — treat ratings as non-production until
 a Postgres-backed `RatingsStore` replaces the in-memory default.
 
 **Workaround today**: install strategies under
-`engine/plugins/<kind>/<name>/` and reload the plugin registry. Do not
-rely on marketplace ratings surviving a restart or being visible across
-replicas.
+`engine/plugins/<kind>/<name>/` and reload the plugin registry. Treat
+marketplace `/search` as a UX/browse preview and do not rely on
+ratings or catalog contents surviving a restart or being visible
+across replicas.
 
 ---
 

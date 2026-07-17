@@ -252,12 +252,13 @@ Requires legal acceptance.
 
 `/api/v1/marketplace/*`. Source: [`routes/marketplace.py`](../engine/api/routes/marketplace.py).
 The whole router requires legal acceptance. **Discovery/install are
-stubs** (`{status:"not_implemented"}`); **ratings are real but
-in-memory only** — see [known-limitations.md](known-limitations.md).
+stubs** (`{status:"not_implemented"}`); **search and ratings are real
+but in-memory only** — see [known-limitations.md](known-limitations.md).
 
 | Method | Path | Auth | Status |
 |---|---|---|---|
 | GET | `/api/v1/marketplace/browse?category=&search=&sort_by=&page=&per_page=` | `user` | Returns empty list (stub). |
+| GET | `/api/v1/marketplace/search?q=&category=&tag=&sort=&page=&limit=` | `user` | **Real.** Keyword (`q`) + category/tag filter with weighted relevance ranking. Returns `SearchResponse{query, sort, results:[SearchResultItem], total, page, limit, has_more}`. `sort` ∈ `relevance\|downloads\|rating\|name\|newest` (defaults to `relevance`, transparently falls back to `downloads` when `q` is empty since relevance is undefined without a query). `limit` 1–100 (default 20), `page` ≥ 1. `400` on an unknown `sort` or out-of-range `limit` (`SearchError`). Backed by an in-memory catalog — see note below. |
 | GET | `/api/v1/marketplace/categories` | `user` | Static category list (algorithmic, ml, llm, hybrid, income, macro). |
 | POST | `/api/v1/marketplace/install` | `developer` | Stub. |
 | DELETE | `/api/v1/marketplace/uninstall/{strategy_id}` | `developer` | Stub. |
@@ -270,6 +271,11 @@ Ratings run through a process-local `InMemoryRatingsStore`
 behind a `RatingsStore` Protocol so a DB backend can drop in later).
 **Not persisted — every restart loses them** (the store warns when
 instantiated outside pytest).
+
+`/search` resolves against a process-local `InMemoryStrategyCatalog`
+([`engine/marketplace/search.py`](../engine/marketplace/search.py))
+seeded with demo strategies. **Not persisted, not cross-replica** — a
+browse/UX preview, not a source of truth.
 
 ## Reference
 
@@ -410,6 +416,14 @@ on registration, so user-scoped events can be targeted directly.
 first-message form — query strings are recorded by reverse proxies and
 log aggregators. Auth attempts are rate-limited per IP
 (`NEXUS_WS_AUTH_RATE_LIMIT_PER_MINUTE`, default 10) via a token bucket.
+
+The rate-limit key is the **client IP**, resolved CIDR-aware via
+[`engine/api/ip_utils.py`](../engine/api/ip_utils.py) (gh#1497): the
+rightmost `X-Forwarded-For` hop (then `X-Real-IP`) is trusted **only**
+when the direct peer matches a `NEXUS_TRUSTED_PROXIES` network entry
+(e.g. `10.0.0.0/8`); otherwise the raw peer is used and spoofed
+headers can't escape the bucket. REST rate-limit buckets share the
+resolver.
 
 Connection scopes are derived from the JWT `role` claim (see
 [`ws/auth.py:_extract_scopes`](../engine/api/ws/auth.py#L80)):

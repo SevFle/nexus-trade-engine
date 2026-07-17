@@ -796,6 +796,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1271,6 +1275,62 @@
     
   
     MCP server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/capability-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP capability audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/tool-catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP tool catalog
   
 
     
@@ -3677,8 +3737,8 @@ Requires legal acceptance.</p>
 <h2 id="marketplace">Marketplace<a class="headerlink" href="#marketplace" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/marketplace/*</code>. Source: <a href="../engine/api/routes/marketplace.py"><code>routes/marketplace.py</code></a>.
 The whole router requires legal acceptance. <strong>Discovery/install are
-stubs</strong> (<code>{status:"not_implemented"}</code>); <strong>ratings are real but
-in-memory only</strong> — see <a href="../known-limitations/">known-limitations.md</a>.</p>
+stubs</strong> (<code>{status:"not_implemented"}</code>); <strong>search and ratings are real
+but in-memory only</strong> — see <a href="../known-limitations/">known-limitations.md</a>.</p>
 <table>
 <thead>
 <tr>
@@ -3694,6 +3754,12 @@ in-memory only</strong> — see <a href="../known-limitations/">known-limitation
 <td><code>/api/v1/marketplace/browse?category=&amp;search=&amp;sort_by=&amp;page=&amp;per_page=</code></td>
 <td><code>user</code></td>
 <td>Returns empty list (stub).</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/marketplace/search?q=&amp;category=&amp;tag=&amp;sort=&amp;page=&amp;limit=</code></td>
+<td><code>user</code></td>
+<td><strong>Real.</strong> Keyword (<code>q</code>) + category/tag filter with weighted relevance ranking. Returns <code>SearchResponse{query, sort, results:[SearchResultItem], total, page, limit, has_more}</code>. <code>sort</code> ∈ <code>relevance\|downloads\|rating\|name\|newest</code> (defaults to <code>relevance</code>, transparently falls back to <code>downloads</code> when <code>q</code> is empty since relevance is undefined without a query). <code>limit</code> 1–100 (default 20), <code>page</code> ≥ 1. <code>400</code> on an unknown <code>sort</code> or out-of-range <code>limit</code> (<code>SearchError</code>). Backed by an in-memory catalog — see note below.</td>
 </tr>
 <tr>
 <td>GET</td>
@@ -3738,6 +3804,10 @@ in-memory only</strong> — see <a href="../known-limitations/">known-limitation
 behind a <code>RatingsStore</code> Protocol so a DB backend can drop in later).
 <strong>Not persisted — every restart loses them</strong> (the store warns when
 instantiated outside pytest).</p>
+<p><code>/search</code> resolves against a process-local <code>InMemoryStrategyCatalog</code>
+(<a href="../engine/marketplace/search.py"><code>engine/marketplace/search.py</code></a>)
+seeded with demo strategies. <strong>Not persisted, not cross-replica</strong> — a
+browse/UX preview, not a source of truth.</p>
 <h2 id="reference">Reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/reference/*</code>. Source: <a href="../engine/api/routes/reference.py"><code>routes/reference.py</code></a>.</p>
 <table>
@@ -4044,6 +4114,13 @@ on registration, so user-scoped events can be targeted directly.</p>
 first-message form — query strings are recorded by reverse proxies and
 log aggregators. Auth attempts are rate-limited per IP
 (<code>NEXUS_WS_AUTH_RATE_LIMIT_PER_MINUTE</code>, default 10) via a token bucket.</p>
+<p>The rate-limit key is the <strong>client IP</strong>, resolved CIDR-aware via
+<a href="../engine/api/ip_utils.py"><code>engine/api/ip_utils.py</code></a> (gh#1497): the
+rightmost <code>X-Forwarded-For</code> hop (then <code>X-Real-IP</code>) is trusted <strong>only</strong>
+when the direct peer matches a <code>NEXUS_TRUSTED_PROXIES</code> network entry
+(e.g. <code>10.0.0.0/8</code>); otherwise the raw peer is used and spoofed
+headers can't escape the bucket. REST rate-limit buckets share the
+resolver.</p>
 <p>Connection scopes are derived from the JWT <code>role</code> claim (see
 <a href="../engine/api/ws/auth.py#L80"><code>ws/auth.py:_extract_scopes</code></a>):</p>
 <table>

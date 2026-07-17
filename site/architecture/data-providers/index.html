@@ -847,6 +847,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#historical-load-cache-enginedatahistorical_cachepy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Historical load cache (engine/data/historical_cache.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#shared-http-client-_httppy" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1004,6 +1015,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1094,6 +1109,62 @@
     
   
     MCP server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mcp/capability-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP capability audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mcp/tool-catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP tool catalog
   
 
     
@@ -2688,6 +2759,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#historical-load-cache-enginedatahistorical_cachepy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Historical load cache (engine/data/historical_cache.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#shared-http-client-_httppy" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3033,6 +3115,31 @@ opt in per call. Design choices worth knowing:</p>
 <li><strong>Graceful degradation.</strong> If Valkey is unreachable, the cache logs
   <code>cache.redis_unavailable</code> and the adapter proceeds uncached. The
   <em>trading path</em> must never depend on the cache being up.</li>
+</ul>
+<h3 id="historical-load-cache-enginedatahistorical_cachepy">Historical load cache (<code>engine/data/historical_cache.py</code>)<a class="headerlink" href="#historical-load-cache-enginedatahistorical_cachepy" title="Permanent link">&para;</a></h3>
+<p>A <em>separate</em>, deliberately in-process cache backs the <strong>historical /
+file-backed</strong> read path (the synchronous CSV/Parquet loaders in
+<a href="../../engine/data/provider.py"><code>engine/data/provider.py</code></a>). It is the
+file-path analog of <code>ProviderCache</code>, and exists because the historical
+path is synchronous and local where <code>ProviderCache</code> is async and
+network-backed:</p>
+<ul>
+<li><strong>Process-local LRU, not Valkey.</strong> File loads are cheap and local;
+  a network round-trip to Valkey would cost more than the re-read.
+  <code>HistoricalDataCache.shared()</code> returns the process-wide singleton
+  (tests reset it via <code>reset_for_tests</code>).</li>
+<li><strong>Keyed by on-disk fingerprint, not TTL.</strong> The key folds the call
+  parameters <em>and</em> the source file's identity — resolved path +
+  <code>mtime_ns</code> + size. A changed file therefore always produces a
+  different fingerprint and a guaranteed miss; there is <strong>no TTL to
+  tune and no stale-data window</strong> after a CSV is edited.</li>
+<li><strong>Byte cap per entry</strong> (<code>CACHE_ENTRY_CAP</code>). Oversized frames are
+  logged and skipped rather than cached, mirroring <code>ProviderCache</code>'s
+  <code>CACHE_PAYLOAD_CAP</code> so a pathological file can't grow the cache
+  unboundedly.</li>
+<li><strong>Type-stable keys.</strong> Non-primitive read kwargs (e.g. polars
+  <code>schema_overrides</code>) are folded through <code>fingerprint_kwargs</code> before
+  hashing, so <code>"1"</code> and <code>1</code> can never collide.</li>
 </ul>
 <h3 id="shared-http-client-_httppy">Shared HTTP client (<code>_http.py</code>)<a class="headerlink" href="#shared-http-client-_httppy" title="Permanent link">&para;</a></h3>
 <p>One async <code>httpx</code>-based client backs the REST adapters. Two
