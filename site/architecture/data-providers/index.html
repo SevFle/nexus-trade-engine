@@ -1004,6 +1004,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1094,6 +1098,62 @@
     
   
     MCP server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mcp/capability-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP capability audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mcp/tool-catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP tool catalog
   
 
     
@@ -2996,13 +3056,41 @@ new provider therefore means: (1) a new <code>*DataProvider(IDataProvider)</code
 module, (2) one branch in <code>build_provider</code>, (3) an entry in the YAML.
 The registry and routing code never change.</p>
 <blockquote>
-<p><strong>The "CSV provider" in commit messages.</strong> Several recent security
-commits (gh#1440) reference a "CSV provider". That work hardened the
-<em>shared</em> symbol grammar and column map in <code>base.py</code> that any
-local-file provider (CSV included) inherits — there is no separate
-<code>csv.py</code> adapter registered in the factory today. If you add one,
-route its file access through the same <code>validate_symbol</code> guard so a
-symbol like <code>../../etc/passwd</code> can never reach the filesystem.</p>
+<p><strong>Two provider tiers — don't confuse them.</strong> There are two
+<code>IDataProvider</code> abstractions in this repo, and they are deliberately
+separate:</p>
+<ol>
+<li>The <strong>live</strong> registry above (<code>engine/data/providers/</code>), an async,
+   HTTP-backed, fail-over-capable fan-out that returns <em>pandas</em> frames
+   and is what <code>GET /api/v1/market-data/*</code> talks to.</li>
+<li>The <strong>offline / historical</strong> tier (<code>engine/data/provider.py</code> +
+   <a href="../../engine/data/csv_provider.py"><code>engine/data/csv_provider.py</code></a>),
+   a small synchronous, file-backed contract (<code>load_data</code> + <code>validate</code>)
+   returning <em>polars</em> frames, used by the offline backtesting / analysis
+   path. Its one concrete adapter today is
+   <code>CSVHistoricalDataProvider</code>, which reads OHLCV CSVs (canonical columns
+   <code>timestamp,open,high,low,close,volume</code>, case-insensitive headers),
+   auto-detects epoch units (<code>s</code>/<code>ms</code>/<code>us</code>/<code>ns</code>/<code>ps</code>, gh#1456), and
+   normalises <code>timestamp</code> to a tz-aware UTC polars <code>Datetime</code>.</li>
+</ol>
+<p>They share a name because both mean "a source of OHLCV", but they are
+not interchangeable and the offline one is <strong>not</strong> registered in the
+live <code>build_provider</code> factory.</p>
+<p>The historical tier is fronted by an in-process LRU
+(<a href="../../engine/data/historical_cache.py"><code>engine/data/historical_cache.py</code></a>,
+gh#1470) keyed by the source file's identity <em>and</em> on-disk fingerprint
+(<code>resolved path + mtime_ns + size</code>). There is <strong>no TTL to tune</strong>: a
+changed file produces a different fingerprint and therefore a miss, so
+a stale frame can never be served. Entries are capped at 64 MiB each
+and the LRU at 128 frames by default; both caches (live <code>ProviderCache</code>
+and historical <code>HistoricalDataCache</code>) share the <code>nexus:dp:</code> /
+<code>nexus:hdp:</code> key-prefix scheme so they never collide even if they later
+share a backing store.</p>
+<p>The gh#1440 security work hardened the <em>live</em> tier's symbol grammar and
+path encoding; if you add a file-backed adapter to the <strong>live</strong> factory,
+route its file access through the same <code>validate_symbol</code> /
+<code>encode_path_segment</code> guards so a symbol like <code>../../etc/passwd</code> can
+never reach the filesystem.</p>
 </blockquote>
 <h2 id="cross-cutting-infrastructure">Cross-cutting infrastructure<a class="headerlink" href="#cross-cutting-infrastructure" title="Permanent link">&para;</a></h2>
 <h3 id="resilience-_resiliencepy">Resilience (<code>_resilience.py</code>)<a class="headerlink" href="#resilience-_resiliencepy" title="Permanent link">&para;</a></h3>

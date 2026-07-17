@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/adr/0006-bcrypt-fernet/">
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/mcp/tool-catalog/">
       
       
-        <link rel="prev" href="../0005-valkey-over-redis/">
+        <link rel="prev" href="../capability-audit/">
       
       
-        <link rel="next" href="../0007-strategy-sandbox-allowlist-imports/">
+        <link rel="next" href="../../data-model/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>0006 — Password hashing (bcrypt) & MFA at rest (Fernet) - Nexus Trade Engine</title>
+        <title>MCP tool catalog - Nexus Trade Engine</title>
       
     
     
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#adr-0006-password-hashing-bcrypt-and-mfa-secret-at-rest-fernet" class="md-skip">
+        <a href="#mcp-tool-catalog" class="md-skip">
           Skip to content
         </a>
       
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              0006 — Password hashing (bcrypt) & MFA at rest (Fernet)
+              MCP tool catalog
             
           </span>
         </div>
@@ -269,10 +269,12 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
+      <li class="md-tabs__item md-tabs__item--active">
         <a href="../../api-reference/" class="md-tabs__link">
           
   
@@ -313,13 +315,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../adr/" class="md-tabs__link">
           
   
   
@@ -783,8 +783,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -802,21 +804,22 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
-        
-          
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   
@@ -834,7 +837,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -908,7 +911,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../mcp/capability-audit/" class="md-nav__link">
+      <a href="../capability-audit/" class="md-nav__link">
         
   
   
@@ -933,10 +936,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../mcp/tool-catalog/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP tool catalog
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -952,6 +982,248 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#conventions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Conventions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compute-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compute tools
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Compute tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run_backtest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_backtest
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#portfolio-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Portfolio tools
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Portfolio tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get_portfolio_status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_portfolio_status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_positions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_positions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_position" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_position
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_unrealized_pnl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_unrealized_pnl
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_orders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_orders
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategy-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Strategy tools
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Strategy tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#list_strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list_strategies
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_strategy_details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_strategy_details
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#market-data-analytics-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Market-data &amp; analytics tools
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Market-data &amp; analytics tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get_market_data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_market_data
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_cost_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_cost_model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_performance_metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_performance_metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary table
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1209,8 +1481,6 @@
       
   
   
-    
-  
   
   
     
@@ -1248,23 +1518,22 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
+            <a href="../../adr/" class="md-nav__link ">
               
   
   
@@ -1282,13 +1551,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1308,7 +1577,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0001-scaffold-tech-choices/" class="md-nav__link">
+      <a href="../../adr/0001-scaffold-tech-choices/" class="md-nav__link">
         
   
   
@@ -1336,7 +1605,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0002-auth-rbac/" class="md-nav__link">
+      <a href="../../adr/0002-auth-rbac/" class="md-nav__link">
         
   
   
@@ -1364,7 +1633,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0003-mobile-app-strategy/" class="md-nav__link">
+      <a href="../../adr/0003-mobile-app-strategy/" class="md-nav__link">
         
   
   
@@ -1392,7 +1661,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0004-task-queue-taskiq/" class="md-nav__link">
+      <a href="../../adr/0004-task-queue-taskiq/" class="md-nav__link">
         
   
   
@@ -1420,7 +1689,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0005-valkey-over-redis/" class="md-nav__link">
+      <a href="../../adr/0005-valkey-over-redis/" class="md-nav__link">
         
   
   
@@ -1445,37 +1714,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    0006 — Password hashing (bcrypt) & MFA at rest (Fernet)
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../adr/0006-bcrypt-fernet/" class="md-nav__link">
         
   
   
@@ -1491,270 +1733,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#context-and-problem-statement" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Context and Problem Statement
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#decision-drivers" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Decision Drivers
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#considered-options" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Considered Options
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Considered Options">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#for-verifier-material-passwords-api-keys-backup-codes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        For verifier material (passwords, API keys, backup codes)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#for-recoverable-secrets-at-rest-totp-seeds-master-key-material" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        For recoverable secrets at rest (TOTP seeds, master key material)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#decision-outcome" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Decision Outcome
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Decision Outcome">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#consequences" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Consequences
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#key-management" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Key Management
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Key Management">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#where-the-keys-live" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Where the keys live
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rotation-procedure" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Rotation procedure
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#threat-boundary-corrected" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Threat boundary (corrected)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Pros and Cons of the Options
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Pros and Cons of the Options">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#bcrypt-chosen-for-verifiers" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        bcrypt (chosen, for verifiers)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#argon2id" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Argon2id
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#scrypt-pbkdf2" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        scrypt / PBKDF2
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#fernet-chosen-for-recoverable-secrets" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Fernet (chosen, for recoverable secrets)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#aes-gcm-raw" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        AES-GCM (raw)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#nacl-secretbox" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        NaCl SecretBox
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#envelope-encryption-with-kms" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Envelope encryption with KMS
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#links" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Links
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1767,7 +1745,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
+      <a href="../../adr/0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
         
   
   
@@ -1795,7 +1773,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0008-pluggable-metrics-backend/" class="md-nav__link">
+      <a href="../../adr/0008-pluggable-metrics-backend/" class="md-nav__link">
         
   
   
@@ -1823,7 +1801,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0009-cross-replica-eventbus-bridge/" class="md-nav__link">
+      <a href="../../adr/0009-cross-replica-eventbus-bridge/" class="md-nav__link">
         
   
   
@@ -1851,7 +1829,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0010-static-ast-validation-toctou-loading/" class="md-nav__link">
+      <a href="../../adr/0010-static-ast-validation-toctou-loading/" class="md-nav__link">
         
   
   
@@ -1879,7 +1857,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../0011-runtime-introspection-blocking/" class="md-nav__link">
+      <a href="../../adr/0011-runtime-introspection-blocking/" class="md-nav__link">
         
   
   
@@ -1907,7 +1885,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../template/" class="md-nav__link">
+      <a href="../../adr/template/" class="md-nav__link">
         
   
   
@@ -2743,10 +2721,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#context-and-problem-statement" class="md-nav__link">
+  <a href="#conventions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Context and Problem Statement
+        Conventions
       
     </span>
   </a>
@@ -2754,44 +2732,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#decision-drivers" class="md-nav__link">
+  <a href="#compute-tools" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Decision Drivers
+        Compute tools
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#considered-options" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Considered Options
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Considered Options">
+    <nav class="md-nav" aria-label="Compute tools">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#for-verifier-material-passwords-api-keys-backup-codes" class="md-nav__link">
+  <a href="#run_backtest" class="md-nav__link">
     <span class="md-ellipsis">
       
-        For verifier material (passwords, API keys, backup codes)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#for-recoverable-secrets-at-rest-totp-seeds-master-key-material" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        For recoverable secrets at rest (TOTP seeds, master key material)
+        run_backtest
       
     </span>
   </a>
@@ -2804,22 +2760,66 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#decision-outcome" class="md-nav__link">
+  <a href="#portfolio-tools" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Decision Outcome
+        Portfolio tools
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Decision Outcome">
+    <nav class="md-nav" aria-label="Portfolio tools">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#consequences" class="md-nav__link">
+  <a href="#get_portfolio_status" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Consequences
+        get_portfolio_status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_positions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_positions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_position" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_position
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_unrealized_pnl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_unrealized_pnl
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_orders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_orders
       
     </span>
   </a>
@@ -2832,22 +2832,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#key-management" class="md-nav__link">
+  <a href="#strategy-tools" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Key Management
+        Strategy tools
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Key Management">
+    <nav class="md-nav" aria-label="Strategy tools">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#where-the-keys-live" class="md-nav__link">
+  <a href="#list_strategies" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Where the keys live
+        list_strategies
       
     </span>
   </a>
@@ -2855,21 +2855,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#rotation-procedure" class="md-nav__link">
+  <a href="#get_strategy_details" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Rotation procedure
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#threat-boundary-corrected" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Threat boundary (corrected)
+        get_strategy_details
       
     </span>
   </a>
@@ -2882,22 +2871,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
+  <a href="#market-data-analytics-tools" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Pros and Cons of the Options
+        Market-data &amp; analytics tools
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Pros and Cons of the Options">
+    <nav class="md-nav" aria-label="Market-data &amp; analytics tools">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#bcrypt-chosen-for-verifiers" class="md-nav__link">
+  <a href="#get_market_data" class="md-nav__link">
     <span class="md-ellipsis">
       
-        bcrypt (chosen, for verifiers)
+        get_market_data
       
     </span>
   </a>
@@ -2905,10 +2894,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#argon2id" class="md-nav__link">
+  <a href="#get_cost_model" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Argon2id
+        get_cost_model
       
     </span>
   </a>
@@ -2916,54 +2905,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#scrypt-pbkdf2" class="md-nav__link">
+  <a href="#get_performance_metrics" class="md-nav__link">
     <span class="md-ellipsis">
       
-        scrypt / PBKDF2
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#fernet-chosen-for-recoverable-secrets" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Fernet (chosen, for recoverable secrets)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#aes-gcm-raw" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        AES-GCM (raw)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#nacl-secretbox" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        NaCl SecretBox
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#envelope-encryption-with-kms" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Envelope encryption with KMS
+        get_performance_metrics
       
     </span>
   </a>
@@ -2976,10 +2921,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#links" class="md-nav__link">
+  <a href="#summary-table" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Links
+        Summary table
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
       
     </span>
   </a>
@@ -3006,328 +2962,357 @@
   
 
 
-<h1 id="adr-0006-password-hashing-bcrypt-and-mfa-secret-at-rest-fernet">ADR-0006: Password hashing (bcrypt) and MFA secret at rest (Fernet)<a class="headerlink" href="#adr-0006-password-hashing-bcrypt-and-mfa-secret-at-rest-fernet" title="Permanent link">&para;</a></h1>
+<h1 id="mcp-tool-catalog">MCP tool catalog<a class="headerlink" href="#mcp-tool-catalog" title="Permanent link">&para;</a></h1>
+<p>The authoritative reference for every tool the Nexus MCP server
+advertises via <code>tools/list</code>. This is the human-readable companion to the
+machine-readable <a href="../api-surface-map.yaml"><code>api-surface-map.yaml</code></a>, which is
+<strong>generated</strong> from <a href="../../engine/mcp/tool_definitions.py"><code>engine/mcp/tool_definitions.py</code></a>
+— when in doubt, the code is the source of truth.</p>
+<p>For the design behind these tools (why read-only, how auth works, how
+results are bounded), read <a href="../../mcp-server/">MCP server</a>. For the
+whole-surface audit, read the <a href="../capability-audit/">capability audit</a>.</p>
+<h2 id="conventions">Conventions<a class="headerlink" href="#conventions" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Status</strong>: Accepted</li>
-<li><strong>Date</strong>: 2026-05-15</li>
-<li><strong>Deciders</strong>: Lead maintainer + 1 reviewer</li>
-<li><strong>Tags</strong>: auth, security, crypto, mfa</li>
+<li><strong>Every tool</strong> advertises MCP <code>readOnlyHint=true, destructiveHint=false,
+  idempotentHint=true</code>. There is no tool that places live orders or
+  mutates trading state.</li>
+<li><strong>Default role</strong> is <code>viewer</code>; only <code>run_backtest</code> requires <code>quant_dev</code>.
+  Roles follow the shared REST hierarchy
+  (<a href="../../api-reference/#roles-rbac-hierarchy">api-reference.md §roles</a>).</li>
+<li><strong>Pagination</strong> (<code>limit</code> + opaque <code>cursor</code>) applies to the three
+  list-heavy tools (<code>get_orders</code>, <code>list_strategies</code>, <code>get_market_data</code>).
+  Defaults: <code>default_page_size=50</code>, <code>max_page_size=500</code>.</li>
+<li><strong>Portfolio tools</strong> take an optional <code>portfolio_id</code> (default <code>"default"</code>)
+  and are gated by the ownership model in
+  <a href="../../mcp-server/#portfolio-access-control">MCP server §portfolio-access-control</a>.</li>
 </ul>
-<h2 id="context-and-problem-statement">Context and Problem Statement<a class="headerlink" href="#context-and-problem-statement" title="Permanent link">&para;</a></h2>
-<p>The engine stores two kinds of secret material in the database:</p>
-<ol>
-<li><strong>Verifier material</strong> — passwords (local auth provider) and
-   long-lived API keys. The database only ever needs to <em>check</em> these,
-   never recover the plaintext. The right shape is a slow,
-   salt-embedded, deliberately expensive hash.</li>
-<li><strong>Recoverable secrets at rest</strong> — TOTP seeds for MFA (we need the
-   plaintext at verification time to compute the expected code) and
-   the master key material for the engine's encrypted secret store
-   (<a href="../../engine/core/secrets.py"><code>engine/core/secrets.py</code></a>). The
-   database must store these, but a <em>database-scoped</em> leak (SQL
-   injection that exfiltrates table rows, a stolen DB backup, a read
-   replica) must not be enough to recover them — because the
-   decryption key is held <em>outside</em> the database. This is scoped to a
-   SQL-injection-level DB leak, not a broad "read-only leak": an
-   attacker who also reaches the application host / env var still
-   recovers plaintext (see <a href="#key-management">Key Management</a>).</li>
-</ol>
-<p>Two ADRs already cover adjacent decisions: ADR-0002 picked the
-<code>AuthBackend</code> / <code>RBAC</code> architecture, and ADR-0001 named Argon2id as
-the <em>intended</em> password hash. This ADR locks in the <em>actual</em> choices
-that shipped (bcrypt for verifiers, Fernet for recoverable secrets)
-and the reasoning behind them, so future contributors don't relitigate
-the conversation every PR.</p>
-<h2 id="decision-drivers">Decision Drivers<a class="headerlink" href="#decision-drivers" title="Permanent link">&para;</a></h2>
+<hr />
+<h2 id="compute-tools">Compute tools<a class="headerlink" href="#compute-tools" title="Permanent link">&para;</a></h2>
+<h3 id="run_backtest"><code>run_backtest</code><a class="headerlink" href="#run_backtest" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p>Required role: <strong><code>quant_dev</code></strong> · compute-only · never places live orders</p>
+</blockquote>
+<p>Run a historical backtest of a strategy on a single symbol over a date
+range. Returns performance metrics (total return, Sharpe, max drawdown,
+win rate, cost drag), trade count, and final capital.</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>strategy_name</code></td>
+<td>string</td>
+<td>✅</td>
+<td>Installed strategy (see <code>list_strategies</code>).</td>
+</tr>
+<tr>
+<td><code>symbol</code></td>
+<td>string</td>
+<td>✅</td>
+<td>1–16 chars.</td>
+</tr>
+<tr>
+<td><code>start_date</code></td>
+<td>date</td>
+<td>✅</td>
+<td>ISO-8601, inclusive.</td>
+</tr>
+<tr>
+<td><code>end_date</code></td>
+<td>date</td>
+<td>✅</td>
+<td>ISO-8601, inclusive.</td>
+</tr>
+<tr>
+<td><code>initial_capital</code></td>
+<td>number</td>
+<td>—</td>
+<td>Default <code>100000</code>, must be <code>&gt; 0</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>The result is a deliberate <strong>summary</strong> — never the full equity curve or
+trade log (those would overrun the assistant's context). See
+<a href="../../mcp-server/#backtest-result-shape">MCP server §backtest-result-shape</a>.</p>
+<hr />
+<h2 id="portfolio-tools">Portfolio tools<a class="headerlink" href="#portfolio-tools" title="Permanent link">&para;</a></h2>
+<p>All five take an optional <code>portfolio_id</code> (default <code>"default"</code>).</p>
+<h3 id="get_portfolio_status"><code>get_portfolio_status</code><a class="headerlink" href="#get_portfolio_status" title="Permanent link">&para;</a></h3>
+<p>Cash, total market value, total return %, realized P&amp;L, open-position
+count.</p>
+<h3 id="get_positions"><code>get_positions</code><a class="headerlink" href="#get_positions" title="Permanent link">&para;</a></h3>
+<p>Open positions: qty, avg cost, price, market value, cost basis,
+unrealized P&amp;L (abs + %), weight.</p>
+<h3 id="get_position"><code>get_position</code><a class="headerlink" href="#get_position" title="Permanent link">&para;</a></h3>
+<p>One position by symbol (case-insensitive match). Raises a not-found error
+when the symbol is not held.</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>symbol</code></td>
+<td>string</td>
+<td>✅</td>
+<td>1–16 chars, case-insensitive.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="get_unrealized_pnl"><code>get_unrealized_pnl</code><a class="headerlink" href="#get_unrealized_pnl" title="Permanent link">&para;</a></h3>
+<p>Net open (unrealized) P&amp;L across the portfolio, abs + %, with a
+per-position breakdown.</p>
+<h3 id="get_orders"><code>get_orders</code><a class="headerlink" href="#get_orders" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p>✅ Paginated (<code>orders</code>)</p>
+</blockquote>
+<p>Chronological order history.</p>
+<hr />
+<h2 id="strategy-tools">Strategy tools<a class="headerlink" href="#strategy-tools" title="Permanent link">&para;</a></h2>
+<h3 id="list_strategies"><code>list_strategies</code><a class="headerlink" href="#list_strategies" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p>✅ Paginated (<code>strategies</code>)</p>
+</blockquote>
+<p>Installed strategies: version, description, author, symbols, defaults.</p>
+<h3 id="get_strategy_details"><code>get_strategy_details</code><a class="headerlink" href="#get_strategy_details" title="Permanent link">&para;</a></h3>
+<p>Full metadata for one strategy.</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>strategy_name</code></td>
+<td>string</td>
+<td>✅</td>
+<td>As returned by <code>list_strategies</code>.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="market-data-analytics-tools">Market-data &amp; analytics tools<a class="headerlink" href="#market-data-analytics-tools" title="Permanent link">&para;</a></h2>
+<h3 id="get_market_data"><code>get_market_data</code><a class="headerlink" href="#get_market_data" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p>✅ Paginated (<code>bars</code>) · Required: <code>symbol</code></p>
+</blockquote>
+<p>OHLCV bars for a symbol + period + interval.</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>symbol</code></td>
+<td>string</td>
+<td>✅</td>
+<td>1–16 chars.</td>
+</tr>
+<tr>
+<td><code>interval</code></td>
+<td>enum</td>
+<td>—</td>
+<td><code>1m\|5m\|15m\|1h\|1d\|1wk\|1mo</code>, default <code>1d</code>.</td>
+</tr>
+<tr>
+<td><code>period</code></td>
+<td>string</td>
+<td>—</td>
+<td>Default <code>1y</code> (e.g. <code>6mo</code>, <code>3mo</code>, <code>1mo</code>).</td>
+</tr>
+<tr>
+<td><code>limit</code> / <code>cursor</code></td>
+<td>—</td>
+<td>—</td>
+<td>Pagination.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="get_cost_model"><code>get_cost_model</code><a class="headerlink" href="#get_cost_model" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p>Required: <code>symbol</code>, <code>quantity</code>, <code>price</code></p>
+</blockquote>
+<p>Transaction-cost breakdown estimate (commission, spread, slippage, fee,
+tax).</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>symbol</code></td>
+<td>string</td>
+<td>✅</td>
+<td>1–16 chars.</td>
+</tr>
+<tr>
+<td><code>quantity</code></td>
+<td>integer</td>
+<td>✅</td>
+<td><code>≥ 1</code>.</td>
+</tr>
+<tr>
+<td><code>price</code></td>
+<td>number</td>
+<td>✅</td>
+<td><code>&gt; 0</code>.</td>
+</tr>
+<tr>
+<td><code>side</code></td>
+<td>enum</td>
+<td>—</td>
+<td><code>buy\|sell</code>, default <code>buy</code>.</td>
+</tr>
+<tr>
+<td><code>avg_volume</code></td>
+<td>integer</td>
+<td>—</td>
+<td>Default <code>0</code>; for the slippage estimate.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="get_performance_metrics"><code>get_performance_metrics</code><a class="headerlink" href="#get_performance_metrics" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p>Required: <code>equity_curve</code></p>
+</blockquote>
+<p>Compute total return, annualized return, Sharpe, Sortino, max drawdown,
+win rate, and profit factor from an equity curve.</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>equity_curve</code></td>
+<td>array</td>
+<td>✅</td>
+<td>≥2 <code>{timestamp, total_value}</code> points.</td>
+</tr>
+<tr>
+<td><code>initial_capital</code></td>
+<td>number</td>
+<td>—</td>
+<td>Default <code>100000</code>, <code>&gt; 0</code>.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="summary-table">Summary table<a class="headerlink" href="#summary-table" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Role</th>
+<th>Paginated</th>
+<th>Required</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run_backtest</code></td>
+<td><code>quant_dev</code></td>
+<td>—</td>
+<td><code>strategy_name</code>, <code>symbol</code>, <code>start_date</code>, <code>end_date</code></td>
+</tr>
+<tr>
+<td><code>get_portfolio_status</code></td>
+<td><code>viewer</code></td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>get_positions</code></td>
+<td><code>viewer</code></td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>get_position</code></td>
+<td><code>viewer</code></td>
+<td>—</td>
+<td><code>symbol</code></td>
+</tr>
+<tr>
+<td><code>get_unrealized_pnl</code></td>
+<td><code>viewer</code></td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>get_orders</code></td>
+<td><code>viewer</code></td>
+<td>✅ <code>orders</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>list_strategies</code></td>
+<td><code>viewer</code></td>
+<td>✅ <code>strategies</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>get_strategy_details</code></td>
+<td><code>viewer</code></td>
+<td>—</td>
+<td><code>strategy_name</code></td>
+</tr>
+<tr>
+<td><code>get_market_data</code></td>
+<td><code>viewer</code></td>
+<td>✅ <code>bars</code></td>
+<td><code>symbol</code></td>
+</tr>
+<tr>
+<td><code>get_cost_model</code></td>
+<td><code>viewer</code></td>
+<td>—</td>
+<td><code>symbol</code>, <code>quantity</code>, <code>price</code></td>
+</tr>
+<tr>
+<td><code>get_performance_metrics</code></td>
+<td><code>viewer</code></td>
+<td>—</td>
+<td><code>equity_curve</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Defense against a DB-scoped leak.</strong> A database-scoped leak (SQL
-  injection that exfiltrates table rows, a stolen DB backup, a read
-  replica) hands an attacker ciphertext only — the decryption key
-  lives outside the database — so <code>users.mfa_secret_encrypted</code> and
-  <code>secrets.ciphertext</code> must not yield plaintext, and
-  <code>users.hashed_password</code> / <code>api_keys.key_hash</code> must not be
-  crackable in useful time. The boundary is <em>DB-scoped</em>, not "any
-  read-only leak"; an attacker who also reaches the env var / host
-  still wins (see <a href="#key-management">Key Management</a>).</li>
-<li><strong>Latency budget.</strong> A login attempt runs password verify <em>and</em> (if
-  MFA is on) TOTP verify, so we cap hashing at ~250 ms per attempt.
-  This does <strong>not</strong> distinguish bcrypt from Argon2id: an
-  OWASP-baseline Argon2id profile (time cost <code>t=2</code>, memory
-  <code>m=64 MiB</code>, parallelism <code>p=1</code>) measures ~100–250 ms on commodity
-  hardware — the same band as bcrypt cost factor 12 (~250 ms). Only
-  <em>aggressive</em> Argon2id (e.g. <code>m=1 GiB</code>) pushes into the multi-second
-  range, so latency alone is not a reason to prefer bcrypt; the
-  decision turns on the drivers below.</li>
-<li><strong>Operational simplicity (reason to retain bcrypt).</strong> bcrypt's cost
-  factor is per-hash and transparently upgrades on the next login via
-  <code>bcrypt.gensalt(rounds=N)</code>, so ratcheting cost upward is a lazy,
-  row-by-row migration with no schema change. Combined with the
-  login rate limiter (ADR-0005), which raises the cost of <em>online</em>
-  attacks far more than any KDF raises <em>offline</em> attack cost, bcrypt
-  is the cheapest safe default to operate today.</li>
-<li><strong>bcrypt 72-byte input ceiling.</strong> bcrypt silently truncates to the
-  first 72 bytes of a password, so any passphrase longer than that
-  collapses to a shared prefix. This is a real driver, not a
-  footnote: it weakens distinctness for long passphrases, and
-  Argon2id has no such ceiling. We accept it because inputs are
-  rejected at &gt; 1 KiB at the request boundary and we pre-hash with
-  SHA-256 before bcrypt if/when long passphrases appear (see
-  Consequences).</li>
-<li><strong>Implementation surface.</strong> Both choices should be one import from
-  the Python cryptography ecosystem, with no hand-rolled primitives.</li>
-<li><strong>Rotation story.</strong> Recoverable secrets need master-key rotation
-  (operator rekeys the engine, every ciphertext is migrated). The
-  primitive we pick has to support that without rewriting rows by
-  hand.</li>
-<li><strong>Auditability.</strong> Both choices should be conventional enough that
-  an outside auditor recognises them on sight, not bespoke.</li>
-</ul>
-<h2 id="considered-options">Considered Options<a class="headerlink" href="#considered-options" title="Permanent link">&para;</a></h2>
-<h3 id="for-verifier-material-passwords-api-keys-backup-codes">For verifier material (passwords, API keys, backup codes)<a class="headerlink" href="#for-verifier-material-passwords-api-keys-backup-codes" title="Permanent link">&para;</a></h3>
-<ol>
-<li><strong>bcrypt with cost factor 12</strong> — Blowfish-based EksBlowfish, the
-   historical Python ecosystem default (<code>bcrypt&gt;=4</code>). Cost 12 ≈
-   ~250 ms on commodity hardware today.</li>
-<li><strong>Argon2id (libargon2 via <code>argon2-cffi</code>)</strong> — PHC winner. Resists
-   GPU/ASIC cracking better than bcrypt; recommended by OWASP.</li>
-<li><strong>scrypt</strong> — older KDF, resists GPU attacks, but parameter space
-   is harder to reason about and the Python bindings are less
-   maintained than Argon2's.</li>
-<li><strong>PBKDF2-HMAC-SHA-256 (high iterations)</strong> — stdlib-only; safe but
-   not GPU-hard. Acceptable fallback, not first choice.</li>
-</ol>
-<h3 id="for-recoverable-secrets-at-rest-totp-seeds-master-key-material">For recoverable secrets at rest (TOTP seeds, master key material)<a class="headerlink" href="#for-recoverable-secrets-at-rest-totp-seeds-master-key-material" title="Permanent link">&para;</a></h3>
-<ol>
-<li><strong>Fernet (<code>cryptography.fernet</code>)</strong> — AES-128-CBC + HMAC-SHA-256,
-   authenticated, key rotation via <code>MultiFernet</code>. One-line encrypt /
-   decrypt.</li>
-<li><strong>AES-GCM via <code>cryptography.hazmat</code></strong> — same primitives, but you
-   have to manage nonces, AAD, and tag concatenation yourself.</li>
-<li><strong>NaCl SecretBox (<code>pynacl</code>)</strong> — XSalsa20-Poly1305. Excellent
-   primitive but adds a C dependency and a second crypto library for
-   one feature.</li>
-<li><strong>Application-level envelope encryption with KMS</strong> — right answer
-   at scale, but we have no KMS today. Tracked as a follow-up.</li>
-</ol>
-<h2 id="decision-outcome">Decision Outcome<a class="headerlink" href="#decision-outcome" title="Permanent link">&para;</a></h2>
-<p>Chosen options:</p>
-<ul>
-<li><strong>bcrypt with cost factor 12</strong> for <code>users.hashed_password</code>,
-  <code>api_keys.key_hash</code>, and <code>users.mfa_backup_codes</code>. Implemented in
-  <a href="../../engine/api/auth/local.py"><code>engine/api/auth/local.py</code></a>,
-  <a href="../../engine/api/auth/api_keys.py"><code>engine/api/auth/api_keys.py</code></a>,
-  and
-  <a href="../../engine/api/auth/mfa_service.py"><code>engine/api/auth/mfa_service.py</code></a>.</li>
-<li><strong>Fernet (<code>cryptography.fernet.Fernet</code>) keyed by
-  <code>settings.mfa_encryption_key</code></strong> for the TOTP secret at rest, and
-  <strong><code>MultiFernet</code></strong> for the application-level secret store in
-  <a href="../../engine/core/secrets.py"><code>engine/core/secrets.py</code></a> so the
-  operator can rotate the master key without rewriting every row in
-  one transaction.</li>
-</ul>
-<p>Cost factor 12 is a deliberate midpoint: it costs an attacker roughly
-the same to brute-force a 12-character password today as a 16-character
-password hashed at cost 10. We will bump the cost factor in a follow-up
-migration as hardware moves; bcrypt's <code>gensalt(rounds=N)</code> makes that a
-row-by-row rewrite on next login, not a schema change.</p>
-<p>For Fernet, the key is loaded from <code>settings.mfa_encryption_key</code>
-(MFA) and <code>settings.secrets_master_key</code> (secret store), both
-url-safe-base64 32-byte Fernet keys. Key rotation is exposed in
-<a href="../../engine/core/secrets.py"><code>engine/core/secrets.py</code></a> via
-<code>SecretsService.rotate_master_key</code> followed by <code>reencrypt_all</code>; the
-<code>MultiFernet</code> accepts the previous key for decrypt during the
-migration window.</p>
-<h3 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Positive</strong></li>
-<li>bcrypt is well-known to any auditor. No surprises in a security
-    review.</li>
-<li>Fernet's <code>MultiFernet</code> gives us free decrypt-with-old /
-    encrypt-with-new during rotation. No bespoke key-version field.</li>
-<li>Both libraries are pure wrappers around OpenSSL / libffi — no
-    hand-rolled crypto, no exotic C dependencies.</li>
-<li><strong>Negative</strong></li>
-<li>bcrypt is GPU-friendly compared to Argon2id. We accept the
-    trade-off not on latency grounds (a tuned Argon2id profile is
-    comparably fast — see Decision Drivers) but on operational ones:
-    per-hash cost-factor upgrades and the login rate limiter
-    (ADR-0005's Valkey-backed limiter), which raises the cost of
-    online attacks far more than any KDF raises the cost of offline
-    attacks.</li>
-<li>Fernet is AES-128, not AES-256. We're comfortable with the
-    128-bit security margin; if AES-128 falls, this project has
-    bigger problems than MFA seeds.</li>
-<li>The MFA and secret-store keys live in environment variables. A
-    host with the env var and a DB dump still recovers the plaintext.
-    KMS-backed envelope encryption is the eventual answer and is
-    tracked as a follow-up.</li>
-<li><strong>Neutral</strong></li>
-<li>Cost factor 12 will need bumping as CPUs improve. We track that
-    in the <a href="../../operations/runbooks/auth-mfa/">auth-mfa runbook</a>.</li>
-</ul>
-<h2 id="key-management">Key Management<a class="headerlink" href="#key-management" title="Permanent link">&para;</a></h2>
-<p>This section makes the Fernet threat boundary and rotation procedure
-explicit so operators don't have to reverse-engineer them from code.</p>
-<h3 id="where-the-keys-live">Where the keys live<a class="headerlink" href="#where-the-keys-live" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>MFA key</strong> — <code>settings.mfa_encryption_key</code>, a url-safe-base64
-  32-byte Fernet key. Loaded from the <code>MFA_ENCRYPTION_KEY</code>
-  environment variable; an empty value disables MFA enrollment (see
-  <a href="../../engine/config.py"><code>engine/config.py</code></a> and
-  <a href="../../engine/api/auth/mfa_service.py"><code>engine/api/auth/mfa_service.py</code></a>).</li>
-<li><strong>Secret-store master key</strong> — <code>settings.secrets_master_key</code>, same
-  encoding. Loaded from <code>SECRETS_MASTER_KEY</code> and wrapped in a
-  <code>MasterKey</code> (current + optional previous) in
-  <a href="../../engine/core/secrets.py"><code>engine/core/secrets.py</code></a>.</li>
-<li><strong>Production target.</strong> Env-var injection is the default so a
-  self-hosted operator can run MFA without a cloud account. For
-  multi-tenant / hosted deployments the intended target is
-  KMS-backed envelope encryption: the Fernet key becomes a
-  data-encryption-key unwrapped at boot from a KMS (AWS KMS / GCP
-  KMS / Vault Transit), so the long-lived key never sits in a <code>.env</code>
-  file or container image. Tracked as a follow-up.</li>
-</ul>
-<h3 id="rotation-procedure">Rotation procedure<a class="headerlink" href="#rotation-procedure" title="Permanent link">&para;</a></h3>
-<p>The <code>MultiFernet</code> inside <code>SecretsService</code> is what makes rotation safe:</p>
-<ol>
-<li>Generate a new 32-byte Fernet key with
-   <code>engine.core.secrets.generate_master_key()</code>.</li>
-<li>Promote it to current and demote the old current to <code>previous</code> via
-   <code>SecretsService.rotate_master_key(new_current=…)</code>.
-   <code>rotate_master_key</code> refuses to run if a <code>previous</code> key is already
-   installed, so an unfinished migration cannot be silently orphaned.</li>
-<li>Migrate ciphertext with <code>await SecretsService.reencrypt_all()</code>.
-   This is two-phase: it decrypts <em>every</em> record first and aborts
-   <em>before any write</em> if any record fails under either key, then
-   re-encrypts under the new current and returns the count migrated.</li>
-<li>Once a full run completes without raising, drop the previous key
-   with <code>drop_previous_key()</code>. Do <strong>not</strong> drop <code>previous</code> earlier —
-   a crash mid-flush leaves a mix of old/new ciphertext, and the
-   previous key is the only thing that can still read the old ones.</li>
-<li>The MFA key (<code>mfa_encryption_key</code>) rotates the same way at the row
-   level: re-encrypt every <code>users.mfa_secret_encrypted</code> value with
-   the new Fernet key while both old and new are mounted.</li>
-</ol>
-<h3 id="threat-boundary-corrected">Threat boundary (corrected)<a class="headerlink" href="#threat-boundary-corrected" title="Permanent link">&para;</a></h3>
-<p>Fernet defends against a <strong>database-scoped</strong> leak — an attacker who
-exfiltrates database rows (SQL injection, a dumped <code>users</code> table, a
-stolen DB backup) gets ciphertext only, and the key lives outside the
-database, so plaintext is not recoverable from the dump alone.</p>
-<p>It does <strong>not</strong> defend against a broader compromise in which the
-attacker also obtains the key:</p>
-<ul>
-<li>Application-host compromise (read access to the process env or
-  <code>/proc/&lt;pid&gt;/environ</code>).</li>
-<li>A leaked <code>.env</code> file, a baked-in container-image secret, or a
-  config/secret-store read that exposes <code>MFA_ENCRYPTION_KEY</code> /
-  <code>SECRETS_MASTER_KEY</code> alongside the DB dump.</li>
-</ul>
-<p>In that combined scenario a DB dump + the env var is enough to
-recover every MFA seed and secret-store value (already noted under
-Negative Consequences). Scoping the claim to "SQL-injection-level DB
-leak" rather than the looser "read-only DB leak" keeps the protection
-honest; KMS-backed envelope encryption is the follow-up that narrows
-the boundary further (the key never touches host disk).</p>
-<h2 id="pros-and-cons-of-the-options">Pros and Cons of the Options<a class="headerlink" href="#pros-and-cons-of-the-options" title="Permanent link">&para;</a></h2>
-<h3 id="bcrypt-chosen-for-verifiers">bcrypt (chosen, for verifiers)<a class="headerlink" href="#bcrypt-chosen-for-verifiers" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Pros</strong></li>
-<li>Universally supported; the Python <code>bcrypt</code> package is mature.</li>
-<li>Cost factor is per-hash — migrating to a higher cost happens
-    transparently on next login.</li>
-<li>Salt is embedded in the hash; no separate column.</li>
-<li><strong>Cons</strong></li>
-<li>GPU-friendly relative to Argon2id.</li>
-<li>72-byte password truncation. We mitigate by pre-hashing long
-    inputs with SHA-256 before bcrypt-hashing the digest if/when we
-    see passwords exceed that ceiling. (Not done today because we
-    reject &gt; 1 KiB at the request boundary.)</li>
-</ul>
-<h3 id="argon2id">Argon2id<a class="headerlink" href="#argon2id" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Pros</strong></li>
-<li>PHC winner; memory-hard.</li>
-<li>OWASP-recommended.</li>
-<li><strong>Cons</strong></li>
-<li>Roughly 2-5× the latency per verify at the memory levels that
-    matter for GPU resistance.</li>
-<li>Less universally recognised by auditors in the Python ecosystem,
-    though this is changing.</li>
-<li>Migration path <em>off</em> bcrypt is harder than migration path <em>onto</em>
-    Argon2id; ship bcrypt first, swap when we have a benchmark.</li>
-</ul>
-<h3 id="scrypt-pbkdf2">scrypt / PBKDF2<a class="headerlink" href="#scrypt-pbkdf2" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Pros</strong></li>
-<li>PBKDF2 is stdlib-only.</li>
-<li><strong>Cons</strong></li>
-<li>scrypt's parameter space is a footgun.</li>
-<li>PBKDF2 is GPU-friendly; not worth the trade against bcrypt today.</li>
-</ul>
-<h3 id="fernet-chosen-for-recoverable-secrets">Fernet (chosen, for recoverable secrets)<a class="headerlink" href="#fernet-chosen-for-recoverable-secrets" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Pros</strong></li>
-<li>Authenticated encryption by default. Tampered ciphertext is
-    rejected.</li>
-<li><code>MultiFernet</code> ships rotation primitives.</li>
-<li>One-line encrypt/decrypt — nothing to get wrong at the call site.</li>
-<li><strong>Cons</strong></li>
-<li>AES-128-CBC + HMAC rather than AEAD. Two-pass but well within
-    budget at this scale.</li>
-<li>Key is a single 32-byte value; no key-splitting built in.</li>
-</ul>
-<h3 id="aes-gcm-raw">AES-GCM (raw)<a class="headerlink" href="#aes-gcm-raw" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Pros</strong></li>
-<li>Modern AEAD; one pass.</li>
-<li><strong>Cons</strong></li>
-<li>Nonce management is the caller's problem; nonce reuse breaks the
-    scheme.</li>
-<li>More code at every call site — easy to get wrong.</li>
-</ul>
-<h3 id="nacl-secretbox">NaCl SecretBox<a class="headerlink" href="#nacl-secretbox" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Pros</strong></li>
-<li>Excellent primitive; hard to misuse.</li>
-<li><strong>Cons</strong></li>
-<li>Adds <code>pynacl</code> and a libsodium dependency for one feature.</li>
-<li>No <code>MultiFernet</code>-style rotation helper; we'd write it.</li>
-</ul>
-<h3 id="envelope-encryption-with-kms">Envelope encryption with KMS<a class="headerlink" href="#envelope-encryption-with-kms" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Pros</strong></li>
-<li>Right answer at scale; per-record data-encryption-keys, KMS-backed
-    master.</li>
-<li><strong>Cons</strong></li>
-<li>No KMS in this project today. Operators of a self-hosted engine
-    shouldn't need a cloud KMS to run MFA. Tracked as a follow-up.</li>
-</ul>
-<h2 id="links">Links<a class="headerlink" href="#links" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Related code:</li>
-<li><a href="../../engine/api/auth/local.py"><code>engine/api/auth/local.py</code></a> —
-    <code>bcrypt.hashpw</code> / <code>checkpw</code> for passwords.</li>
-<li><a href="../../engine/api/auth/api_keys.py"><code>engine/api/auth/api_keys.py</code></a>
-    — bcrypt for the API-key <code>key_hash</code>.</li>
-<li><a href="../../engine/api/auth/mfa_service.py"><code>engine/api/auth/mfa_service.py</code></a>
-    — Fernet for the TOTP secret at rest; bcrypt for backup codes.</li>
-<li><a href="../../engine/core/secrets.py"><code>engine/core/secrets.py</code></a> —
-    <code>MultiFernet</code>-based secret store with master-key rotation.</li>
-<li><a href="../../engine/config.py"><code>engine/config.py</code></a> — <code>mfa_encryption_key</code>
-    and <code>secrets_master_key</code> settings.</li>
-<li>Related ADRs:</li>
-<li><a href="../0001-scaffold-tech-choices/">ADR-0001 — Scaffold technology choices</a>
-    (originally named Argon2id; this ADR records the bcrypt choice
-    that actually shipped).</li>
-<li><a href="../0002-auth-rbac/">ADR-0002 — Auth &amp; RBAC model</a>.</li>
-<li>Related runbook:
-  <a href="../../operations/runbooks/auth-mfa/"><code>docs/operations/runbooks/auth-mfa.md</code></a>.</li>
-<li>Supersedes: —</li>
-<li>Superseded by: —</li>
-<li>External references:</li>
-<li><a href="https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html">OWASP Password Storage Cheat Sheet</a></li>
-<li><a href="https://github.com/fernet/spec">Fernet spec</a></li>
-<li><a href="https://www.usenix.org/conference/usenixsecurity19/presentation/pedicini">bcrypt cost factor recommendations</a></li>
+<li><a href="../api-surface-map.yaml"><code>api-surface-map.yaml</code></a> — machine-readable.</li>
+<li><a href="../capability-audit/">Capability audit</a> — whole-surface review.</li>
+<li><a href="../../mcp-server/">MCP server</a> — design narrative.</li>
+<li><a href="../../engine/mcp/tool_definitions.py"><code>engine/mcp/tool_definitions.py</code></a>
+  — the code this catalog describes.</li>
 </ul>
 
 
@@ -3366,7 +3351,7 @@ the boundary further (the key never touches host disk).</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../0005-valkey-over-redis/" class="md-footer__link md-footer__link--prev" aria-label="Previous: 0005 — Valkey client + broker over redis-py / Redis">
+          <a href="../capability-audit/" class="md-footer__link md-footer__link--prev" aria-label="Previous: MCP capability audit">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -3376,20 +3361,20 @@ the boundary further (the key never touches host disk).</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                0005 — Valkey client + broker over redis-py / Redis
+                MCP capability audit
               </div>
             </div>
           </a>
         
         
           
-          <a href="../0007-strategy-sandbox-allowlist-imports/" class="md-footer__link md-footer__link--next" aria-label="Next: 0007 — Strategy sandbox allowlist imports">
+          <a href="../../data-model/" class="md-footer__link md-footer__link--next" aria-label="Next: Data model">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                0007 — Strategy sandbox allowlist imports
+                Data model
               </div>
             </div>
             <div class="md-footer__button md-icon">

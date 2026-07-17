@@ -69,7 +69,7 @@ we explain *why*, not *what*.
 | Understand how market data is routed, failed over, and validated | [`architecture/data-providers.md`](architecture/data-providers.md) |
 | Understand every table and its constraints | [`data-model.md`](data-model.md) |
 | Pick the right multi-strategy coordinator (voters vs. capital-aware) | [`architecture/multi-strategy.md`](architecture/multi-strategy.md) |
-| Call the REST / WebSocket API | [`api-reference.md`](api-reference.md) |
+| Call the REST / WebSocket API | [`api-reference.md`](api-reference.md) · [`websocket.md`](websocket.md) (real-time streams) |
 | Drive the engine from an LLM agent (MCP) | [`mcp-server.md`](mcp-server.md) · [`mcp/capability-audit.md`](mcp/capability-audit.md) · [`mcp/tool-catalog.md`](mcp/tool-catalog.md) |
 | Run the engine locally | [`development.md`](development.md) |
 | Ship a release | [`deployment.md`](deployment.md) · [`RELEASING.md`](RELEASING.md) |
@@ -106,7 +106,8 @@ docs/
 │   ├── 0009-cross-replica-eventbus-bridge.md
 │   ├── 0010-static-ast-validation-toctou-loading.md
 │   └── 0011-runtime-introspection-blocking.md
-├── api-reference.md                ← every HTTP/WS route, auth, schemas
+├── api-reference.md                ← every HTTP route, auth, schemas
+├── websocket.md                   ← WS /ws and /ws/events (channels, scopes, event delivery)
 ├── mcp-server.md                   ← MCP tools/resources/auth (LLM agent surface)
 ├── mcp/                            ← MCP surface audit + catalog (generated map)
 │   ├── capability-audit.md         ← whole-surface review (findings, inventory)
@@ -143,7 +144,8 @@ docs/
 - **Linking**: relative paths only (`../architecture/overview.md`), so
   links work both on GitHub and in any local Markdown viewer.
 - **Per-file length cap**: 500 lines. Split a file rather than letting
-  it accrete. (`api-reference.md` is the largest at ~450 lines and is
+  it accrete. (`api-reference.md` is ~390 lines after the WebSocket
+  section was split into `websocket.md`; `websocket.md` is ~135.)
   split by domain; everything else is well under.)
 - **No marketing copy.** The README at the repo root is the public
   face; everything under `docs/` is engineering-grade.

@@ -125,10 +125,40 @@ Field names map to env as `NEXUS_WS_<UPPER>` (see
 | `NEXUS_WS_IDLE_TIMEOUT_SECONDS` | `300.0` | Max time a connection may stay open without activity. |
 | `NEXUS_WS_AUTH_TIMEOUT_SECONDS` | `5.0` | Window after `accept()` for the client to send its `auth` message (or supply `?token=`). |
 | `NEXUS_WS_AUTH_RATE_LIMIT_PER_MINUTE` | `10` | Per-IP token bucket on auth attempts (defends the handshake against token-spray). |
+| `TRUSTED_PROXIES` | *(unset)* | Comma-separated allow-list of reverse-proxy hops trusted to set `X-Forwarded-For`/`X-Real-IP` for WebSocket auth-rate-limiting. **CIDR-aware** (e.g. `10.0.0.0/8,172.16.0.0/12`). Read directly from the env (no `NEXUS_` prefix). When unset, the raw peer IP is used and forwarded headers are ignored — the correct default for a direct-internet deploy. See [WebSocket API](websocket.md). |
 | `NEXUS_WS_EVENT_BRIDGE_CONCURRENCY` | `32` | Fan-out concurrency of the cross-replica `EventBusBridge`. |
 
+<a id="websocket"></a>
+#### Trusted-proxy IP resolution (auth rate-limiting)
+
+The WebSocket auth rate-limit is **per client IP**. Behind a load
+balancer, the raw `ws.client.host` is the LB, not the user — so the
+[`_get_remote_ip`](../engine/api/ws/auth.py) resolver implements a
+**trusted-proxy** model (gh#1497):
+
+- The peer IP is used directly unless it appears in `TRUSTED_PROXIES`.
+- When the peer *is* a trusted proxy, the **rightmost hop** of
+  `X-Forwarded-For` (falling back to `X-Real-IP`) is trusted instead.
+- `TRUSTED_PROXIES` is matched with **CIDR awareness**
+  ([`is_trusted_proxy`](../engine/api/ip_utils.py)): `10.0.0.0/8` covers
+  the whole VPC, not just the literal string `10.0.0.0/8`.
+- Entries outside the trusted set are ignored, so an **untrusted** peer
+  spoofing `X-Forwarded-For` changes nothing.
+
+That last point is the whole reason for the fix. The prior code did a
+literal string compare against `TRUSTED_PROXIES`; a single matched proxy
+then trusted *any* `X-Forwarded-For` value, so any client could claim to
+be any address and dodge the per-IP bucket. The CIDR match narrows trust
+to your real proxy hops, and the rightmost-hop parse (`rsplit(",", 1)[-1]`)
+means a pathologically long header can't force a huge allocation to read
+one hop.
+
+> Leave `TRUSTED_PROXIES` **unset** for a direct-internet deploy (no LB):
+the raw peer IP is correct and forwarded headers are untrusted by
+default. Set it to your LB/VPC CIDRs only when terminating TLS at a proxy.
+
 The live socket registry is per-process; event *delivery* is
-[already cross-replica](api-reference.md#event-delivery) via the
+[already cross-replica](websocket.md#event-delivery) via the
 `EventBusBridge` + Valkey pub/sub — see
 [`known-limitations.md`](known-limitations.md). Auth is JWT-only (no
 `nxs_*` API keys on WS).

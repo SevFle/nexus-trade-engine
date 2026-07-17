@@ -794,6 +794,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -884,6 +888,62 @@
     
   
     MCP server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/capability-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP capability audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/tool-catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP tool catalog
   
 
     
@@ -3041,12 +3101,45 @@ Field names map to env as <code>NEXUS_WS_&lt;UPPER&gt;</code> (see
 <td>Per-IP token bucket on auth attempts (defends the handshake against token-spray).</td>
 </tr>
 <tr>
+<td><code>TRUSTED_PROXIES</code></td>
+<td><em>(unset)</em></td>
+<td>Comma-separated allow-list of reverse-proxy hops trusted to set <code>X-Forwarded-For</code>/<code>X-Real-IP</code> for WebSocket auth-rate-limiting. <strong>CIDR-aware</strong> (e.g. <code>10.0.0.0/8,172.16.0.0/12</code>). Read directly from the env (no <code>NEXUS_</code> prefix). When unset, the raw peer IP is used and forwarded headers are ignored — the correct default for a direct-internet deploy. See <a href="../api-reference/#websocket">api-reference → WebSocket</a>.</td>
+</tr>
+<tr>
 <td><code>NEXUS_WS_EVENT_BRIDGE_CONCURRENCY</code></td>
 <td><code>32</code></td>
 <td>Fan-out concurrency of the cross-replica <code>EventBusBridge</code>.</td>
 </tr>
 </tbody>
 </table>
+<p><a id="websocket"></a></p>
+<h4 id="trusted-proxy-ip-resolution-auth-rate-limiting">Trusted-proxy IP resolution (auth rate-limiting)<a class="headerlink" href="#trusted-proxy-ip-resolution-auth-rate-limiting" title="Permanent link">&para;</a></h4>
+<p>The WebSocket auth rate-limit is <strong>per client IP</strong>. Behind a load
+balancer, the raw <code>ws.client.host</code> is the LB, not the user — so the
+<a href="../engine/api/ws/auth.py"><code>_get_remote_ip</code></a> resolver implements a
+<strong>trusted-proxy</strong> model (gh#1497):</p>
+<ul>
+<li>The peer IP is used directly unless it appears in <code>TRUSTED_PROXIES</code>.</li>
+<li>When the peer <em>is</em> a trusted proxy, the <strong>rightmost hop</strong> of
+  <code>X-Forwarded-For</code> (falling back to <code>X-Real-IP</code>) is trusted instead.</li>
+<li><code>TRUSTED_PROXIES</code> is matched with <strong>CIDR awareness</strong>
+  (<a href="../engine/api/ip_utils.py"><code>is_trusted_proxy</code></a>): <code>10.0.0.0/8</code> covers
+  the whole VPC, not just the literal string <code>10.0.0.0/8</code>.</li>
+<li>Entries outside the trusted set are ignored, so an <strong>untrusted</strong> peer
+  spoofing <code>X-Forwarded-For</code> changes nothing.</li>
+</ul>
+<p>That last point is the whole reason for the fix. The prior code did a
+literal string compare against <code>TRUSTED_PROXIES</code>; a single matched proxy
+then trusted <em>any</em> <code>X-Forwarded-For</code> value, so any client could claim to
+be any address and dodge the per-IP bucket. The CIDR match narrows trust
+to your real proxy hops, and the rightmost-hop parse (<code>rsplit(",", 1)[-1]</code>)
+means a pathologically long header can't force a huge allocation to read
+one hop.</p>
+<blockquote>
+<p>Leave <code>TRUSTED_PROXIES</code> <strong>unset</strong> for a direct-internet deploy (no LB):
+the raw peer IP is correct and forwarded headers are untrusted by
+default. Set it to your LB/VPC CIDRs only when terminating TLS at a proxy.</p>
+</blockquote>
 <p>The live socket registry is per-process; event <em>delivery</em> is
 <a href="../api-reference/#event-delivery">already cross-replica</a> via the
 <code>EventBusBridge</code> + Valkey pub/sub — see

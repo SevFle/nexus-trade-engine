@@ -136,13 +136,43 @@ new provider therefore means: (1) a new `*DataProvider(IDataProvider)`
 module, (2) one branch in `build_provider`, (3) an entry in the YAML.
 The registry and routing code never change.
 
-> **The "CSV provider" in commit messages.** Several recent security
-> commits (gh#1440) reference a "CSV provider". That work hardened the
-> *shared* symbol grammar and column map in `base.py` that any
-> local-file provider (CSV included) inherits — there is no separate
-> `csv.py` adapter registered in the factory today. If you add one,
-> route its file access through the same `validate_symbol` guard so a
-> symbol like `../../etc/passwd` can never reach the filesystem.
+> **Two provider tiers — don't confuse them.** There are two
+> `IDataProvider` abstractions in this repo, and they are deliberately
+> separate:
+>
+> 1. The **live** registry above (`engine/data/providers/`), an async,
+>    HTTP-backed, fail-over-capable fan-out that returns *pandas* frames
+>    and is what `GET /api/v1/market-data/*` talks to.
+> 2. The **offline / historical** tier (`engine/data/provider.py` +
+>    [`engine/data/csv_provider.py`](../../engine/data/csv_provider.py)),
+>    a small synchronous, file-backed contract (`load_data` + `validate`)
+>    returning *polars* frames, used by the offline backtesting / analysis
+>    path. Its one concrete adapter today is
+>    `CSVHistoricalDataProvider`, which reads OHLCV CSVs (canonical columns
+>    `timestamp,open,high,low,close,volume`, case-insensitive headers),
+>    auto-detects epoch units (`s`/`ms`/`us`/`ns`/`ps`, gh#1456), and
+>    normalises `timestamp` to a tz-aware UTC polars `Datetime`.
+>
+> They share a name because both mean "a source of OHLCV", but they are
+> not interchangeable and the offline one is **not** registered in the
+> live `build_provider` factory.
+>
+> The historical tier is fronted by an in-process LRU
+> ([`engine/data/historical_cache.py`](../../engine/data/historical_cache.py),
+> gh#1470) keyed by the source file's identity *and* on-disk fingerprint
+> (`resolved path + mtime_ns + size`). There is **no TTL to tune**: a
+> changed file produces a different fingerprint and therefore a miss, so
+> a stale frame can never be served. Entries are capped at 64 MiB each
+> and the LRU at 128 frames by default; both caches (live `ProviderCache`
+> and historical `HistoricalDataCache`) share the `nexus:dp:` /
+> `nexus:hdp:` key-prefix scheme so they never collide even if they later
+> share a backing store.
+>
+> The gh#1440 security work hardened the *live* tier's symbol grammar and
+> path encoding; if you add a file-backed adapter to the **live** factory,
+> route its file access through the same `validate_symbol` /
+> `encode_path_segment` guards so a symbol like `../../etc/passwd` can
+> never reach the filesystem.
 
 ## Cross-cutting infrastructure
 

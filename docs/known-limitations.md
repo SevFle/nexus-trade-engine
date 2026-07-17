@@ -315,9 +315,10 @@ the API-key branch from the legacy endpoint into `ws/auth.py`.
 `engine/tasks/worker.py` defines the broker; the compose file runs
 it. But:
 
-- `POST /backtest/run` uses FastAPI `BackgroundTasks`, not TaskIQ —
-  so backtests run in the *web* process, not the worker. A long
-  backtest stalls the uvicorn worker pool.
+- `POST /backtest/run` (and `POST /api/v1/backtest`) use FastAPI
+  `BackgroundTasks`, not TaskIQ — the TaskIQ tasks (`run_backtest` /
+  `submit_backtest_job`, gh#1472) landed but no route calls them; wiring
+  `.kiq(...)` would also fix the P0 (results land in the result backend).
 - The task-pipeline SLO in [`operations/slos.md`](operations/slos.md)
   is defined but has no emitter yet — `nexus.task.runs_total` is the
   intended metric name.

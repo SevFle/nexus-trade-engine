@@ -796,6 +796,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1271,6 +1275,62 @@
     
   
     MCP server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/capability-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP capability audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/tool-catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP tool catalog
   
 
     
@@ -3637,6 +3697,12 @@ are lost on process restart.</p>
 <td>Returns <code>202 {status:"accepted", backtest_id}</code>. Computation runs as a <code>BackgroundTasks</code> job (not TaskIQ — see <a href="../known-limitations/">known-limitations.md</a>).</td>
 </tr>
 <tr>
+<td>POST</td>
+<td><code>/api/v1/backtest</code></td>
+<td><code>BacktestSubmitRequest</code> — accepts the canonical fields <strong>and</strong> the k6 load-test aliases (<code>strategy_id</code>/<code>start</code>/<code>end</code> map to <code>strategy_name</code>/<code>start_date</code>/<code>end_date</code> via Pydantic <code>AliasChoices</code>).</td>
+<td>Same <code>202 {status:"accepted", backtest_id}</code> shape; the entry point <code>tests/load/api-baseline.js</code> exercises. Identical behaviour to <code>/run</code>, kept as a distinct route so the load harness doesn't track Pydantic renames.</td>
+</tr>
+<tr>
 <td>GET</td>
 <td><code>/api/v1/backtest/results/{backtest_id}</code></td>
 <td>—</td>
@@ -3676,9 +3742,12 @@ Requires legal acceptance.</p>
 </table>
 <h2 id="marketplace">Marketplace<a class="headerlink" href="#marketplace" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/marketplace/*</code>. Source: <a href="../engine/api/routes/marketplace.py"><code>routes/marketplace.py</code></a>.
-The whole router requires legal acceptance. <strong>Discovery/install are
-stubs</strong> (<code>{status:"not_implemented"}</code>); <strong>ratings are real but
-in-memory only</strong> — see <a href="../known-limitations/">known-limitations.md</a>.</p>
+The whole router requires legal acceptance. Of the discovery surface,
+<code>/search</code> and <code>/ratings</code> are <strong>real</strong> (both backed by in-memory,
+process-local stores); <code>browse</code>/<code>install</code>/<code>uninstall</code> and the legacy
+<code>/{id}/rate</code> are <strong>stubs</strong> (<code>{status:"not_implemented"}</code>). See
+<a href="../known-limitations/">known-limitations.md</a> — nothing here is persisted,
+so a restart loses every rating and the catalog resets to the seed.</p>
 <table>
 <thead>
 <tr>
@@ -3694,6 +3763,12 @@ in-memory only</strong> — see <a href="../known-limitations/">known-limitation
 <td><code>/api/v1/marketplace/browse?category=&amp;search=&amp;sort_by=&amp;page=&amp;per_page=</code></td>
 <td><code>user</code></td>
 <td>Returns empty list (stub).</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/marketplace/search?q=&amp;category=&amp;tag=&amp;sort=&amp;page=&amp;limit=</code></td>
+<td><code>user</code></td>
+<td><strong>Real.</strong> Keyword search + filter across the catalog (gh#1476). <code>q</code> is tokenised and matched (case-insensitively) against name, description, tags, author; empty <code>q</code> skips keyword filtering. <code>sort</code> ∈ <code>{relevance, downloads, rating, name, newest}</code> (default <code>relevance</code>, which falls back to <code>downloads</code> when <code>q</code> is empty since relevance is undefined there). <code>limit</code> is clamped to <code>[1, MAX_LIMIT]</code>. Returns <code>SearchResponse{query, sort, results:SearchResultItem[], total, page, limit, has_more}</code>. <code>400</code> on <code>SearchError</code> (bad sort). Backed by a thread-safe in-memory <code>StrategyCatalog</code> (<code>engine/marketplace/search.py</code>) behind a <code>Protocol</code>, mirroring the ratings store layout.</td>
 </tr>
 <tr>
 <td>GET</td>
@@ -4043,7 +4118,13 @@ on registration, so user-scoped events can be targeted directly.</p>
 <code>?token=</code> query parameter or the first <code>auth</code> message. Prefer the
 first-message form — query strings are recorded by reverse proxies and
 log aggregators. Auth attempts are rate-limited per IP
-(<code>NEXUS_WS_AUTH_RATE_LIMIT_PER_MINUTE</code>, default 10) via a token bucket.</p>
+(<code>NEXUS_WS_AUTH_RATE_LIMIT_PER_MINUTE</code>, default 10) via a token bucket.
+The "per IP" IP is resolved under a <strong>trusted-proxy</strong> model (gh#1497):
+the raw peer IP is used unless it is in the <strong>CIDR-aware</strong>
+<code>TRUSTED_PROXIES</code> allow-list, in which case the rightmost
+<code>X-Forwarded-For</code>/<code>X-Real-IP</code> hop is trusted — see
+<a href="../deployment/#websocket">deployment → WebSocket</a> for the spoofing bypass
+the CIDR fix closed.</p>
 <p>Connection scopes are derived from the JWT <code>role</code> claim (see
 <a href="../engine/api/ws/auth.py#L80"><code>ws/auth.py:_extract_scopes</code></a>):</p>
 <table>

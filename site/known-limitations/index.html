@@ -794,6 +794,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -884,6 +888,62 @@
     
   
     MCP server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/capability-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP capability audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/tool-catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP tool catalog
   
 
     
@@ -3131,9 +3191,14 @@ the API-key branch from the legacy endpoint into <code>ws/auth.py</code>.</p>
 <p><code>engine/tasks/worker.py</code> defines the broker; the compose file runs
 it. But:</p>
 <ul>
-<li><code>POST /backtest/run</code> uses FastAPI <code>BackgroundTasks</code>, not TaskIQ —
-  so backtests run in the <em>web</em> process, not the worker. A long
-  backtest stalls the uvicorn worker pool.</li>
+<li><code>POST /backtest/run</code> (and the <code>POST /api/v1/backtest</code> alias) use
+  FastAPI <code>BackgroundTasks</code>, not TaskIQ — so backtests run in the <em>web</em>
+  process and stall the uvicorn pool. The TaskIQ task definitions
+  (<code>run_backtest</code> / <code>submit_backtest_job</code>, gh#1472 — validation, retry,
+  timeout, result-collection) landed but <strong>no route calls them</strong>;
+  wiring <code>_run_backtest_background</code> → <code>submit_backtest_job.kiq(...)</code>
+  would also fix the P0 (results land in the result backend, not the
+  in-process dict).</li>
 <li>The task-pipeline SLO in <a href="../operations/slos/"><code>operations/slos.md</code></a>
   is defined but has no emitter yet — <code>nexus.task.runs_total</code> is the
   intended metric name.</li>
