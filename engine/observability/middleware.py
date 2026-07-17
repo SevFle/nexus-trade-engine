@@ -58,6 +58,8 @@ import re
 import uuid
 from typing import TYPE_CHECKING
 
+import structlog
+
 from engine.observability import context as ctx
 
 if TYPE_CHECKING:
@@ -129,10 +131,32 @@ class CorrelationIdMiddleware:
                 break
 
         cid = safe_correlation_id(incoming)
+        request_id = uuid.uuid4().hex
+        span_id = uuid.uuid4().hex[:16]
+
+        # Expose the id on ``request.state`` so route handlers and
+        # dependencies can read it via ``request.state.correlation_id``
+        # without reaching into the observability context layer. Starlette
+        # backs ``request.state`` with ``scope['state']``, so populating
+        # that dict makes the value visible to any ``Request`` built from
+        # this scope.
+        scope.setdefault("state", {})["correlation_id"] = cid
+
+        # Inject the id into the structlog contextvars context so every
+        # log record produced while handling this request carries
+        # ``correlation_id`` (structlog is configured with
+        # ``merge_contextvars`` in engine.observability.logging). Bound
+        # alongside ``request_id`` so a single causal chain can still be
+        # split into its individual HTTP requests.
+        structlog_tokens = structlog.contextvars.bind_contextvars(
+            correlation_id=cid,
+            request_id=request_id,
+        )
+
         tokens = ctx.bind_request_scope(
             correlation_id=cid,
-            request_id=uuid.uuid4().hex,
-            span_id=uuid.uuid4().hex[:16],
+            request_id=request_id,
+            span_id=span_id,
         )
 
         # Tracks whether *any* ``http.response.start`` has already been
@@ -190,7 +214,10 @@ class CorrelationIdMiddleware:
             # By the time `await self.app(...)` returns (or the exception
             # propagates) all body chunks have been sent — including
             # streaming responses. Reset is therefore safe and prevents
-            # leakage in inlined-caller tests.
+            # leakage in inlined-caller tests. structlog contextvars are
+            # reset here in lock-step so a value bound for one request can
+            # never survive past the request that bound it.
+            structlog.contextvars.reset_contextvars(**structlog_tokens)
             ctx.reset_tokens(tokens)
 
 
