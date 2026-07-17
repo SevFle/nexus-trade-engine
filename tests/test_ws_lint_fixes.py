@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -18,11 +19,16 @@ import pytest
 from engine.api.ws.auth import (
     AuthRateLimiter,
     AuthResult,
+    _check_legal_acceptance,
+    _extract_token_from_handshake,
     _get_remote_ip,
     _hash_subject,
+    _load_active_user,
+    _strip_bearer,
     authenticate_websocket,
     extract_scopes,
     validate_refresh_token,
+    validate_session_token_for_ws,
 )
 from engine.api.ws.channels import ChannelResolver
 from engine.api.ws.connection_manager import ConnectionManager
@@ -39,8 +45,10 @@ from engine.api.ws.permissions import (
 )
 from engine.api.ws.protocol import (
     VALID_CHANNELS,
+    WS_CLOSE_AUTH_FORBIDDEN,
     WS_CLOSE_AUTH_INVALID,
     WS_CLOSE_AUTH_TIMEOUT,
+    WS_CLOSE_LEGAL_REACCEPT,
     AckMessage,
     AuthMessage,
     CloseMessage,
@@ -1480,3 +1488,391 @@ class TestExceptions:
     def test_subscription_limit_error(self):
         err = SubscriptionLimitError(code=1008, reason="limit")
         assert err.code == 1008
+
+
+# ---------------------------------------------------------------------------
+# auth.py — _strip_bearer
+# ---------------------------------------------------------------------------
+
+
+class TestStripBearer:
+    """Cover the ``Authorization`` header credential extractor.
+
+    Only the ``Bearer`` scheme is accepted (case-insensitively); malformed
+    or non-Bearer values return ``None``.
+    """
+
+    def test_valid_bearer(self):
+        assert _strip_bearer("Bearer abc123") == "abc123"
+
+    def test_scheme_is_case_insensitive(self):
+        assert _strip_bearer("bearer abc123") == "abc123"
+        assert _strip_bearer("BEARER abc123") == "abc123"
+        assert _strip_bearer("BeArEr abc123") == "abc123"
+
+    def test_token_is_stripped(self):
+        assert _strip_bearer("Bearer   abc123   ") == "abc123"
+
+    def test_non_bearer_scheme_rejected(self):
+        assert _strip_bearer("Basic dXNlcjpwYXNz") is None
+        assert _strip_bearer("Negotiate xyz") is None
+
+    def test_missing_token_rejected(self):
+        # Only the scheme, no credential → split yields 1 element.
+        assert _strip_bearer("Bearer") is None
+
+    def test_whitespace_only_token_rejected(self):
+        assert _strip_bearer("Bearer    ") is None
+        assert _strip_bearer("Bearer \t\n") is None
+
+    def test_empty_string_rejected(self):
+        assert _strip_bearer("") is None
+
+    def test_token_may_contain_spaces(self):
+        # split(None, 1) splits on the first run of whitespace only, so a
+        # token containing internal spaces is preserved verbatim.
+        assert _strip_bearer("Bearer abc def") == "abc def"
+
+
+# ---------------------------------------------------------------------------
+# auth.py — _extract_token_from_handshake
+# ---------------------------------------------------------------------------
+
+
+class TestExtractTokenFromHandshake:
+    """Cover the WS handshake token extractor and its priority order.
+
+    Priority: ``Authorization`` header > ``Sec-WebSocket-Protocol``
+    subprotocol > ``token`` query parameter.
+    """
+
+    def test_authorization_header(self):
+        ws = _FakeWebSocket(headers={"authorization": "Bearer hdr-token"})
+        assert _extract_token_from_handshake(ws) == "hdr-token"
+
+    def test_subprotocol_bearer_prefix(self):
+        ws = _FakeWebSocket(headers={"sec-websocket-protocol": "bearer.sub-token"})
+        assert _extract_token_from_handshake(ws) == "sub-token"
+
+    def test_subprotocol_bearer_prefix_case_insensitive(self):
+        ws = _FakeWebSocket(headers={"sec-websocket-protocol": "BEARER.sub-token"})
+        assert _extract_token_from_handshake(ws) == "sub-token"
+
+    def test_subprotocol_single_bare_token_accepted(self):
+        ws = _FakeWebSocket(headers={"sec-websocket-protocol": "bare-token"})
+        assert _extract_token_from_handshake(ws) == "bare-token"
+
+    def test_subprotocol_bearer_prefix_wins_over_bare(self):
+        ws = _FakeWebSocket(headers={"sec-websocket-protocol": "bearer.real, decoy"})
+        assert _extract_token_from_handshake(ws) == "real"
+
+    def test_subprotocol_empty_after_bearer_prefix_returned_as_bare(self):
+        # A single "bearer." candidate has an empty token after the prefix,
+        # so the bearer-prefix branch is skipped — but it is still the sole
+        # candidate, so the bare-token fallback returns it verbatim. It is
+        # harmlessly rejected downstream by decode_token().
+        ws = _FakeWebSocket(headers={"sec-websocket-protocol": "bearer."})
+        assert _extract_token_from_handshake(ws) == "bearer."
+
+    def test_empty_subprotocol_falls_through_to_query(self):
+        # A subprotocol header whose candidates are all blank yields an empty
+        # candidate list, so neither the prefix nor the bare-token branches
+        # fire and we fall through to the query parameter.
+        ws = _FakeWebSocket(
+            headers={"sec-websocket-protocol": ",  ,"},
+            query_params={"token": "q-token"},
+        )
+        assert _extract_token_from_handshake(ws) == "q-token"
+
+    def test_subprotocol_multiple_bare_values_refuse_to_guess(self):
+        # Two comma-separated non-bearer values are ambiguous → subprotocol
+        # path returns nothing and we fall through to the query param.
+        ws = _FakeWebSocket(
+            headers={"sec-websocket-protocol": "a, b"},
+            query_params={"token": "q-token"},
+        )
+        assert _extract_token_from_handshake(ws) == "q-token"
+
+    def test_query_param_fallback(self):
+        ws = _FakeWebSocket(query_params={"token": "q-token"})
+        assert _extract_token_from_handshake(ws) == "q-token"
+
+    def test_query_param_stripped(self):
+        ws = _FakeWebSocket(query_params={"token": "   q-token   "})
+        assert _extract_token_from_handshake(ws) == "q-token"
+
+    def test_query_param_whitespace_only_rejected(self):
+        ws = _FakeWebSocket(query_params={"token": "   "})
+        assert _extract_token_from_handshake(ws) is None
+
+    def test_query_param_non_string_rejected(self):
+        ws = _FakeWebSocket(query_params={"token": 12345})
+        assert _extract_token_from_handshake(ws) is None
+
+    def test_no_token_anywhere_returns_none(self):
+        ws = _FakeWebSocket()
+        assert _extract_token_from_handshake(ws) is None
+
+    def test_no_query_params_attribute_returns_none(self):
+        # A WebSocket double without ``query_params`` must not raise.
+        ws = _FakeWebSocket()
+        del ws.query_params
+        assert _extract_token_from_handshake(ws) is None
+
+    def test_header_wins_over_subprotocol_and_query(self):
+        ws = _FakeWebSocket(
+            headers={
+                "authorization": "Bearer hdr-token",
+                "sec-websocket-protocol": "bearer.sub-token",
+            },
+            query_params={"token": "q-token"},
+        )
+        assert _extract_token_from_handshake(ws) == "hdr-token"
+
+    def test_subprotocol_wins_over_query(self):
+        ws = _FakeWebSocket(
+            headers={"sec-websocket-protocol": "bearer.sub-token"},
+            query_params={"token": "q-token"},
+        )
+        assert _extract_token_from_handshake(ws) == "sub-token"
+
+    def test_malformed_header_falls_through_to_subprotocol(self):
+        # A present but non-Bearer Authorization header is ignored, and the
+        # subprotocol / query fallbacks still apply.
+        ws = _FakeWebSocket(
+            headers={
+                "authorization": "Basic dXNlcjpwYXNz",
+                "sec-websocket-protocol": "bearer.sub-token",
+            },
+        )
+        assert _extract_token_from_handshake(ws) == "sub-token"
+
+    def test_malformed_header_falls_through_to_query(self):
+        ws = _FakeWebSocket(
+            headers={"authorization": "Bearer"},
+            query_params={"token": "q-token"},
+        )
+        assert _extract_token_from_handshake(ws) == "q-token"
+
+
+# ---------------------------------------------------------------------------
+# auth.py — _load_active_user
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _UserStub:
+    """Minimal stand-in for :class:`engine.db.models.User`."""
+
+    id: Any
+    is_active: bool = True
+
+
+class _FakeScalarResult:
+    """Mimics the SQLAlchemy ``Result.scalar_one_or_none()`` surface."""
+
+    def __init__(self, scalar):
+        self._scalar = scalar
+
+    def scalar_one_or_none(self):
+        return self._scalar
+
+
+class TestLoadActiveUser:
+    async def test_active_user_returned(self):
+        user = _UserStub(id=uuid.uuid4(), is_active=True)
+        db = AsyncMock()
+        db.execute.return_value = _FakeScalarResult(user)
+        result = await _load_active_user(db, user.id)
+        assert result is user
+
+    async def test_missing_user_returns_none(self):
+        db = AsyncMock()
+        db.execute.return_value = _FakeScalarResult(None)
+        result = await _load_active_user(db, uuid.uuid4())
+        assert result is None
+
+    async def test_disabled_user_returns_none(self):
+        user = _UserStub(id=uuid.uuid4(), is_active=False)
+        db = AsyncMock()
+        db.execute.return_value = _FakeScalarResult(user)
+        result = await _load_active_user(db, user.id)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# auth.py — _check_legal_acceptance
+# ---------------------------------------------------------------------------
+
+
+class TestCheckLegalAcceptance:
+    @patch("engine.api.ws.auth.legal_service")
+    async def test_no_pending_returns_none(self, mock_legal):
+        mock_legal.get_pending_acceptances = AsyncMock(return_value=[])
+        db = AsyncMock()
+        result = await _check_legal_acceptance(db, uuid.uuid4())
+        assert result is None
+
+    @patch("engine.api.ws.auth.legal_service")
+    async def test_pending_returns_reaccept_code(self, mock_legal):
+        mock_legal.get_pending_acceptances = AsyncMock(return_value=["some-pending-doc"])
+        db = AsyncMock()
+        result = await _check_legal_acceptance(db, uuid.uuid4())
+        assert isinstance(result, tuple)
+        assert result[0] == WS_CLOSE_LEGAL_REACCEPT
+        assert "legal" in result[1]
+
+    @patch("engine.api.ws.auth.legal_service")
+    async def test_store_exception_fails_closed(self, mock_legal):
+        # A broken legal-documents store must fail closed: degrade to a
+        # generic auth failure rather than letting the handler crash.
+        mock_legal.get_pending_acceptances = AsyncMock(side_effect=RuntimeError("db unavailable"))
+        db = AsyncMock()
+        result = await _check_legal_acceptance(db, uuid.uuid4())
+        assert isinstance(result, tuple)
+        assert result[0] == WS_CLOSE_AUTH_INVALID
+
+
+# ---------------------------------------------------------------------------
+# auth.py — validate_session_token_for_ws
+# ---------------------------------------------------------------------------
+
+
+class TestValidateSessionTokenForWs:
+    @patch("engine.api.ws.auth.decode_token", return_value=None)
+    async def test_invalid_token(self, _mock_decode):
+        result = await validate_session_token_for_ws(AsyncMock(), "bad")
+        assert isinstance(result, tuple)
+        assert result[0] == WS_CLOSE_AUTH_INVALID
+
+    @patch("engine.api.ws.auth.decode_token")
+    async def test_missing_sub(self, mock_decode):
+        mock_decode.return_value = {"role": "admin", "type": "access"}
+        result = await validate_session_token_for_ws(AsyncMock(), "jwt")
+        assert isinstance(result, tuple)
+        assert result[0] == WS_CLOSE_AUTH_INVALID
+
+    @patch("engine.api.ws.auth.decode_token")
+    async def test_sub_not_a_uuid(self, mock_decode):
+        mock_decode.return_value = {"sub": "not-a-uuid", "role": "admin"}
+        result = await validate_session_token_for_ws(AsyncMock(), "jwt")
+        assert isinstance(result, tuple)
+        assert result[0] == WS_CLOSE_AUTH_INVALID
+
+    @patch("engine.api.ws.auth._load_active_user", return_value=None)
+    @patch("engine.api.ws.auth.decode_token")
+    async def test_user_not_found_or_revoked(self, mock_decode, _mock_load):
+        user_uuid = uuid.uuid4()
+        mock_decode.return_value = {"sub": str(user_uuid), "role": "admin"}
+        result = await validate_session_token_for_ws(AsyncMock(), "jwt")
+        assert isinstance(result, tuple)
+        assert result[0] == WS_CLOSE_AUTH_INVALID
+        assert "revoked" in result[1]
+
+    @patch("engine.api.ws.auth._load_active_user")
+    @patch("engine.api.ws.auth.decode_token")
+    async def test_insufficient_scope(self, mock_decode, mock_load):
+        user_uuid = uuid.uuid4()
+        mock_decode.return_value = {"sub": str(user_uuid), "role": "viewer"}
+        mock_load.return_value = _UserStub(id=user_uuid, is_active=True)
+        result = await validate_session_token_for_ws(
+            AsyncMock(),
+            "jwt",
+            required_scopes=["read:portfolio:all"],
+            enforce_legal=False,
+        )
+        assert isinstance(result, tuple)
+        assert result[0] == WS_CLOSE_AUTH_FORBIDDEN
+        assert "scope" in result[1]
+
+    @patch("engine.api.ws.auth._load_active_user")
+    @patch("engine.api.ws.auth.decode_token")
+    async def test_required_scopes_satisfied(self, mock_decode, mock_load):
+        user_uuid = uuid.uuid4()
+        mock_decode.return_value = {"sub": str(user_uuid), "role": "admin"}
+        mock_load.return_value = _UserStub(id=user_uuid, is_active=True)
+        result = await validate_session_token_for_ws(
+            AsyncMock(),
+            "jwt",
+            required_scopes=["read:portfolio:all", "read:orders"],
+            enforce_legal=False,
+        )
+        assert isinstance(result, AuthResult)
+
+    @patch("engine.api.ws.auth.legal_service")
+    @patch("engine.api.ws.auth._load_active_user")
+    @patch("engine.api.ws.auth.decode_token")
+    async def test_legal_reacceptance_required(self, mock_decode, mock_load, mock_legal):
+        user_uuid = uuid.uuid4()
+        mock_decode.return_value = {"sub": str(user_uuid), "role": "admin"}
+        mock_load.return_value = _UserStub(id=user_uuid, is_active=True)
+        mock_legal.get_pending_acceptances = AsyncMock(return_value=["pending-doc"])
+        result = await validate_session_token_for_ws(AsyncMock(), "jwt")
+        assert isinstance(result, tuple)
+        assert result[0] == WS_CLOSE_LEGAL_REACCEPT
+
+    @patch("engine.api.ws.auth.legal_service")
+    @patch("engine.api.ws.auth._load_active_user")
+    @patch("engine.api.ws.auth.decode_token")
+    async def test_enforce_legal_false_skips_legal_check(self, mock_decode, mock_load, mock_legal):
+        user_uuid = uuid.uuid4()
+        mock_decode.return_value = {"sub": str(user_uuid), "role": "admin"}
+        mock_load.return_value = _UserStub(id=user_uuid, is_active=True)
+        # If legal were enforced, this pending doc would block. With
+        # enforce_legal=False it must be skipped entirely.
+        mock_legal.get_pending_acceptances = AsyncMock(return_value=["pending-doc"])
+        result = await validate_session_token_for_ws(AsyncMock(), "jwt", enforce_legal=False)
+        assert isinstance(result, AuthResult)
+        mock_legal.get_pending_acceptances.assert_not_called()
+
+    @patch("engine.api.ws.auth.legal_service")
+    @patch("engine.api.ws.auth._load_active_user")
+    @patch("engine.api.ws.auth.decode_token")
+    async def test_success(self, mock_decode, mock_load, mock_legal):
+        user_uuid = uuid.uuid4()
+        mock_decode.return_value = {"sub": str(user_uuid), "role": "admin"}
+        mock_load.return_value = _UserStub(id=user_uuid, is_active=True)
+        mock_legal.get_pending_acceptances = AsyncMock(return_value=[])
+        result = await validate_session_token_for_ws(AsyncMock(), "jwt")
+        assert isinstance(result, AuthResult)
+        assert result.user_id == str(user_uuid)
+        assert "read:portfolio:all" in result.scopes
+
+
+# ---------------------------------------------------------------------------
+# auth.py — authenticate_websocket (DB-backed path)
+# ---------------------------------------------------------------------------
+
+
+class TestAuthenticateWebsocketDbPath:
+    @patch("engine.api.ws.auth.validate_session_token_for_ws")
+    async def test_db_path_delegates_and_returns_auth_result(self, mock_validate):
+        expected = AuthResult(
+            user_id="u1",
+            scopes=["read:portfolio"],
+            token_data={"sub": "u1"},
+        )
+        mock_validate.return_value = expected
+        db = AsyncMock()
+        ws = _FakeWebSocket(query_params={"token": "jwt"})
+        result = await authenticate_websocket(ws, db=db)
+        assert result is expected
+        mock_validate.assert_awaited_once_with(db, "jwt")
+
+    @patch("engine.api.ws.auth.validate_session_token_for_ws")
+    async def test_db_path_passes_through_rejection(self, mock_validate):
+        mock_validate.return_value = (WS_CLOSE_AUTH_INVALID, "bad token")
+        db = AsyncMock()
+        ws = _FakeWebSocket(query_params={"token": "jwt"})
+        result = await authenticate_websocket(ws, db=db)
+        assert isinstance(result, tuple)
+        assert result[0] == WS_CLOSE_AUTH_INVALID
+
+    @patch("engine.api.ws.auth.validate_session_token_for_ws")
+    async def test_db_path_uses_handshake_header_token(self, mock_validate):
+        expected = AuthResult(user_id="u1", scopes=[], token_data={})
+        mock_validate.return_value = expected
+        db = AsyncMock()
+        ws = _FakeWebSocket(headers={"authorization": "Bearer hdr-token"})
+        await authenticate_websocket(ws, db=db)
+        mock_validate.assert_awaited_once_with(db, "hdr-token")
