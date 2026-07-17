@@ -177,6 +177,32 @@ opt in per call. Design choices worth knowing:
   `cache.redis_unavailable` and the adapter proceeds uncached. The
   *trading path* must never depend on the cache being up.
 
+### Historical load cache (`engine/data/historical_cache.py`)
+
+A *separate*, deliberately in-process cache backs the **historical /
+file-backed** read path (the synchronous CSV/Parquet loaders in
+[`engine/data/provider.py`](../../engine/data/provider.py)). It is the
+file-path analog of `ProviderCache`, and exists because the historical
+path is synchronous and local where `ProviderCache` is async and
+network-backed:
+
+- **Process-local LRU, not Valkey.** File loads are cheap and local;
+  a network round-trip to Valkey would cost more than the re-read.
+  `HistoricalDataCache.shared()` returns the process-wide singleton
+  (tests reset it via `reset_for_tests`).
+- **Keyed by on-disk fingerprint, not TTL.** The key folds the call
+  parameters *and* the source file's identity — resolved path +
+  `mtime_ns` + size. A changed file therefore always produces a
+  different fingerprint and a guaranteed miss; there is **no TTL to
+  tune and no stale-data window** after a CSV is edited.
+- **Byte cap per entry** (`CACHE_ENTRY_CAP`). Oversized frames are
+  logged and skipped rather than cached, mirroring `ProviderCache`'s
+  `CACHE_PAYLOAD_CAP` so a pathological file can't grow the cache
+  unboundedly.
+- **Type-stable keys.** Non-primitive read kwargs (e.g. polars
+  `schema_overrides`) are folded through `fingerprint_kwargs` before
+  hashing, so `"1"` and `1` can never collide.
+
 ### Shared HTTP client (`_http.py`)
 
 One async `httpx`-based client backs the REST adapters. Two

@@ -794,6 +794,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -884,6 +888,62 @@
     
   
     MCP server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/capability-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP capability audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/tool-catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP tool catalog
   
 
     
@@ -2938,6 +2998,11 @@ Naming convention: field <code>foo_bar</code> → env <code>NEXUS_FOO_BAR</code>
 <td><code>NEXUS_RATE_LIMIT_ROLE_TIERS</code></td>
 <td><code>""</code></td>
 <td>JSON <code>{role:[per_minute,burst]}</code> for per-role overrides when a Bearer JWT is present (e.g. <code>{"viewer":[120,30],"admin":[6000,200]}</code>).</td>
+</tr>
+<tr>
+<td><code>NEXUS_TRUSTED_PROXIES</code></td>
+<td><code>""</code></td>
+<td>CSV of proxy IPs/CIDRs (e.g. <code>10.0.0.0/8</code>). When the direct peer matches, <code>X-Forwarded-For</code> / <code>X-Real-IP</code> is used for the per-IP rate-limit <strong>and</strong> WS-auth buckets (REST + WS share the resolver in <a href="../engine/api/ip_utils.py"><code>engine/api/ip_utils.py</code></a>). Otherwise those headers are ignored and a spoofed header cannot escape a bucket. <strong>Required for accurate per-client rate limiting behind a reverse proxy.</strong></td>
 </tr>
 <tr>
 <td><code>NEXUS_DATABASE_POOL_SIZE</code> / <code>_MAX_OVERFLOW</code></td>

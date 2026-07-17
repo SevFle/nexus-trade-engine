@@ -2,186 +2,194 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/LAST_AUDIT/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/PLUGIN_DEV_GUIDE/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/RELEASING/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/api-reference/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/contributors/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/data-model/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/deployment/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/development/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/known-limitations/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/mcp-server/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/adr/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/adr/0001-scaffold-tech-choices/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/adr/0002-auth-rbac/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/adr/0003-mobile-app-strategy/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/adr/0004-task-queue-taskiq/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/adr/0005-valkey-over-redis/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/adr/0006-bcrypt-fernet/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/adr/0007-strategy-sandbox-allowlist-imports/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/adr/0008-pluggable-metrics-backend/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/adr/0009-cross-replica-eventbus-bridge/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/adr/0010-static-ast-validation-toctou-loading/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/adr/0011-runtime-introspection-blocking/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/adr/template/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/architecture/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/architecture/analytics/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/architecture/core-domains/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/architecture/data-providers/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/architecture/database/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/architecture/multi-strategy/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/architecture/overview/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/architecture/plugins/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/legal/processors/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
+    </url>
+    <url>
+         <loc>https://github.com/SevFle/nexus-trade-engine/mcp/capability-audit/</loc>
+         <lastmod>2026-07-17</lastmod>
+    </url>
+    <url>
+         <loc>https://github.com/SevFle/nexus-trade-engine/mcp/tool-catalog/</loc>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/observability/logging/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/operations/backup-and-recovery/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/operations/dr-drill-checklist/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/operations/load-testing/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/operations/slos/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/operations/runbooks/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/operations/runbooks/api-availability/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/operations/runbooks/api-latency/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/operations/runbooks/auth-mfa/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/operations/runbooks/backtest-submit/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/operations/runbooks/common-issues/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/operations/runbooks/task-pipeline/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
     <url>
          <loc>https://github.com/SevFle/nexus-trade-engine/operations/runbooks/webhook-delivery/</loc>
-         <lastmod>2026-07-14</lastmod>
+         <lastmod>2026-07-17</lastmod>
     </url>
 </urlset>
