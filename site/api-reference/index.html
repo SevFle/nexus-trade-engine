@@ -1629,6 +1629,8 @@
       
         
       
+        
+      
     
     
     
@@ -1980,6 +1982,34 @@
     
   
     0011 — Runtime introspection / dunder blocking
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0012-safe-identifier-validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0012 — SafeIdentifier path-parameter validation
   
 
     
@@ -3633,6 +3663,13 @@ All routes require legal acceptance.</p>
 </table>
 <h2 id="strategies">Strategies<a class="headerlink" href="#strategies" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/strategies/*</code>. Source: <a href="../engine/api/routes/strategies.py"><code>routes/strategies.py</code></a>.</p>
+<p>Every <code>{strategy_id}</code> path parameter on this router is typed as
+<a href="../engine/api/validators.py"><code>SafeIdentifier</code></a> (see <a href="../adr/0012-safe-identifier-validation/">ADR-0012</a>),
+so a malformed or hostile identifier is rejected with <strong><code>422</code></strong> by
+FastAPI's request-validation layer <em>before</em> the handler runs — it
+can never reach the plugin registry, a log line, or the reflected
+<code>404</code> <code>detail</code>. The same gate covers <code>/scoring/{strategy_name}</code>
+below.</p>
 <table>
 <thead>
 <tr>
@@ -3709,7 +3746,9 @@ windows); see source for the canonical schema. The full list is also
 served via OpenAPI.</p>
 <h2 id="scoring">Scoring<a class="headerlink" href="#scoring" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/scoring/*</code>. Source: <a href="../engine/api/routes/scoring.py"><code>routes/scoring.py</code></a>.
-Requires legal acceptance.</p>
+Requires legal acceptance. <code>{strategy_name}</code> is typed as
+<a href="../engine/api/validators.py"><code>SafeIdentifier</code></a> (same gate as
+<code>/strategies/{strategy_id}</code> — see <a href="../adr/0012-safe-identifier-validation/">ADR-0012</a>).</p>
 <table>
 <thead>
 <tr>
@@ -4192,6 +4231,19 @@ can only arrive after the socket opens (in-band browser refresh).</p>
   (body <code>{code:"legal_re_acceptance_required", documents:[…]}</code>).</li>
 <li><strong>Validation</strong>: <code>422</code> from FastAPI; <code>400</code> for hand-rolled checks
   (e.g. invalid scope in API keys, unknown tax jurisdiction).</li>
+<li><strong>Identifier validation</strong>: every user-controlled identifier path
+  parameter (<code>/strategies/{strategy_id}</code>, <code>/scoring/{strategy_name}</code>)
+  is typed as <a href="../engine/api/validators.py"><code>SafeIdentifier</code></a> — a
+  shared <code>Annotated[str, Path(pattern=…, max_length=…)]</code> alias whose
+  regex <code>^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$</code> admits dotted plugin IDs
+  while rejecting markup, path traversal (<code>..</code>), whitespace, control
+  characters, and non-ASCII. A non-conforming value returns <code>422</code>
+  <em>before</em> the handler runs, so it can never reach the plugin
+  registry, a DB query, a log line, or the reflected <code>detail</code> string.
+  See <a href="../adr/0012-safe-identifier-validation/">ADR-0012</a> for the regex
+  rationale (no look-around — pydantic v2 compiles patterns with the
+  Rust <code>regex</code> crate) and the per-route regression suite
+  (<a href="../tests/test_identifier_validation_sev.py"><code>tests/test_identifier_validation_sev.py</code></a>).</li>
 <li><strong>Rate limit</strong>: <code>429</code> with <code>Retry-After</code> from
   <a href="../engine/api/rate_limit.py"><code>RateLimitMiddleware</code></a>. Default 600
   req/min/IP, burst 60. <code>/health</code> and <code>/metrics</code> are exempt;

@@ -211,6 +211,14 @@ All routes require legal acceptance.
 
 `/api/v1/strategies/*`. Source: [`routes/strategies.py`](../engine/api/routes/strategies.py).
 
+Every `{strategy_id}` path parameter on this router is typed as
+[`SafeIdentifier`](../engine/api/validators.py) (see [ADR-0012](adr/0012-safe-identifier-validation.md)),
+so a malformed or hostile identifier is rejected with **`422`** by
+FastAPI's request-validation layer *before* the handler runs — it
+can never reach the plugin registry, a log line, or the reflected
+`404` `detail`. The same gate covers `/scoring/{strategy_name}`
+below.
+
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/v1/strategies/` | Lists installed strategies via `app.state.plugin_registry.list_all()`. |
@@ -241,7 +249,9 @@ served via OpenAPI.
 ## Scoring
 
 `/api/v1/scoring/*`. Source: [`routes/scoring.py`](../engine/api/routes/scoring.py).
-Requires legal acceptance.
+Requires legal acceptance. `{strategy_name}` is typed as
+[`SafeIdentifier`](../engine/api/validators.py) (same gate as
+`/strategies/{strategy_id}` — see [ADR-0012](adr/0012-safe-identifier-validation.md)).
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
@@ -489,6 +499,19 @@ can only arrive after the socket opens (in-band browser refresh).
   (body `{code:"legal_re_acceptance_required", documents:[…]}`).
 - **Validation**: `422` from FastAPI; `400` for hand-rolled checks
   (e.g. invalid scope in API keys, unknown tax jurisdiction).
+- **Identifier validation**: every user-controlled identifier path
+  parameter (`/strategies/{strategy_id}`, `/scoring/{strategy_name}`)
+  is typed as [`SafeIdentifier`](../engine/api/validators.py) — a
+  shared `Annotated[str, Path(pattern=…, max_length=…)]` alias whose
+  regex `^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$` admits dotted plugin IDs
+  while rejecting markup, path traversal (`..`), whitespace, control
+  characters, and non-ASCII. A non-conforming value returns `422`
+  *before* the handler runs, so it can never reach the plugin
+  registry, a DB query, a log line, or the reflected `detail` string.
+  See [ADR-0012](adr/0012-safe-identifier-validation.md) for the regex
+  rationale (no look-around — pydantic v2 compiles patterns with the
+  Rust `regex` crate) and the per-route regression suite
+  ([`tests/test_identifier_validation_sev.py`](../tests/test_identifier_validation_sev.py)).
 - **Rate limit**: `429` with `Retry-After` from
   [`RateLimitMiddleware`](../engine/api/rate_limit.py). Default 600
   req/min/IP, burst 60. `/health` and `/metrics` are exempt;

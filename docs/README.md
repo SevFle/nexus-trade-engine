@@ -10,7 +10,7 @@ theme. We picked it over the alternatives for concrete reasons:
 * Plain Markdown in /docs (the previous approach) renders on GitHub but
   gives no full-text search, no collapsible/versioned navigation, and no
   reliable Mermaid rendering. For a codebase this size (19 DB tables,
-  10 ADRs, a 452-line API reference, 7 runbooks) those matter.
+  12 ADRs, a ~510-line API reference, 7 runbooks) those matter.
 * MkDocs Material consumes the existing Markdown verbatim, so the files
   stay first-class on GitHub AND get a navigable, searchable, themed
   site. Config lives in /mkdocs.yml; deps in the `docs` extra of
@@ -105,7 +105,8 @@ docs/
 │   ├── 0008-pluggable-metrics-backend.md
 │   ├── 0009-cross-replica-eventbus-bridge.md
 │   ├── 0010-static-ast-validation-toctou-loading.md
-│   └── 0011-runtime-introspection-blocking.md
+│   ├── 0011-runtime-introspection-blocking.md
+│   └── 0012-safe-identifier-validation.md
 ├── api-reference.md                ← every HTTP/WS route, auth, schemas
 ├── mcp-server.md                   ← MCP tools/resources/auth (LLM agent surface)
 ├── mcp/                            ← MCP surface audit + catalog (generated map)

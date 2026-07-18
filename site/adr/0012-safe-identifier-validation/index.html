@@ -10,31 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/operations/runbooks/auth-mfa/">
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/adr/0012-safe-identifier-validation/">
       
       
-        <link rel="prev" href="../api-latency/">
+        <link rel="prev" href="../0011-runtime-introspection-blocking/">
       
       
-        <link rel="next" href="../backtest-submit/">
+        <link rel="next" href="../template/">
       
       
         
       
       
-      <link rel="icon" href="../../../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Auth & MFA - Nexus Trade Engine</title>
+        <title>0012 — SafeIdentifier path-parameter validation - Nexus Trade Engine</title>
       
     
     
-      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -53,7 +53,7 @@
       
     
     
-    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#runbook-auth-mfa" class="md-skip">
+        <a href="#adr-0012-shared-safeidentifier-validation-for-path-parameters" class="md-skip">
           Skip to content
         </a>
       
@@ -92,7 +92,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../.." title="Nexus Trade Engine" class="md-header__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
+    <a href="../.." title="Nexus Trade Engine" class="md-header__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m3.5 18.5 6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17z"/></svg>
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Auth & MFA
+              0012 — SafeIdentifier path-parameter validation
             
           </span>
         </div>
@@ -230,7 +230,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../.." class="md-tabs__link">
+      <a href="../.." class="md-tabs__link">
         
   
   
@@ -251,7 +251,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../architecture/" class="md-tabs__link">
+        <a href="../../architecture/" class="md-tabs__link">
           
   
   
@@ -273,7 +273,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../api-reference/" class="md-tabs__link">
+        <a href="../../api-reference/" class="md-tabs__link">
           
   
   
@@ -295,7 +295,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../development/" class="md-tabs__link">
+        <a href="../../development/" class="md-tabs__link">
           
   
   
@@ -313,11 +313,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../../adr/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -335,13 +337,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../../slos/" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../operations/slos/" class="md-tabs__link">
           
   
   
@@ -363,7 +363,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../observability/logging/" class="md-tabs__link">
+        <a href="../../observability/logging/" class="md-tabs__link">
           
   
   
@@ -385,7 +385,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../legal/processors/" class="md-tabs__link">
+        <a href="../../legal/processors/" class="md-tabs__link">
           
   
   
@@ -407,7 +407,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../known-limitations/" class="md-tabs__link">
+        <a href="../../known-limitations/" class="md-tabs__link">
           
   
   
@@ -443,7 +443,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../.." title="Nexus Trade Engine" class="md-nav__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
+    <a href="../.." title="Nexus Trade Engine" class="md-nav__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m3.5 18.5 6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17z"/></svg>
@@ -473,7 +473,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../.." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -539,7 +539,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../../architecture/" class="md-nav__link ">
+            <a href="../../architecture/" class="md-nav__link ">
               
   
   
@@ -583,7 +583,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../architecture/overview/" class="md-nav__link">
+      <a href="../../architecture/overview/" class="md-nav__link">
         
   
   
@@ -611,7 +611,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../architecture/core-domains/" class="md-nav__link">
+      <a href="../../architecture/core-domains/" class="md-nav__link">
         
   
   
@@ -639,7 +639,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../architecture/analytics/" class="md-nav__link">
+      <a href="../../architecture/analytics/" class="md-nav__link">
         
   
   
@@ -667,7 +667,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../architecture/multi-strategy/" class="md-nav__link">
+      <a href="../../architecture/multi-strategy/" class="md-nav__link">
         
   
   
@@ -695,7 +695,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../architecture/data-providers/" class="md-nav__link">
+      <a href="../../architecture/data-providers/" class="md-nav__link">
         
   
   
@@ -723,7 +723,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../architecture/database/" class="md-nav__link">
+      <a href="../../architecture/database/" class="md-nav__link">
         
   
   
@@ -751,7 +751,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../architecture/plugins/" class="md-nav__link">
+      <a href="../../architecture/plugins/" class="md-nav__link">
         
   
   
@@ -852,7 +852,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../api-reference/" class="md-nav__link">
+      <a href="../../api-reference/" class="md-nav__link">
         
   
   
@@ -880,7 +880,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../mcp-server/" class="md-nav__link">
+      <a href="../../mcp-server/" class="md-nav__link">
         
   
   
@@ -908,7 +908,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../mcp/capability-audit/" class="md-nav__link">
+      <a href="../../mcp/capability-audit/" class="md-nav__link">
         
   
   
@@ -936,7 +936,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../mcp/tool-catalog/" class="md-nav__link">
+      <a href="../../mcp/tool-catalog/" class="md-nav__link">
         
   
   
@@ -964,7 +964,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../data-model/" class="md-nav__link">
+      <a href="../../data-model/" class="md-nav__link">
         
   
   
@@ -1065,7 +1065,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../development/" class="md-nav__link">
+      <a href="../../development/" class="md-nav__link">
         
   
   
@@ -1093,7 +1093,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../deployment/" class="md-nav__link">
+      <a href="../../deployment/" class="md-nav__link">
         
   
   
@@ -1121,7 +1121,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../RELEASING/" class="md-nav__link">
+      <a href="../../RELEASING/" class="md-nav__link">
         
   
   
@@ -1149,7 +1149,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../PLUGIN_DEV_GUIDE/" class="md-nav__link">
+      <a href="../../PLUGIN_DEV_GUIDE/" class="md-nav__link">
         
   
   
@@ -1177,7 +1177,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../contributors/" class="md-nav__link">
+      <a href="../../contributors/" class="md-nav__link">
         
   
   
@@ -1209,6 +1209,8 @@
       
   
   
+    
+  
   
   
     
@@ -1248,22 +1250,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../../adr/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -1281,13 +1284,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1307,7 +1310,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0001-scaffold-tech-choices/" class="md-nav__link">
+      <a href="../0001-scaffold-tech-choices/" class="md-nav__link">
         
   
   
@@ -1335,7 +1338,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0002-auth-rbac/" class="md-nav__link">
+      <a href="../0002-auth-rbac/" class="md-nav__link">
         
   
   
@@ -1363,7 +1366,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0003-mobile-app-strategy/" class="md-nav__link">
+      <a href="../0003-mobile-app-strategy/" class="md-nav__link">
         
   
   
@@ -1391,7 +1394,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0004-task-queue-taskiq/" class="md-nav__link">
+      <a href="../0004-task-queue-taskiq/" class="md-nav__link">
         
   
   
@@ -1419,7 +1422,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0005-valkey-over-redis/" class="md-nav__link">
+      <a href="../0005-valkey-over-redis/" class="md-nav__link">
         
   
   
@@ -1447,7 +1450,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0006-bcrypt-fernet/" class="md-nav__link">
+      <a href="../0006-bcrypt-fernet/" class="md-nav__link">
         
   
   
@@ -1475,7 +1478,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
+      <a href="../0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
         
   
   
@@ -1503,7 +1506,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0008-pluggable-metrics-backend/" class="md-nav__link">
+      <a href="../0008-pluggable-metrics-backend/" class="md-nav__link">
         
   
   
@@ -1531,7 +1534,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0009-cross-replica-eventbus-bridge/" class="md-nav__link">
+      <a href="../0009-cross-replica-eventbus-bridge/" class="md-nav__link">
         
   
   
@@ -1559,7 +1562,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0010-static-ast-validation-toctou-loading/" class="md-nav__link">
+      <a href="../0010-static-ast-validation-toctou-loading/" class="md-nav__link">
         
   
   
@@ -1587,7 +1590,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../adr/0011-runtime-introspection-blocking/" class="md-nav__link">
+      <a href="../0011-runtime-introspection-blocking/" class="md-nav__link">
         
   
   
@@ -1595,392 +1598,6 @@
     
   
     0011 — Runtime introspection / dunder blocking
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../../adr/0012-safe-identifier-validation/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    0012 — SafeIdentifier path-parameter validation
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../../adr/template/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    ADR template
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-    
-  
-  
-  
-    
-    
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-          
-        
-      
-        
-      
-    
-    
-    
-      
-        
-        
-      
-      
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
-        
-          
-          <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
-              
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Operations
-  
-
-    
-  </span>
-  
-  
-
-            </a>
-            
-              
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
-                <span class="md-nav__icon md-icon"></span>
-              </label>
-            
-          </div>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_6">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Operations
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../slos/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    SLOs
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../backup-and-recovery/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Backup & recovery
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../dr-drill-checklist/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    DR drill checklist
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../load-testing/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Load testing
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-            
-              
-                
-  
-  
-    
-  
-  
-  
-    
-    
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-      
-      
-        
-          
-          
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_6" checked>
-        
-          
-          <label class="md-nav__link" for="__nav_6_6" id="__nav_6_6_label" tabindex="">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Runbooks
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_6_6">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Runbooks
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../api-availability/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    API availability
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../api-latency/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    API latency
   
 
     
@@ -2017,7 +1634,7 @@
   <span class="md-ellipsis">
     
   
-    Auth & MFA
+    0012 — SafeIdentifier path-parameter validation
   
 
     
@@ -2035,7 +1652,7 @@
   <span class="md-ellipsis">
     
   
-    Auth & MFA
+    0012 — SafeIdentifier path-parameter validation
   
 
     
@@ -2061,10 +1678,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-this-means" class="md-nav__link">
+  <a href="#context-and-problem-statement" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What this means
+        Context and Problem Statement
       
     </span>
   </a>
@@ -2072,10 +1689,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#first-60-seconds" class="md-nav__link">
+  <a href="#decision-drivers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        First 60 seconds
+        Decision Drivers
       
     </span>
   </a>
@@ -2083,10 +1700,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#triage" class="md-nav__link">
+  <a href="#considered-options" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Triage
+        Considered Options
       
     </span>
   </a>
@@ -2094,32 +1711,110 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#common-causes" class="md-nav__link">
+  <a href="#decision-outcome" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Common causes
+        Decision Outcome
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision Outcome">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-this-regex-exactly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why this regex, exactly
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#escalation" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Escalation
+        Consequences
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#post-incident" class="md-nav__link">
+  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Post-incident
+        Pros and Cons of the Options
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pros and Cons of the Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-1-do-nothing-defend-per-sink" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 1 — Do nothing; defend per sink
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-2-per-route-annotated-literals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 2 — Per-route Annotated[...] literals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-3-centralised-input-sanitization-middleware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 3 — Centralised input-sanitization middleware
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-4-shared-safeidentifier-alias-chosen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 4 — Shared SafeIdentifier alias (chosen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Links
       
     </span>
   </a>
@@ -2142,7 +1837,387 @@
   
   
     <li class="md-nav__item">
-      <a href="../backtest-submit/" class="md-nav__link">
+      <a href="../template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../operations/runbooks/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/slos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SLOs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/backup-and-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backup & recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/dr-drill-checklist/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DR drill checklist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/load-testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Load testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_6" id="__nav_6_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runbooks
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Runbooks
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/api-availability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API availability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/api-latency/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API latency
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/auth-mfa/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth & MFA
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/backtest-submit/" class="md-nav__link">
         
   
   
@@ -2170,7 +2245,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../webhook-delivery/" class="md-nav__link">
+      <a href="../../operations/runbooks/webhook-delivery/" class="md-nav__link">
         
   
   
@@ -2198,7 +2273,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../task-pipeline/" class="md-nav__link">
+      <a href="../../operations/runbooks/task-pipeline/" class="md-nav__link">
         
   
   
@@ -2226,7 +2301,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../common-issues/" class="md-nav__link">
+      <a href="../../operations/runbooks/common-issues/" class="md-nav__link">
         
   
   
@@ -2327,7 +2402,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../observability/logging/" class="md-nav__link">
+      <a href="../../observability/logging/" class="md-nav__link">
         
   
   
@@ -2420,7 +2495,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../legal/processors/" class="md-nav__link">
+      <a href="../../legal/processors/" class="md-nav__link">
         
   
   
@@ -2515,7 +2590,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../known-limitations/" class="md-nav__link">
+      <a href="../../known-limitations/" class="md-nav__link">
         
   
   
@@ -2543,7 +2618,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../LAST_AUDIT/" class="md-nav__link">
+      <a href="../../LAST_AUDIT/" class="md-nav__link">
         
   
   
@@ -2598,10 +2673,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-this-means" class="md-nav__link">
+  <a href="#context-and-problem-statement" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What this means
+        Context and Problem Statement
       
     </span>
   </a>
@@ -2609,10 +2684,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#first-60-seconds" class="md-nav__link">
+  <a href="#decision-drivers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        First 60 seconds
+        Decision Drivers
       
     </span>
   </a>
@@ -2620,10 +2695,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#triage" class="md-nav__link">
+  <a href="#considered-options" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Triage
+        Considered Options
       
     </span>
   </a>
@@ -2631,32 +2706,110 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#common-causes" class="md-nav__link">
+  <a href="#decision-outcome" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Common causes
+        Decision Outcome
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision Outcome">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-this-regex-exactly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why this regex, exactly
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#escalation" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Escalation
+        Consequences
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#post-incident" class="md-nav__link">
+  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Post-incident
+        Pros and Cons of the Options
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pros and Cons of the Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-1-do-nothing-defend-per-sink" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 1 — Do nothing; defend per sink
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-2-per-route-annotated-literals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 2 — Per-route Annotated[...] literals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-3-centralised-input-sanitization-middleware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 3 — Centralised input-sanitization middleware
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-4-shared-safeidentifier-alias-chosen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 4 — Shared SafeIdentifier alias (chosen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Links
       
     </span>
   </a>
@@ -2683,85 +2836,231 @@
   
 
 
-<h1 id="runbook-auth-mfa">Runbook — Auth &amp; MFA<a class="headerlink" href="#runbook-auth-mfa" title="Permanent link">&para;</a></h1>
-<p><strong>Alerts</strong>: <code>AuthMFAFastBurn</code>, <code>AuthMFAMediumBurn</code>, <code>AuthMFASlowBurn</code>,
-<code>AuthMFABudgetExhaustion</code></p>
-<p><strong>SLO</strong>: 99.9% non-failure auth + MFA-verify outcomes over 28 days
-(<a href="../../slos/#critical-user-journeys">slos.md</a>).</p>
-<h2 id="what-this-means">What this means<a class="headerlink" href="#what-this-means" title="Permanent link">&para;</a></h2>
-<p>Legitimate users cannot reliably log in. Auth is one nine higher than
-general API availability because login is a binary cliff: a 1% failure
-rate locks ≈ 1% of users out completely. <strong>Page severity at every burn
-rate.</strong> Treat as a security-adjacent incident: do not investigate
-quickly <em>and</em> sloppily.</p>
-<h2 id="first-60-seconds">First 60 seconds<a class="headerlink" href="#first-60-seconds" title="Permanent link">&para;</a></h2>
+<h1 id="adr-0012-shared-safeidentifier-validation-for-path-parameters">ADR-0012: Shared <code>SafeIdentifier</code> validation for path parameters<a class="headerlink" href="#adr-0012-shared-safeidentifier-validation-for-path-parameters" title="Permanent link">&para;</a></h1>
+<ul>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-07-18</li>
+<li><strong>Deciders</strong>: Lead maintainer + security reviewer</li>
+<li><strong>Tags</strong>: security, api, validation</li>
+</ul>
+<h2 id="context-and-problem-statement">Context and Problem Statement<a class="headerlink" href="#context-and-problem-statement" title="Permanent link">&para;</a></h2>
+<p>Several REST routes take a <em>user-controlled identifier</em> as a path
+parameter — most notably <code>strategy_id</code> on every
+<code>/api/v1/strategies/{strategy_id}/...</code> route and <code>strategy_name</code> on
+every <code>/api/v1/scoring/{strategy_name}/...</code> route. Those identifiers
+then flow into four hostile-input-sensitive sinks:</p>
 <ol>
-<li>Open the <strong>Nexus / SLO overview</strong> dashboard. Check the "Auth &amp; MFA"
-   panel. Confirm the failure ratio is real, not a single noisy probe.</li>
-<li>Try logging in with a known-good test account. If it works, the
-   alert may be firing on a specific user cohort — not all users.</li>
-<li>If it fails, capture the response body (redact sensitive fields)
-   and the request id. Move to "Common causes → MFA verification
-   broken".</li>
+<li><strong>Registry lookups</strong> — <code>app.state.plugin_registry.get(strategy_id)</code>
+   and the scoring <code>PluginRegistry(...)</code> constructor key off the raw
+   string.</li>
+<li><strong>Database queries</strong> — the scoring results handler issues
+   <code>select(ScoringSnapshot).where(strategy_id == ...)</code> against the
+   value.</li>
+<li><strong>Log lines</strong> — structlog emits the identifier verbatim in the
+   request-scoped context.</li>
+<li><strong>Reflected error <code>detail</code> strings</strong> — <code>404</code> bodies carry the raw
+   identifier: <code>f"Strategy '{strategy_id}' not found"</code>.</li>
 </ol>
-<h2 id="triage">Triage<a class="headerlink" href="#triage" title="Permanent link">&para;</a></h2>
+<p>Without a validation gate at the framework layer, every one of those
+sinks is on its own to defend against markup injection
+(<code>'&gt;&lt;svg onload=…&gt;</code>), path traversal (<code>../</code>), SQL/log-forging
+sequences (<code>'; DROP TABLE--</code>), control characters, and Unicode
+look-alikes. Per-handler discipline cannot hold: a new route added
+six months later silently inherits no defense, and there is no
+compile-time signal that the author forgot one.</p>
+<p>Two commits closed this hole. <code>a6b6fd24</code> added a per-route
+<code>Annotated[str, Path(pattern=…)]</code>; <code>ef25466f</code> factored the pattern
+and the length cap out of the route modules into a single
+<a href="../../engine/api/validators.py"><code>engine.api/validators.SafeIdentifier</code></a>
+alias so the contract cannot drift between routes. This ADR records
+<em>why</em> the validation lives at the FastAPI layer (and not in the
+handlers), <em>why</em> the regex is shaped the way it is (pydantic-v2 / Rust
+<code>regex</code> crate constraints), and the limits of the approach.</p>
+<h2 id="decision-drivers">Decision Drivers<a class="headerlink" href="#decision-drivers" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Is the failure on password verification or on MFA verification?</strong></li>
-<li><code>nexus_auth_attempts_total{outcome="failure"}</code> is split by neither
-    today; look at engine logs for the request id to disambiguate.</li>
-<li>The relevant call-sites are
-    <a href="../../../engine/api/routes/auth.py"><code>engine/api/routes/auth.py</code></a>
-    (password / login) and
-    <a href="../../../engine/api/auth/mfa_service.py"><code>engine/api/auth/mfa_service.py</code></a>
-    (<code>verify_login_code</code>, <code>verify_challenge</code>).</li>
-<li><strong>Spike correlated with a deploy?</strong> Cross-reference the spike with
-  release-please tag history. A botched MFA-encryption-key roll is the
-  most damaging cause and is documented under "Common causes".</li>
-<li><strong>Spike correlated with a brute-force attempt?</strong> Look at
-  <code>nexus_auth_attempts_total{outcome="failure"}</code> partitioned by source
-  IP if your edge proxy attaches it. A spike that doesn't move
-  <code>outcome="success"</code> means the SLO is firing on probably-malicious
-  traffic — the SLO definition deliberately includes failed attempts,
-  so this is "working as designed" but the on-call still needs to
-  decide whether to rate-limit harder.</li>
+<li><strong>Reject once, defend everywhere.</strong> A pattern enforced by FastAPI's
+  request-validation layer runs <em>before</em> the handler body. A hostile
+  identifier therefore never reaches the registry, the DB, structlog,
+  or a reflected <code>detail</code> — it is rejected with HTTP <code>422</code> at the
+  boundary. One chokepoint beats four per-sink checks.</li>
+<li><strong>The contract must be unit-testable in isolation.</strong> Per-route
+  <code>Annotated[...]</code> literals duplicated the pattern in every module and
+  could only be exercised through an ASGI client. A shared alias is
+  testable directly against the regex, and the regression suite
+  (<a href="../../tests/test_identifier_validation_sev.py"><code>tests/test_identifier_validation_sev.py</code></a>)
+  parametrizes one <code>_HOSTILE_IDENTIFIERS</code> list across every
+  identifier-bearing route so a new route opts into the test for free
+  by adopting the alias.</li>
+<li><strong>Pydantic v2 compiles patterns with the Rust <code>regex</code> crate.</strong> That
+  crate does <strong>not</strong> support lookahead / look-behind assertions. Any
+  pattern that depends on look-around raises <code>regex parse error</code> at
+  app-import time, so the dot-discipline contract has to be expressed
+  constructively.</li>
+<li><strong>Dots are legitimate but only as separators.</strong> Plugin / strategy
+  identifiers namespace with dots (<code>vendor.meanreversion.v2</code>), so a
+  blanket "no dots" rule would reject real values. The contract is
+  specifically "dots between non-empty, dot-free tokens" — no
+  leading/trailing dot, no <code>..</code>.</li>
 </ul>
-<h2 id="common-causes">Common causes<a class="headerlink" href="#common-causes" title="Permanent link">&para;</a></h2>
+<h2 id="considered-options">Considered Options<a class="headerlink" href="#considered-options" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Do nothing at the framework layer; rely on per-handler sanitization
+   or per-sink parameterization.</strong> Defense-in-depth at each sink.</li>
+<li><strong>Per-route <code>Annotated[str, Path(pattern=…)]</code> literals</strong> (the
+   intermediate state in <code>a6b6fd24</code>, before the refactor).</li>
+<li><strong>A centralised input-sanitization middleware</strong> that rewrites /
+   rejects identifiers in the request path before routing.</li>
+<li><strong>A single shared <code>SafeIdentifier</code> type alias bundling the pattern
+   and length cap, used as the path-parameter type</strong> (chosen).</li>
+</ol>
+<h2 id="decision-outcome">Decision Outcome<a class="headerlink" href="#decision-outcome" title="Permanent link">&para;</a></h2>
+<p>Chosen option: <strong>Option 4</strong>, shipped as
+<a href="../../engine/api/validators.py"><code>engine/api/validators.SafeIdentifier</code></a>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">MAX_IDENTIFIER_LENGTH</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">64</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">SAFE_IDENTIFIER_PATTERN</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$&quot;</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">SafeIdentifier</span> <span class="o">=</span> <span class="n">Annotated</span><span class="p">[</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="nb">str</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">Path</span><span class="p">(</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="n">pattern</span><span class="o">=</span><span class="n">SAFE_IDENTIFIER_PATTERN</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        <span class="n">max_length</span><span class="o">=</span><span class="n">MAX_IDENTIFIER_LENGTH</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="p">),</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="p">]</span>
+</span></code></pre></div>
+<p>Adoption today is deliberate and narrow: it covers exactly the routes
+that take a <em>plugin/strategy</em> identifier as a path parameter and feed
+it into registry/DB/log/reflection sinks —</p>
 <ul>
-<li><strong>MFA encryption key drift</strong> — the running engine's
-  <code>MFA_ENCRYPTION_KEY</code> does not match the one used when the user's
-  secret was encrypted. Symptom: every MFA verify returns "failure"
-  for users with <code>mfa_enabled = true</code>. Fix: restore the previous key
-  from the secrets vault, see
-  <a href="../../backup-and-recovery/#secrets-and-keys"><code>backup-and-recovery.md → Secrets</code></a>.
-  <strong>Do not</strong> rotate the key under load — it must be a coordinated
-  re-encryption.</li>
-<li><strong>MFA challenge token expired</strong> — challenge TTL is <code>mfa_challenge_ttl_seconds</code>
-  (default 300 s). If users are slow to enter codes, this will look like
-  failures. Consider raising the TTL if the SLO violation correlates
-  with operator-set TTL.</li>
-<li><strong>Clock skew</strong> — TOTP relies on synchronized clocks. NTP drift on
-  hosts &gt; ±1 step causes legitimate codes to be rejected. Verify with
-  <code>chronyc tracking</code> or equivalent.</li>
-<li><strong>DB unavailable for the <code>users</code> table read path</strong> — login fails to
-  even fetch the user record. Treat as a DB incident
-  (<a href="../../backup-and-recovery/"><code>backup-and-recovery.md</code></a>) and remediate
-  there first.</li>
-<li><strong>Brute-force / credential-stuffing campaign</strong> — failures dominated by
-  one ASN / set of IPs. Engage the rate-limit / WAF surface; do not
-  relax the SLO.</li>
+<li><code>GET/POST /api/v1/strategies/{strategy_id}</code> and the
+  <code>activate</code> / <code>deactivate</code> / <code>reload</code> / <code>health</code> sub-routes
+  (<a href="../../engine/api/routes/strategies.py"><code>routes/strategies.py</code></a>);</li>
+<li><code>POST /api/v1/scoring/{strategy_name}/run</code> and
+  <code>GET /api/v1/scoring/{strategy_name}/results</code>
+  (<a href="../../engine/api/routes/scoring.py"><code>routes/scoring.py</code></a>).</li>
 </ul>
-<h2 id="escalation">Escalation<a class="headerlink" href="#escalation" title="Permanent link">&para;</a></h2>
-<p>Auth failures touch security: page the security on-call alongside the
-service on-call. Time-to-page should be <strong>immediate</strong> for the fast-burn
-alert.</p>
-<h2 id="post-incident">Post-incident<a class="headerlink" href="#post-incident" title="Permanent link">&para;</a></h2>
+<p>Other path parameters (<code>portfolio_id</code>, <code>webhook_id</code>, <code>backtest_id</code>,
+<code>task_id</code>, document slugs under <code>/legal</code>, OAuth <code>provider</code>) are <strong>not</strong>
+covered by this alias. They are UUIDs, numeric IDs, or values drawn
+from a small fixed enumeration, and they are validated by their
+existing type annotations or in-handler membership checks.</p>
+<h3 id="why-this-regex-exactly">Why this regex, exactly<a class="headerlink" href="#why-this-regex-exactly" title="Permanent link">&para;</a></h3>
+<p>The pattern <code>^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$</code> is shaped by three
+constraints that interact:</p>
+<ol>
+<li><strong>Anchored end-to-end.</strong> <code>^...$</code> makes the contract independent of
+   whether the validator internally uses <code>re.match</code>, <code>re.search</code>, or
+   <code>re.fullmatch</code>. FastAPI / pydantic versions differ; the anchors make
+   drift impossible.</li>
+<li><strong>No look-around.</strong> Pydantic v2 compiles the pattern with the Rust
+   <code>regex</code> crate, which rejects lookahead/look-behind at parse time.
+   The dot discipline is therefore expressed <em>constructively</em> — "one
+   or more dot-free tokens separated by <em>single</em> dots" — rather than
+   as "any character except a leading/trailing/consecutive dot":</li>
+<li><code>[A-Za-z0-9_-]+</code> — the first token requires ≥1 dot-free char, so
+     the identifier can neither be empty nor <em>start</em> with a dot.</li>
+<li><code>(\.[A-Za-z0-9_-]+)*</code> — zero or more <code>.</code> separators, each of
+     which must be followed by ≥1 dot-free char, so a trailing dot, a
+     leading dot in a later segment, and <code>..</code> are all structurally
+     impossible.</li>
+<li><strong>64-char cap.</strong> A hostile or runaway identifier cannot blow up a
+   log line, a DB index, or a reflected error <code>detail</code>. <code>64</code> matches
+   the common "short identifier" ceiling (e.g. the <code>strategy.id</code>
+   field in plugin manifests) and is mirrored in the named constant
+   <code>MAX_IDENTIFIER_LENGTH</code> so tests and callers reference the same
+   value if the cap ever moves.</li>
+</ol>
+<h3 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Capture how many user accounts were affected and for how long.</li>
-<li>If MFA secrets had to be re-encrypted, document the rotation in the
-  on-call log and confirm the new key is in the secrets vault with
-  cross-region replication.</li>
-<li>If the cause was a brute-force attempt, file a security advisory only
-  if user accounts were actually compromised.</li>
+<li><strong>Positive</strong> — hostile identifiers (<code>'&gt;&lt;svg onload=alert(1)&gt;</code>,
+  <code>strategy" onerror=…</code>, <code>'; DROP TABLE--</code>, <code>has space</code>, <code>stratégie</code>,
+  <code>a*b</code>, <code>a@b</code>, …) are rejected with <code>422</code> <em>before</em> the handler runs,
+  on every covered route. The regression test pins this for each route
+  individually.</li>
+<li><strong>Positive</strong> — the contract is one definition. A new identifier
+  route gets full validation by writing
+  <code>strategy_id: SafeIdentifier</code> instead of re-deriving (and possibly
+  diverging from) the pattern.</li>
+<li><strong>Positive</strong> — the pattern is unit-testable in isolation; the
+  regression suite does not have to stand up a router per route.</li>
+<li><strong>Negative</strong> — FastAPI's framework-generated <code>422</code> body <em>echoes the
+  invalid input value</em> in its <code>detail</code> payload. The
+  <a href="../../tests/test_identifier_validation_sev.py"><code>TestNoHostileEcho</code></a>
+  class pins that the dangerous substrings are neutralised by JSON
+  serialisation, but the decoded hostile payload may still appear
+  verbatim in the framework's error detail. Any admin UI that renders
+  422 bodies verbatim must HTML-escape them; this is a known limit,
+  not something the validator can close on its own.</li>
+<li><strong>Negative</strong> — <code>.</code> is allowed, which means the pattern admits very
+  long dotted chains up to 64 chars. That is intentional (namespaced
+  plugin IDs) but means the alias is <em>not</em> a substitute for
+  rate-limiting or authz on routes that accept it.</li>
+</ul>
+<h2 id="pros-and-cons-of-the-options">Pros and Cons of the Options<a class="headerlink" href="#pros-and-cons-of-the-options" title="Permanent link">&para;</a></h2>
+<h3 id="option-1-do-nothing-defend-per-sink">Option 1 — Do nothing; defend per sink<a class="headerlink" href="#option-1-do-nothing-defend-per-sink" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> No new abstraction; each sink keeps its existing input
+  contract (parameterised queries, structlog redaction, HTML-escaping
+  in the UI).</li>
+<li><strong>Cons:</strong> No compile-time signal when a new route forgets the
+  defense; four sinks to audit forever; the reflected <code>detail</code> string
+  in the <code>404</code> body is undefended by construction. Rejected: defence
+  in depth is good, but it should not be the <em>only</em> layer for a
+  four-sink identifier.</li>
+</ul>
+<h3 id="option-2-per-route-annotated-literals">Option 2 — Per-route <code>Annotated[...]</code> literals<a class="headerlink" href="#option-2-per-route-annotated-literals" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Minimal change; no new module.</li>
+<li><strong>Cons:</strong> Duplicates the pattern in every route module and lets the
+  copies drift (one route loosens the regex in a hot-fix and the
+  contract silently splits). The pattern itself is non-obvious enough
+  (the no-look-around formulation) that centralising it is worth the
+  indirection. This is the state <code>a6b6fd24</code> shipped in;
+  <code>ef25466f</code> retired it.</li>
+</ul>
+<h3 id="option-3-centralised-input-sanitization-middleware">Option 3 — Centralised input-sanitization middleware<a class="headerlink" href="#option-3-centralised-input-sanitization-middleware" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> One place; covers routes that haven't been written yet.</li>
+<li><strong>Cons:</strong> A middleware that rewrites or rejects path parameters has
+  to understand routing semantics (which segment is an identifier vs.
+  a fixed literal like <code>/activate</code>), and Starlette decodes <code>%2F</code> into
+  a path separator <em>before</em> the route is matched — so a middleware
+  cannot reliably see the raw identifier the way the
+  path-parameter validator can. It also conflates <em>validation</em> (a
+  routing-layer concern) with <em>sanitization</em> (a sink-layer concern),
+  which makes the security boundary harder to reason about. Rejected.</li>
+</ul>
+<h3 id="option-4-shared-safeidentifier-alias-chosen">Option 4 — Shared <code>SafeIdentifier</code> alias (chosen)<a class="headerlink" href="#option-4-shared-safeidentifier-alias-chosen" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> One regex, one length cap, one chokepoint, unit-testable
+  in isolation; new routes adopt it by writing a type annotation; the
+  contract is identical across every route by construction.</li>
+<li><strong>Cons:</strong> Adoption is opt-in per route, so it is only as good as the
+  discipline of "use the alias when adding an identifier route." That
+  discipline is reinforced by the parametrised regression test (a new
+  identifier route that forgets the alias won't have a corresponding
+  <code>test_*_rejects_malformed_id</code> row, which is visible in code review)
+  and by the docstrings at the top of <code>routes/strategies.py</code> and
+  <code>routes/scoring.py</code>.</li>
+</ul>
+<h2 id="links">Links<a class="headerlink" href="#links" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Add regex validation to identifier parameters: commit <code>a6b6fd24</code></li>
+<li>Extract validation logic into <code>validators</code> module: commit <code>ef25466f</code></li>
+<li>Source: <a href="../../engine/api/validators.py"><code>engine/api/validators.py</code></a>
+  (<code>SafeIdentifier</code>, <code>SAFE_IDENTIFIER_PATTERN</code>, <code>MAX_IDENTIFIER_LENGTH</code>)</li>
+<li>Tests:
+  <a href="../../tests/test_identifier_validation_sev.py"><code>tests/test_identifier_validation_sev.py</code></a>
+  (per-route 422 regression, hostile-payload echo assertion)</li>
+<li>Related: <a href="../../api-reference/"><code>api-reference.md</code></a> (identifier
+  validation subsection under "Errors") and
+  <a href="../../architecture/plugins/"><code>architecture/plugins.md</code></a> (the
+  plugin-id surface this protects)</li>
+<li>Companion ring to the sandbox ADRs
+  (<a href="../0007-strategy-sandbox-allowlist-imports/">0007</a>,
+  <a href="../0010-static-ast-validation-toctou-loading/">0010</a>,
+  <a href="../0011-runtime-introspection-blocking/">0011</a>): those defend the
+  <em>code</em> a plugin can run; this ADR defends the <em>name</em> a caller can
+  hand the registry that loads it.</li>
 </ul>
 
 
@@ -2800,7 +3099,7 @@ alert.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../api-latency/" class="md-footer__link md-footer__link--prev" aria-label="Previous: API latency">
+          <a href="../0011-runtime-introspection-blocking/" class="md-footer__link md-footer__link--prev" aria-label="Previous: 0011 — Runtime introspection / dunder blocking">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -2810,20 +3109,20 @@ alert.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                API latency
+                0011 — Runtime introspection / dunder blocking
               </div>
             </div>
           </a>
         
         
           
-          <a href="../backtest-submit/" class="md-footer__link md-footer__link--next" aria-label="Next: Backtest submit">
+          <a href="../template/" class="md-footer__link md-footer__link--next" aria-label="Next: ADR template">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Backtest submit
+                ADR template
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -2878,10 +3177,10 @@ alert.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>
