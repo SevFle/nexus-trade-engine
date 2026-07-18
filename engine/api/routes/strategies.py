@@ -2,7 +2,9 @@
 Strategy management API routes — install, configure, activate, monitor.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BaseModel, Field
 
 from engine.api.auth.dependency import get_current_user
@@ -10,6 +12,14 @@ from engine.db.models import User
 from engine.legal.dependencies import require_legal_acceptance
 
 router = APIRouter(dependencies=[Depends(require_legal_acceptance)])
+
+# Strategy identifiers are short machine tokens drawn from [A-Za-z0-9_-].
+# Constraining the path parameter at the FastAPI validation layer means a
+# malformed or hostile identifier (markup, path traversal, control chars)
+# is rejected with a 422 *before* the handler runs, so it can never reach
+# a registry lookup, log line, or reflected error detail. This complements
+# output-side sanitization by failing fast on the input side.
+_SAFE_IDENTIFIER_PATTERN = r"^[A-Za-z0-9_-]+$"
 
 
 class StrategyConfigRequest(BaseModel):
@@ -24,7 +34,11 @@ async def list_strategies(request: Request, user: User = Depends(get_current_use
 
 
 @router.get("/{strategy_id}")
-async def get_strategy(strategy_id: str, request: Request, user: User = Depends(get_current_user)):
+async def get_strategy(
+    strategy_id: Annotated[str, Path(pattern=_SAFE_IDENTIFIER_PATTERN)],
+    request: Request,
+    user: User = Depends(get_current_user),
+):
     """Get details for a specific strategy."""
     registry = request.app.state.plugin_registry
     entry = registry.get(strategy_id)
@@ -47,7 +61,7 @@ async def get_strategy(strategy_id: str, request: Request, user: User = Depends(
 
 @router.post("/{strategy_id}/activate")
 async def activate_strategy(
-    strategy_id: str,
+    strategy_id: Annotated[str, Path(pattern=_SAFE_IDENTIFIER_PATTERN)],
     config: StrategyConfigRequest,
     request: Request,
     user: User = Depends(get_current_user),
@@ -78,7 +92,7 @@ async def activate_strategy(
 
 @router.post("/{strategy_id}/deactivate")
 async def deactivate_strategy(
-    strategy_id: str,
+    strategy_id: Annotated[str, Path(pattern=_SAFE_IDENTIFIER_PATTERN)],
     request: Request,
     user: User = Depends(get_current_user),
 ):
@@ -90,7 +104,7 @@ async def deactivate_strategy(
 
 @router.post("/{strategy_id}/reload")
 async def reload_strategy(
-    strategy_id: str,
+    strategy_id: Annotated[str, Path(pattern=_SAFE_IDENTIFIER_PATTERN)],
     request: Request,
     user: User = Depends(get_current_user),
 ):
@@ -104,7 +118,7 @@ async def reload_strategy(
 
 @router.get("/{strategy_id}/health")
 async def strategy_health(
-    strategy_id: str,
+    strategy_id: Annotated[str, Path(pattern=_SAFE_IDENTIFIER_PATTERN)],
     request: Request,
     user: User = Depends(get_current_user),
 ):

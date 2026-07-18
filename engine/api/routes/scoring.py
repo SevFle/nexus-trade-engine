@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +31,13 @@ class ScoringRunResponse(BaseModel):
     universe_size: int
 
 
+# Strategy identifiers are short machine tokens drawn from [A-Za-z0-9_-].
+# Constraining the path parameter at the FastAPI validation layer means a
+# malformed or hostile identifier (markup, path traversal, control chars)
+# is rejected with a 422 *before* the handler runs, so it can never reach
+# a registry lookup, DB query, log line, or reflected error detail.
+_SAFE_IDENTIFIER_PATTERN = r"^[A-Za-z0-9_-]+$"
+
 _STRATEGIES_DIR = None
 
 
@@ -40,7 +47,7 @@ def _get_registry() -> PluginRegistry:
 
 @router.post("/{strategy_name}/run", response_model=ScoringRunResponse)
 async def run_scoring(
-    strategy_name: str,
+    strategy_name: Annotated[str, Path(pattern=_SAFE_IDENTIFIER_PATTERN)],
     body: ScoringRunRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -79,7 +86,7 @@ async def run_scoring(
 
 @router.get("/{strategy_name}/results")
 async def get_scoring_results(
-    strategy_name: str,
+    strategy_name: Annotated[str, Path(pattern=_SAFE_IDENTIFIER_PATTERN)],
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
     limit: int = Query(default=20, ge=1, le=100),
