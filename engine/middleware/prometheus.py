@@ -60,6 +60,7 @@ import contextlib
 import re
 import time
 from typing import TYPE_CHECKING
+from weakref import WeakKeyDictionary
 
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
@@ -139,15 +140,31 @@ def normalize_path(path: str) -> str:
 # Lazy collector registration
 # ---------------------------------------------------------------------------
 
-# Module-level cache of the lazily-created collectors. Keyed by the
-# ``id()`` of the registry they live in so tests that pass a throwaway
-# ``CollectorRegistry`` get their own fresh collector set without
-# colliding with the production default registry. The cache is rebuilt
-# from scratch if the registry is garbage-collected because nothing
-# else references its collectors — fine, since ``id()`` reuse would
-# only matter if a stale registry lingered, and tests call
-# :func:`reset_collectors_for_tests` between cases anyway.
-_collectors_cache: dict[int, dict[str, Counter | Gauge | Histogram]] = {}
+# Module-level cache of the lazily-created collectors. Keyed on the
+# registry object itself via :class:`weakref.WeakKeyDictionary` so a
+# throwaway ``CollectorRegistry`` (common in tests) is reaped the
+# moment no external reference remains — its cache entry vanishes
+# automatically. This fixes two problems the previous ``id()``-keyed
+# plain ``dict`` had:
+#
+#   1. **Memory leak.** The cache held the collectors, and the
+#      collectors' mere existence kept the registry alive (they are
+#      registered against it), so a test that spun up a hundred
+#      throwaway registries would pin every one of them forever.
+#   2. **``id()``-reuse correctness bug.** If a registry *was* somehow
+#      released (e.g. via the collectors being dropped first), CPython
+#      was free to hand its memory address — and therefore its
+#      ``id()`` — to the next object allocated. A fresh registry
+#      landing on a recycled address would inherit the dead registry's
+#      cached collectors, silently sharing metric state across what
+#      the caller thought were isolated registries.
+#
+# Keying on the object directly (weakly) eliminates both: the entry
+# only exists while the registry does, and identity is by object, not
+# by transient memory address.
+_collectors_cache: WeakKeyDictionary[
+    CollectorRegistry, dict[str, Counter | Gauge | Histogram]
+] = WeakKeyDictionary()
 
 
 def _get_collectors(
@@ -163,9 +180,12 @@ def _get_collectors(
     any code path that constructs more than one middleware against the
     same registry (notably the app factory when it is invoked more than
     once in a process, e.g. some test harnesses).
+
+    The cache is a :class:`weakref.WeakKeyDictionary` keyed on the
+    registry itself, so the entry is dropped automatically once the
+    registry is garbage-collected (see ``_collectors_cache`` docs).
     """
-    cache_key = id(registry)
-    cached = _collectors_cache.get(cache_key)
+    cached = _collectors_cache.get(registry)
     if cached is not None:
         return cached
 
@@ -193,7 +213,7 @@ def _get_collectors(
         "latency": latency,
         "in_flight": in_flight,
     }
-    _collectors_cache[cache_key] = collectors
+    _collectors_cache[registry] = collectors
     return collectors
 
 
@@ -207,7 +227,10 @@ def reset_collectors_for_tests() -> None:
     the registered collectors behind, which would make the *next*
     lazy init blow up with ``Duplicated timeseries``.
     """
-    for collectors in _collectors_cache.values():
+    # Materialise the values into a list because we mutate the cache
+    # (via ``.clear()``) below and ``WeakKeyDictionary`` may also shed
+    # entries concurrently if a registry is finalised mid-iteration.
+    for collectors in list(_collectors_cache.values()):
         for collector in collectors.values():
             # Collector was never registered against the default
             # registry (tests using throwaway registries) or already
