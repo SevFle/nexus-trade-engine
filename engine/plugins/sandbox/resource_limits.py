@@ -67,11 +67,12 @@ outer's tracemalloc session mid-flight).
 
 A module-level :data:`_guard_lock` (:class:`threading.Lock`, non-reentrant)
 serialises entry into the context manager.  Re-entrant entry — from the same
-thread or any other — is rejected with a :class:`RuntimeError` carrying a
-clear message rather than deadlocking or silently racing.  In the production
-deployment the host sandbox already serialises evaluations via the asyncio
-``_eval_lock``; this module-level guard is defence-in-depth for any caller
-that invokes :func:`resource_limits` directly (tests, ad-hoc tooling).
+thread or any other — is rejected with a :class:`SandboxResourceError`
+(kind = :data:`SINGLE_FLIGHT_RESOURCE`) carrying a clear message rather than
+deadlocking or silently racing.  In the production deployment the host
+sandbox already serialises evaluations via the asyncio ``_eval_lock``; this
+module-level guard is defence-in-depth for any caller that invokes
+:func:`resource_limits` directly (tests, ad-hoc tooling).
 
 Graceful degradation
 --------------------
@@ -111,6 +112,7 @@ if TYPE_CHECKING:
 __all__ = [
     "CPU_RESOURCE",
     "MEMORY_RESOURCE",
+    "SINGLE_FLIGHT_RESOURCE",
     "ResourceLimits",
     "SandboxResourceError",
     "resource_limits",
@@ -119,6 +121,9 @@ __all__ = [
 #: Resource-kind identifiers carried on :class:`SandboxResourceError`.
 CPU_RESOURCE: str = "cpu"
 MEMORY_RESOURCE: str = "memory"
+#: Kind used when the single-flight :data:`_guard_lock` is already held
+#: (re-entrant or concurrent entry into :func:`resource_limits`).
+SINGLE_FLIGHT_RESOURCE: str = "single_flight"
 
 # ── Single-flight guard ───────────────────────────────────────────────
 #
@@ -161,17 +166,22 @@ class SandboxResourceError(BaseException):
     wall-clock timeout: ``SandboxResourceError`` is raised by the dedicated
     Layer-3 guards and carries structured ``kind`` / ``limit`` / ``actual``
     metadata so callers (and dashboards) can distinguish a CPU blow-up from a
-    memory blow-up.
+    memory blow-up.  The same exception type is reused for the single-flight
+    violation (``kind = "single_flight"``) raised when the module-level
+    :data:`_guard_lock` is already held, so callers only need to catch one
+    exception type for every Layer-3 failure mode.
 
     Attributes
     ----------
     kind:
-        ``"cpu"`` or ``"memory"`` — which guard fired.
+        ``"cpu"``, ``"memory"`` or ``"single_flight"`` — which guard fired.
     limit:
-        The configured limit value (seconds for CPU, MiB for memory).
+        The configured limit value (seconds for CPU, MiB for memory);
+        ``None`` for the single-flight violation (no scalar limit applies).
     actual:
         The observed value that exceeded the limit, when measurable
-        (peak MiB for memory; ``None`` for CPU where the timer simply fired).
+        (peak MiB for memory; ``None`` for CPU where the timer simply fired;
+        ``None`` for the single-flight violation).
     """
 
     def __init__(
@@ -190,6 +200,19 @@ class SandboxResourceError(BaseException):
             msg = (
                 f"Strategy exceeded memory limit of {limit}MiB "
                 f"(peak {actual}MiB)"
+            )
+        elif kind == SINGLE_FLIGHT_RESOURCE:
+            # The single-flight violation is not a scalar-limit breach, so
+            # ``limit`` / ``actual`` are ``None``; the explanatory text is
+            # what tells the caller how to fix the call site.
+            msg = (
+                "resource_limits is not re-entrant: another guarded call is "
+                "already in flight on this interpreter. The SIGALRM handler "
+                "and tracemalloc peak counter are process-global, so two "
+                "overlapping resource_limits regions would corrupt each "
+                "other's teardown. Serialise guarded regions (e.g. via the "
+                "host sandbox's _eval_lock) and do not nest resource_limits "
+                "contexts."
             )
         else:
             msg = f"Strategy exceeded {kind} resource limit"
@@ -478,15 +501,12 @@ def resource_limits(
     # ``Lock``) or silently clobbering the in-flight handler/peak (another
     # thread).  Released in the ``finally`` below so it is always freed,
     # including when the body raises :class:`SandboxResourceError`.
+    #
+    # The violation is reported as a :class:`SandboxResourceError` (not a
+    # plain :class:`RuntimeError`) so callers only need to catch the single
+    # Layer-3 exception type regardless of which guard fired.
     if not _guard_lock.acquire(blocking=False):
-        raise RuntimeError(
-            "resource_limits is not re-entrant: another guarded call is "
-            "already in flight on this interpreter. The SIGALRM handler "
-            "and tracemalloc peak counter are process-global, so two "
-            "overlapping resource_limits regions would corrupt each other's "
-            "teardown. Serialise guarded regions (e.g. via the host "
-            "sandbox's _eval_lock) and do not nest resource_limits contexts."
-        )
+        raise SandboxResourceError(SINGLE_FLIGHT_RESOURCE, limit=None)
 
     cpu_state = _CpuGuardState()
     mem_state = _MemoryGuardState()

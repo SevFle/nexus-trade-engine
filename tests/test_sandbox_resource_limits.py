@@ -12,8 +12,9 @@ Covers:
 3. Memory guard — :mod:`tracemalloc`-based Python-allocation soft-cap.
 4. The single-flight module-level :class:`threading.Lock` — re-entrant
    (same-thread) and concurrent (cross-thread) entry must be rejected with a
-   clear :class:`RuntimeError` rather than deadlocking or silently corrupting
-   the process-global SIGALRM handler / tracemalloc peak counter.
+   clear :class:`SandboxResourceError` (``kind="single_flight"``) rather
+   than deadlocking or silently corrupting the process-global SIGALRM
+   handler / tracemalloc peak counter.
 5. Graceful degradation — disabled guards, missing ``signal``/``tracemalloc``
    support, and resource-limit values ``<= 0``.
 6. Teardown correctness — the single-flight lock is released even when the
@@ -32,6 +33,7 @@ import pytest
 from engine.plugins.sandbox.resource_limits import (
     CPU_RESOURCE,
     MEMORY_RESOURCE,
+    SINGLE_FLIGHT_RESOURCE,
     ResourceLimits,
     SandboxResourceError,
     _can_use_signals,
@@ -88,6 +90,7 @@ class TestPublicAPISurface:
     def test_cpu_resource_constants(self) -> None:
         assert CPU_RESOURCE == "cpu"
         assert MEMORY_RESOURCE == "memory"
+        assert SINGLE_FLIGHT_RESOURCE == "single_flight"
 
     def test_cpu_error_message(self) -> None:
         err = SandboxResourceError(CPU_RESOURCE, limit=2.5)
@@ -110,6 +113,23 @@ class TestPublicAPISurface:
     def test_unknown_kind_message(self) -> None:
         err = SandboxResourceError("fds", limit=1)
         assert "fds resource limit" in str(err)
+
+    def test_single_flight_error_message(self) -> None:
+        """The single-flight violation carries the explanatory message and
+        the structured ``kind`` metadata so callers catching
+        :class:`SandboxResourceError` can branch on it just like the CPU /
+        memory guards."""
+        err = SandboxResourceError(SINGLE_FLIGHT_RESOURCE, limit=None)
+        assert err.kind == SINGLE_FLIGHT_RESOURCE
+        assert err.limit is None
+        assert err.actual is None
+        message = str(err)
+        # The message names the offending API and the cause.
+        assert "resource_limits" in message
+        assert "re-entrant" in message
+        # And the process-global resource that motivates the lock.
+        assert "SIGALRM" in message
+        assert "tracemalloc" in message
 
     def test_resource_limits_defaults(self) -> None:
         limits = ResourceLimits()
@@ -328,7 +348,9 @@ class TestSingleFlightGuard:
 
     A re-entrant call would otherwise clobber the outer guard's teardown
     (the inner exit restores the outer's handler and stops the outer's
-    tracemalloc session mid-flight).
+    tracemalloc session mid-flight).  The rejection is raised as a
+    :class:`SandboxResourceError` with ``kind="single_flight"`` so callers
+    only need to catch the single Layer-3 exception type.
     """
 
     def test_reentrant_entry_from_same_thread_rejected(self) -> None:
@@ -336,26 +358,34 @@ class TestSingleFlightGuard:
 
         Entering :func:`resource_limits` while already inside another
         :func:`resource_limits` (on the same thread) must raise a clear
-        :class:`RuntimeError` rather than deadlocking (a plain
-        :class:`threading.Lock` would deadlock) or silently corrupting the
-        outer guard's teardown state."""
+        :class:`SandboxResourceError` (``kind="single_flight"``) rather
+        than deadlocking (a plain :class:`threading.Lock` would deadlock) or
+        silently corrupting the outer guard's teardown state."""
         limits = ResourceLimits(cpu_timeout_seconds=2.0, max_memory_mb=0)
         with (
             resource_limits(limits),
-            pytest.raises(RuntimeError, match="not re-entrant"),
+            pytest.raises(SandboxResourceError, match="not re-entrant"),
             resource_limits(limits),
         ):
             pytest.fail("re-entrant entry must be rejected")
 
     def test_reentrant_error_message_names_the_cause(self) -> None:
-        """The :class:`RuntimeError` raised on re-entrant entry must clearly
-        explain *why* re-entry is forbidden (so the caller knows to
-        serialise their guarded regions)."""
+        """The :class:`SandboxResourceError` raised on re-entrant entry must
+        clearly explain *why* re-entry is forbidden (so the caller knows to
+        serialise their guarded regions) and carry ``kind="single_flight"``
+        metadata so callers can branch on it."""
         limits = ResourceLimits(cpu_timeout_seconds=2.0, max_memory_mb=0)
         with resource_limits(limits):
-            with pytest.raises(RuntimeError) as exc_info, resource_limits(limits):
+            with (
+                pytest.raises(SandboxResourceError) as exc_info,
+                resource_limits(limits),
+            ):
                 pass
-            message = str(exc_info.value)
+            err = exc_info.value
+            assert err.kind == SINGLE_FLIGHT_RESOURCE
+            assert err.limit is None
+            assert err.actual is None
+            message = str(err)
             assert "resource_limits" in message
             assert "re-entrant" in message
             # Mentions the process-global resource that motivates the lock.
@@ -404,7 +434,8 @@ class TestSingleFlightGuard:
     def test_concurrent_entry_from_another_thread_rejected(self) -> None:
         """A second thread that attempts to enter :func:`resource_limits`
         while the main thread holds the lock is rejected with the same
-        clear :class:`RuntimeError` (raised in the second thread)."""
+        clear :class:`SandboxResourceError` (``kind="single_flight"``,
+        raised in the second thread)."""
         limits = ResourceLimits(cpu_timeout_seconds=2.0, max_memory_mb=0)
         errors: list[BaseException] = []
         barrier = threading.Barrier(2)
@@ -413,8 +444,17 @@ class TestSingleFlightGuard:
             barrier.wait()
             try:
                 with resource_limits(limits):
-                    errors.append(RuntimeError("re-entry unexpectedly succeeded"))
+                    # If we reach here re-entry was *not* rejected, which
+                    # is the bug this test guards against — record a
+                    # sentinel so the assertion below fails loudly.
+                    errors.append(
+                        RuntimeError("re-entry unexpectedly succeeded"),
+                    )
             except BaseException as exc:
+                # capture every BaseException here, including
+                # :class:`SandboxResourceError` (which is *not* an
+                # :class:`Exception`) and ``KeyboardInterrupt`` / thread
+                # teardown noise during failure modes.
                 errors.append(exc)
 
         with resource_limits(limits):
@@ -426,7 +466,8 @@ class TestSingleFlightGuard:
             t.join(timeout=2.0)
         assert not t.is_alive(), "inner thread should have terminated promptly"
         assert len(errors) == 1
-        assert isinstance(errors[0], RuntimeError)
+        assert isinstance(errors[0], SandboxResourceError)
+        assert errors[0].kind == SINGLE_FLIGHT_RESOURCE
         assert "re-entrant" in str(errors[0])
 
     def test_sequential_entries_from_different_threads_succeed(self) -> None:
@@ -478,7 +519,7 @@ class TestGracefulDegradation:
         limits = ResourceLimits(cpu_timeout_seconds=0, max_memory_mb=0)
         with (
             resource_limits(limits),
-            pytest.raises(RuntimeError, match="re-entrant"),
+            pytest.raises(SandboxResourceError, match="re-entrant"),
             resource_limits(limits),
         ):
             pass
