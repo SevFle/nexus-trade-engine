@@ -105,7 +105,8 @@ docs/
 │   ├── 0008-pluggable-metrics-backend.md
 │   ├── 0009-cross-replica-eventbus-bridge.md
 │   ├── 0010-static-ast-validation-toctou-loading.md
-│   └── 0011-runtime-introspection-blocking.md
+│   ├── 0011-runtime-introspection-blocking.md
+│   └── 0012-sandbox-resource-limits-single-flight.md
 ├── api-reference.md                ← every HTTP/WS route, auth, schemas
 ├── mcp-server.md                   ← MCP tools/resources/auth (LLM agent surface)
 ├── mcp/                            ← MCP surface audit + catalog (generated map)

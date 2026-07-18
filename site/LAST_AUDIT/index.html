@@ -2503,26 +2503,10 @@
 
 <h1 id="last-engineering-docs-audit">Last engineering-docs audit<a class="headerlink" href="#last-engineering-docs-audit" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>Timestamp:</strong> 2026-07-18T17:00:00Z</li>
-<li><strong>Cycle:</strong> 1867</li>
+<li><strong>Timestamp:</strong> 2026-07-18T16:53:09Z</li>
+<li><strong>Cycle:</strong> 1884</li>
 <li><strong>Commit:</strong> <code>8f211bf9</code></li>
-<li><strong>Target:</strong> reflect latest 1867 cycles of development</li>
-</ul>
-<p>Changes reconciled in this pass:</p>
-<ul>
-<li>Sandbox layer 3 grew a dedicated <code>engine/plugins/sandbox/resource_limits.py</code>
-  module (#1539) — SIGALRM CPU timer, tracemalloc memory cap, single-flight
-  lock. <a href="../architecture/plugins/"><code>architecture/plugins.md</code></a> layer-3 row and
-  file inventory updated; new <a href="../adr/0012-sandbox-resource-limits-single-flight/">ADR-0012</a>
-  captures the design.</li>
-<li>API identifier validation centralised in
-  <a href="../engine/api/validators.py"><code>engine/api/validators.py</code></a> (#1535) — the
-  <code>SafeIdentifier</code> pattern is now enforced on every
-  <code>/strategies/{strategy_id}</code> and <code>/scoring/{strategy_name}</code> path param.
-  <a href="../api-reference/"><code>api-reference.md</code></a> notes the contract.</li>
-<li><code>scripts/compose-entrypoint.py</code> (#1358) added as an optional wrapper for
-  URL-encoding DB / Valkey passwords with reserved characters.
-  <a href="../deployment/"><code>deployment.md</code></a> documents the failure mode it closes.</li>
+<li><strong>Target:</strong> reflect latest 1884 cycles of development</li>
 </ul>
 <p>This file is touched on every <code>do_engineering_docs</code> run by kaizen, so
 its mtime tells you when documentation was last reconciled with the

@@ -13,20 +13,22 @@ two independent guards:
    raises :class:`SandboxResourceError` so the violation propagates as a
    Python exception.
 
-   :class:`SandboxResourceError` inherits from :class:`RuntimeError` (and
-   therefore :class:`Exception`).  Defeat-resistance does **not** come from
-   the exception hierarchy: it comes from the sandbox runtime itself, which
-   blocks sandboxed strategies from introspecting host-side frames and
-   types.  A sandboxed strategy cannot import
-   :mod:`engine.plugins.sandbox.resource_limits` (the restricted importer
-   denies ``engine.*``), cannot reach the :class:`SandboxResourceError`
-   symbol via ``sys.modules`` or host-frame walking (frame filters strip
-   host frames from raised exceptions), and therefore cannot name the type
-   in an ``except`` clause.  Its only available catch-all is the generic
-   ``except Exception``, which *would* match — but the host sandbox
-   re-asserts the SIGALRM guard on the next bytecode boundary and
-   translates any surviving exception into a hard kill of the strategy
-   regardless.
+   :class:`SandboxResourceError` inherits **directly** from
+   :class:`BaseException` — *not* from :class:`Exception`.  This is the
+   single most important defeat-resistance invariant of the Layer-3
+   guards: a strategy that wraps its hot loop in ``except Exception: pass``
+   cannot swallow the ``SIGALRM``-raised violation, because the generic
+   ``except Exception`` clause does not match a :class:`BaseException`
+   subclass.  The sandbox runtime itself additionally blocks sandboxed
+   strategies from introspecting host-side frames and types — a sandboxed
+   strategy cannot import :mod:`engine.plugins.sandbox.resource_limits`
+   (the restricted importer denies ``engine.*``), cannot reach the
+   :class:`SandboxResourceError` symbol via ``sys.modules`` or host-frame
+   walking (frame filters strip host frames from raised exceptions), and
+   therefore cannot name the type in an ``except`` clause — but the
+   :class:`BaseException` base is the *first* line of defence and is
+   deliberately chosen so the canonical ``except Exception: pass``
+   defeat-attempt fails on its own.
 
 2. **Memory cap** — enforced via :mod:`tracemalloc`.
 
@@ -146,34 +148,34 @@ SINGLE_FLIGHT_RESOURCE: str = "single_flight"
 _guard_lock: _threading.Lock = _threading.Lock()
 
 
-class SandboxResourceError(RuntimeError):
+class SandboxResourceError(BaseException):
     """Raised when a sandboxed strategy exceeds a declared resource limit.
 
     .. note::
 
-       This exception inherits from :class:`RuntimeError` (and therefore
-       :class:`Exception`).  Earlier revisions derived it directly from
-       :class:`BaseException` so a strategy's ``except Exception`` clause
-       could not swallow it — but that defence-in-depth was redundant: the
-       real protection comes from the sandbox runtime blocking
-       introspection.  A sandboxed strategy cannot import this module (the
-       restricted importer denies ``engine.*``), cannot reach the
-       :class:`SandboxResourceError` symbol via ``sys.modules`` or
-       host-frame walking (frame filters strip host frames from raised
-       exceptions), and therefore cannot name the type in an ``except``
-       clause.  Its only available catch-all is the generic
-       ``except Exception``, which the host sandbox renders irrelevant by
-       re-asserting the SIGALRM guard on the next bytecode boundary and
-       translating any surviving exception into a hard kill of the
-       strategy.
+       This exception inherits **directly** from :class:`BaseException` —
+       *not* from :class:`Exception`.  This is deliberate and load-bearing:
+       it is the single most important defeat-resistance invariant of the
+       Layer-3 guards.  A sandboxed strategy that wraps its hot loop in
+       ``except Exception: pass`` (the canonical defeat-attempt) **cannot**
+       swallow a ``SIGALRM``-raised :class:`SandboxResourceError`, because
+       the generic ``except Exception`` clause does not match a
+       :class:`BaseException` subclass.  If this inheritance were ever
+       reverted to derive from :class:`RuntimeError` / :class:`Exception`,
+       the CPU timeout would become trivially defeatable and the entire
+       Layer-3 guard would be cosmetic.
 
-       Inheriting from :class:`RuntimeError` keeps :class:`SandboxResourceError`
-       within the ordinary :class:`Exception` hierarchy, which means host
-       code that does a blanket ``except Exception`` (e.g. task workers,
-       observability middleware, asyncio error handlers) sees and logs it
-       correctly instead of letting it tear the worker down as an
-       unhandled :class:`BaseException` would.  That observability win is
-       worth more than the redundant hierarchy-based defence.
+       Host-side callers that wish to observe a :class:`SandboxResourceError`
+       must therefore catch :class:`BaseException` (or the specific
+       :class:`SandboxResourceError` type) — a blanket ``except Exception``
+       will **not** see it.  This is the intended behaviour: a resource
+       violation is a hard kill that should propagate past ordinary
+       error-handling middleware, not be silently logged-and-swallowed as
+       a routine strategy error.  The sandbox runtime's introspection
+       blocks (restricted importer denying ``engine.*``, frame filters
+       stripping host frames from raised exceptions) provide additional
+       defence-in-depth so a sandboxed strategy cannot even *name* the
+       :class:`SandboxResourceError` type in an ``except`` clause.
 
     Distinct from the generic :class:`TimeoutError` raised by the asyncio
     wall-clock timeout: ``SandboxResourceError`` is raised by the dedicated

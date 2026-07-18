@@ -1,9 +1,9 @@
 # Last engineering-docs audit
 
-- **Timestamp:** 2026-07-18T16:53:09Z
-- **Cycle:** 1884
-- **Commit:** `8f211bf9`
-- **Target:** reflect latest 1884 cycles of development
+- **Timestamp:** 2026-07-18T21:25:06Z
+- **Cycle:** 1890
+- **Commit:** `f0074785`
+- **Target:** reflect latest 1890 cycles of development
 
 This file is touched on every `do_engineering_docs` run by kaizen, so
 its mtime tells you when documentation was last reconciled with the

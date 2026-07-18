@@ -33,6 +33,11 @@ dependencies = [
     "python-multipart>=0.0.9",
     "mcp>=1.0.0",
     "sse-starlette>=3.4.0",
+    # Prometheus pull-mode exposition. Used by engine/middleware/prometheus.py
+    # to record HTTP request latency / counters / in-flight gauges into the
+    # default REGISTRY, exposed at /metrics/prometheus. The optional Twisted
+    # extra is not needed.
+    "prometheus-client>=0.20.0",
     # zoneinfo has no bundled IANA tz database on minimal Python images
     # (e.g. the python:3.12 CI container); ship tzdata so ZoneInfo("US/Eastern")
     # and friends resolve at runtime.
