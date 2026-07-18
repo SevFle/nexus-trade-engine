@@ -13,8 +13,9 @@ edit this file by hand — it is regenerated as part of every release PR.
 ## [Unreleased]
 
 ### Fixed
+- (fix) Fix HIGH-severity eager-evaluation bug in `engine/api/routes/marketplace.py` where `getattr(catalog, 'get', _fallback_strategy_get(catalog))` constructed the fallback adapter on every request regardless of whether `catalog.get` existed; replaced with a lazy callable so the adapter is only built when actually needed. Fix MEDIUM-severity security issue where raw `strategy_id` was reflected verbatim in 404 error `detail`, enabling information leakage; error responses now return a generic message.
 - (fix) Fix critical sandbox security bypasses: add `__dict__` and missing escape primitives (`__reduce__`, `__reduce_ex__`, `__wrapped__`, `__self__`, `__loader__`, `__spec__`, `__objclass__`, `__defaults__`, `__kwdefaults__`) to `_BLOCKED_ATTRS` in `engine/plugins/sandbox/__init__.py`; add `@pytest.mark.asyncio` to async tests in `tests/test_sandbox_blocked_attrs.py`.
-- (write_tests) Add a no-retry guard in `LiveExecutionBackend._request` so a transport error on the non-idempotent `POST /v2/orders` (order submission) raises `BrokerConnectionError` immediately instead of retrying, preventing duplicate orders; add unit tests covering the guard and confirming reads still retry.
+- (write_tests) Add a no-retry guard in `LiveExecutionBackend._request` so an transport error on the non-idempotent `POST /v2/orders` (order submission) raises `BrokerConnectionError` immediately instead of retrying, preventing duplicate orders; add unit tests covering the guard and confirming reads still retry.
 - (fix) Fix check ordering in `engine/core/execution/live.py` `execute()` and the two failing tests in `tests/test_execution_backends.py`
 
 ### Internal
@@ -42,13 +43,4 @@ edit this file by hand — it is regenerated as part of every release PR.
 
 
 ### Internal
-- (write_tests) Write tests for the most recently changed code to break the loop
-
-
-### Internal
-- (write_tests) Write tests for the most recently changed code to break the loop
-- (subagent) SEV-267 — Plugin Sandbox with Security Isolation (Phase 2, Lane B)
-
-
-The initial public 0.1.0 release line. Entries below this point are appended
-automatically once release-please starts cutting tagged rele
+- (write_tests) Write tes
