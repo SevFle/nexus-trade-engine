@@ -1241,6 +1241,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#cross-cutting-middleware" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1629,6 +1640,8 @@
       
         
       
+        
+      
     
     
     
@@ -1980,6 +1993,34 @@
     
   
     0011 — Runtime introspection / dunder blocking
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0012-sandbox-resource-limits-single-flight/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0012 — Sandbox resource limits (SIGALRM + tracemalloc + single-flight)
   
 
     
@@ -3162,6 +3203,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#cross-cutting-middleware" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3633,6 +3685,15 @@ All routes require legal acceptance.</p>
 </table>
 <h2 id="strategies">Strategies<a class="headerlink" href="#strategies" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/strategies/*</code>. Source: <a href="../engine/api/routes/strategies.py"><code>routes/strategies.py</code></a>.</p>
+<p>Every <code>{strategy_id}</code> path param is validated by the shared
+<a href="../engine/api/validators.py"><code>SafeIdentifier</code></a> pattern
+(<code>^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$</code>, max 64 chars) at the FastAPI
+validation layer — values outside that grammar return <code>422</code> <em>before</em>
+the handler runs. The pattern accepts dotted namespacing
+(<code>mypackage.v2</code>) but rejects empty identifiers, leading/trailing
+dots, consecutive dots (<code>..</code>), and any non-<code>[A-Za-z0-9_-]</code> character,
+so a hostile identifier can never reach a registry lookup, DB query,
+or reflected error <code>detail</code>. See <a href="#validation">Validation</a> below.</p>
 <table>
 <thead>
 <tr>
@@ -3710,6 +3771,10 @@ served via OpenAPI.</p>
 <h2 id="scoring">Scoring<a class="headerlink" href="#scoring" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/scoring/*</code>. Source: <a href="../engine/api/routes/scoring.py"><code>routes/scoring.py</code></a>.
 Requires legal acceptance.</p>
+<p><code>{strategy_name}</code> path params share the same
+<a href="../engine/api/validators.py"><code>SafeIdentifier</code></a> contract as
+<code>/strategies/{strategy_id}</code> — see <a href="#strategies">Strategies</a> and
+<a href="#validation">Validation</a>.</p>
 <table>
 <thead>
 <tr>
@@ -3808,6 +3873,16 @@ instantiated outside pytest).</p>
 (<a href="../engine/marketplace/search.py"><code>engine/marketplace/search.py</code></a>)
 seeded with demo strategies. <strong>Not persisted, not cross-replica</strong> — a
 browse/UX preview, not a source of truth.</p>
+<blockquote>
+<p><strong>Information-leakage hygiene (gh#1527).</strong> The catalog-lookup
+fallback in <code>routes/marketplace.py</code> was rewritten to be <strong>lazy</strong>
+(the adapter is built only when <code>catalog.get</code> is actually missing)
+and 404 responses no longer reflect the raw <code>strategy_id</code> in the
+<code>detail</code> field — both the eager construction and the verbatim
+echo were flagged in a security review. Error bodies now return a
+generic message so a probe cannot enumerate installed strategy ids
+or confirm/deny existence via reflected text.</p>
+</blockquote>
 <h2 id="reference">Reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h2>
 <p><code>/api/v1/reference/*</code>. Source: <a href="../engine/api/routes/reference.py"><code>routes/reference.py</code></a>.</p>
 <table>
@@ -4191,7 +4266,12 @@ can only arrive after the socket opens (in-band browser refresh).</p>
   insufficient role/scope; <strong><code>451</code></strong> for missing legal acceptance
   (body <code>{code:"legal_re_acceptance_required", documents:[…]}</code>).</li>
 <li><strong>Validation</strong>: <code>422</code> from FastAPI; <code>400</code> for hand-rolled checks
-  (e.g. invalid scope in API keys, unknown tax jurisdiction).</li>
+  (e.g. invalid scope in API keys, unknown tax jurisdiction).
+  Identifiers in user-controlled path params (<code>{strategy_id}</code> on
+  <code>/strategies/*</code>, <code>{strategy_name}</code> on <code>/scoring/*</code>) are validated
+  up front by the shared <code>SafeIdentifier</code> pattern in
+  <a href="../engine/api/validators.py"><code>engine/api/validators.py</code></a> — see
+  <a href="#validation">Validation</a>.</li>
 <li><strong>Rate limit</strong>: <code>429</code> with <code>Retry-After</code> from
   <a href="../engine/api/rate_limit.py"><code>RateLimitMiddleware</code></a>. Default 600
   req/min/IP, burst 60. <code>/health</code> and <code>/metrics</code> are exempt;
@@ -4200,6 +4280,34 @@ can only arrive after the socket opens (in-band browser refresh).</p>
   (<a href="../engine/api/body_size_limit.py"><code>BodySizeLimitMiddleware</code></a>).</li>
 <li><strong>Provider errors</strong>: see Market data section above.</li>
 </ul>
+<p><a id="validation"></a></p>
+<h2 id="validation">Validation<a class="headerlink" href="#validation" title="Permanent link">&para;</a></h2>
+<p>User-controlled identifier path params (<code>{strategy_id}</code> on
+<code>/strategies/*</code>, <code>{strategy_name}</code> on <code>/scoring/*</code>) are validated by
+the shared <a href="../engine/api/validators.py"><code>SafeIdentifier</code></a> alias —
+an <code>Annotated[str, Path(...)]</code> that bundles a regex pattern and a
+length cap so every route module enforces the <em>same</em> contract without
+re-deriving it.</p>
+<ul>
+<li>Pattern: <code>^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$</code> — one or more
+  dot-free tokens separated by single dots.</li>
+<li>Max length: 64 characters.</li>
+<li>Grammar: alphanumerics, underscore, hyphen, and <code>.</code> <strong>only as a
+  separator</strong> between non-empty tokens. Leading/trailing dots,
+  consecutive dots (<code>..</code>), and any other character class are
+  rejected.</li>
+<li>Effect: non-conforming values return <code>422 Unprocessable Entity</code>
+  from FastAPI <em>before</em> the handler runs, so a hostile identifier
+  can never reach a registry lookup, a DB query, or a reflected
+  error <code>detail</code>.</li>
+</ul>
+<p>The pattern is deliberately written without look-around assertions
+because Pydantic v2 compiles it with the Rust <code>regex</code> crate, which
+does not support lookahead/look-behind; the "token (<code>.</code> token)*"
+formulation achieves the dot discipline constructively. Dotted
+namespacing (<code>mypackage.v2</code>) is accepted so versioned strategy
+packages keep working — a regression test for that exact shape lives
+in <a href="../tests/test_validators.py"><code>tests/test_validators.py</code></a>.</p>
 <h2 id="cross-cutting-middleware">Cross-cutting middleware<a class="headerlink" href="#cross-cutting-middleware" title="Permanent link">&para;</a></h2>
 <p>Applied in reverse order in <a href="../engine/app.py#L154"><code>create_app</code></a> so the
 last-added wraps everything:</p>

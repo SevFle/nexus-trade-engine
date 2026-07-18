@@ -105,7 +105,8 @@ docs/
 │   ├── 0008-pluggable-metrics-backend.md
 │   ├── 0009-cross-replica-eventbus-bridge.md
 │   ├── 0010-static-ast-validation-toctou-loading.md
-│   └── 0011-runtime-introspection-blocking.md
+│   ├── 0011-runtime-introspection-blocking.md
+│   └── 0012-sandbox-resource-limits-single-flight.md
 ├── api-reference.md                ← every HTTP/WS route, auth, schemas
 ├── mcp-server.md                   ← MCP tools/resources/auth (LLM agent surface)
 ├── mcp/                            ← MCP surface audit + catalog (generated map)
@@ -147,7 +148,7 @@ docs/
   over because they grow monotonically with the surface they describe
   and are heavily cross-linked by anchor — splitting them would fragment
   navigation more than it helps:
-  - [`api-reference.md`](api-reference.md) (~520 lines) is the full HTTP/WS
+  - [`api-reference.md`](api-reference.md) (~570 lines) is the full HTTP/WS
     route catalog, split by domain *within* the file; it has 9 inbound
     anchor links from other docs.
   - [`known-limitations.md`](known-limitations.md) (~510 lines) is the

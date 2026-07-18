@@ -1358,6 +1358,8 @@
       
         
       
+        
+      
     
     
     
@@ -1709,6 +1711,34 @@
     
   
     0011 — Runtime introspection / dunder blocking
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0012-sandbox-resource-limits-single-flight/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0012 — Sandbox resource limits (SIGALRM + tracemalloc + single-flight)
   
 
     
@@ -2850,7 +2880,7 @@ something to stake a customer's data on.</p>
 <td>3. Resource limits</td>
 <td>best-effort in-process</td>
 <td><strong>shipped</strong></td>
-<td><code>resource.setrlimit</code> for memory / file descriptors on Linux.</td>
+<td><a href="../../engine/plugins/sandbox/resource_limits.py"><code>engine/plugins/sandbox/resource_limits.py</code></a> wraps every <code>evaluate()</code> / <code>on_bar()</code> call in a <code>resource_limits(...)</code> context manager that enforces <strong>two independent guards</strong>: (a) <strong>CPU time</strong> via <code>signal.SIGALRM</code> / <code>setitimer</code> — kernel-delivered on the next bytecode boundary, so it preempts a tight loop that never <code>await</code>s (the asyncio <code>wait_for</code> can only fire on loop re-entry); (b) <strong>memory cap</strong> via <code>tracemalloc</code> peak/high-water snapshot plus a background daemon-thread poller that catches a sustained breach within <code>poll_interval</code>. A separate <code>RLIMIT_AS</code> kernel backstop (installed by the host sandbox, not this module) covers native/C-extension allocations <code>tracemalloc</code> cannot see (NumPy buffers, <code>mmap</code>, …) — the tracemalloc layer is a best-effort Python-visible trip-wire that fires a structured <code>SandboxResourceError(kind="memory")</code> <em>before</em> the harder <code>MemoryError</code>. Violations surface as <code>SandboxResourceError(RuntimeError)</code> carrying structured <code>kind</code> / <code>limit</code> / <code>actual</code> metadata so dashboards can tell a CPU blow-up from a memory blow-up. A module-level non-reentrant <code>threading.Lock</code> serialises entry because <code>SIGALRM</code> handler slots and the tracemalloc peak counter are <strong>process-global</strong> — overlapping invocations would clobber each other's teardown; re-entrant or concurrent entry raises <code>SandboxResourceError(kind="single_flight")</code> instead of deadlocking or racing. See <a href="../../adr/0012-sandbox-resource-limits-single-flight/">ADR-0012</a>.</td>
 </tr>
 <tr>
 <td>4. Filesystem isolation</td>
@@ -2882,9 +2912,11 @@ their trusted deployment surface today:</p>
 <a href="../../engine/plugins/sandbox/__init__.py"><code>sandbox/__init__.py</code></a>.
 <a href="../../adr/0010-static-ast-validation-toctou-loading/">ADR-0010</a> covers
 the static-AST Layer 0 + the validate-then-exec loader; <a href="../../adr/0011-runtime-introspection-blocking/">ADR-0011</a>
-covers the runtime introspection guard (Layer 0a). An ADR covering
-the final isolation choice (likely WASI for strategies, separate process
-for executors) is deferred until that work is sequenced.</p>
+covers the runtime introspection guard (Layer 0a); <a href="../../adr/0012-sandbox-resource-limits-single-flight/">ADR-0012</a>
+covers the Layer-3 resource-limits design and the single-flight lock
+that protects the process-global <code>SIGALRM</code> / <code>tracemalloc</code> state. An
+ADR covering the final isolation choice (likely WASI for strategies,
+separate process for executors) is deferred until that work is sequenced.</p>
 <h2 id="where-the-code-lives">Where the code lives<a class="headerlink" href="#where-the-code-lives" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -2917,6 +2949,10 @@ for executors) is deferred until that work is sequenced.</p>
 <tr>
 <td><a href="../../engine/plugins/sandbox/__init__.py"><code>engine/plugins/sandbox/__init__.py</code></a></td>
 <td>Layered strategy sandbox (see below).</td>
+</tr>
+<tr>
+<td><a href="../../engine/plugins/sandbox/resource_limits.py"><code>engine/plugins/sandbox/resource_limits.py</code></a></td>
+<td>Layer-3 <code>resource_limits(...)</code> context manager: SIGALRM CPU timer + <code>tracemalloc</code> memory cap + single-flight lock. Host-side module (imported before sandbox restrictions activate; <code>engine.*</code> is denied by the restricted importer so sandboxed code cannot reach it).</td>
 </tr>
 <tr>
 <td><a href="../../engine/plugins/sandbox/filesystem.py"><code>engine/plugins/sandbox/filesystem.py</code></a></td>
