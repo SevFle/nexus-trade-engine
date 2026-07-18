@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from engine.api.auth.dependency import get_current_user
+from engine.api.validators import SafeIdentifier
 from engine.db.models import ScoringSnapshot, User
 from engine.deps import get_db
 from engine.legal.dependencies import require_legal_acceptance
@@ -31,6 +32,12 @@ class ScoringRunResponse(BaseModel):
     universe_size: int
 
 
+# Strategy identifiers are validated at the FastAPI layer via the shared
+# :data:`engine.api.validators.SafeIdentifier` alias (pattern + max length).
+# A malformed or hostile identifier (markup, path traversal, control chars)
+# is rejected with a 422 *before* the handler runs, so it can never reach
+# a registry lookup, DB query, log line, or reflected error detail.
+
 _STRATEGIES_DIR = None
 
 
@@ -40,7 +47,7 @@ def _get_registry() -> PluginRegistry:
 
 @router.post("/{strategy_name}/run", response_model=ScoringRunResponse)
 async def run_scoring(
-    strategy_name: str,
+    strategy_name: SafeIdentifier,
     body: ScoringRunRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -79,7 +86,7 @@ async def run_scoring(
 
 @router.get("/{strategy_name}/results")
 async def get_scoring_results(
-    strategy_name: str,
+    strategy_name: SafeIdentifier,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
     limit: int = Query(default=20, ge=1, le=100),
