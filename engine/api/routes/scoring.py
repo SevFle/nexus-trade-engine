@@ -33,10 +33,12 @@ class ScoringRunResponse(BaseModel):
 
 
 # Strategy identifiers are validated at the FastAPI layer via the shared
-# :data:`engine.api.validators.SafeIdentifier` alias (pattern + max length).
-# A malformed or hostile identifier (markup, path traversal, control chars)
-# is rejected with a 422 *before* the handler runs, so it can never reach
-# a registry lookup, DB query, log line, or reflected error detail.
+# :data:`engine.api.validators.SafeIdentifier` alias, which bundles
+# :data:`engine.api.validators.SAFE_IDENTIFIER_PATTERN` plus the min/max
+# length bounds from :mod:`engine.api.validators`.  A malformed or hostile
+# identifier (markup, path traversal, control chars, ``.``, ``/``) is
+# rejected with a 422 *before* the handler runs, so it can never reach a
+# registry lookup, DB query, log line, or reflected error detail.
 
 _STRATEGIES_DIR = None
 
