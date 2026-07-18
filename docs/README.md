@@ -147,7 +147,7 @@ docs/
   over because they grow monotonically with the surface they describe
   and are heavily cross-linked by anchor — splitting them would fragment
   navigation more than it helps:
-  - [`api-reference.md`](api-reference.md) (~520 lines) is the full HTTP/WS
+  - [`api-reference.md`](api-reference.md) (~570 lines) is the full HTTP/WS
     route catalog, split by domain *within* the file; it has 9 inbound
     anchor links from other docs.
   - [`known-limitations.md`](known-limitations.md) (~510 lines) is the

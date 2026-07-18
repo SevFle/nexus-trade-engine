@@ -137,6 +137,41 @@ The live socket registry is per-process; event *delivery* is
 Never put secrets in a committed `.env`. Compose reads `.env` from
 the working directory; CI injects via the secrets manager.
 
+### Passwords with reserved characters — `scripts/compose-entrypoint.py`
+
+Docker Compose interpolates `${POSTGRES_PASSWORD}` / `${VALKEY_PASSWORD}`
+verbatim into the `NEXUS_DATABASE_URL` / `NEXUS_VALKEY_URL` connection
+strings. It cannot URL-encode them, so a password that contains a
+reserved URI character (`@`, `/`, `:`, `%`, `#`, `+` …) silently
+corrupts the URL and the service fails to connect with an opaque
+`invalid URL` / `authentication failed` error that gives no hint the
+password is the culprit.
+
+[`scripts/compose-entrypoint.py`](../scripts/compose-entrypoint.py)
+(#1358) is an optional wrapper that closes this. It rebuilds both URLs
+from their individual `POSTGRES_*` / `VALKEY_*` parts, percent-encoding
+every component with `urllib.parse.quote` (the encoder SQLAlchemy /
+asyncpg / redis-py expect), validates ports and Valkey logical-DB index,
+then `exec`s the real entrypoint (`uvicorn` / `taskiq`) so the process
+keeps PID 1 and signal handling stays correct. The URL builders are
+exposed as pure functions (`build_database_url`, `build_valkey_url`) so
+they can be unit-tested without spawning a process.
+
+Wire it in by overriding the service entrypoint:
+
+```yaml
+services:
+  nexus-api:
+    entrypoint: ["python", "/app/scripts/compose-entrypoint.py", "uvicorn", "engine.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+  worker:
+    entrypoint: ["python", "/app/scripts/compose-entrypoint.py", "python", "-m", "taskiq", "worker", "engine.tasks.worker:broker"]
+```
+
+The default `docker-compose.yml` does **not** use this wrapper today —
+the happy path (alnum-only passwords) is byte-identical either way. Pull
+it in only if your secrets manager emits passwords containing reserved
+URI characters.
+
 ## Database setup
 
 ```bash

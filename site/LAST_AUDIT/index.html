@@ -1240,6 +1240,8 @@
       
         
       
+        
+      
     
     
     
@@ -1591,6 +1593,34 @@
     
   
     0011 — Runtime introspection / dunder blocking
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0012-sandbox-resource-limits-single-flight/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0012 — Sandbox resource limits (SIGALRM + tracemalloc + single-flight)
   
 
     
@@ -2404,24 +2434,6 @@
         
       
       
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Last audit
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -2438,58 +2450,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#2026-07-17-reconciliation-against-recent-main" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2026-07-17 — reconciliation against recent main
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#docsknown-limitationsmd-marketplace-section-refreshed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        docs/known-limitations.md — marketplace section refreshed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#prior-cycle-notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Prior cycle notes
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
       
     </li>
   
@@ -2523,47 +2483,6 @@
     
   
   
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#2026-07-17-reconciliation-against-recent-main" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2026-07-17 — reconciliation against recent main
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#docsknown-limitationsmd-marketplace-section-refreshed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        docs/known-limitations.md — marketplace section refreshed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#prior-cycle-notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Prior cycle notes
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
 </nav>
                   </div>
                 </div>
@@ -2584,50 +2503,30 @@
 
 <h1 id="last-engineering-docs-audit">Last engineering-docs audit<a class="headerlink" href="#last-engineering-docs-audit" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>Timestamp:</strong> 2026-07-17T00:00:00Z</li>
-<li><strong>Commit:</strong> <code>b809847d</code> (HEAD)</li>
-<li><strong>Target:</strong> reconcile docs with the latest landed features</li>
+<li><strong>Timestamp:</strong> 2026-07-18T17:00:00Z</li>
+<li><strong>Cycle:</strong> 1867</li>
+<li><strong>Commit:</strong> <code>8f211bf9</code></li>
+<li><strong>Target:</strong> reflect latest 1867 cycles of development</li>
 </ul>
-<p>This file is touched on every documentation-reconciliation pass, so its
-mtime tells you when the docs were last compared against the source —
-even when the audit produced no diff.</p>
-<h2 id="2026-07-17-reconciliation-against-recent-main">2026-07-17 — reconciliation against recent <code>main</code><a class="headerlink" href="#2026-07-17-reconciliation-against-recent-main" title="Permanent link">&para;</a></h2>
-<p>Closed four drift gaps where the docs lagged behind merged features.
-Each fix was verified against the current source:</p>
+<p>Changes reconciled in this pass:</p>
 <ul>
-<li><strong><code>docs/api-reference.md</code> (Marketplace)</strong> — documented
-  <code>GET /api/v1/marketplace/search</code> (gh#1476): query params
-  (<code>q</code>/<code>category</code>/<code>tag</code>/<code>sort</code>/<code>page</code>/<code>limit</code>), the <code>SearchResponse</code>
-  shape, the <code>relevance → downloads</code> empty-query fallback, the 1–100
-  limit range, and the <code>400</code> on unknown <code>sort</code>/out-of-range <code>limit</code>.
-  Also recorded that it is backed by the in-memory catalog (see below).</li>
-<li><strong><code>docs/api-reference.md</code> (WebSocket auth)</strong> — documented the
-  CIDR-aware client-IP resolution behind <code>NEXUS_TRUSTED_PROXIES</code>
-  (gh#1497): rightmost <code>X-Forwarded-For</code> hop (then <code>X-Real-IP</code>) is used
-  only when the direct peer is a trusted network; otherwise headers are
-  ignored. REST and WS share <code>engine/api/ip_utils.py</code>.</li>
-<li><strong><code>docs/architecture/data-providers.md</code></strong> — added the "Historical load
-  cache" subsection for <code>engine/data/historical_cache.py</code> (gh#1470): the
-  process-local LRU that mirrors <code>ProviderCache</code> for the synchronous
-  file-backed (CSV/Parquet) path, keyed by on-disk fingerprint
-  (<code>path + mtime_ns + size</code>) rather than TTL.</li>
-<li><strong><code>docs/deployment.md</code></strong> — added <code>NEXUS_TRUSTED_PROXIES</code> to the
-  strongly-recommended env table (the knob the WS/REST rate-limit
-  resolution above is driven by).</li>
+<li>Sandbox layer 3 grew a dedicated <code>engine/plugins/sandbox/resource_limits.py</code>
+  module (#1539) — SIGALRM CPU timer, tracemalloc memory cap, single-flight
+  lock. <a href="../architecture/plugins/"><code>architecture/plugins.md</code></a> layer-3 row and
+  file inventory updated; new <a href="../adr/0012-sandbox-resource-limits-single-flight/">ADR-0012</a>
+  captures the design.</li>
+<li>API identifier validation centralised in
+  <a href="../engine/api/validators.py"><code>engine/api/validators.py</code></a> (#1535) — the
+  <code>SafeIdentifier</code> pattern is now enforced on every
+  <code>/strategies/{strategy_id}</code> and <code>/scoring/{strategy_name}</code> path param.
+  <a href="../api-reference/"><code>api-reference.md</code></a> notes the contract.</li>
+<li><code>scripts/compose-entrypoint.py</code> (#1358) added as an optional wrapper for
+  URL-encoding DB / Valkey passwords with reserved characters.
+  <a href="../deployment/"><code>deployment.md</code></a> documents the failure mode it closes.</li>
 </ul>
-<h2 id="docsknown-limitationsmd-marketplace-section-refreshed"><code>docs/known-limitations.md</code> — marketplace section refreshed<a class="headerlink" href="#docsknown-limitationsmd-marketplace-section-refreshed" title="Permanent link">&para;</a></h2>
-<p>The "Strategy Marketplace is mostly a stub" entry previously listed
-only ratings as the real-but-in-memory surface. It now also covers the
-<code>/search</code> endpoint (gh#1476): real ranked search, but resolving against
-an <code>InMemoryStrategyCatalog</code> seeded with fixed demo strategies — same
-non-persistence / non-cross-replica story as ratings. Title updated to
-"search + ratings real, in-memory".</p>
-<h2 id="prior-cycle-notes">Prior cycle notes<a class="headerlink" href="#prior-cycle-notes" title="Permanent link">&para;</a></h2>
-<p>Includes the MCP surface audit reconciliation: <code>docs/mcp/</code>
-(<code>capability-audit.md</code>, <code>tool-catalog.md</code>, and the generated
-<code>api-surface-map.yaml</code>) plus the <code>engine/mcp/tool_definitions.py</code>
-schema-factory refactor (removes symbol duplication + a shared-mutable-
-reference hazard; advertised schemas unchanged).</p>
+<p>This file is touched on every <code>do_engineering_docs</code> run by kaizen, so
+its mtime tells you when documentation was last reconciled with the
+codebase — even when the audit produced no diff.</p>
 
 
 

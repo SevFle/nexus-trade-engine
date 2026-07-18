@@ -5,10 +5,11 @@ Covers:
 1. The public API surface (``SandboxResourceError``, ``ResourceLimits``,
    ``resource_limits``) and the resource-kind metadata carried on the
    exception.
-2. CPU guard — ``SIGALRM``-based preemption of a tight compute loop, including
-   the critical regression where a strategy that wraps its hot path in
-   ``except Exception: pass`` is *still* killed (because
-   :class:`SandboxResourceError` derives from :class:`BaseException`).
+2. CPU guard — ``SIGALRM``-based preemption of a tight compute loop.
+   :class:`SandboxResourceError` derives from :class:`RuntimeError` (a
+   regular :class:`Exception` subclass); defeat-resistance for sandboxed
+   strategies comes from the sandbox runtime blocking introspection, not
+   from the exception hierarchy.
 3. Memory guard — :mod:`tracemalloc`-based Python-allocation soft-cap.
 4. The single-flight module-level :class:`threading.Lock` — re-entrant
    (same-thread) and concurrent (cross-thread) entry must be rejected with a

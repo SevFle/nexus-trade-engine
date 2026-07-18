@@ -211,6 +211,16 @@ All routes require legal acceptance.
 
 `/api/v1/strategies/*`. Source: [`routes/strategies.py`](../engine/api/routes/strategies.py).
 
+Every `{strategy_id}` path param is validated by the shared
+[`SafeIdentifier`](../engine/api/validators.py) pattern
+(`^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$`, max 64 chars) at the FastAPI
+validation layer — values outside that grammar return `422` *before*
+the handler runs. The pattern accepts dotted namespacing
+(`mypackage.v2`) but rejects empty identifiers, leading/trailing
+dots, consecutive dots (`..`), and any non-`[A-Za-z0-9_-]` character,
+so a hostile identifier can never reach a registry lookup, DB query,
+or reflected error `detail`. See [Validation](#validation) below.
+
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/v1/strategies/` | Lists installed strategies via `app.state.plugin_registry.list_all()`. |
@@ -242,6 +252,11 @@ served via OpenAPI.
 
 `/api/v1/scoring/*`. Source: [`routes/scoring.py`](../engine/api/routes/scoring.py).
 Requires legal acceptance.
+
+`{strategy_name}` path params share the same
+[`SafeIdentifier`](../engine/api/validators.py) contract as
+`/strategies/{strategy_id}` — see [Strategies](#strategies) and
+[Validation](#validation).
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
@@ -276,6 +291,15 @@ instantiated outside pytest).
 ([`engine/marketplace/search.py`](../engine/marketplace/search.py))
 seeded with demo strategies. **Not persisted, not cross-replica** — a
 browse/UX preview, not a source of truth.
+
+> **Information-leakage hygiene (gh#1527).** The catalog-lookup
+> fallback in `routes/marketplace.py` was rewritten to be **lazy**
+> (the adapter is built only when `catalog.get` is actually missing)
+> and 404 responses no longer reflect the raw `strategy_id` in the
+> `detail` field — both the eager construction and the verbatim
+> echo were flagged in a security review. Error bodies now return a
+> generic message so a probe cannot enumerate installed strategy ids
+> or confirm/deny existence via reflected text.
 
 ## Reference
 
@@ -489,6 +513,11 @@ can only arrive after the socket opens (in-band browser refresh).
   (body `{code:"legal_re_acceptance_required", documents:[…]}`).
 - **Validation**: `422` from FastAPI; `400` for hand-rolled checks
   (e.g. invalid scope in API keys, unknown tax jurisdiction).
+  Identifiers in user-controlled path params (`{strategy_id}` on
+  `/strategies/*`, `{strategy_name}` on `/scoring/*`) are validated
+  up front by the shared `SafeIdentifier` pattern in
+  [`engine/api/validators.py`](../engine/api/validators.py) — see
+  [Validation](#validation).
 - **Rate limit**: `429` with `Retry-After` from
   [`RateLimitMiddleware`](../engine/api/rate_limit.py). Default 600
   req/min/IP, burst 60. `/health` and `/metrics` are exempt;
@@ -496,6 +525,36 @@ can only arrive after the socket opens (in-band browser refresh).
 - **Body size**: hard 1 MiB cap on every request
   ([`BodySizeLimitMiddleware`](../engine/api/body_size_limit.py)).
 - **Provider errors**: see Market data section above.
+
+<a id="validation"></a>
+## Validation
+
+User-controlled identifier path params (`{strategy_id}` on
+`/strategies/*`, `{strategy_name}` on `/scoring/*`) are validated by
+the shared [`SafeIdentifier`](../engine/api/validators.py) alias —
+an `Annotated[str, Path(...)]` that bundles a regex pattern and a
+length cap so every route module enforces the *same* contract without
+re-deriving it.
+
+- Pattern: `^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$` — one or more
+  dot-free tokens separated by single dots.
+- Max length: 64 characters.
+- Grammar: alphanumerics, underscore, hyphen, and `.` **only as a
+  separator** between non-empty tokens. Leading/trailing dots,
+  consecutive dots (`..`), and any other character class are
+  rejected.
+- Effect: non-conforming values return `422 Unprocessable Entity`
+  from FastAPI *before* the handler runs, so a hostile identifier
+  can never reach a registry lookup, a DB query, or a reflected
+  error `detail`.
+
+The pattern is deliberately written without look-around assertions
+because Pydantic v2 compiles it with the Rust `regex` crate, which
+does not support lookahead/look-behind; the "token (`.` token)*"
+formulation achieves the dot discipline constructively. Dotted
+namespacing (`mypackage.v2`) is accepted so versioned strategy
+packages keep working — a regression test for that exact shape lives
+in [`tests/test_validators.py`](../tests/test_validators.py).
 
 ## Cross-cutting middleware
 
