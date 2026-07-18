@@ -240,6 +240,55 @@ class TestCpuGuard:
             _hot_loop_swallowing_exception()
 
     @requires_sigalrm
+    def test_cpu_timeout_kills_strategy_object_that_swallows_exception(self) -> None:
+        """**Additional regression test (task item 3).**
+
+        Mirrors
+        :meth:`test_cpu_timeout_kills_strategy_that_swallows_exception`
+        but drives the CPU guard through a realistic *strategy object*
+        exposing an ``on_bar``-style method (the surface the host sandbox
+        actually calls into) whose body wraps a tight compute loop in
+        ``except Exception: pass``.  This guards the same invariant from a
+        second, complementary angle: if :class:`SandboxResourceError` were
+        ever reverted to inherit from :class:`Exception`, the strategy's
+        blanket ``except Exception`` clause would silently absorb the
+        SIGALRM-fired violation, ``on_bar`` would return, and
+        ``pytest.raises(SandboxResourceError)`` would fail with
+        ``DID NOT RAISE`` — surfacing the regression loudly rather than
+        masking it as a pass.
+        """
+
+        class _SwallowingStrategy:
+            """Minimal strategy stand-in whose ``on_bar`` hot loop tries
+            to defeat the CPU guard with ``except Exception: pass``."""
+
+            name = "swallowing"
+            version = "0.0.0"
+
+            def on_bar(self, _market: Any, _portfolio: Any) -> list[Any]:
+                try:
+                    i = 0
+                    while True:
+                        i += 1
+                except Exception:  # noqa: S110 - intentional: the exact
+                    # defeat-attempt the CPU guard must survive; the test
+                    # fails loudly if SandboxResourceError regresses back
+                    # under Exception.
+                    pass
+                return []
+
+        strategy = _SwallowingStrategy()
+        limits = ResourceLimits(cpu_timeout_seconds=0.1, max_memory_mb=0)
+        with (
+            pytest.raises(SandboxResourceError, match="CPU") as exc_info,
+            resource_limits(limits),
+        ):
+            strategy.on_bar(None, None)
+        # And the propagating violation carries the structured CPU metadata.
+        assert exc_info.value.kind == CPU_RESOURCE
+        assert exc_info.value.limit == 0.1
+
+    @requires_sigalrm
     def test_cpu_error_carries_limit_metadata(self) -> None:
         limits = ResourceLimits(cpu_timeout_seconds=0.05, max_memory_mb=0)
         with pytest.raises(SandboxResourceError) as exc_info, resource_limits(limits):
