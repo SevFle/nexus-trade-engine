@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import math
 from decimal import Decimal
+from types import MappingProxyType
 
 import pytest
 from pydantic import ValidationError
@@ -105,6 +106,38 @@ class TestWeightValidation:
     def test_non_numeric_weight_rejected(self):
         with pytest.raises(ValidationError, match="must be a number"):
             CapitalAllocation(strategy_weights={"a": "half"})  # type: ignore[dict-item]
+
+
+# ── strategy_weights container-type handling ─────────────────────── #
+class TestStrategyWeightsContainerType:
+    """The before-validator branches on the container type of the raw
+    ``strategy_weights`` input: a plain ``dict``, a read-only mapping (e.g.
+    ``MappingProxyType`` from a frozen instance), or anything else (a type
+    error)."""
+
+    def test_read_only_mapping_is_accepted(self):
+        # A MappingProxyType exposes ``.items`` but is not a ``dict``; the
+        # validator must coerce it transparently into a plain dict.
+        mapping = MappingProxyType({"a": 1.0})
+        alloc = CapitalAllocation(strategy_weights=mapping)
+        assert alloc.strategy_weights == {"a": 1.0}
+
+    def test_read_only_mapping_with_multiple_weights_accepted(self):
+        mapping = MappingProxyType({"a": 0.6, "b": 0.4})
+        alloc = CapitalAllocation(
+            strategy_weights=mapping, total_capital=Decimal("1000")
+        )
+        assert alloc.strategy_weights == {"a": 0.6, "b": 0.4}
+
+    def test_non_dict_non_mapping_rejected(self):
+        # A list has no ``.items`` attribute -> explicit type error rather
+        # than a confusing Pydantic coercion failure.
+        with pytest.raises(ValidationError, match="strategy_weights must be a dict"):
+            CapitalAllocation(strategy_weights=[("a", 1.0)])  # type: ignore[arg-type]
+
+    def test_scalar_rejected_as_non_dict(self):
+        with pytest.raises(ValidationError, match="strategy_weights must be a dict"):
+            CapitalAllocation(strategy_weights=42)  # type: ignore[arg-type]
 
 
 # ── cross-field validation ────────────────────────────────────────── #
