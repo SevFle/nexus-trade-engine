@@ -202,7 +202,17 @@ class OrderManager:
             order.fill_price = fill.price
             order.fill_quantity = fill.quantity
             order.filled_at = datetime.now(UTC)
-            order.transition(OrderStatus.FILLED)
+            # An execution backend may fill fewer shares than requested
+            # (e.g. thin liquidity, exchange rounding). Such a fill must
+            # be marked ``PARTIALLY_FILLED`` so downstream consumers can
+            # distinguish it from a complete fill and react accordingly
+            # (e.g. resubmit the residual, surface a partial-fill flag).
+            # Only a fill that fully satisfies ``order.quantity`` counts
+            # as ``FILLED``; everything else is partial.
+            if fill.quantity < order.quantity:
+                order.transition(OrderStatus.PARTIALLY_FILLED)
+            else:
+                order.transition(OrderStatus.FILLED)
 
             # Update portfolio
             total_cost = cost_breakdown.total.amount
@@ -225,7 +235,12 @@ class OrderManager:
         # (programmer bug) — never loses it from the completed-orders log
         # that downstream reconciliation relies on.
         self.completed_orders.append(order)
-        if order.status == OrderStatus.FILLED:
+        # Publish a fill event for *both* complete and partial fills.
+        # WebSocket clients / outbox consumers rely on the
+        # ``ORDER_FILLED`` event to track order progress; gating it on
+        # ``FILLED`` alone silently drops partial fills, leaving clients
+        # unaware that shares changed hands.
+        if order.status in (OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED):
             await self._publish_fill_event(order)
         return order
 
