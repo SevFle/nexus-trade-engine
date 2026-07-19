@@ -19,7 +19,8 @@ from engine.events.bus import EventType
 from engine.observability.metrics import MetricsBackend, get_metrics
 
 if TYPE_CHECKING:
-    from engine.core.cost_model import ICostModel
+    from engine.core.cost_model import CostBreakdown, ICostModel
+    from engine.core.execution.base import FillResult
     from engine.core.portfolio import Portfolio
     from engine.core.risk_engine import RiskEngine
     from engine.events.bus import EventBus
@@ -199,33 +200,7 @@ class OrderManager:
 
         # Step 6: Reconcile
         if fill.success:
-            order.fill_price = fill.price
-            order.fill_quantity = fill.quantity
-            order.filled_at = datetime.now(UTC)
-            # An execution backend may fill fewer shares than requested
-            # (e.g. thin liquidity, exchange rounding). Such a fill must
-            # be marked ``PARTIALLY_FILLED`` so downstream consumers can
-            # distinguish it from a complete fill and react accordingly
-            # (e.g. resubmit the residual, surface a partial-fill flag).
-            # Only a fill that fully satisfies ``order.quantity`` counts
-            # as ``FILLED``; everything else is partial.
-            if fill.quantity < order.quantity:
-                order.transition(OrderStatus.PARTIALLY_FILLED)
-            else:
-                order.transition(OrderStatus.FILLED)
-
-            # Update portfolio
-            total_cost = cost_breakdown.total.amount
-            if order.side == Side.BUY:
-                self.portfolio.open_position(order.symbol, fill.quantity, fill.price, total_cost)
-            elif order.side == Side.SELL:
-                tax = cost_breakdown.tax_estimate.amount
-                non_tax_cost = total_cost - tax
-                self.portfolio.close_position(
-                    order.symbol, fill.quantity, fill.price, non_tax_cost, tax
-                )
-
-            logger.info("order.filled", order_id=order.id, price=fill.price, qty=fill.quantity)
+            self._reconcile_fill(order, fill, cost_breakdown)
         else:
             order.transition(OrderStatus.FAILED, fill.reason)
             logger.error("order.failed", order_id=order.id, reason=fill.reason)
@@ -243,6 +218,113 @@ class OrderManager:
         if order.status in (OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED):
             await self._publish_fill_event(order)
         return order
+
+    def _reconcile_fill(
+        self,
+        order: Order,
+        fill: FillResult,
+        cost_breakdown: CostBreakdown,
+    ) -> None:
+        """Apply a fill to an order, mutating it and the portfolio in place.
+
+        Supports **partial fills**: a single order may be reconciled against
+        multiple ``FillResult`` objects (e.g. an execution venue that returns
+        liquidity in slices). Each call accumulates into ``order.fill_quantity``
+        and transitions the order to:
+
+        * ``FILLED`` once the cumulative filled quantity reaches the
+          requested ``order.quantity``; or
+        * ``PARTIALLY_FILLED`` while the cumulative total is still short.
+
+        Costs are scaled to the quantity actually filled in *this* round:
+        ``cost_breakdown`` was pre-computed for the full ``order.quantity``,
+        so we apply the proportional ``effective_qty / order.quantity`` ratio
+        to avoid over-charging the portfolio on partial fills.
+
+        Two safety invariants are enforced on top of the partial-fill math:
+
+        * **Overfill protection.** ``effective_qty`` is clamped to the
+          remaining unfilled portion of the order
+          (``min(fill.quantity, order.quantity - (order.fill_quantity or 0))``)
+          so a buggy or aggressive venue can never push the cumulative
+          filled quantity past the originally requested amount, never
+          over-charge the portfolio, and never leave the order stuck in
+          ``PARTIALLY_FILLED`` once it has in fact been satisfied.
+
+        * **VWAP across rounds.** ``order.fill_price`` is the volume-weighted
+          average price of every fill seen so far, not the most recent
+          execution price. We reconstruct prior notional from the running
+          VWAP (``prior_qty * prior_vwap``), add this round's notional, and
+          divide by the new cumulative quantity — no extra state field
+          required.
+        """
+        # Overfill protection: clamp this round to the remaining unfilled
+        # portion of the order. ``remaining`` is floored at zero so a stray
+        # late fill arriving after the order is already satisfied can never
+        # produce a negative effective quantity.
+        prior_qty = order.fill_quantity or 0
+        remaining = max(order.quantity - prior_qty, 0)
+        effective_qty = min(fill.quantity, remaining)
+
+        if effective_qty <= 0:
+            # Order is already fully filled. A stray late fill would
+            # otherwise append a duplicate FILLED transition and open a
+            # zero-share tax lot — drop it with a warning instead.
+            logger.warning(
+                "order_manager.dropped_zero_effective_fill",
+                order_id=order.id,
+                fill_qty=fill.quantity,
+                cumulative_qty=prior_qty,
+                order_qty=order.quantity,
+            )
+            return
+
+        # VWAP across partial fills: ``order.fill_price`` doubles as the
+        # running VWAP, so prior notional is ``prior_qty * prior_vwap``.
+        prior_notional = (order.fill_price or 0.0) * prior_qty
+        round_notional = effective_qty * fill.price
+        new_qty = prior_qty + effective_qty
+        order.fill_quantity = new_qty
+        order.fill_price = (
+            (prior_notional + round_notional) / new_qty if new_qty > 0 else fill.price
+        )
+        order.filled_at = datetime.now(UTC)
+
+        # FILLED vs PARTIALLY_FILLED is decided by the *cumulative* total
+        # against the originally requested quantity, not by this single
+        # fill — a 4-share fill on a 10-share order is partial even though
+        # the fill itself fully succeeded.
+        if order.fill_quantity >= order.quantity:
+            order.transition(OrderStatus.FILLED)
+        else:
+            order.transition(OrderStatus.PARTIALLY_FILLED)
+
+        # Scale the pre-computed cost breakdown (sized for the full order)
+        # down to the *effective* quantity actually applied this round so
+        # the portfolio is only charged for what it received.
+        fill_ratio = effective_qty / order.quantity if order.quantity > 0 else 0.0
+        realized_total = cost_breakdown.total.amount * fill_ratio
+
+        if order.side == Side.BUY:
+            self.portfolio.open_position(
+                order.symbol, effective_qty, fill.price, realized_total
+            )
+        elif order.side == Side.SELL:
+            tax = cost_breakdown.tax_estimate.amount * fill_ratio
+            non_tax_cost = realized_total - tax
+            self.portfolio.close_position(
+                order.symbol, effective_qty, fill.price, non_tax_cost, tax
+            )
+
+        logger.info(
+            "order.filled",
+            order_id=order.id,
+            price=fill.price,
+            vwap=order.fill_price,
+            qty=effective_qty,
+            cumulative_qty=order.fill_quantity,
+            status=order.status.value,
+        )
 
     async def _publish_fill_event(self, order: Order) -> None:
         """Publish an ``ORDER_FILLED`` event to the event bus.
