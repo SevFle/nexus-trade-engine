@@ -112,7 +112,7 @@ async def ws_endpoint(ws: WebSocket) -> None:
 
             ws_metrics.metrics.counter(
                 "sev_ws_messages_received_total",
-                tags={"type": raw.get("type", "unknown")},
+                tags={"type": raw.get("type", "unknown") if isinstance(raw, dict) else "unknown"},
             )
             _state.manager.touch(connection_id)
 
