@@ -26,6 +26,7 @@ Scope is intentionally narrow: OrderManager → EventBus → EventBusBridge
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
@@ -33,7 +34,7 @@ import pytest
 from engine.api.ws.event_bridge import _EVENT_TO_CHANNEL, EventBusBridge
 from engine.core.cost_model import DefaultCostModel
 from engine.core.execution.base import FillResult
-from engine.core.order_manager import OrderManager, OrderStatus
+from engine.core.order_manager import Order, OrderManager, OrderStatus
 from engine.core.portfolio import Portfolio
 from engine.core.risk_engine import RiskEngine
 from engine.core.signal import Side, Signal
@@ -42,7 +43,6 @@ from engine.observability.metrics import RecordingBackend, set_metrics
 
 if TYPE_CHECKING:
     from engine.api.ws.protocol import EventMessage
-    from engine.core.order_manager import Order
 
 
 class FakeExecutionBackend:
@@ -383,6 +383,128 @@ class TestPublishFillEventErrorHandling:
             name != "order_manager.fill_event_publish_failed"
             for (name, _tags) in metrics_backend.counters
         )
+
+
+class TestPublishFillEventPayloadAndCompletedOrders:
+    """Targeted regression tests for the fill-event payload shape and
+    for the order in which ``completed_orders`` is appended relative to
+    event publishing.
+
+    These pin two properties that the broader happy-path tests don't
+    assert directly:
+
+    * ``_publish_fill_event`` must succeed against a *real* filled
+      :class:`Order` without raising :class:`AttributeError` — i.e. every
+      attribute referenced in the payload exists on the model.
+    * The order is recorded in ``completed_orders`` *before* the fill
+      event is published, so a publish failure (swallowed infrastructure
+      error or a propagated programmer bug) never drops it from the log.
+    """
+
+    @pytest.fixture
+    def metrics_backend(self) -> RecordingBackend:
+        backend = RecordingBackend()
+        set_metrics(backend)
+        return backend
+
+    async def test_publish_fill_event_succeeds_without_attribute_error(
+        self,
+        event_bus: EventBus,
+    ) -> None:
+        """Build a real filled Order and publish directly.
+
+        Catches any drift between the Order model and the payload
+        ``_publish_fill_event`` builds (a missing attribute would raise
+        :class:`AttributeError` inside the coroutine).
+        """
+        om = OrderManager(
+            cost_model=DefaultCostModel(),
+            risk_engine=RiskEngine(),
+            portfolio=Portfolio(initial_cash=100_000.0),
+            event_bus=event_bus,
+        )
+
+        order = Order(
+            signal_id="sig-1",
+            strategy_id="strat-1",
+            symbol="AAPL",
+            side=Side.BUY,
+            quantity=10,
+        )
+        order.fill_price = 150.0
+        order.fill_quantity = 10
+        order.filled_at = datetime.now(UTC)
+        order.transition(OrderStatus.FILLED)
+
+        # Must not raise — every attribute referenced in the payload
+        # exists on Order, so there's nothing for the publish path to
+        # trip over.
+        await om._publish_fill_event(order)
+
+    async def test_order_recorded_in_completed_orders_when_publish_fails(
+        self,
+        metrics_backend: RecordingBackend,
+    ) -> None:
+        """The order must land in ``completed_orders`` even when the
+        event bus is unavailable.
+
+        Drives a ``ConnectionError`` out of the bus (an infrastructure
+        failure that ``_publish_fill_event`` swallows) and confirms the
+        just-filled order still appears in ``completed_orders``.
+        """
+        flaky_bus = FlakyEventBus(raise_exc=ConnectionError("bus down"))
+        om = OrderManager(
+            cost_model=DefaultCostModel(),
+            risk_engine=RiskEngine(),
+            portfolio=Portfolio(initial_cash=100_000.0),
+            event_bus=flaky_bus,
+        )
+        om.set_execution_backend(
+            FakeExecutionBackend(success=True, price=150.0, quantity=10)
+        )
+
+        signal = Signal.buy(symbol="AAPL", strategy_id="s", quantity=10)
+        order = await om.process_signal(signal, market_price=150.0)
+
+        # The order filled and was emitted at (then swallowed).
+        assert order.status == OrderStatus.FILLED
+        assert flaky_bus.emit_calls == 1
+        # Crucially: it is still in completed_orders despite the bus
+        # being down. Downstream reconciliation must never lose it.
+        assert order in om.completed_orders
+        assert len(om.completed_orders) == 1
+
+    async def test_order_recorded_in_completed_orders_when_publish_propagates(
+        self,
+        metrics_backend: RecordingBackend,
+    ) -> None:
+        """Even when a *non*-infrastructure exception propagates out of
+        ``_publish_fill_event``, the order must already be in
+        ``completed_orders``.
+
+        The append now happens *before* the publish call, so a
+        propagated :class:`TypeError` (a programmer bug, intentionally
+        re-raised) leaves the order recorded for inspection.
+        """
+        flaky_bus = FlakyEventBus(raise_exc=TypeError("bad payload type"))
+        om = OrderManager(
+            cost_model=DefaultCostModel(),
+            risk_engine=RiskEngine(),
+            portfolio=Portfolio(initial_cash=100_000.0),
+            event_bus=flaky_bus,
+        )
+        om.set_execution_backend(
+            FakeExecutionBackend(success=True, price=150.0, quantity=10)
+        )
+
+        signal = Signal.buy(symbol="AAPL", strategy_id="s", quantity=10)
+        with pytest.raises(TypeError):
+            await om.process_signal(signal, market_price=150.0)
+
+        # Despite the propagated error, the order was recorded first.
+        assert len(om.completed_orders) == 1
+        assert om.completed_orders[0].status == OrderStatus.FILLED
+        assert om.completed_orders[0].symbol == "AAPL"
 
 
 class TestEventBridgeChannelRouting:

@@ -5,6 +5,7 @@ Signal → Validate → Cost → Risk Check → Execute → Reconcile → Log
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -201,7 +202,17 @@ class OrderManager:
             order.fill_price = fill.price
             order.fill_quantity = fill.quantity
             order.filled_at = datetime.now(UTC)
-            order.transition(OrderStatus.FILLED)
+            # An execution backend may fill fewer shares than requested
+            # (e.g. thin liquidity, exchange rounding). Such a fill must
+            # be marked ``PARTIALLY_FILLED`` so downstream consumers can
+            # distinguish it from a complete fill and react accordingly
+            # (e.g. resubmit the residual, surface a partial-fill flag).
+            # Only a fill that fully satisfies ``order.quantity`` counts
+            # as ``FILLED``; everything else is partial.
+            if fill.quantity < order.quantity:
+                order.transition(OrderStatus.PARTIALLY_FILLED)
+            else:
+                order.transition(OrderStatus.FILLED)
 
             # Update portfolio
             total_cost = cost_breakdown.total.amount
@@ -215,12 +226,22 @@ class OrderManager:
                 )
 
             logger.info("order.filled", order_id=order.id, price=fill.price, qty=fill.quantity)
-            await self._publish_fill_event(order)
         else:
             order.transition(OrderStatus.FAILED, fill.reason)
             logger.error("order.failed", order_id=order.id, reason=fill.reason)
 
+        # Record the order BEFORE publishing the fill event so a publish
+        # failure — whether swallowed (infrastructure) or propagated
+        # (programmer bug) — never loses it from the completed-orders log
+        # that downstream reconciliation relies on.
         self.completed_orders.append(order)
+        # Publish a fill event for *both* complete and partial fills.
+        # WebSocket clients / outbox consumers rely on the
+        # ``ORDER_FILLED`` event to track order progress; gating it on
+        # ``FILLED`` alone silently drops partial fills, leaving clients
+        # unaware that shares changed hands.
+        if order.status in (OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED):
+            await self._publish_fill_event(order)
         return order
 
     async def _publish_fill_event(self, order: Order) -> None:
@@ -257,8 +278,16 @@ class OrderManager:
             "signal_id": order.signal_id,
         }
         try:
-            await self._event_bus.emit(
-                EventType.ORDER_FILLED, payload, source="order_manager"
+            # Bound how long we wait on the bus: a wedged Redis or
+            # in-process dispatcher must never stall order execution.
+            # ``asyncio.wait_for`` raises ``TimeoutError`` on expiry,
+            # which the clause below treats as best-effort infrastructure
+            # failure alongside the bus' own transport errors.
+            await asyncio.wait_for(
+                self._event_bus.emit(
+                    EventType.ORDER_FILLED, payload, source="order_manager"
+                ),
+                timeout=2.0,
             )
         except (ConnectionError, TimeoutError, RuntimeError) as exc:
             # Bus / transport infrastructure failures are best-effort:
