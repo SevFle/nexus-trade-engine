@@ -59,12 +59,12 @@ from __future__ import annotations
 import contextlib
 import re
 import time
+import weakref
 from typing import TYPE_CHECKING
 
-from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+from prometheus_client import REGISTRY, CollectorRegistry, Counter, Gauge, Histogram
 
 if TYPE_CHECKING:
-    from prometheus_client.registry import CollectorRegistry
     from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 
@@ -140,14 +140,21 @@ def normalize_path(path: str) -> str:
 # ---------------------------------------------------------------------------
 
 # Module-level cache of the lazily-created collectors. Keyed by the
-# ``id()`` of the registry they live in so tests that pass a throwaway
-# ``CollectorRegistry`` get their own fresh collector set without
-# colliding with the production default registry. The cache is rebuilt
-# from scratch if the registry is garbage-collected because nothing
-# else references its collectors — fine, since ``id()`` reuse would
-# only matter if a stale registry lingered, and tests call
-# :func:`reset_collectors_for_tests` between cases anyway.
-_collectors_cache: dict[int, dict[str, Counter | Gauge | Histogram]] = {}
+# registry object itself via :class:`weakref.WeakKeyDictionary` so
+# tests that pass a throwaway ``CollectorRegistry`` get their own
+# fresh collector set without colliding with the production default
+# registry, and — crucially — the cache entry vanishes automatically
+# as soon as the registry is garbage-collected. Keying on the object
+# (rather than ``id(registry)``) closes a subtle corruption window:
+# CPython is free to recycle the memory address of a GC'd registry,
+# which under the old ``id()``-keyed ``dict`` could resurrect a stale
+# cache entry pointing at collectors registered against a now-dead
+# registry. ``reset_collectors_for_tests`` is still provided for the
+# default-registry teardown path because the default
+# :data:`REGISTRY` is process-global and never dies.
+_collectors_cache: weakref.WeakKeyDictionary[
+    CollectorRegistry, dict[str, Counter | Gauge | Histogram]
+] = weakref.WeakKeyDictionary()
 
 
 def _get_collectors(
@@ -163,9 +170,13 @@ def _get_collectors(
     any code path that constructs more than one middleware against the
     same registry (notably the app factory when it is invoked more than
     once in a process, e.g. some test harnesses).
+
+    The cache is a :class:`weakref.WeakKeyDictionary` keyed on the
+    registry object, so the entry disappears automatically once the
+    registry itself is unreferenced — there is no stale entry for a
+    later ``id()``-recycled object to hit.
     """
-    cache_key = id(registry)
-    cached = _collectors_cache.get(cache_key)
+    cached = _collectors_cache.get(registry)
     if cached is not None:
         return cached
 
@@ -193,27 +204,36 @@ def _get_collectors(
         "latency": latency,
         "in_flight": in_flight,
     }
-    _collectors_cache[cache_key] = collectors
+    _collectors_cache[registry] = collectors
     return collectors
 
 
 def reset_collectors_for_tests() -> None:
     """Drop the module-level collector cache and unregister anything we
-    previously created from the default :data:`REGISTRY`.
+    previously created from *each* registry that still has a live entry.
 
     Intended *only* for unit tests that need a clean slate between
-    cases. Production code never calls this. The default registry is
+    cases. Production code never calls this. Both the default
+    :data:`REGISTRY` and any still-live throwaway registries are
     cleaned explicitly because merely clearing the cache would leave
     the registered collectors behind, which would make the *next*
-    lazy init blow up with ``Duplicated timeseries``.
+    lazy init blow up with ``Duplicated timeseries`` (default registry)
+    or leak state across tests that reuse the same throwaway registry.
+
+    Entries whose registry has already been garbage-collected are
+    gone from the :class:`weakref.WeakKeyDictionary` already, so there
+    is nothing to unregister for them — ``KeyError`` is suppressed for
+    the rare race where a registry is collected mid-iteration.
     """
-    for collectors in _collectors_cache.values():
+    for registry, collectors in list(_collectors_cache.items()):
         for collector in collectors.values():
-            # Collector was never registered against the default
-            # registry (tests using throwaway registries) or already
-            # removed — both are safe to ignore.
-            with contextlib.suppress(KeyError, AttributeError):
-                REGISTRY.unregister(collector)
+            # ``unregister`` raises ``KeyError`` if the collector is
+            # not registered against this registry (e.g. already
+            # removed by a prior reset). That is the only expected
+            # failure mode — ``AttributeError`` used to be suppressed
+            # too but masked real bugs, so it is no longer caught.
+            with contextlib.suppress(KeyError):
+                registry.unregister(collector)
     _collectors_cache.clear()
 
 
