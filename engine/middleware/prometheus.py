@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import contextlib
 import re
+import threading
 import time
 import weakref
 from typing import TYPE_CHECKING
@@ -139,22 +140,54 @@ def normalize_path(path: str) -> str:
 # Lazy collector registration
 # ---------------------------------------------------------------------------
 
-# Module-level cache of the lazily-created collectors. Keyed by the
-# registry object itself via :class:`weakref.WeakKeyDictionary` so
-# tests that pass a throwaway ``CollectorRegistry`` get their own
-# fresh collector set without colliding with the production default
-# registry, and — crucially — the cache entry vanishes automatically
-# as soon as the registry is garbage-collected. Keying on the object
-# (rather than ``id(registry)``) closes a subtle corruption window:
-# CPython is free to recycle the memory address of a GC'd registry,
-# which under the old ``id()``-keyed ``dict`` could resurrect a stale
-# cache entry pointing at collectors registered against a now-dead
-# registry. ``reset_collectors_for_tests`` is still provided for the
+# Module-level cache of the lazily-created collectors.
+#
+# The conceptual cache key is the tuple
+# ``(registry, metric_prefix, tuple(buckets))`` — two middleware
+# instances built against the same registry but with different
+# prefixes (or different histogram bucket layouts) must receive
+# *distinct* collector objects, otherwise the second construction
+# would either silently reuse the first one's prefix/buckets or
+# blow up with ``Duplicated timeseries`` when it tried to register
+# its own.
+#
+# Because plain ``tuple`` objects are not weak-referenceable, the
+# key is split across two levels:
+#
+# - The *outer* level is a :class:`weakref.WeakKeyDictionary` keyed
+#   by the registry object itself. Tests that pass a throwaway
+#   ``CollectorRegistry`` get their own fresh collector set without
+#   colliding with the production default registry, and — crucially
+#   — the entry vanishes automatically as soon as the registry is
+#   garbage-collected. Keying on the object (rather than
+#   ``id(registry)``) closes a subtle corruption window: CPython is
+#   free to recycle the memory address of a GC'd registry, which
+#   under the old ``id()``-keyed ``dict`` could resurrect a stale
+#   cache entry pointing at collectors registered against a
+#   now-dead registry.
+# - The *inner* level is a plain :class:`dict` keyed by
+#   ``(metric_prefix, tuple(buckets))`` holding the collector sets
+#   for that registry. It is created lazily on first insertion.
+#
+# ``reset_collectors_for_tests`` is still provided for the
 # default-registry teardown path because the default
 # :data:`REGISTRY` is process-global and never dies.
 _collectors_cache: weakref.WeakKeyDictionary[
-    CollectorRegistry, dict[str, Counter | Gauge | Histogram]
+    CollectorRegistry,
+    dict[tuple[str, tuple[float, ...]], dict[str, Counter | Gauge | Histogram]],
 ] = weakref.WeakKeyDictionary()
+
+# Module-level lock guarding both lazy collector creation in
+# :func:`_get_collectors` and the iterate-unregister-clear teardown
+# in :func:`reset_collectors_for_tests`. The app factory and several
+# test fixtures construct middleware from multiple threads (and
+# ``RQ``/``arq`` workers can instantiate the app per-worker); without
+# serialisation two threads could race past the ``cached is None``
+# check and both try to register ``http_requests_total``, with the
+# second raising ``Duplicated timeseries``. The lock is held for the
+# whole create-and-store critical section because ``prometheus_client``
+# constructor calls are fast and never re-enter this module.
+_collectors_lock = threading.Lock()
 
 
 def _get_collectors(
@@ -164,48 +197,92 @@ def _get_collectors(
     buckets: tuple[float, ...] = _DEFAULT_BUCKETS,
 ) -> dict[str, Counter | Gauge | Histogram]:
     """Return the cached collector set for ``registry``, creating it
-    on first access. Each call with the same registry returns the same
+    on first access. Each call with the same
+    ``(registry, metric_prefix, buckets)`` triple returns the same
     objects — re-creating a named collector in a ``prometheus_client``
     registry raises ``ValueError``, so this memoisation is required for
     any code path that constructs more than one middleware against the
     same registry (notably the app factory when it is invoked more than
     once in a process, e.g. some test harnesses).
 
-    The cache is a :class:`weakref.WeakKeyDictionary` keyed on the
-    registry object, so the entry disappears automatically once the
-    registry itself is unreferenced — there is no stale entry for a
-    later ``id()``-recycled object to hit.
-    """
-    cached = _collectors_cache.get(registry)
-    if cached is not None:
-        return cached
+    The cache key is the full triple
+    ``(registry, metric_prefix, tuple(buckets))`` so two middlewares
+    that differ only in prefix or bucket layout each get their own
+    collector set rather than silently sharing the first one's. The
+    registry half of the key lives in the outer
+    :class:`weakref.WeakKeyDictionary` (so the entry disappears
+    automatically once the registry itself is unreferenced — there is
+    no stale entry for a later ``id()``-recycled object to hit); the
+    ``(metric_prefix, buckets)`` half lives in an inner :class:`dict`.
 
-    labelnames = ("method", "status", "path")
-    requests = Counter(
-        f"{metric_prefix}_requests_total",
-        "Total number of HTTP requests received by the API.",
-        labelnames,
-        registry=registry,
-    )
-    latency = Histogram(
-        f"{metric_prefix}_request_duration_seconds",
-        "HTTP request handling latency in seconds (wall time).",
-        labelnames,
-        buckets=buckets,
-        registry=registry,
-    )
-    in_flight = Gauge(
-        f"{metric_prefix}_requests_in_flight",
-        "Number of HTTP requests currently being processed.",
-        registry=registry,
-    )
-    collectors: dict[str, Counter | Gauge | Histogram] = {
-        "requests": requests,
-        "latency": latency,
-        "in_flight": in_flight,
-    }
-    _collectors_cache[registry] = collectors
-    return collectors
+    Construction of the three collectors is performed under
+    :data:`_collectors_lock` and wrapped in a ``try``/``except`` so
+    that if any one of them raises (e.g. ``Duplicated timeseries``
+    from a partial prior registration, or a ``prometheus_client``
+    version bump that rejects our labelnames), the collectors that
+    *were* already registered are unregistered before the exception
+    propagates — leaving the registry clean for a retry instead of
+    leaking half-built collectors that would cause every subsequent
+    attempt to fail the same way.
+    """
+    inner_key = (metric_prefix, tuple(buckets))
+    with _collectors_lock:
+        registry_cache = _collectors_cache.get(registry)
+        if registry_cache is not None:
+            cached = registry_cache.get(inner_key)
+            if cached is not None:
+                return cached
+
+        labelnames = ("method", "status", "path")
+        # Track every collector we successfully register so that if a
+        # later constructor raises we can unregister the earlier ones
+        # and leave the registry in a clean state. Without this, a
+        # failure partway through would leave e.g. ``Counter``
+        # registered but ``Histogram`` missing, and the next call would
+        # blow up on the Counter re-registration forever.
+        created: list[Counter | Gauge | Histogram] = []
+        try:
+            requests = Counter(
+                f"{metric_prefix}_requests_total",
+                "Total number of HTTP requests received by the API.",
+                labelnames,
+                registry=registry,
+            )
+            created.append(requests)
+            latency = Histogram(
+                f"{metric_prefix}_request_duration_seconds",
+                "HTTP request handling latency in seconds (wall time).",
+                labelnames,
+                buckets=buckets,
+                registry=registry,
+            )
+            created.append(latency)
+            in_flight = Gauge(
+                f"{metric_prefix}_requests_in_flight",
+                "Number of HTTP requests currently being processed.",
+                registry=registry,
+            )
+            created.append(in_flight)
+        except Exception:
+            # Best-effort cleanup of any partially-created collectors.
+            # ``unregister`` raises ``KeyError`` if the collector was
+            # never fully registered (defensive against future
+            # ``prometheus_client`` internals); that is suppressed.
+            for partial in created:
+                with contextlib.suppress(KeyError):
+                    registry.unregister(partial)
+            raise
+
+        collectors: dict[str, Counter | Gauge | Histogram] = {
+            "requests": requests,
+            "latency": latency,
+            "in_flight": in_flight,
+        }
+        if registry_cache is None:
+            registry_cache = {}
+            _collectors_cache[registry] = registry_cache
+        registry_cache[inner_key] = collectors
+        return collectors
 
 
 def reset_collectors_for_tests() -> None:
@@ -224,17 +301,27 @@ def reset_collectors_for_tests() -> None:
     gone from the :class:`weakref.WeakKeyDictionary` already, so there
     is nothing to unregister for them — ``KeyError`` is suppressed for
     the rare race where a registry is collected mid-iteration.
+
+    The whole iterate-unregister-clear sequence runs under
+    :data:`_collectors_lock` so that a concurrent
+    :func:`_get_collectors` call on another thread cannot observe the
+    cache half-cleared (which could lead it to re-register a
+    collector that ``reset`` is about to unregister, or to grab a
+    reference to a collector dict whose entries are being torn down).
     """
-    for registry, collectors in list(_collectors_cache.items()):
-        for collector in collectors.values():
-            # ``unregister`` raises ``KeyError`` if the collector is
-            # not registered against this registry (e.g. already
-            # removed by a prior reset). That is the only expected
-            # failure mode — ``AttributeError`` used to be suppressed
-            # too but masked real bugs, so it is no longer caught.
-            with contextlib.suppress(KeyError):
-                registry.unregister(collector)
-    _collectors_cache.clear()
+    with _collectors_lock:
+        for registry, registry_cache in list(_collectors_cache.items()):
+            for collectors in registry_cache.values():
+                for collector in collectors.values():
+                    # ``unregister`` raises ``KeyError`` if the
+                    # collector is not registered against this
+                    # registry (e.g. already removed by a prior
+                    # reset). That is the only expected failure mode
+                    # — ``AttributeError`` used to be suppressed too
+                    # but masked real bugs, so it is no longer caught.
+                    with contextlib.suppress(KeyError):
+                        registry.unregister(collector)
+        _collectors_cache.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -300,8 +387,8 @@ class PrometheusMiddleware:
         # Resolve the registry eagerly so the constructor fails fast on
         # a bad value rather than at first request. We do NOT pass
         # ``None`` down to prometheus_client because the lazy cache is
-        # keyed on the registry's ``id()`` — always have a concrete
-        # object to key on.
+        # keyed (in part) on the registry object itself — always have a
+        # concrete object to key on.
         self.registry: CollectorRegistry = registry if registry is not None else REGISTRY
         self.exempt_paths: frozenset[str] = frozenset(
             exempt_paths if exempt_paths is not None else DEFAULT_EXEMPT_PATHS

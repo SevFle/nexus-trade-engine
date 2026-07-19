@@ -18,6 +18,7 @@ from engine.middleware.prometheus import (
     DEFAULT_EXEMPT_PATHS,
     PrometheusMiddleware,
     _collectors_cache,
+    _collectors_lock,
     _get_collectors,
     normalize_path,
     reset_collectors_for_tests,
@@ -110,7 +111,11 @@ class TestCollectorCacheIsWeakKeyed:
         registry = CollectorRegistry()
         collectors = _get_collectors(registry)
         assert registry in _collectors_cache
-        assert _collectors_cache[registry] is collectors
+        # The cache is two-level: outer WeakKeyDictionary keyed by the
+        # registry, inner dict keyed by ``(metric_prefix, buckets)``.
+        inner = _collectors_cache[registry]
+        assert isinstance(inner, dict)
+        assert collectors in inner.values()
         del registry
         gc.collect()
         assert len(_collectors_cache) == 0
@@ -165,8 +170,303 @@ class TestCollectorCacheIsWeakKeyed:
         c = CollectorRegistry()
         c_collectors = _get_collectors(c)
         assert c in _collectors_cache
-        assert c_collectors is _collectors_cache[c]
+        # Two-level cache: outer keyed by registry, inner keyed by
+        # ``(metric_prefix, buckets)``.
+        inner = _collectors_cache[c]
+        assert next(iter(inner.values())) is c_collectors
         assert len(_collectors_cache) == 1
+
+
+# ---------------------------------------------------------------------------
+# Cache key includes metric_prefix and buckets
+# ---------------------------------------------------------------------------
+
+
+class TestCacheKeyIncludesPrefixAndBuckets:
+    """The cache key must be the full
+    ``(registry, metric_prefix, tuple(buckets))`` triple.
+
+    Before this fix the cache was keyed only on the registry, so two
+    middlewares constructed against the same registry with *different*
+    prefixes or bucket layouts would silently share the first one's
+    collector set — and the second middleware would record metrics
+    under the wrong metric names. The 2-level cache structure makes
+    the inner key ``(metric_prefix, tuple(buckets))`` so each variant
+    gets its own collector objects.
+
+    Note: ``prometheus_client`` itself refuses to register two
+    Counters / Gauges with the same name in one registry, so in
+    practice each distinct ``(prefix, buckets)`` pair needs a distinct
+    prefix to coexist. The cache still records buckets in the key so
+    that two calls with the *same* prefix but *different* buckets do
+    not silently return the wrong cached Histogram.
+    """
+
+    def test_different_prefix_yields_different_collectors(self):
+        registry = CollectorRegistry()
+        http = _get_collectors(registry, metric_prefix="http")
+        ws = _get_collectors(registry, metric_prefix="websocket")
+        assert http is not ws
+        # ``prometheus_client.Counter`` strips the ``_total`` suffix
+        # from its internal ``_name`` attribute (the suffix is
+        # re-appended automatically at exposition time), so checking
+        # ``._name`` directly would compare ``"http_requests"`` against
+        # ``"http_requests_total"``. The prefix-is-applied guarantee
+        # is observable through the *exposed* metric surface, which is
+        # what scrapers ultimately consume — so use ``generate_latest``
+        # the same way ``test_two_middlewares_with_different_prefix_coexist``
+        # does. This also verifies the cache key really did incorporate
+        # the prefix: if it had not, the second call would have returned
+        # the first one's collectors and only one TYPE line would appear.
+        out = generate_latest(registry).decode()
+        assert "# TYPE http_requests_total counter" in out
+        assert "# TYPE websocket_requests_total counter" in out
+
+    def test_different_buckets_yields_different_histograms(self):
+        """Same prefix but different buckets cannot coexist in one
+        registry (Counter/Gauge names would collide), so we verify
+        via two separate registries that the buckets value really is
+        part of the cache lookup and the resulting Histogram reflects
+        the requested buckets.
+        """
+        registry_a = CollectorRegistry()
+        registry_b = CollectorRegistry()
+        default_buckets = _get_collectors(registry_a, buckets=(0.005, 0.01, 0.025))
+        custom_buckets = _get_collectors(registry_b, buckets=(0.1, 1.0, 10.0))
+        assert default_buckets["latency"] is not custom_buckets["latency"]
+        # The buckets difference must actually land on the Histogram.
+        # ``prometheus_client.Histogram`` stores ``_upper_bounds`` as a
+        # ``list`` (it appends ``+Inf`` to the configured buckets), so
+        # normalise to a tuple before comparing values — the cache key
+        # itself is already tuple-normalised (see
+        # ``test_cache_key_buckets_is_a_tuple_not_a_list``), this is
+        # purely about reading the library's internal attribute.
+        assert tuple(default_buckets["latency"]._upper_bounds) == (0.005, 0.01, 0.025, float("inf"))
+        assert tuple(custom_buckets["latency"]._upper_bounds) == (0.1, 1.0, 10.0, float("inf"))
+
+    def test_same_prefix_and_buckets_returns_same_collectors(self):
+        registry = CollectorRegistry()
+        first = _get_collectors(
+            registry, metric_prefix="http", buckets=(0.1, 1.0, 10.0)
+        )
+        second = _get_collectors(
+            registry, metric_prefix="http", buckets=(0.1, 1.0, 10.0)
+        )
+        assert first is second
+
+    def test_two_middlewares_with_different_prefix_coexist(self):
+        """Constructing two middlewares against the same registry but
+        with different prefixes must not blow up with
+        ``Duplicated timeseries`` and each must record under its own
+        metric names.
+        """
+        registry = CollectorRegistry()
+        mw_http = PrometheusMiddleware(
+            _ok_app(200), registry=registry, metric_prefix="http"
+        )
+        mw_ws = PrometheusMiddleware(
+            _ok_app(200), registry=registry, metric_prefix="websocket"
+        )
+        assert mw_http._counter is not mw_ws._counter
+
+        out = generate_latest(registry).decode()
+        assert "# TYPE http_requests_total counter" in out
+        assert "# TYPE websocket_requests_total counter" in out
+
+    def test_inner_cache_holds_multiple_prefix_entries_per_registry(self):
+        registry = CollectorRegistry()
+        _get_collectors(registry, metric_prefix="http")
+        _get_collectors(registry, metric_prefix="websocket")
+        _get_collectors(registry, metric_prefix="grpc")
+        inner = _collectors_cache[registry]
+        # Three distinct (prefix, buckets) entries for one registry.
+        assert len(inner) == 3
+
+    def test_cache_key_buckets_is_a_tuple_not_a_list(self):
+        """``buckets`` may be passed as any iterable; the cache key must
+        normalise to a ``tuple`` so two calls with semantically equal
+        but type-different iterables share an entry.
+        """
+        registry = CollectorRegistry()
+        first = _get_collectors(
+            registry, metric_prefix="http", buckets=[0.1, 1.0, 10.0]
+        )
+        inner = _collectors_cache[registry]
+        # Key is normalised to a tuple, not the list we passed in.
+        assert ("http", (0.1, 1.0, 10.0)) in inner
+        second = _get_collectors(
+            registry, metric_prefix="http", buckets=(0.1, 1.0, 10.0)
+        )
+        assert first is second
+
+
+# ---------------------------------------------------------------------------
+# Constructor failure: partial cleanup
+# ---------------------------------------------------------------------------
+
+
+class TestConstructorFailureCleansUp:
+    """If any of the three collector constructors raises, every
+    collector that *did* register must be unregistered before the
+    exception propagates — otherwise the registry is left polluted
+    with half-built collectors and every subsequent attempt to build
+    the set fails the same way (``Duplicated timeseries``).
+    """
+
+    def test_partial_collectors_unregistered_on_failure(self, monkeypatch):
+        registry = CollectorRegistry()
+
+        # Make the *second* constructor (Histogram) blow up after the
+        # Counter has already been registered. We patch the Histogram
+        # class in the prometheus_client namespace that the module
+        # under test imported.
+        from engine.middleware import prometheus as prom_module
+
+        original_histogram = prom_module.Histogram
+
+        class _ExplodingHistogram(original_histogram):  # type: ignore[misc]
+            def __init__(self, *args, **kwargs):
+                raise RuntimeError("simulated prometheus_client failure")
+
+        monkeypatch.setattr(prom_module, "Histogram", _ExplodingHistogram)
+
+        with pytest.raises(RuntimeError, match="simulated"):
+            _get_collectors(registry, metric_prefix="http")
+
+        # The Counter that was successfully created before the
+        # Histogram blew up must have been unregistered — otherwise
+        # it would leak into the registry and break the next attempt.
+        out = generate_latest(registry).decode()
+        assert "http_requests_total" not in out
+        assert "http_request_duration_seconds" not in out
+        assert "http_requests_in_flight" not in out
+
+        # And nothing should be cached under the ("http", default)
+        # inner key — the failed attempt must not poison the cache.
+        inner = _collectors_cache.get(registry, {})
+        assert ("http", tuple(_default_buckets_tuple())) not in inner
+
+    def test_retry_after_failure_succeeds(self, monkeypatch):
+        """After a failed construction, the registry must be clean
+        enough that a retry (with the failure patched out) succeeds
+        instead of raising ``Duplicated timeseries``.
+        """
+        registry = CollectorRegistry()
+        from engine.middleware import prometheus as prom_module
+
+        original_gauge = prom_module.Gauge
+        call_count = {"n": 0}
+
+        class _ExplodingGauge(original_gauge):  # type: ignore[misc]
+            def __init__(self, *args, **kwargs):
+                call_count["n"] += 1
+                if call_count["n"] == 1:
+                    raise RuntimeError("first attempt fails")
+                super().__init__(*args, **kwargs)
+
+        monkeypatch.setattr(prom_module, "Gauge", _ExplodingGauge)
+
+        # First attempt fails partway through.
+        with pytest.raises(RuntimeError):
+            _get_collectors(registry, metric_prefix="http")
+
+        # Second attempt must succeed — proving partial cleanup worked.
+        collectors = _get_collectors(registry, metric_prefix="http")
+        assert "requests" in collectors
+        assert "latency" in collectors
+        assert "in_flight" in collectors
+
+
+def _default_buckets_tuple():
+    """Return the module's default buckets as a tuple (used by tests
+    that need to assert against the inner cache key)."
+    """
+    from engine.middleware.prometheus import _DEFAULT_BUCKETS
+
+    return _DEFAULT_BUCKETS
+
+
+# ---------------------------------------------------------------------------
+# Thread safety: _collectors_lock
+# ---------------------------------------------------------------------------
+
+
+class TestCollectorsLock:
+    """Both :func:`_get_collectors` and :func:`reset_collectors_for_tests`
+    must serialise on :data:`_collectors_lock`. Without it, two threads
+    instantiating middleware concurrently against the same registry
+    can race past the ``cached is None`` check and both attempt to
+    register ``http_requests_total`` — the loser raises
+    ``Duplicated timeseries``.
+    """
+
+    def test_lock_exists_and_is_a_lock(self):
+        import threading
+
+        # ``threading.Lock`` returns a non-reentrant `_thread.lock`
+        # object; ``RLock`` would also be acceptable for this guard.
+        assert isinstance(_collectors_lock, type(threading.Lock()))
+
+    def test_concurrent_get_collectors_does_not_raise_duplicate(self):
+        """Spin up many threads all racing to lazily create the same
+        collector set against the same registry. The lock must
+        serialise them; without it we would see
+        ``Duplicated timeseries`` from the loser.
+        """
+        import threading
+
+        registry = CollectorRegistry()
+        results: list[Exception | dict] = []
+        results_lock = threading.Lock()
+
+        def worker():
+            try:
+                collectors = _get_collectors(registry, metric_prefix="http")
+            except Exception as exc:
+                with results_lock:
+                    results.append(exc)
+            else:
+                with results_lock:
+                    results.append(collectors)
+
+        threads = [threading.Thread(target=worker) for _ in range(16)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # No thread should have raised.
+        errors = [r for r in results if isinstance(r, Exception)]
+        assert not errors, f"concurrent get_collectors raised: {errors!r}"
+        # All threads must have received the same collector dict.
+        collector_dicts = [r for r in results if not isinstance(r, Exception)]
+        assert len(collector_dicts) == 16
+        first = collector_dicts[0]
+        assert all(c is first for c in collector_dicts[1:])
+
+    def test_reset_clears_multiple_prefix_entries(self):
+        """``reset_collectors_for_tests`` must unregister every
+        ``(prefix, buckets)`` variant for a registry, not just the
+        first one. Regression for the inner-cache-key change.
+        """
+        registry = CollectorRegistry()
+        _get_collectors(registry, metric_prefix="http")
+        _get_collectors(registry, metric_prefix="websocket")
+        _get_collectors(registry, metric_prefix="grpc")
+
+        out_before = generate_latest(registry).decode()
+        assert "http_requests_total" in out_before
+        assert "websocket_requests_total" in out_before
+        assert "grpc_requests_total" in out_before
+
+        reset_collectors_for_tests()
+
+        out_after = generate_latest(registry).decode()
+        assert "http_requests_total" not in out_after
+        assert "websocket_requests_total" not in out_after
+        assert "grpc_requests_total" not in out_after
+        assert "http_request_duration_seconds" not in out_after
+        assert registry not in _collectors_cache
 
 
 # ---------------------------------------------------------------------------
