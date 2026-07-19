@@ -60,6 +60,7 @@ import contextlib
 import re
 import time
 from typing import TYPE_CHECKING
+from weakref import WeakKeyDictionary
 
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
@@ -140,14 +141,18 @@ def normalize_path(path: str) -> str:
 # ---------------------------------------------------------------------------
 
 # Module-level cache of the lazily-created collectors. Keyed by the
-# ``id()`` of the registry they live in so tests that pass a throwaway
-# ``CollectorRegistry`` get their own fresh collector set without
-# colliding with the production default registry. The cache is rebuilt
-# from scratch if the registry is garbage-collected because nothing
-# else references its collectors — fine, since ``id()`` reuse would
-# only matter if a stale registry lingered, and tests call
-# :func:`reset_collectors_for_tests` between cases anyway.
-_collectors_cache: dict[int, dict[str, Counter | Gauge | Histogram]] = {}
+# registry object itself (not its ``id()``) via a
+# :class:`weakref.WeakKeyDictionary`. This means throwaway test
+# registries are cleaned up automatically as soon as they go out of
+# scope — no stale entries linger to be resurrected by ``id()`` reuse,
+# and there is no need for tests to remember to call
+# :func:`reset_collectors_for_tests` for isolation. Only the process-
+# global default :data:`REGISTRY` is held strongly (by ``prometheus_client``
+# itself), so its cache entry persists until
+# :func:`reset_collectors_for_tests` explicitly drops it.
+_collectors_cache: WeakKeyDictionary[
+    CollectorRegistry, dict[str, Counter | Gauge | Histogram]
+] = WeakKeyDictionary()
 
 
 def _get_collectors(
@@ -164,8 +169,7 @@ def _get_collectors(
     same registry (notably the app factory when it is invoked more than
     once in a process, e.g. some test harnesses).
     """
-    cache_key = id(registry)
-    cached = _collectors_cache.get(cache_key)
+    cached = _collectors_cache.get(registry)
     if cached is not None:
         return cached
 
@@ -193,28 +197,32 @@ def _get_collectors(
         "latency": latency,
         "in_flight": in_flight,
     }
-    _collectors_cache[cache_key] = collectors
+    _collectors_cache[registry] = collectors
     return collectors
 
 
 def reset_collectors_for_tests() -> None:
-    """Drop the module-level collector cache and unregister anything we
-    previously created from the default :data:`REGISTRY`.
+    """Drop the default-registry collector set from the cache and
+    unregister those collectors from :data:`REGISTRY`.
 
     Intended *only* for unit tests that need a clean slate between
-    cases. Production code never calls this. The default registry is
-    cleaned explicitly because merely clearing the cache would leave
-    the registered collectors behind, which would make the *next*
-    lazy init blow up with ``Duplicated timeseries``.
+    cases against the process-global default registry. Production code
+    never calls this. Throwaway test registries are reaped
+    automatically by the :class:`weakref.WeakKeyDictionary` as soon as
+    they go out of scope, so this function only needs to bother with
+    the default registry — which is held alive by ``prometheus_client``
+    itself and would otherwise leak its registered collectors, making
+    the *next* lazy init blow up with ``Duplicated timeseries``.
     """
-    for collectors in _collectors_cache.values():
-        for collector in collectors.values():
-            # Collector was never registered against the default
-            # registry (tests using throwaway registries) or already
-            # removed — both are safe to ignore.
-            with contextlib.suppress(KeyError, AttributeError):
-                REGISTRY.unregister(collector)
-    _collectors_cache.clear()
+    collectors = _collectors_cache.pop(REGISTRY, None)
+    if collectors is None:
+        return
+    for collector in collectors.values():
+        # The default registry owns these collectors; an earlier reset
+        # or a misconfigured test may have removed them already — both
+        # are safe to ignore.
+        with contextlib.suppress(KeyError, AttributeError):
+            REGISTRY.unregister(collector)
 
 
 # ---------------------------------------------------------------------------
