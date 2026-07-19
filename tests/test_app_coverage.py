@@ -368,6 +368,61 @@ class TestShutdownGuaranteesCloseSentry:
 
         mock_close.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_ws_order_signal_bridge_stopped_when_provided(self):
+        """When ``ws_order_signal_bridge`` is passed it must also be stopped."""
+        from engine.app import _shutdown
+
+        ws_bridge = MagicMock()
+        ws_order_signal_bridge = MagicMock()
+        ws_manager = MagicMock()
+        ws_manager.close_all = AsyncMock()
+        event_bus = MagicMock()
+        event_bus.disconnect = AsyncMock()
+        app = MagicMock()
+        app.state.valkey.aclose = AsyncMock()
+
+        with (
+            patch("engine.app.dispose_engine", new=AsyncMock()),
+            patch("engine.app.close_sentry"),
+        ):
+            await _shutdown(
+                app,
+                ws_bridge,
+                ws_manager,
+                event_bus,
+                ws_order_signal_bridge=ws_order_signal_bridge,
+            )
+
+        ws_order_signal_bridge.stop.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_ws_order_signal_bridge_optional_defaults_to_none(self):
+        """``_shutdown`` must accept calls without ``ws_order_signal_bridge``.
+
+        This pins backward compatibility for the positional 4-arg form
+        ``(app, ws_bridge, ws_manager, event_bus)`` used by older callers;
+        it must not raise even though ``ws_order_signal_bridge`` is omitted.
+        """
+        from engine.app import _shutdown
+
+        ws_bridge = MagicMock()
+        ws_manager = MagicMock()
+        ws_manager.close_all = AsyncMock()
+        event_bus = MagicMock()
+        event_bus.disconnect = AsyncMock()
+        app = MagicMock()
+        app.state.valkey.aclose = AsyncMock()
+
+        with (
+            patch("engine.app.dispose_engine", new=AsyncMock()),
+            patch("engine.app.close_sentry") as mock_close,
+        ):
+            # Must NOT raise even though ws_order_signal_bridge is omitted.
+            await _shutdown(app, ws_bridge, ws_manager, event_bus)
+
+        mock_close.assert_called_once()
+
 
 class TestInitSentryGuard:
     """``init_sentry()`` in the lifespan startup must be wrapped in a

@@ -36,12 +36,15 @@ class EventType(StrEnum):
     # Signal events
     SIGNAL_EMITTED = "signal.emitted"
     SIGNAL_BATCH = "signal.batch"
+    SIGNAL_GENERATED = "signal.generated"
 
     # Order events
     ORDER_CREATED = "order.created"
     ORDER_VALIDATED = "order.validated"
     ORDER_SUBMITTED = "order.submitted"
     ORDER_FILLED = "order.filled"
+    ORDER_PARTIALLY_FILLED = "order.partially_filled"
+    ORDER_CANCELLED = "order.cancelled"
     ORDER_REJECTED = "order.rejected"
     ORDER_FAILED = "order.failed"
 
