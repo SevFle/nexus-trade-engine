@@ -14,11 +14,14 @@ import structlog
 from pydantic import BaseModel, Field
 
 from engine.core.signal import Side, Signal
+from engine.events.bus import EventType
+from engine.observability.metrics import MetricsBackend, get_metrics
 
 if TYPE_CHECKING:
     from engine.core.cost_model import ICostModel
     from engine.core.portfolio import Portfolio
     from engine.core.risk_engine import RiskEngine
+    from engine.events.bus import EventBus
 
 logger = structlog.get_logger()
 
@@ -95,13 +98,25 @@ class OrderManager:
         cost_model: ICostModel,
         risk_engine: RiskEngine,
         portfolio: Portfolio,
+        event_bus: EventBus | None = None,
+        metrics: MetricsBackend | None = None,
     ):
         self.cost_model = cost_model
         self.risk_engine = risk_engine
         self.portfolio = portfolio
+        # Optional event bus. When wired, fill events are published so the
+        # WebSocket event bridge can broadcast them to connected clients.
+        self._event_bus = event_bus
+        self._metrics = metrics
         self.execution_backend = None  # Set by engine based on mode
         self.pending_orders: dict[str, Order] = {}
         self.completed_orders: list[Order] = []
+
+    @property
+    def metrics(self) -> MetricsBackend:
+        """Resolve the metrics backend lazily so tests can swap the
+        process-wide singleton via :func:`set_metrics` after construction."""
+        return self._metrics if self._metrics is not None else get_metrics()
 
     def set_execution_backend(self, backend):
         """Swap execution backend: backtest, paper, or live."""
@@ -200,12 +215,64 @@ class OrderManager:
                 )
 
             logger.info("order.filled", order_id=order.id, price=fill.price, qty=fill.quantity)
+            await self._publish_fill_event(order)
         else:
             order.transition(OrderStatus.FAILED, fill.reason)
             logger.error("order.failed", order_id=order.id, reason=fill.reason)
 
         self.completed_orders.append(order)
         return order
+
+    async def _publish_fill_event(self, order: Order) -> None:
+        """Publish an ``ORDER_FILLED`` event to the event bus.
+
+        The :class:`~engine.api.ws.event_bridge.EventBusBridge` subscribes
+        to ``ORDER_FILLED`` and fans the event out to WebSocket clients on
+        the ``orders`` channel, giving connected clients real-time order
+        status updates.
+
+        Publishing is best-effort for *infrastructure* failures
+        (:class:`ConnectionError`, :class:`TimeoutError`, and
+        :class:`RuntimeError` — the errors the bus itself raises when
+        Redis or the in-process dispatcher is unavailable): such failures
+        are logged, a ``order_manager.fill_event_publish_failed`` counter
+        is incremented, and order execution continues uninterrupted.
+
+        Any *other* exception (e.g. :class:`TypeError` from a programmer
+        bug, or :class:`ValueError` from a malformed payload) is
+        intentionally re-raised so it surfaces during development instead
+        of being silently swallowed.
+        """
+        if self._event_bus is None:
+            return
+        payload = {
+            "order_id": order.id,
+            "symbol": order.symbol,
+            "side": order.side.value,
+            "qty": order.fill_quantity,
+            "price": order.fill_price,
+            "timestamp": order.filled_at.isoformat() if order.filled_at else None,
+            "status": order.status.value,
+            "strategy_id": order.strategy_id,
+            "signal_id": order.signal_id,
+        }
+        try:
+            await self._event_bus.emit(
+                EventType.ORDER_FILLED, payload, source="order_manager"
+            )
+        except (ConnectionError, TimeoutError, RuntimeError) as exc:
+            # Bus / transport infrastructure failures are best-effort:
+            # log + metric, then keep processing orders. A WebSocket/outbox
+            # outage must never break order execution.
+            self.metrics.counter(
+                "order_manager.fill_event_publish_failed",
+                tags={"error_type": type(exc).__name__},
+            )
+            logger.exception(
+                "order_manager.fill_event_publish_failed",
+                order_id=order.id,
+                error_type=type(exc).__name__,
+            )
 
     def _calculate_quantity(self, signal: Signal, price: float) -> int:
         """Convert signal weight to share quantity."""

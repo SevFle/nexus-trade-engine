@@ -15,26 +15,38 @@ import structlog
 from engine.api.ws.metrics import ws_metrics
 from engine.api.ws.permissions import resolve_room_name
 from engine.api.ws.protocol import EventMessage
+from engine.events.bus import EventType
 
 if TYPE_CHECKING:
     from engine.api.ws.connection_manager import ConnectionManager
-    from engine.events.bus import EventBus, EventType
+    from engine.events.bus import EventBus
 
 logger = structlog.get_logger()
 
-_EVENT_TO_CHANNEL: dict[str, str] = {
-    "portfolio_updated": "portfolio",
-    "position_opened": "portfolio",
-    "position_closed": "portfolio",
-    "order_created": "orders",
-    "order_validated": "orders",
-    "order_submitted": "orders",
-    "order_filled": "orders",
-    "order_rejected": "orders",
-    "order_failed": "orders",
-    "strategy_loaded": "strategies",
-    "strategy_unloaded": "strategies",
-    "strategy_error": "strategies",
+# Maps each subscribed ``EventType`` to the WebSocket channel subscribers
+# join via ``SubscribeMessage(channel=...)``.
+#
+# Keys are :class:`~engine.events.bus.EventType` members. Because
+# ``EventType`` is a :class:`enum.StrEnum`, each member compares equal to
+# — and hashes identically to — its dotted string value (e.g.
+# ``EventType.ORDER_FILLED == "order.filled"``). The event payload's
+# ``"type"`` field is exactly that dotted value (see
+# :meth:`engine.events.bus.Event.to_dict`), so a plain
+# ``_EVENT_TO_CHANNEL.get(event_type)`` lookup matches directly with no
+# string normalisation step required.
+_EVENT_TO_CHANNEL: dict[EventType, str] = {
+    EventType.PORTFOLIO_UPDATED: "portfolio",
+    EventType.POSITION_OPENED: "portfolio",
+    EventType.POSITION_CLOSED: "portfolio",
+    EventType.ORDER_CREATED: "orders",
+    EventType.ORDER_VALIDATED: "orders",
+    EventType.ORDER_SUBMITTED: "orders",
+    EventType.ORDER_FILLED: "orders",
+    EventType.ORDER_REJECTED: "orders",
+    EventType.ORDER_FAILED: "orders",
+    EventType.STRATEGY_LOADED: "strategies",
+    EventType.STRATEGY_UNLOADED: "strategies",
+    EventType.STRATEGY_ERROR: "strategies",
 }
 
 
@@ -55,8 +67,6 @@ class EventBusBridge:
         self._handler = self._handle
 
     def start(self, event_types: list[EventType] | None = None) -> None:
-        from engine.events.bus import EventType  # noqa: PLC0415
-
         if event_types is None:
             event_types = [
                 EventType.PORTFOLIO_UPDATED,
