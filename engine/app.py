@@ -50,6 +50,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from engine.events.bus import EventBus
+    from engine.ws.bridge import EventBusBridge as OrderSignalEventBusBridge
 
 logger = structlog.get_logger()
 
@@ -204,6 +205,20 @@ async def _init_websockets_and_events(app: FastAPI) -> None:
     app.state.ws_bridge = ws_bridge
     logger.info("ws.bridge_started")
 
+    # Focused EventBus → WebSocket bridge for order / trade / signal
+    # events (SEV-XXX). Runs alongside the room-based ws_bridge above;
+    # this one is intentionally light-weight — no client-side filtering
+    # or auth checks, just subscribe → serialize → broadcast.
+    from engine.ws.bridge import EventBusBridge as OrderSignalEventBusBridge
+
+    order_signal_bridge = OrderSignalEventBusBridge(
+        bus=event_bus,
+        manager=ws_manager,
+    )
+    order_signal_bridge.start()
+    app.state.ws_order_signal_bridge = order_signal_bridge
+    logger.info("ws.order_signal_bridge_started")
+
 
 async def _init_taskiq_broker(app: FastAPI) -> None:
     # Open the taskiq broker's Redis/Valkey connection pool so the API
@@ -238,6 +253,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await _shutdown(
         app,
         app.state.ws_bridge,
+        app.state.ws_order_signal_bridge,
         app.state.ws_manager,
         app.state.event_bus,
     )
@@ -246,6 +262,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 async def _shutdown(
     app: FastAPI,
     ws_bridge: EventBusBridge,
+    ws_order_signal_bridge: OrderSignalEventBusBridge,
     ws_manager: ConnectionManager,
     event_bus: EventBus,
 ) -> None:
@@ -261,6 +278,9 @@ async def _shutdown(
 
     async def _stop_bridge() -> None:
         ws_bridge.stop()
+
+    async def _stop_order_signal_bridge() -> None:
+        ws_order_signal_bridge.stop()
 
     async def _close_websockets() -> None:
         await ws_manager.close_all(code=1000, reason="server_shutdown")
@@ -281,6 +301,7 @@ async def _shutdown(
 
     cleanup_steps: list[tuple[str, Any]] = [
         ("ws_bridge.stop", _stop_bridge),
+        ("ws_order_signal_bridge.stop", _stop_order_signal_bridge),
         ("ws_manager.close_all", _close_websockets),
         ("event_bus.disconnect", _disconnect_bus),
         ("taskiq_broker.shutdown", _shutdown_broker),
