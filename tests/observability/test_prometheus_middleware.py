@@ -9,11 +9,13 @@ keyed by the registry object rather than ``id(registry)``), the raw-ASGI
 from __future__ import annotations
 
 import gc
+import threading
 import weakref
 
 import pytest
 from prometheus_client import REGISTRY, CollectorRegistry, generate_latest
 
+from engine.middleware import prometheus as prometheus_module
 from engine.middleware.prometheus import (
     DEFAULT_EXEMPT_PATHS,
     PrometheusMiddleware,
@@ -220,6 +222,161 @@ class TestResetCollectorsForTests:
         assert "http_requests_total" not in out_after
         assert "http_request_duration_seconds" not in out_after
         assert "http_requests_in_flight" not in out_after
+
+
+# ---------------------------------------------------------------------------
+# _get_collectors thread safety
+# ---------------------------------------------------------------------------
+
+
+class TestGetCollectorsIsThreadSafe:
+    """The cold path of :func:`_get_collectors` is serialised by the
+    module-level :data:`_collectors_lock` so two (or more) threads
+    racing to lazily register collectors against the same fresh
+    registry do not both call ``prometheus_client.Counter`` / ``Histogram``
+    / ``Gauge`` against it, which would raise ``Duplicated timeseries``.
+
+    Each test here uses a brand-new :class:`CollectorRegistry`, so the
+    very first call from any thread is a cold-path miss. We widen the
+    race window by monkey-patching the constructor symbols used inside
+    the module with wrappers that record every cold-path entry and
+    briefly ``sleep`` — without that, the cold path is too fast for the
+    race to manifest on most machines and the test would be flaky.
+    """
+
+    @staticmethod
+    def _patch_constructors(monkeypatch, *, delay: float):
+        """Replace the ``Counter``/``Histogram``/``Gauge`` symbols in
+        :mod:`engine.middleware.prometheus` with wrappers that record
+        the calling thread and ``sleep(delay)`` before delegating to
+        the real constructor. Returns the list of recorded caller ids.
+        """
+        import time
+
+        reached: list[int] = []
+
+        def _wrap(orig):
+            def _wrapped(*args, **kwargs):
+                reached.append(threading.get_ident())
+                if delay:
+                    time.sleep(delay)
+                return orig(*args, **kwargs)
+
+            return _wrapped
+
+        monkeypatch.setattr(prometheus_module, "Counter", _wrap(prometheus_module.Counter))
+        monkeypatch.setattr(
+            prometheus_module, "Histogram", _wrap(prometheus_module.Histogram)
+        )
+        monkeypatch.setattr(prometheus_module, "Gauge", _wrap(prometheus_module.Gauge))
+        return reached
+
+    def test_two_threads_no_duplicate_timeseries(self, monkeypatch):
+        """Two threads racing ``_get_collectors`` on a fresh registry
+        must not raise ``Duplicated timeseries`` and must observe the
+        same cached collector set.
+        """
+        reached = self._patch_constructors(monkeypatch, delay=0.02)
+
+        registry = CollectorRegistry()
+        start = threading.Barrier(2)
+        results: list[dict] = []
+        errors: list[BaseException] = []
+
+        def worker():
+            try:
+                start.wait()
+                results.append(_get_collectors(registry))
+            except BaseException as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == [], (
+            f"workers raised: {[(type(e).__name__, str(e)) for e in errors]}"
+        )
+        assert len(results) == 2
+        # Both threads observe the *same* collectors dict.
+        assert results[0] is results[1]
+        # Exactly one thread entered the cold-path constructors.
+        assert len(reached) == 3, (
+            f"expected exactly one Counter/Histogram/Gauge triple (3 calls), "
+            f"got {len(reached)} constructor calls — lock not serialising cold path"
+        )
+        # Cache has exactly one entry for this registry.
+        assert _collectors_cache[registry] is results[0]
+        # Registry only carries one set of http_* metrics.
+        out = generate_latest(registry).decode()
+        assert out.count("# TYPE http_requests_total counter") == 1
+        assert out.count("# TYPE http_request_duration_seconds histogram") == 1
+        assert out.count("# TYPE http_requests_in_flight gauge") == 1
+
+    def test_many_threads_no_duplicate_timeseries(self, monkeypatch):
+        """Stress the cold-path serialisation with 16 threads. Without
+        :data:`_collectors_lock` this test reliably raises
+        ``Duplicated timeseries`` on the second constructor call; with
+        the lock every thread observes the same cached entry.
+        """
+        reached = self._patch_constructors(monkeypatch, delay=0.01)
+
+        n = 16
+        registry = CollectorRegistry()
+        start = threading.Barrier(n)
+        results: list[dict] = []
+        errors: list[BaseException] = []
+        results_lock = threading.Lock()
+
+        def worker():
+            try:
+                start.wait()
+                collectors = _get_collectors(registry)
+                with results_lock:
+                    results.append(collectors)
+            except BaseException as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker) for _ in range(n)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == [], (
+            f"workers raised: {[(type(e).__name__, str(e)) for e in errors]}"
+        )
+        assert len(results) == n
+        first = results[0]
+        for r in results[1:]:
+            assert r is first
+        # Only one thread should have entered the constructor block.
+        assert len(reached) == 3, (
+            f"expected exactly one Counter/Histogram/Gauge triple (3 calls), "
+            f"got {len(reached)} constructor calls — lock not serialising cold path"
+        )
+        out = generate_latest(registry).decode()
+        assert out.count("# TYPE http_requests_total counter") == 1
+
+    def test_lock_is_a_threading_lock(self):
+        """Guard against accidental removal of the lock — the module
+        must expose a real :class:`threading.Lock` (technically an
+        instance of the underlying ``_thread.lockType``) at
+        ``_collectors_lock``.
+        """
+        lock = prometheus_module._collectors_lock
+        # ``threading.Lock`` returns a ``_thread.CLockType``; the
+        # public, stable way to assert that is via ``threading.Lock``
+        # itself (instances of the same C type).
+        assert isinstance(lock, type(threading.Lock()))
+        # And it must support the context-manager protocol used by
+        # ``with _collectors_lock:``.
+        assert hasattr(lock, "__enter__")
+        assert hasattr(lock, "__exit__")
+        assert hasattr(lock, "acquire")
+        assert hasattr(lock, "release")
 
 
 # ---------------------------------------------------------------------------

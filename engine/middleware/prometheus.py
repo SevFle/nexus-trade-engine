@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import contextlib
 import re
+import threading
 import time
 import weakref
 from typing import TYPE_CHECKING
@@ -156,6 +157,20 @@ _collectors_cache: weakref.WeakKeyDictionary[
     CollectorRegistry, dict[str, Counter | Gauge | Histogram]
 ] = weakref.WeakKeyDictionary()
 
+#: Module-level lock guarding the *cold path* of :func:`_get_collectors`
+#: (i.e. the first time a given registry is seen, when we create the
+#: three named collectors and insert them into the cache). The hot path
+#: — returning the cached dict — is lock-free because the only mutation
+#: that could race is the cold-path registration, and two concurrent
+#: cold paths for the same registry would each call
+#: ``prometheus_client.Counter(...)`` against that registry, raising
+#: ``Duplicated timeseries``. Holding this lock serialises the
+#: create/register/cache block, so the second waiter observes the
+#: cached entry on retry instead of racing the registration. This is
+#: only paid once per registry per process; subsequent calls take the
+#: fast path above the lock.
+_collectors_lock = threading.Lock()
+
 
 def _get_collectors(
     registry: CollectorRegistry,
@@ -175,37 +190,59 @@ def _get_collectors(
     registry object, so the entry disappears automatically once the
     registry itself is unreferenced — there is no stale entry for a
     later ``id()``-recycled object to hit.
+
+    Thread safety
+    -------------
+    The fast path (cache hit) is lock-free. The slow path — create
+    collectors, register them, store them in the cache — is guarded by
+    :data:`_collectors_lock`. Without that lock, two threads hitting
+    :func:`_get_collectors` for the same fresh registry simultaneously
+    would each pass the ``cached is None`` check and both attempt to
+    construct ``Counter("http_requests_total", ...)`` against it; the
+    second constructor raises ``Duplicated timeseries`` and the
+    middleware fails to initialise. The lock is acquired only on the
+    cold path so the per-request hot path pays nothing.
     """
     cached = _collectors_cache.get(registry)
     if cached is not None:
         return cached
 
-    labelnames = ("method", "status", "path")
-    requests = Counter(
-        f"{metric_prefix}_requests_total",
-        "Total number of HTTP requests received by the API.",
-        labelnames,
-        registry=registry,
-    )
-    latency = Histogram(
-        f"{metric_prefix}_request_duration_seconds",
-        "HTTP request handling latency in seconds (wall time).",
-        labelnames,
-        buckets=buckets,
-        registry=registry,
-    )
-    in_flight = Gauge(
-        f"{metric_prefix}_requests_in_flight",
-        "Number of HTTP requests currently being processed.",
-        registry=registry,
-    )
-    collectors: dict[str, Counter | Gauge | Histogram] = {
-        "requests": requests,
-        "latency": latency,
-        "in_flight": in_flight,
-    }
-    _collectors_cache[registry] = collectors
-    return collectors
+    # Cold path: serialise the create/register/cache block across all
+    # threads so a concurrent cold-path caller for the same registry
+    # re-checks the cache inside the lock and observes our newly-stored
+    # entry instead of racing the registration. Per-registry overhead
+    # is paid exactly once; subsequent calls hit the fast path above.
+    with _collectors_lock:
+        cached = _collectors_cache.get(registry)
+        if cached is not None:
+            return cached
+
+        labelnames = ("method", "status", "path")
+        requests = Counter(
+            f"{metric_prefix}_requests_total",
+            "Total number of HTTP requests received by the API.",
+            labelnames,
+            registry=registry,
+        )
+        latency = Histogram(
+            f"{metric_prefix}_request_duration_seconds",
+            "HTTP request handling latency in seconds (wall time).",
+            labelnames,
+            buckets=buckets,
+            registry=registry,
+        )
+        in_flight = Gauge(
+            f"{metric_prefix}_requests_in_flight",
+            "Number of HTTP requests currently being processed.",
+            registry=registry,
+        )
+        collectors: dict[str, Counter | Gauge | Histogram] = {
+            "requests": requests,
+            "latency": latency,
+            "in_flight": in_flight,
+        }
+        _collectors_cache[registry] = collectors
+        return collectors
 
 
 def reset_collectors_for_tests() -> None:
@@ -220,18 +257,47 @@ def reset_collectors_for_tests() -> None:
     lazy init blow up with ``Duplicated timeseries`` (default registry)
     or leak state across tests that reuse the same throwaway registry.
 
-    Entries whose registry has already been garbage-collected are
-    gone from the :class:`weakref.WeakKeyDictionary` already, so there
-    is nothing to unregister for them — ``KeyError`` is suppressed for
-    the rare race where a registry is collected mid-iteration.
+    Why ``KeyError`` is suppressed
+    ------------------------------
+    ``CollectorRegistry.unregister`` raises ``KeyError`` when the
+    collector passed to it is not currently registered against that
+    registry. The realistic ways that happens here are:
+
+    1. **External teardown.** A test or fixture has already removed
+       the collector from this registry by some other path — e.g. the
+       test manually called ``registry.unregister(...)``, or a
+       sibling teardown helper dropped the same collectors — leaving
+       a stale cache entry pointing at collectors that are no longer
+       registered.
+    2. **A registry reused across modules.** Two independently-tested
+       modules both wired :class:`PrometheusMiddleware` against the
+       same shared registry and one of them already tore its
+       collectors down.
+    3. **Concurrent collection (defensive).** Because the cache is a
+       :class:`weakref.WeakKeyDictionary`, the snapshot taken by
+       ``list(_collectors_cache.items())`` and the subsequent
+       ``unregister`` call are not atomic with respect to other
+       threads mutating the same registry.
+
+    In every case the collector is already gone from the target
+    registry, which is exactly the end state this function is trying
+    to reach — so ``KeyError`` is treated as success.
+    ``AttributeError`` used to be suppressed too but masked real bugs,
+    so it is no longer caught. Entries whose registry has already been
+    garbage-collected are simply absent from the
+    :class:`weakref.WeakKeyDictionary` and are never iterated at all.
     """
     for registry, collectors in list(_collectors_cache.items()):
         for collector in collectors.values():
-            # ``unregister`` raises ``KeyError`` if the collector is
-            # not registered against this registry (e.g. already
-            # removed by a prior reset). That is the only expected
-            # failure mode — ``AttributeError`` used to be suppressed
-            # too but masked real bugs, so it is no longer caught.
+            # ``unregister`` raises ``KeyError`` when the collector is
+            # not registered against this registry. That can happen on
+            # a repeat reset (the pre-test reset already removed it),
+            # when the test tore the registry down itself, or when a
+            # WeakKeyDictionary entry vanishes mid-iteration. In every
+            # case the collector is already gone from the registry —
+            # the desired end state — so ``KeyError`` is suppressed.
+            # ``AttributeError`` is *not* suppressed: it historically
+            # masked real bugs.
             with contextlib.suppress(KeyError):
                 registry.unregister(collector)
     _collectors_cache.clear()
