@@ -1262,7 +1262,7 @@ class TestEventBusBridge:
         await manager.join_room(cid, "portfolio:account:A1")
         await bus.deliver(
             EventType.PORTFOLIO_UPDATED,
-            {"type": "portfolio_updated", "data": {"account_id": "A1"}},
+            {"type": "portfolio.updated", "data": {"account_id": "A1"}},
         )
         await asyncio.sleep(0.1)
         seq = manager.next_seq("portfolio:account:A1")
@@ -1282,7 +1282,7 @@ class TestEventBusBridge:
         await manager.join_room(cid, "portfolio:strategy:S1")
         await bus.deliver(
             EventType.POSITION_OPENED,
-            {"type": "position_opened", "data": {"strategy_id": "S1"}},
+            {"type": "position.opened", "data": {"strategy_id": "S1"}},
         )
         await asyncio.sleep(0.1)
 
@@ -1294,7 +1294,7 @@ class TestEventBusBridge:
         await manager.join_room(cid, "orders:symbol:AAPL")
         await bus.deliver(
             EventType.ORDER_FILLED,
-            {"type": "order_filled", "data": {"symbol": "AAPL"}},
+            {"type": "order.filled", "data": {"symbol": "AAPL"}},
         )
         await asyncio.sleep(0.1)
 
@@ -1306,7 +1306,7 @@ class TestEventBusBridge:
         await manager.join_room(cid, "strategies:strategy:S1")
         await bus.deliver(
             EventType.STRATEGY_LOADED,
-            {"type": "strategy_loaded", "data": {"strategy_id": "S1"}},
+            {"type": "strategy.loaded", "data": {"strategy_id": "S1"}},
         )
         await asyncio.sleep(0.1)
 
@@ -1315,17 +1315,25 @@ class TestEventBusBridge:
         bridge.start()
         await bus.deliver(
             EventType.ORDER_CREATED,
-            {"type": "order_created", "data": "not_a_dict"},
+            {"type": "order.created", "data": "not_a_dict"},
         )
         await asyncio.sleep(0.05)
 
     async def test_event_to_channel_mapping(self):
-        assert _EVENT_TO_CHANNEL["portfolio_updated"] == "portfolio"
-        assert _EVENT_TO_CHANNEL["order_created"] == "orders"
-        assert _EVENT_TO_CHANNEL["strategy_loaded"] == "strategies"
-        assert _EVENT_TO_CHANNEL["order_filled"] == "orders"
-        assert _EVENT_TO_CHANNEL["position_closed"] == "portfolio"
-        assert _EVENT_TO_CHANNEL["strategy_error"] == "strategies"
+        from engine.events.bus import EventType
+
+        assert _EVENT_TO_CHANNEL[EventType.PORTFOLIO_UPDATED] == "portfolio"
+        assert _EVENT_TO_CHANNEL[EventType.ORDER_CREATED] == "orders"
+        assert _EVENT_TO_CHANNEL[EventType.STRATEGY_LOADED] == "strategies"
+        assert _EVENT_TO_CHANNEL[EventType.ORDER_FILLED] == "orders"
+        assert _EVENT_TO_CHANNEL[EventType.POSITION_CLOSED] == "portfolio"
+        assert _EVENT_TO_CHANNEL[EventType.STRATEGY_ERROR] == "strategies"
+        # StrEnum members compare equal to (and hash identically to) their
+        # dotted string ``.value``, so the mapping is also reachable via the
+        # exact ``"type"`` string the EventBus serializes into payloads.
+        assert _EVENT_TO_CHANNEL["portfolio.updated"] == "portfolio"
+        assert _EVENT_TO_CHANNEL["order.created"] == "orders"
+        assert _EVENT_TO_CHANNEL["strategy.loaded"] == "strategies"
 
     async def test_handle_with_user_id_broadcasts_user_room(self, setup):
         bus, manager, bridge, EventType = setup
@@ -1336,7 +1344,7 @@ class TestEventBusBridge:
         await bus.deliver(
             EventType.ORDER_CREATED,
             {
-                "type": "order_created",
+                "type": "order.created",
                 "data": {"user_id": "u1", "symbol": "AAPL"},
             },
         )
@@ -1351,7 +1359,7 @@ class TestEventBusBridge:
         with patch("engine.api.ws.event_bridge.resolve_room_name", return_value=None):
             await bus.deliver(
                 EventType.PORTFOLIO_UPDATED,
-                {"type": "portfolio_updated", "data": {}},
+                {"type": "portfolio.updated", "data": {}},
             )
         await asyncio.sleep(0.1)
         assert len(ws.sent) >= 1
@@ -1366,7 +1374,7 @@ class TestEventBusBridge:
         with patch("engine.api.ws.event_bridge.resolve_room_name", return_value=""):
             await bus.deliver(
                 EventType.ORDER_CREATED,
-                {"type": "order_created", "data": {}},
+                {"type": "order.created", "data": {}},
             )
         await asyncio.sleep(0.1)
         assert len(ws.sent) >= 1
@@ -1381,7 +1389,7 @@ class TestEventBusBridge:
         ):
             await bus.deliver(
                 EventType.PORTFOLIO_UPDATED,
-                {"type": "portfolio_updated", "data": {}},
+                {"type": "portfolio.updated", "data": {}},
             )
         await asyncio.sleep(0.05)
 
@@ -1393,7 +1401,7 @@ class TestEventBusBridge:
         await manager.join_room(cid, "strategies")
         await bus.deliver(
             EventType.STRATEGY_LOADED,
-            {"type": "strategy_loaded", "data": {"irrelevant_key": "val"}},
+            {"type": "strategy.loaded", "data": {"irrelevant_key": "val"}},
         )
         await asyncio.sleep(0.1)
         assert len(ws.sent) >= 1
@@ -1415,7 +1423,7 @@ class TestEventBusBridge:
         with patch("engine.api.ws.event_bridge.asyncio.create_task", side_effect=failing_create):
             await bus.deliver(
                 EventType.ORDER_CREATED,
-                {"type": "order_created", "data": {"symbol": "AAPL"}},
+                {"type": "order.created", "data": {"symbol": "AAPL"}},
             )
             await asyncio.sleep(0.05)
 
