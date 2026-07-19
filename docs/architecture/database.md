@@ -25,12 +25,12 @@ The schema is owned by the Alembic migration chain in
 
 | Rev   | Adds / changes                                                 |
 |-------|----------------------------------------------------------------|
-| 001   | Initial schema: users, strategies, backtest_results, accounts. |
-| 002   | Auxiliary tables (portfolios, journals, positions, fills).     |
+| 001   | Initial schema: `users`, `portfolios`, `positions`, `orders`, `installed_strategies`, `backtest_results`, `ohlcv_bars`. |
+| 002   | Auxiliary tables: `portfolio_snapshots`, `evaluation_log`, `tax_lots`, `marketplace_entries`, `marketplace_reviews` (migration-only schema; no live ORM models). |
 | 003   | Make `backtest_results.portfolio_id` nullable.                 |
 | 004   | Legal documents (Terms, Privacy, Disclaimer, …).               |
-| 005   | Auth/RBAC tables (roles, role_assignments).                    |
-| 006   | Make `legal_acceptance` rows immutable (no update/delete).     |
+| 005   | `refresh_tokens` for JWT refresh-rotation (RBAC role is a `users.role` string, not a separate table). |
+| 006   | Make `legal_acceptances` rows immutable (no UPDATE/DELETE; trigger raises). |
 | 007   | `scoring_snapshots` for cross-strategy composite scoring.      |
 | 008   | `backtest_results.composite_score` + `score_breakdown` (gh#8). |
 | 009   | `users.{mfa_enabled, mfa_secret_encrypted, mfa_backup_codes}`. |
@@ -63,7 +63,7 @@ runbook at [`docs/operations/backup-and-recovery.md`](../operations/backup-and-r
 - **`backtest_results`** — every run a user has ever submitted. The
   `score_breakdown` JSONB column is the per-dimension score map from
   the strategy evaluator.
-- **`portfolios`, `accounts`, `positions`, `fills`** — operational
+- **`portfolios`, `positions`, `orders`** — operational
   trading state. When live trading lands (#109 / #111) these tables
   will see write traffic on every fill.
 - **`webhook_configs`, `webhook_deliveries`** — the outbound webhook

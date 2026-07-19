@@ -3348,13 +3348,15 @@ will need its own SLOs when #109/#111 land. Today there's nothing to
 SLO because live isn't shipped.</p>
 <hr />
 <h2 id="p2-some-decisions-still-lack-an-adr">P2 — Some decisions still lack an ADR<a class="headerlink" href="#p2-some-decisions-still-lack-an-adr" title="Permanent link">&para;</a></h2>
-<p><a href="../adr/"><code>docs/adr/</code></a> now captures eleven decisions: scaffold
+<p><a href="../adr/"><code>docs/adr/</code></a> now captures twelve decisions: scaffold
 (0001), auth/RBAC (0002), mobile/PWA (0003), TaskIQ (0004), Valkey
 (0005), bcrypt+Fernet (0006), the strategy sandbox allowlist import
 model (0007), the pluggable <code>MetricsBackend</code> Protocol (0008), the
 cross-replica <code>EventBus</code> WebSocket bridge (0009), the static AST
-validation + TOCTOU-safe strategy loader (0010), and the runtime
-introspection / dunder-attribute guard (0011). A handful of smaller
+validation + TOCTOU-safe strategy loader (0010), the runtime
+introspection / dunder-attribute guard (0011), and the Layer-3
+sandbox resource limits (SIGALRM + tracemalloc + single-flight lock,
+0012). A handful of smaller
 decisions are still recorded only as PR descriptions or commit
 messages — e.g. the in-process backtest result store (this is tech
 debt to be fixed, P0 above, rather than an accepted architecture

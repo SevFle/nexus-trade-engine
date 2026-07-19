@@ -194,6 +194,8 @@ record the acceptance the gate checks for. Source:
 | POST | `/api/v1/legal/accept` | `user` | Records acceptance(s); `acceptances` are append-only (migration 006). |
 | GET | `/api/v1/legal/acceptances/me?document_slug=` | `user` | Caller's acceptance history. |
 | GET | `/api/v1/legal/attributions?context=` | — | `DataProviderAttribution` rows shown in the UI footer. |
+| POST | `/api/legal/accept` | `user` | **Legal-gate** endpoint (note: no `/v1/`). The legacy/companion route to the document-managed `/api/v1/legal/accept` above: it accepts a single `document_version` field, validates it against `settings.legal_terms_version`, and on match persists the *server-authoritative* version (never the client string, so the audit trail can't be polluted). `422 {code:"LEGAL_VERSION_MISMATCH", current_version, submitted_version}` on a stale/future version. The caller IP is resolved via `resolve_client_ip`, which honours `trusted_proxies` (CIDR-aware) and `X-Forwarded-For`, so the recorded address is the real end user behind a reverse proxy. Source: [`routes/legal.py`](../engine/api/routes/legal.py). |
+| GET | `/api/legal/status` | `user` | **Legal-gate** status. `200 GateStatusResponse{accepted, current_version, accepted_version?, accepted_at?, needs_acceptance}` — `accepted` is true iff the user's most recent acceptance matches the current version; `needs_acceptance` is the negation, for client UX. |
 
 ## Portfolio
 

@@ -2734,11 +2734,11 @@ The schema is owned by the Alembic migration chain in
 <tbody>
 <tr>
 <td>001</td>
-<td>Initial schema: users, strategies, backtest_results, accounts.</td>
+<td>Initial schema: <code>users</code>, <code>portfolios</code>, <code>positions</code>, <code>orders</code>, <code>installed_strategies</code>, <code>backtest_results</code>, <code>ohlcv_bars</code>.</td>
 </tr>
 <tr>
 <td>002</td>
-<td>Auxiliary tables (portfolios, journals, positions, fills).</td>
+<td>Auxiliary tables: <code>portfolio_snapshots</code>, <code>evaluation_log</code>, <code>tax_lots</code>, <code>marketplace_entries</code>, <code>marketplace_reviews</code> (migration-only schema; no live ORM models).</td>
 </tr>
 <tr>
 <td>003</td>
@@ -2750,11 +2750,11 @@ The schema is owned by the Alembic migration chain in
 </tr>
 <tr>
 <td>005</td>
-<td>Auth/RBAC tables (roles, role_assignments).</td>
+<td><code>refresh_tokens</code> for JWT refresh-rotation (RBAC role is a <code>users.role</code> string, not a separate table).</td>
 </tr>
 <tr>
 <td>006</td>
-<td>Make <code>legal_acceptance</code> rows immutable (no update/delete).</td>
+<td>Make <code>legal_acceptances</code> rows immutable (no UPDATE/DELETE; trigger raises).</td>
 </tr>
 <tr>
 <td>007</td>
@@ -2809,7 +2809,7 @@ runbook at <a href="../../operations/backup-and-recovery/"><code>docs/operations
 <li><strong><code>backtest_results</code></strong> — every run a user has ever submitted. The
   <code>score_breakdown</code> JSONB column is the per-dimension score map from
   the strategy evaluator.</li>
-<li><strong><code>portfolios</code>, <code>accounts</code>, <code>positions</code>, <code>fills</code></strong> — operational
+<li><strong><code>portfolios</code>, <code>positions</code>, <code>orders</code></strong> — operational
   trading state. When live trading lands (#109 / #111) these tables
   will see write traffic on every fill.</li>
 <li><strong><code>webhook_configs</code>, <code>webhook_deliveries</code></strong> — the outbound webhook

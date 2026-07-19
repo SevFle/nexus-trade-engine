@@ -204,6 +204,30 @@ by setting `revoked_at`; the row itself never disappears.
 deleting a user with acceptances fails at commit time, which forces
 the GDPR deletion flow to record the revoke first.
 
+### `legal_gate_acceptances` (engine/legal/models.py)
+
+The **legal-gate** audit table — a deliberately simpler, single-document
+companion to `legal_acceptances` above. Backs the
+[`POST /api/legal/accept`](api-reference.md#legal) and
+`GET /api/legal/status` endpoints (note: no `/v1/`). Where
+`legal_acceptances` is the multi-document CMS surface
+(`/api/v1/legal/*`), `legal_gate_acceptances` records the binary
+"accepted the current `settings.legal_terms_version`" flag the request
+pipeline's `require_legal_acceptance` gate actually checks.
+
+| Column | Type / constraint | Notes |
+|---|---|---|
+| `id` | UUID PK | Server-generated. |
+| `user_id` | `varchar(64)` indexed | Stored as `str(user.id)`; no FK (the legal module is intentionally decoupled from `engine.db.models.User`). |
+| `document_version` | `varchar(32)` | The server-authoritative `settings.legal_terms_version` persisted on accept — never the client-supplied string, so the audit trail can't be polluted by a crafted payload. |
+| `accepted_at` | `UTCDateTime` | Timezone-aware UTC. |
+| `ip_address` | `varchar(45)` | Resolved via `resolve_client_ip` (CIDR-aware `trusted_proxies` + `X-Forwarded-For`); the real end user even behind a reverse proxy. |
+
+Compound indexes: `ix_legal_gate_user_version (user_id, document_version)`
+and `ix_legal_gate_user_time (user_id, accepted_at)` cover the two read
+patterns (latest-by-version, latest-by-time). Append-only by intent —
+every acceptance is retained for a lossless audit trail.
+
 ## Privacy
 
 ### `dsr_requests` (012)

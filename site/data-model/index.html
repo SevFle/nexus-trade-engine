@@ -1293,6 +1293,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#legal_gate_acceptances-enginelegalmodelspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        legal_gate_acceptances (engine/legal/models.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3139,6 +3150,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#legal_gate_acceptances-enginelegalmodelspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        legal_gate_acceptances (engine/legal/models.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3549,6 +3571,55 @@ by setting <code>revoked_at</code>; the row itself never disappears.</p>
 <p><code>user_id</code> FK is <code>ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED</code> —
 deleting a user with acceptances fails at commit time, which forces
 the GDPR deletion flow to record the revoke first.</p>
+<h3 id="legal_gate_acceptances-enginelegalmodelspy"><code>legal_gate_acceptances</code> (engine/legal/models.py)<a class="headerlink" href="#legal_gate_acceptances-enginelegalmodelspy" title="Permanent link">&para;</a></h3>
+<p>The <strong>legal-gate</strong> audit table — a deliberately simpler, single-document
+companion to <code>legal_acceptances</code> above. Backs the
+<a href="../api-reference/#legal"><code>POST /api/legal/accept</code></a> and
+<code>GET /api/legal/status</code> endpoints (note: no <code>/v1/</code>). Where
+<code>legal_acceptances</code> is the multi-document CMS surface
+(<code>/api/v1/legal/*</code>), <code>legal_gate_acceptances</code> records the binary
+"accepted the current <code>settings.legal_terms_version</code>" flag the request
+pipeline's <code>require_legal_acceptance</code> gate actually checks.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type / constraint</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>UUID PK</td>
+<td>Server-generated.</td>
+</tr>
+<tr>
+<td><code>user_id</code></td>
+<td><code>varchar(64)</code> indexed</td>
+<td>Stored as <code>str(user.id)</code>; no FK (the legal module is intentionally decoupled from <code>engine.db.models.User</code>).</td>
+</tr>
+<tr>
+<td><code>document_version</code></td>
+<td><code>varchar(32)</code></td>
+<td>The server-authoritative <code>settings.legal_terms_version</code> persisted on accept — never the client-supplied string, so the audit trail can't be polluted by a crafted payload.</td>
+</tr>
+<tr>
+<td><code>accepted_at</code></td>
+<td><code>UTCDateTime</code></td>
+<td>Timezone-aware UTC.</td>
+</tr>
+<tr>
+<td><code>ip_address</code></td>
+<td><code>varchar(45)</code></td>
+<td>Resolved via <code>resolve_client_ip</code> (CIDR-aware <code>trusted_proxies</code> + <code>X-Forwarded-For</code>); the real end user even behind a reverse proxy.</td>
+</tr>
+</tbody>
+</table>
+<p>Compound indexes: <code>ix_legal_gate_user_version (user_id, document_version)</code>
+and <code>ix_legal_gate_user_time (user_id, accepted_at)</code> cover the two read
+patterns (latest-by-version, latest-by-time). Append-only by intent —
+every acceptance is retained for a lossless audit trail.</p>
 <h2 id="privacy">Privacy<a class="headerlink" href="#privacy" title="Permanent link">&para;</a></h2>
 <h3 id="dsr_requests-012"><code>dsr_requests</code> (012)<a class="headerlink" href="#dsr_requests-012" title="Permanent link">&para;</a></h3>
 <p>GDPR / CCPA data-subject request audit row. Tracks lifecycle

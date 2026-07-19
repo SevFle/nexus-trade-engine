@@ -476,13 +476,15 @@ SLO because live isn't shipped.
 
 ## P2 — Some decisions still lack an ADR
 
-[`docs/adr/`](adr/README.md) now captures eleven decisions: scaffold
+[`docs/adr/`](adr/README.md) now captures twelve decisions: scaffold
 (0001), auth/RBAC (0002), mobile/PWA (0003), TaskIQ (0004), Valkey
 (0005), bcrypt+Fernet (0006), the strategy sandbox allowlist import
 model (0007), the pluggable `MetricsBackend` Protocol (0008), the
 cross-replica `EventBus` WebSocket bridge (0009), the static AST
-validation + TOCTOU-safe strategy loader (0010), and the runtime
-introspection / dunder-attribute guard (0011). A handful of smaller
+validation + TOCTOU-safe strategy loader (0010), the runtime
+introspection / dunder-attribute guard (0011), and the Layer-3
+sandbox resource limits (SIGALRM + tracemalloc + single-flight lock,
+0012). A handful of smaller
 decisions are still recorded only as PR descriptions or commit
 messages — e.g. the in-process backtest result store (this is tech
 debt to be fixed, P0 above, rather than an accepted architecture

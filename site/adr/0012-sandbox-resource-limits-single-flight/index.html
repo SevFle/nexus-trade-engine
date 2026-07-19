@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/architecture/plugins/">
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/adr/0012-sandbox-resource-limits-single-flight/">
       
       
-        <link rel="prev" href="../database/">
+        <link rel="prev" href="../0011-runtime-introspection-blocking/">
       
       
-        <link rel="next" href="../../api-reference/">
+        <link rel="next" href="../template/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Plugin system - Nexus Trade Engine</title>
+        <title>0012 — Sandbox resource limits (SIGALRM + tracemalloc + single-flight) - Nexus Trade Engine</title>
       
     
     
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#plugins" class="md-skip">
+        <a href="#adr-0012-sandbox-resource-limits-sigalrm-tracemalloc-single-flight-lock" class="md-skip">
           Skip to content
         </a>
       
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Plugin system
+              0012 — Sandbox resource limits (SIGALRM + tracemalloc + single-flight)
             
           </span>
         </div>
@@ -247,13 +247,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../architecture/" class="md-tabs__link">
           
   
   
@@ -315,11 +313,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../adr/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -497,8 +497,6 @@
       
   
   
-    
-  
   
   
     
@@ -526,23 +524,22 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
+            <a href="../../architecture/" class="md-nav__link ">
               
   
   
@@ -560,13 +557,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="">
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -586,7 +583,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../overview/" class="md-nav__link">
+      <a href="../../architecture/overview/" class="md-nav__link">
         
   
   
@@ -614,7 +611,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../core-domains/" class="md-nav__link">
+      <a href="../../architecture/core-domains/" class="md-nav__link">
         
   
   
@@ -642,7 +639,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../analytics/" class="md-nav__link">
+      <a href="../../architecture/analytics/" class="md-nav__link">
         
   
   
@@ -670,7 +667,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../multi-strategy/" class="md-nav__link">
+      <a href="../../architecture/multi-strategy/" class="md-nav__link">
         
   
   
@@ -698,7 +695,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../data-providers/" class="md-nav__link">
+      <a href="../../architecture/data-providers/" class="md-nav__link">
         
   
   
@@ -726,7 +723,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../database/" class="md-nav__link">
+      <a href="../../architecture/database/" class="md-nav__link">
         
   
   
@@ -751,37 +748,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Plugin system
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../architecture/plugins/" class="md-nav__link">
         
   
   
@@ -797,92 +767,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#what-can-be-a-plugin" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What can be a plugin
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#discovery-registration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Discovery &amp; registration
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#lifecycle" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Lifecycle
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#writing-a-plugin-strategy-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Writing a plugin (strategy example)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#sandboxing" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Sandboxing
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#where-the-code-lives" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Where the code lives
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1325,6 +1209,8 @@
       
   
   
+    
+  
   
   
     
@@ -1364,22 +1250,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../adr/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -1397,13 +1284,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1423,7 +1310,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0001-scaffold-tech-choices/" class="md-nav__link">
+      <a href="../0001-scaffold-tech-choices/" class="md-nav__link">
         
   
   
@@ -1451,7 +1338,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0002-auth-rbac/" class="md-nav__link">
+      <a href="../0002-auth-rbac/" class="md-nav__link">
         
   
   
@@ -1479,7 +1366,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0003-mobile-app-strategy/" class="md-nav__link">
+      <a href="../0003-mobile-app-strategy/" class="md-nav__link">
         
   
   
@@ -1507,7 +1394,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0004-task-queue-taskiq/" class="md-nav__link">
+      <a href="../0004-task-queue-taskiq/" class="md-nav__link">
         
   
   
@@ -1535,7 +1422,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0005-valkey-over-redis/" class="md-nav__link">
+      <a href="../0005-valkey-over-redis/" class="md-nav__link">
         
   
   
@@ -1563,7 +1450,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0006-bcrypt-fernet/" class="md-nav__link">
+      <a href="../0006-bcrypt-fernet/" class="md-nav__link">
         
   
   
@@ -1591,7 +1478,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
+      <a href="../0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
         
   
   
@@ -1619,7 +1506,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0008-pluggable-metrics-backend/" class="md-nav__link">
+      <a href="../0008-pluggable-metrics-backend/" class="md-nav__link">
         
   
   
@@ -1647,7 +1534,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0009-cross-replica-eventbus-bridge/" class="md-nav__link">
+      <a href="../0009-cross-replica-eventbus-bridge/" class="md-nav__link">
         
   
   
@@ -1675,7 +1562,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0010-static-ast-validation-toctou-loading/" class="md-nav__link">
+      <a href="../0010-static-ast-validation-toctou-loading/" class="md-nav__link">
         
   
   
@@ -1703,7 +1590,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/0011-runtime-introspection-blocking/" class="md-nav__link">
+      <a href="../0011-runtime-introspection-blocking/" class="md-nav__link">
         
   
   
@@ -1728,10 +1615,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../adr/0012-sandbox-resource-limits-single-flight/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0012 — Sandbox resource limits (SIGALRM + tracemalloc + single-flight)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1747,6 +1661,231 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#context-and-problem-statement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context and Problem Statement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-drivers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Drivers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#considered-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Considered Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-outcome" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Outcome
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision Outcome">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Details
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-sigalrm-and-not-asynciowait_for" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why SIGALRM and not asyncio.wait_for
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-sandboxresourceerrorbaseexception-and-not-exception" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why SandboxResourceError(BaseException) and not (Exception)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-tracemalloc-and-rlimit_as" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why tracemalloc and RLIMIT_AS
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-a-non-reentrant-threadinglock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why a non-reentrant threading.Lock
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-host-side-imports-of-blocked-modules-are-safe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why host-side imports of blocked modules are safe
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pros and Cons of the Options
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pros and Cons of the Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-1-asynciowait_for-as-the-only-guard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 1 — asyncio.wait_for as the only guard
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-2-sigalrm-tracemalloc-no-single-flight-lock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 2 — SIGALRM + tracemalloc, no single-flight lock
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-3-sigalrm-tracemalloc-non-reentrant-lock-chosen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 3 — SIGALRM + tracemalloc + non-reentrant Lock (chosen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-4-subprocess-per-strategy-kill-9-on-timeout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 4 — Subprocess per strategy, kill -9 on timeout
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Links
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1759,7 +1898,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../adr/template/" class="md-nav__link">
+      <a href="../template/" class="md-nav__link">
         
   
   
@@ -2595,10 +2734,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-can-be-a-plugin" class="md-nav__link">
+  <a href="#context-and-problem-statement" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What can be a plugin
+        Context and Problem Statement
       
     </span>
   </a>
@@ -2606,10 +2745,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#discovery-registration" class="md-nav__link">
+  <a href="#decision-drivers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Discovery &amp; registration
+        Decision Drivers
       
     </span>
   </a>
@@ -2617,10 +2756,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#lifecycle" class="md-nav__link">
+  <a href="#considered-options" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Lifecycle
+        Considered Options
       
     </span>
   </a>
@@ -2628,32 +2767,171 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#writing-a-plugin-strategy-example" class="md-nav__link">
+  <a href="#decision-outcome" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Writing a plugin (strategy example)
+        Decision Outcome
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision Outcome">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#sandboxing" class="md-nav__link">
+  <a href="#details" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Sandboxing
+        Details
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-sigalrm-and-not-asynciowait_for" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why SIGALRM and not asyncio.wait_for
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#where-the-code-lives" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#why-sandboxresourceerrorbaseexception-and-not-exception" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Where the code lives
+        Why SandboxResourceError(BaseException) and not (Exception)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-tracemalloc-and-rlimit_as" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why tracemalloc and RLIMIT_AS
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-a-non-reentrant-threadinglock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why a non-reentrant threading.Lock
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-host-side-imports-of-blocked-modules-are-safe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why host-side imports of blocked modules are safe
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pros and Cons of the Options
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pros and Cons of the Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-1-asynciowait_for-as-the-only-guard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 1 — asyncio.wait_for as the only guard
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-2-sigalrm-tracemalloc-no-single-flight-lock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 2 — SIGALRM + tracemalloc, no single-flight lock
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-3-sigalrm-tracemalloc-non-reentrant-lock-chosen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 3 — SIGALRM + tracemalloc + non-reentrant Lock (chosen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-4-subprocess-per-strategy-kill-9-on-timeout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 4 — Subprocess per strategy, kill -9 on timeout
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Links
       
     </span>
   </a>
@@ -2680,308 +2958,367 @@
   
 
 
-<h1 id="plugins">Plugins<a class="headerlink" href="#plugins" title="Permanent link">&para;</a></h1>
-<p>The plugin system lets operators extend Nexus Trade Engine with new
-strategies, data providers, and execution backends without forking
-the core. Plugins live under <a href="../../engine/plugins/"><code>engine/plugins/</code></a>
-and are loaded via a runtime registry.</p>
-<p>The interactive diagram in
-<a href="../plugin-sdk-architecture.jsx"><code>plugin-sdk-architecture.jsx</code></a> shows
-the lifecycle visually; this doc is the flat-markdown source of truth.</p>
-<h2 id="what-can-be-a-plugin">What can be a plugin<a class="headerlink" href="#what-can-be-a-plugin" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Kind</th>
-<th>Loaded into</th>
-<th>Example use case</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Strategy</strong></td>
-<td>The backtest runner / live trading loop</td>
-<td>A custom signal generator, e.g. mean reversion.</td>
-</tr>
-<tr>
-<td><strong>Data provider</strong></td>
-<td>The data registry</td>
-<td>A new market data source (broker REST, CSV, vendor SDK).</td>
-</tr>
-<tr>
-<td><strong>Executor</strong></td>
-<td>The order pipeline</td>
-<td>An adapter to a specific broker's REST/FIX/WS API.</td>
-</tr>
-<tr>
-<td><strong>Webhook template</strong></td>
-<td>The webhook dispatcher</td>
-<td>A new outbound payload shape (Slack/Discord-class).</td>
-</tr>
-</tbody>
-</table>
-<p>The plugin SDK's contract is intentionally small:</p>
-<ol>
-<li>A class implementing the strategy interface — either the public
-   <a href="../../sdk/nexus_sdk/strategy.py"><code>IStrategy</code></a> ABC (<code>async
-   evaluate(portfolio, market, costs) -&gt; list[Signal]</code>, what the README
-   and <a href="../../PLUGIN_DEV_GUIDE/"><code>PLUGIN_DEV_GUIDE.md</code></a> teach) or the
-   legacy in-engine <a href="../../engine/plugins/sdk.py"><code>BaseStrategy</code></a>
-   (<code>on_bar(state, portfolio) -&gt; list[dict]</code>).</li>
-<li>A <strong>YAML</strong> manifest (<code>strategy.manifest.yaml</code> or <code>manifest.yaml</code>)
-   parsed by the <a href="../../engine/plugins/manifest.py"><code>StrategyManifest</code></a>
-   Pydantic model.</li>
-<li>Optional <code>tests/</code> exercising the plugin against a fixture.</li>
-</ol>
-<blockquote>
-<p>The unified "every kind is a plugin" model below is the <em>target
-architecture</em>. Today only <strong>strategies</strong> are discoverable via the
-filesystem registry; data providers are registered in code from a YAML
-config (see <a href="../overview/">database/overview</a>); executors are not yet
-pluggable.</p>
-</blockquote>
-<h2 id="discovery-registration">Discovery &amp; registration<a class="headerlink" href="#discovery-registration" title="Permanent link">&para;</a></h2>
-<p><a href="../../engine/plugins/registry.py"><code>PluginRegistry</code></a> walks a root
-directory for <code>*/manifest.yaml</code> entries, loads each sibling
-<code>strategy.py</code>, and instantiates its top-level <code>Strategy</code> class. The
-canonical root is the repo-level <a href="../../strategies/"><code>strategies/</code></a>
-directory. The <a href="../../engine/plugins/manifest.py"><code>StrategyManifest</code></a>
-schema is what <code>strategy.manifest.yaml</code> (the filename the bundled
-examples and the SDK use) is parsed against.</p>
-<p>The HTTP surface in
-<a href="../../engine/api/routes/strategies.py"><code>routes/strategies.py</code></a> talks
-to <code>app.state.plugin_registry</code> (a richer registry exposing
-<code>list_all()</code>, <code>get()</code>, <code>activate</code>/<code>reload</code>/<code>unload</code>). Note that today
-this is only attached by the legacy
-<a href="../../engine/main.py"><code>engine/main.py</code></a> entrypoint, not the canonical
-<code>create_app()</code> in <a href="../../engine/app.py"><code>engine/app.py</code></a> — so live
-strategy activation from the public API is part of the still-partial
-strategy story (see <a href="../../known-limitations/">known-limitations.md</a>).
-This split is intentional: it lets the operator swap strategies in
-config without re-deploying once the wiring is complete.</p>
-<h2 id="lifecycle">Lifecycle<a class="headerlink" href="#lifecycle" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>discover  ──▶  validate manifest  ──▶  import entry point  ──▶  register
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>                                                                    │
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>                                                                    ▼
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>                            domain code ◀───  registry.get(name) ───┤
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>                                                                    │
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>                                              shutdown ─────────────┤
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>                                                                    ▼
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>                                                     teardown / unregister
-</span></code></pre></div>
+<h1 id="adr-0012-sandbox-resource-limits-sigalrm-tracemalloc-single-flight-lock">ADR-0012: Sandbox resource limits — SIGALRM + tracemalloc + single-flight lock<a class="headerlink" href="#adr-0012-sandbox-resource-limits-sigalrm-tracemalloc-single-flight-lock" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>Discovery</strong> is filesystem-walk based. No network calls; no
-  arbitrary imports outside the plugin tree.</li>
-<li><strong>Validation</strong> fails fast on missing fields, version mismatches, or
-  declared dependencies that aren't installed.</li>
-<li><strong>Import</strong> happens once at startup. If a plugin's import raises,
-  the engine logs the error and continues without registering it —
-  one bad plugin should not crash the service.</li>
-<li><strong>Teardown</strong> runs at shutdown so plugins with sockets / threads
-  close cleanly.</li>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-07-17</li>
+<li><strong>Deciders</strong>: Lead maintainer + security reviewer</li>
+<li><strong>Tags</strong>: security, plugins, sandbox</li>
 </ul>
-<h2 id="writing-a-plugin-strategy-example">Writing a plugin (strategy example)<a class="headerlink" href="#writing-a-plugin-strategy-example" title="Permanent link">&para;</a></h2>
-<p>Concrete tutorials live in
-<a href="../../PLUGIN_DEV_GUIDE/"><code>docs/PLUGIN_DEV_GUIDE.md</code></a>. The minimum
-shape (matching the bundled <a href="../../strategies/"><code>strategies/</code></a>
-examples):</p>
+<h2 id="context-and-problem-statement">Context and Problem Statement<a class="headerlink" href="#context-and-problem-statement" title="Permanent link">&para;</a></h2>
+<p><a href="../0007-strategy-sandbox-allowlist-imports/">ADR-0007</a> closed the static
+<code>import</code> surface, <a href="../0010-static-ast-validation-toctou-loading/">ADR-0010</a>
+closed dynamic-import / code-execution builtins and the loader TOCTOU
+window, and <a href="../0011-runtime-introspection-blocking/">ADR-0011</a> closed the
+CPython object-graph escape chain. None of those, however, address a
+strategy that is <strong>syntactically benign but unbounded in cost</strong> — a tight
+<code>while True:</code> loop, a <code>numpy.zeros((10**9,))</code> allocation, or an
+accidentally-exponential recursion. Such a strategy never <em>imports</em> a
+forbidden module and never <em>traverses</em> a dunder; it just consumes the
+host process until the OOM killer or a deploy health-check tears it down.</p>
+<p>The host sandbox already wraps every <code>evaluate()</code> / <code>on_bar()</code> call in
+an <code>asyncio.wait_for(...)</code> wall-clock timeout, but that timeout <strong>can
+only fire when the event loop regains control</strong>. A strategy that spins
+in pure-Python compute (<code>while True: pass</code>) — or in a C extension that
+does not release the GIL — never <code>await</code>s, so the asyncio scheduler
+never gets to run the timeout callback. From the perspective of an
+operator looking at a stuck worker, the asyncio timeout is invisible.</p>
+<p>This ADR records the decisions behind the Layer-3 resource-limits
+module — <a href="../../engine/plugins/sandbox/resource_limits.py"><code>engine/plugins/sandbox/resource_limits.py</code></a>
+(gh#1539, gh#1545) — because the mechanism rests on three non-obvious
+invariants that are easy to break in a future refactor:</p>
 <ol>
-<li>Subclass the strategy interface — <code>nexus_sdk.IStrategy</code> for the
-   public SDK contract (<code>async evaluate(...) -&gt; list[Signal]</code>), or
-   <code>engine.plugins.sdk.BaseStrategy</code> for the legacy <code>on_bar</code> loop.</li>
-<li>Implement the required methods (<code>evaluate</code> for <code>IStrategy</code>,
-   <code>on_bar</code> for <code>BaseStrategy</code>; <code>initialize</code>/<code>dispose</code>/<code>get_config_schema</code>
-   for the SDK ABC).</li>
-<li>Add a <code>strategy.manifest.yaml</code> (or <code>manifest.yaml</code>):
-   <div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;mean-reversion-basic&quot;</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Mean</span><span class="nv"> </span><span class="s">Reversion</span><span class="nv"> </span><span class="s">Basic&quot;</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nt">author</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Nexus</span><span class="nv"> </span><span class="s">Team&quot;</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nt">runtime</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;python:3.11&quot;</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="nt">dependencies</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="nt">resources</span><span class="p">:</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="nt">max_memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;256MB&quot;</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">  </span><span class="nt">gpu</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;none&quot;</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="nt">network</span><span class="p">:</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">  </span><span class="nt">allowed_endpoints</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="nt">config_schema</span><span class="p">:</span>
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">object</span>
-</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
-</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">    </span><span class="nt">sma_period</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">integer</span><span class="p p-Indicator">,</span><span class="nt"> default</span><span class="p">:</span><span class="w"> </span><span class="nv">50</span><span class="w"> </span><span class="p p-Indicator">}</span>
-</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="nt">data_feeds</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;ohlcv&quot;</span><span class="p p-Indicator">]</span>
-</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="nt">min_history_bars</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60</span>
-</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="nt">watchlist</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;AAPL&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;MSFT&quot;</span><span class="p p-Indicator">]</span>
-</span></code></pre></div></li>
-<li>Drop the directory at <code>strategies/&lt;name&gt;/</code> with a <code>strategy.py</code>
-   that defines a <code>Strategy</code> class. See
-   <a href="../../strategies/examples/"><code>strategies/examples/</code></a> for reference
-   implementations (<code>mean_reversion</code>, <code>quality_momentum</code>,
-   <code>llm_sentiment</code>).</li>
-<li>Run the test suite — the plugin loader has its own integration
-   tests that ensure your manifest validates and your entry point
-   imports cleanly.</li>
+<li>the <strong>CPU guard uses <code>signal.SIGALRM</code></strong>, not an asyncio timeout, so
+   it fires on the next bytecode boundary;</li>
+<li>the <strong>memory guard uses <code>tracemalloc</code> as a Python-visible soft-cap
+   backed by a separate kernel <code>RLIMIT_AS</code></strong>, with a deliberate split
+   in responsibility; and</li>
+<li>the <strong>single-flight <code>threading.Lock</code></strong> is non-reentrant <em>on purpose</em>
+   and rejects re-entry rather than deadlocking.</li>
 </ol>
-<h2 id="sandboxing">Sandboxing<a class="headerlink" href="#sandboxing" title="Permanent link">&para;</a></h2>
-<p>Strategies run inside a layered sandbox defined in
-<a href="../../engine/plugins/sandbox/__init__.py"><code>engine/plugins/sandbox/__init__.py</code></a>.
-Five of six layers (0–4) are implemented in-process today; layer 5
-(process isolation) is the production security boundary and is tracked
-as a follow-up. The numbering is historical: layers 1–4 were the
-original in-process set; layer 0 (static AST validation) was added by
-<a href="../../adr/0010-static-ast-validation-toctou-loading/">ADR-0010</a>, and
-layer 5 remains the only true isolation boundary.</p>
-<blockquote>
-<p><strong>Important — threat model.</strong> Layers 0–4 are <strong>best-effort
-defense-in-depth, not a security boundary</strong>. They narrow the
-accidental-bug surface and raise the bar for casual misuse, but they
-all run <strong>in-process</strong>, share the engine's memory and DB session,
-and can be defeated by a determined attacker with the full Python
-runtime available. <strong>Only layer 5 (process / container isolation) is
-a real security boundary</strong>, because it puts the strategy in a
-separate address space with the kernel enforcing the limits. Treat
-the in-process layers accordingly — helpful guardrails, not
-something to stake a customer's data on.</p>
-</blockquote>
+<p>All three invariants are pinned by regression tests in
+<a href="../../tests/test_sandbox_resource_limits.py"><code>tests/test_sandbox_resource_limits.py</code></a>;
+the ADR exists so a future "this lock looks like an <code>RLock</code> candidate"
+or "let's just catch <code>Exception</code> in the sandbox runtime" refactor has
+a written record of why those changes are dangerous.</p>
+<h2 id="decision-drivers">Decision Drivers<a class="headerlink" href="#decision-drivers" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Defeat-resistance over ergonomics.</strong> A strategy author who wants to
+  exceed a resource budget and <em>not get caught</em> will wrap their hot
+  loop in <code>except Exception: pass</code>. The Layer-3 guards must therefore
+  surface violations in a way that the canonical defeat-attempt cannot
+  swallow.</li>
+<li><strong>Preempt pure-compute loops.</strong> The asyncio wall-clock timeout is a
+  fallback only; the primary CPU guard must fire without the event
+  loop's cooperation.</li>
+<li><strong>No false sense of security on the memory side.</strong> <code>tracemalloc</code>
+  cannot see native allocations, and the docstring / this ADR must say
+  so plainly. The kernel <code>RLIMIT_AS</code> is what actually stops a NumPy
+  blow-up; tracemalloc produces a structured, attributable error
+  <em>before</em> the harder <code>MemoryError</code>.</li>
+<li><strong>Don't add a new escape vector.</strong> The resource-limits module is
+  host-side code that imports modules on the sandbox deny-list
+  (<code>signal</code>, <code>tracemalloc</code>, <code>threading</code>). Those imports must succeed at
+  engine start-up <em>before</em> restrictions activate, and the resulting
+  module objects must not be reachable from sandboxed code.</li>
+<li><strong>Fail loudly, never deadlock.</strong> The signal handler and tracemalloc
+  peak counter are process-global, so overlapping guarded regions
+  would corrupt each other's teardown. Re-entrant entry must raise a
+  clear error rather than block.</li>
+</ul>
+<h2 id="considered-options">Considered Options<a class="headerlink" href="#considered-options" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong><code>asyncio.wait_for</code> as the only guard.</strong> No <code>SIGALRM</code>, no
+   <code>tracemalloc</code>, no single-flight lock.</li>
+<li><strong><code>signal.SIGALRM</code> CPU + <code>tracemalloc</code> memory, no single-flight
+   lock.</strong> Trust the host runtime to serialise evaluations.</li>
+<li><strong><code>signal.SIGALRM</code> CPU + <code>tracemalloc</code> memory + a module-level
+   non-reentrant <code>threading.Lock</code> that rejects re-entry.</strong> The
+   chosen design.</li>
+<li><strong>Run every strategy in a subprocess and <code>kill -9</code> on timeout.</strong>
+   Defer to layer 5 (process / container isolation).</li>
+</ol>
+<h2 id="decision-outcome">Decision Outcome<a class="headerlink" href="#decision-outcome" title="Permanent link">&para;</a></h2>
+<p>Chosen option: <strong>Option 3 — SIGALRM CPU + tracemalloc memory +
+single-flight lock</strong>, because it is the strongest guard we can build
+<em>inside the existing in-process sandbox</em> without prematurely
+introducing the layer-5 subprocess boundary, and it degrades
+gracefully on runtimes that cannot support one of the two primitive
+guards.</p>
+<h3 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Positive</strong> — a strategy that spins in pure Python (<code>while True:
+  pass</code>) is preempted on the next bytecode boundary by the
+  kernel-delivered <code>SIGALRM</code>, <em>independently</em> of the asyncio loop.</li>
+<li><strong>Positive</strong> — <code>SandboxResourceError</code> inherits directly from
+  <code>BaseException</code>, so the canonical <code>except Exception: pass</code> defeat
+  cannot swallow a CPU or memory violation. The single exception type
+  carries <code>kind</code> (<code>"cpu"</code>, <code>"memory"</code>, <code>"single_flight"</code>), <code>limit</code>,
+  and <code>actual</code>, so dashboards can tell a CPU blow-up from a memory
+  blow-up from a programming-error re-entry.</li>
+<li><strong>Positive</strong> — overlapping guarded regions cannot silently corrupt
+  teardown state. Re-entrant entry (same thread) and concurrent entry
+  (another thread) both raise <code>SandboxResourceError(kind="single_flight")</code>
+  with a message that names the process-global resource at fault and
+  tells the caller to serialise.</li>
+<li><strong>Positive</strong> — graceful degradation. Off-main-thread, on Windows, or
+  where <code>signal.SIGALRM</code> is unavailable, the CPU guard is skipped and
+  the asyncio wall-clock timeout remains as the fallback; if
+  <code>tracemalloc</code> cannot start (e.g. <code>PYTHONMALLOC</code> set), the memory
+  guard is skipped rather than crashing the sandbox.</li>
+<li><strong>Negative</strong> — <code>tracemalloc</code> is a Python-allocation soft-cap only.
+  Native / C-extension allocations (NumPy buffers, pandas block
+  storage, <code>mmap</code>, file-system page cache) are <strong>not</strong> seen and a
+  strategy can blow past <code>max_memory_mb</code> <em>without</em> tripping the
+  tracemalloc layer. The kernel <code>RLIMIT_AS</code> backstop installed by
+  the host sandbox is what actually aborts such an allocation in
+  real time; the tracemalloc layer produces the structured,
+  attributable error <em>before</em> the harder <code>MemoryError</code>. This caveat
+  is load-bearing and is repeated in the module docstring, the
+  architecture note, and here.</li>
+<li><strong>Negative</strong> — host-side callers that wish to observe
+  <code>SandboxResourceError</code> must catch <code>BaseException</code> (or the specific
+  type); a blanket <code>except Exception</code> will <em>not</em> see it. This is
+  intentional but easy to forget.</li>
+<li><strong>Negative</strong> — <code>SIGALRM</code> only works on the main thread of the main
+  interpreter, so any future move to evaluate strategies on a worker
+  thread silently loses the CPU guard. The asyncio timeout is the
+  fallback; the regression test suite skips the CPU tests when
+  <code>_can_use_signals()</code> returns <code>False</code>.</li>
+<li><strong>Neutral</strong> — the host sandbox already serialises evaluations via
+  its own <code>_eval_lock</code>, so in the production deployment the
+  module-level <code>_guard_lock</code> is defence-in-depth for tests and ad-hoc
+  tooling that call <code>resource_limits(...)</code> directly.</li>
+</ul>
+<h2 id="details">Details<a class="headerlink" href="#details" title="Permanent link">&para;</a></h2>
+<h3 id="why-sigalrm-and-not-asynciowait_for">Why <code>SIGALRM</code> and not <code>asyncio.wait_for</code><a class="headerlink" href="#why-sigalrm-and-not-asynciowait_for" title="Permanent link">&para;</a></h3>
+<p><code>asyncio.wait_for(coro, timeout)</code> cancels its inner task by scheduling
+a callback on the running loop and raising <code>CancelledError</code> into the
+coroutine the next time the loop regains control. That is sufficient
+for any strategy that <code>await</code>s — every <code>await</code> is a loop re-entry
+point. It is <em>not</em> sufficient for:</p>
+<ul>
+<li>a pure-Python compute loop (<code>while True: x += 1</code>) that never <code>await</code>s;</li>
+<li>a C-extension call that holds the GIL for an unbounded time; or</li>
+<li>a pathological recursion that exhausts the C stack before the
+  scheduler gets another turn.</li>
+</ul>
+<p><code>signal.SIGALRM</code> (via <code>signal.setitimer(ITIMER_REAL, ...)</code>) is
+delivered by the kernel on the next bytecode boundary regardless of
+whether the loop is running. The installed handler raises
+<code>SandboxResourceError(CPU_RESOURCE, limit=...)</code>, which unwinds the
+Python stack normally. The prior signal handler is snapshotted on
+entry (<code>signal.getsignal(SIGALRM)</code>) and restored on exit, so a host
+caller that already has a SIGALRM handler is not silently clobbered.</p>
+<p>Availability is probed up front by <code>_can_use_signals()</code>, which returns
+<code>False</code> off-main-thread or on a platform without <code>SIGALRM</code> /
+<code>setitimer</code>. In that case the CPU guard is a no-op (<code>timer_armed=False</code>)
+and the asyncio wall-clock timeout remains the backstop.</p>
+<h3 id="why-sandboxresourceerrorbaseexception-and-not-exception">Why <code>SandboxResourceError(BaseException)</code> and not <code>(Exception)</code><a class="headerlink" href="#why-sandboxresourceerrorbaseexception-and-not-exception" title="Permanent link">&para;</a></h3>
+<p>The single most important defeat-resistance invariant in this module.
+A strategy that wants to exceed its budget and <em>not</em> get caught writes:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">try</span><span class="p">:</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        <span class="o">...</span>   <span class="c1"># tight compute loop, never awaits</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="k">pass</span>       <span class="c1"># swallow the timeout, keep going</span>
+</span></code></pre></div>
+<p>If <code>SandboxResourceError</code> inherited from <code>Exception</code> (or
+<code>RuntimeError</code>), the SIGALRM handler would raise it, the <code>except
+Exception</code> clause would match, and the strategy would silently keep
+running. By inheriting directly from <code>BaseException</code>, the violation
+sails past <code>except Exception</code> and propagates to the host runtime.</p>
+<p>This was not the original shape: commit gh#1539 landed the module
+with <code>SandboxResourceError(RuntimeError)</code>, and gh#1545 <em>deliberately
+re-parented it to</em> <code>BaseException</code> once review caught the
+defeat-attempt. The regression test
+(<code>test_sandbox_resource_limits.py::TestPublicAPISurface</code>) asserts both
+<code>issubclass(SandboxResourceError, BaseException)</code> and
+<code>not issubclass(SandboxResourceError, Exception)</code> so the invariant
+cannot regress without a failing test.</p>
+<p>The introspection controls from <a href="../0011-runtime-introspection-blocking/">ADR-0011</a>
+provide additional defence-in-depth — a sandboxed strategy cannot
+import <code>engine.plugins.sandbox.resource_limits</code> (the restricted
+importer denies <code>engine.*</code>), cannot reach the <code>SandboxResourceError</code>
+symbol via <code>sys.modules</code> or host-frame walking (frame filters strip
+host frames from raised exceptions), and therefore cannot name the
+type in an <code>except</code> clause even if it could spell it. The
+<code>BaseException</code> parent is the <em>first</em> line of defence and is what
+defeats the canonical <code>except Exception: pass</code> on its own.</p>
+<h3 id="why-tracemalloc-and-rlimit_as">Why <code>tracemalloc</code> <em>and</em> <code>RLIMIT_AS</code><a class="headerlink" href="#why-tracemalloc-and-rlimit_as" title="Permanent link">&para;</a></h3>
+<p><code>tracemalloc</code> traces allocations performed through <code>PyMem_*</code> /
+<code>PyObject_*</code> — i.e. Python objects and buffers created from Python
+code. It does <strong>not</strong> see:</p>
+<ul>
+<li>native / C-extension heap allocations (<code>malloc</code> / <code>calloc</code> — NumPy
+  internal buffers, pandas block storage, extension-module working
+  memory);</li>
+<li>memory-mapped files (<code>mmap</code>), file-system page cache, or kernel
+  buffers; or</li>
+<li>allocations made by threads <code>tracemalloc</code> was not tracking when the
+  call started.</li>
+</ul>
+<p>Consequently a strategy that allocates large native buffers can blow
+past <code>max_memory_mb</code> <em>without</em> tripping tracemalloc. The host sandbox
+therefore installs <code>RLIMIT_AS</code> (via <code>resource.setrlimit</code> in
+<code>StrategySandbox._apply_resource_limits</code>) as a separate
+<strong>kernel-level backstop</strong> — that cap covers the whole process address
+space and is what actually aborts an over-the-limit allocation in real
+time (it raises <code>MemoryError</code>).</p>
+<p>The split is deliberate:</p>
 <table>
 <thead>
 <tr>
 <th>Layer</th>
-<th>Kind</th>
-<th>Status</th>
-<th>Mechanism</th>
+<th>What it sees</th>
+<th>When it fires</th>
+<th>Failure mode</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>0. Static source validation</td>
-<td>best-effort in-process</td>
-<td><strong>shipped</strong></td>
-<td><a href="../../engine/plugins/restricted_importer.py"><code>ImportValidator</code></a> walks the strategy's AST <strong>before</strong> compile/exec and rejects <code>import</code> of a blocked module, plus bare calls to <code>__import__</code>/<code>exec</code>/<code>eval</code>/<code>compile</code> and <code>importlib.import_module(…)</code>. An exact match in the blocked set can never be overridden by the allowlist. See <a href="../../adr/0010-static-ast-validation-toctou-loading/">ADR-0010</a>.</td>
+<td><code>tracemalloc</code> (this module)</td>
+<td>Python allocations only</td>
+<td>At context exit (peak / sustained breach)</td>
+<td>Structured <code>SandboxResourceError(kind="memory")</code> with observed MiB</td>
 </tr>
 <tr>
-<td>0a. Runtime introspection blocking</td>
-<td>best-effort in-process</td>
-<td><strong>shipped</strong></td>
-<td><code>_BLOCKED_ATTRS</code> + <code>_restricted_getattr</code> (installed over <code>builtins.getattr</code> per evaluation) refuse the dynamic <code>getattr(obj, name)</code> form of every sandbox-escape dunder — type traversal (<code>__class__</code>/<code>__base__</code>/<code>__subclasses__</code>), function introspection (<code>__globals__</code>/<code>__code__</code>/<code>__closure__</code>), namespace access (<code>__builtins__</code>/<code>__dict__</code>), pickle gadget chains (<code>__reduce__</code>), module loading (<code>__loader__</code>/<code>__spec__</code>). <code>builtins.object</code> is swapped for <code>_RestrictedObject</code> so <code>object.__subclasses__()</code> raises. The 3-argument <code>getattr(obj, name, default)</code> contract is honoured (returns the caller's default, never the blocked value) so <code>inspect</code>/<code>dataclasses</code>/<code>pydantic</code> keep working. Direct dotted access (<code>obj.__class__</code>) is <strong>not</strong> intercepted — that is layer 5's job. See <a href="../../adr/0011-runtime-introspection-blocking/">ADR-0011</a>.</td>
-</tr>
-<tr>
-<td>1. Import restrictions</td>
-<td>best-effort in-process</td>
-<td><strong>shipped</strong></td>
-<td>Default-deny <strong>allowlist</strong> (<code>FROZEN_ALLOWED_MODULES</code> in <a href="../../engine/plugins/allowlist.py"><code>allowlist.py</code></a>): a strategy may import a module only if its root name is in the frozen set. Enforced by <a href="../../engine/plugins/restricted_importer.py"><code>RestrictedImporter</code></a> at both <code>sys.meta_path</code> and <code>builtins.__import__</code>. The old denylist (<code>DENYLIST_MODULES</code>) is retained as defence-in-depth and as the test-suite's escape-vector oracle, but enforcement is purely allowlist-based. Adding a module requires a security review (see <a href="../../adr/0007-strategy-sandbox-allowlist-imports/">ADR-0007</a>).</td>
-</tr>
-<tr>
-<td>2. Network whitelist</td>
-<td>best-effort in-process</td>
-<td><strong>shipped</strong></td>
-<td><code>SandboxedHttpClient</code> proxies every outbound call through an allowlist declared in the manifest (<code>requires_network: true</code> + URL prefixes).</td>
-</tr>
-<tr>
-<td>3. Resource limits</td>
-<td>best-effort in-process</td>
-<td><strong>shipped</strong></td>
-<td><a href="../../engine/plugins/sandbox/resource_limits.py"><code>engine/plugins/sandbox/resource_limits.py</code></a> wraps every <code>evaluate()</code> / <code>on_bar()</code> call in a <code>resource_limits(...)</code> context manager that enforces <strong>two independent guards</strong>: (a) <strong>CPU time</strong> via <code>signal.SIGALRM</code> / <code>setitimer</code> — kernel-delivered on the next bytecode boundary, so it preempts a tight loop that never <code>await</code>s (the asyncio <code>wait_for</code> can only fire on loop re-entry); (b) <strong>memory cap</strong> via <code>tracemalloc</code> peak/high-water snapshot plus a background daemon-thread poller that catches a sustained breach within <code>poll_interval</code>. A separate <code>RLIMIT_AS</code> kernel backstop (installed by the host sandbox, not this module) covers native/C-extension allocations <code>tracemalloc</code> cannot see (NumPy buffers, <code>mmap</code>, …) — the tracemalloc layer is a best-effort Python-visible trip-wire that fires a structured <code>SandboxResourceError(kind="memory")</code> <em>before</em> the harder <code>MemoryError</code>. Violations surface as <code>SandboxResourceError</code> — which inherits <strong>directly from <code>BaseException</code>, not <code>Exception</code></strong> (gh#1545), so the canonical <code>except Exception: pass</code> defeat-attempt cannot swallow a SIGALRM-raised CPU violation — carrying structured <code>kind</code> / <code>limit</code> / <code>actual</code> metadata so dashboards can tell a CPU blow-up from a memory blow-up. A module-level non-reentrant <code>threading.Lock</code> serialises entry because <code>SIGALRM</code> handler slots and the tracemalloc peak counter are <strong>process-global</strong> — overlapping invocations would clobber each other's teardown; re-entrant or concurrent entry raises <code>SandboxResourceError(kind="single_flight")</code> instead of deadlocking or racing. See <a href="../../adr/0012-sandbox-resource-limits-single-flight/">ADR-0012</a>.</td>
-</tr>
-<tr>
-<td>4. Filesystem isolation</td>
-<td>best-effort in-process</td>
-<td><strong>shipped (active path) + reusable primitive landed, not yet wired</strong></td>
-<td>The active sandbox (<code>_setup_filesystem_isolation</code> / <code>_restricted_open</code> in <a href="../../engine/plugins/sandbox/__init__.py"><code>sandbox/__init__.py</code></a>) runs each evaluation in a fresh <code>tempfile.TemporaryDirectory</code>, wraps <code>builtins.open</code>, and rejects any path whose <code>os.path.realpath</code> canonical form falls outside the work dir or a declared <code>manifest.artifacts</code> root. Writes, append, and <code>+</code> modes are rejected; raw file-descriptor <code>open</code>s are rejected. The check opens the <strong>resolved</strong> path, not the raw argument, so a symlink/relative path can't be reinterpreted by the kernel between check and use (TOCTOU). Separately, <a href="../../engine/plugins/sandbox/filesystem.py"><code>engine/plugins/sandbox/filesystem.py</code></a> ships a host-side, framework-agnostic <a href="../../engine/plugins/sandbox/filesystem.py"><code>PathValidator</code></a> (whitelist canonicalisation with exact / <code>&lt;root&gt;{sep}</code> prefix matching, write gating, <code>make_open_hook</code> / <code>make_path_hook</code> factories) that closes both symlink-traversal and <code>..</code> traversal in one <code>realpath</code> step. <strong><code>PathValidator</code> landed (#1436) but is not yet imported by the active sandbox</strong> — the inline <code>_restricted_open</code> is what runs today. Unifying the two is a tracked follow-up.</td>
-</tr>
-<tr>
-<td>5. Process isolation</td>
-<td><strong>security boundary</strong></td>
-<td><strong>planned</strong></td>
-<td>Subprocess / container per strategy, communicated with via pipes (serialized <code>MarketState</code> in, <code>Signal[]</code> out). Killed on timeout / memory pressure.</td>
+<td><code>RLIMIT_AS</code> (host sandbox)</td>
+<td>Whole process address space</td>
+<td>At the over-limit syscall</td>
+<td><code>MemoryError</code> from the allocating call</td>
 </tr>
 </tbody>
 </table>
-<p>Because layers 0–4 are in-process, a malicious strategy that finds a
-path past them can read environment variables, the database session,
-and the filesystem. Operators must therefore treat plugins as part of
-their trusted deployment surface today:</p>
+<p>The tracemalloc layer is the <em>best-effort, Python-visible</em> trip-wire
+that produces an attributable error before the harder <code>MemoryError</code>.
+Anything that reads this ADR or the module docstring and concludes
+"the memory cap is enforced" has misread it: only <code>RLIMIT_AS</code> enforces,
+tracemalloc reports.</p>
+<p>Implementation notes:</p>
 <ul>
-<li>Pin plugin versions in your operator config; do not auto-update.</li>
-<li>Plugins that come from third parties should be code-reviewed before
-  install.</li>
-<li>For untrusted strategies, <strong>do not rely on layers 0–4</strong>. Run them
-  in an external sandbox (container, VM) and call the engine through
-  the SDK instead of loading them in-process.</li>
+<li><code>_setup_memory_guard</code> calls <code>tracemalloc.reset_peak()</code> on entry so
+  the high-water mark observed is attributable to <em>this</em> guarded call,
+  not the cumulative process peak.</li>
+<li>A daemon thread (<code>sandbox-memory-monitor</code>) polls the <em>current</em>
+  traced allocation every <code>poll_interval</code> seconds and sets a
+  <code>breach_event</code> if it exceeds the cap; the deterministic exit-time
+  peak comparison in <code>_finalize_memory</code> is what ultimately raises, so
+  a transient spike that subsides before exit is still caught if the
+  poller observed it.</li>
+<li><code>daemon=True</code> on the monitor thread guarantees it never outlives the
+  process even if <code>__exit__</code> is skipped (e.g. during interpreter
+  shutdown).</li>
+<li>If <code>tracemalloc.start()</code> raises <code>RuntimeError</code> (e.g. <code>PYTHONMALLOC</code>
+  is set), the memory guard is disabled rather than crashing.</li>
 </ul>
-<p>Layer 5 is the production architecture — see the module docstring in
-<a href="../../engine/plugins/sandbox/__init__.py"><code>sandbox/__init__.py</code></a>.
-<a href="../../adr/0010-static-ast-validation-toctou-loading/">ADR-0010</a> covers
-the static-AST Layer 0 + the validate-then-exec loader; <a href="../../adr/0011-runtime-introspection-blocking/">ADR-0011</a>
-covers the runtime introspection guard (Layer 0a); <a href="../../adr/0012-sandbox-resource-limits-single-flight/">ADR-0012</a>
-covers the Layer-3 resource-limits design and the single-flight lock
-that protects the process-global <code>SIGALRM</code> / <code>tracemalloc</code> state. An
-ADR covering the final isolation choice (likely WASI for strategies,
-separate process for executors) is deferred until that work is sequenced.</p>
-<h2 id="where-the-code-lives">Where the code lives<a class="headerlink" href="#where-the-code-lives" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>File</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><a href="../../strategies/"><code>strategies/</code></a></td>
-<td>Strategy packages: each holds a <code>manifest.yaml</code> (+ optional artifacts) and a <code>strategy.py</code> exposing a <code>Strategy</code> class. <code>examples/</code> ships reference strategies.</td>
-</tr>
-<tr>
-<td><a href="../../engine/plugins/registry.py"><code>engine/plugins/registry.py</code></a></td>
-<td>Filesystem discovery + <code>PluginRegistry</code> (discover, load, instantiate).</td>
-</tr>
-<tr>
-<td><a href="../../engine/plugins/manifest.py"><code>engine/plugins/manifest.py</code></a></td>
-<td><code>StrategyManifest</code> / <code>ResourceLimits</code> / <code>NetworkConfig</code> Pydantic schema + validation.</td>
-</tr>
-<tr>
-<td><a href="../../engine/plugins/sdk.py"><code>engine/plugins/sdk.py</code></a></td>
-<td>Legacy <code>BaseStrategy</code> ABC (<code>on_bar</code> loop).</td>
-</tr>
-<tr>
-<td><a href="../../sdk/nexus_sdk/strategy.py"><code>sdk/nexus_sdk/strategy.py</code></a></td>
-<td>Public <code>IStrategy</code> ABC (<code>evaluate</code> → <code>Signal[]</code>), <code>MarketState</code>, <code>StrategyConfig</code>.</td>
-</tr>
-<tr>
-<td><a href="../../engine/plugins/sandbox/__init__.py"><code>engine/plugins/sandbox/__init__.py</code></a></td>
-<td>Layered strategy sandbox (see below).</td>
-</tr>
-<tr>
-<td><a href="../../engine/plugins/sandbox/resource_limits.py"><code>engine/plugins/sandbox/resource_limits.py</code></a></td>
-<td>Layer-3 <code>resource_limits(...)</code> context manager: SIGALRM CPU timer + <code>tracemalloc</code> memory cap + single-flight lock. Host-side module (imported before sandbox restrictions activate; <code>engine.*</code> is denied by the restricted importer so sandboxed code cannot reach it).</td>
-</tr>
-<tr>
-<td><a href="../../engine/plugins/sandbox/filesystem.py"><code>engine/plugins/sandbox/filesystem.py</code></a></td>
-<td>Reusable layer-4 <code>PathValidator</code> (whitelist + <code>realpath</code> canonicalisation, write gating, open/path hooks). Landed (#1436); <strong>not yet wired</strong> into the active sandbox, which uses the inline <code>_restricted_open</code> in <code>sandbox/__init__.py</code>.</td>
-</tr>
-<tr>
-<td><a href="../../engine/plugins/restricted_importer.py"><code>engine/plugins/restricted_importer.py</code></a></td>
-<td>Allowlist import hook (layer 1) + static <code>ImportValidator</code> AST checker (layer 0).</td>
-</tr>
-<tr>
-<td><a href="../../engine/plugins/allowlist.py"><code>engine/plugins/allowlist.py</code></a></td>
-<td>The import allowlist + denylist.</td>
-</tr>
-<tr>
-<td><a href="../../engine/plugins/sandboxed_http.py"><code>engine/plugins/sandboxed_http.py</code></a></td>
-<td>Network-whitelist HTTP proxy (layer 2).</td>
-</tr>
-<tr>
-<td><a href="../../engine/plugins/scoring_executor.py"><code>engine/plugins/scoring_executor.py</code></a></td>
-<td>Runs <code>IScoringStrategy</code> plugins for the scoring routes.</td>
-</tr>
-<tr>
-<td><a href="../../tests/"><code>tests/</code></a></td>
-<td>Loader + manifest tests live alongside the rest of the suite (e.g. <code>test_plugin_registry.py</code>, <code>test_strategies_coverage.py</code>).</td>
-</tr>
-</tbody>
-</table>
-<p>Run <code>ls engine/plugins/</code> and <code>ls strategies/</code> to confirm the current
-shape — these trees grow as new kinds land.</p>
+<h3 id="why-a-non-reentrant-threadinglock">Why a non-reentrant <code>threading.Lock</code><a class="headerlink" href="#why-a-non-reentrant-threadinglock" title="Permanent link">&para;</a></h3>
+<p>The signal-handler slot (<code>signal.SIGALRM</code>) and the tracemalloc peak
+counter are <strong>process-global</strong>: there is exactly one of each per
+interpreter. Two overlapping <code>resource_limits(...)</code> regions would
+therefore corrupt each other's teardown — the inner <code>__exit__</code> would
+restore the outer's signal handler (disarming the outer's timer) and
+call <code>tracemalloc.stop()</code> on the outer's session mid-flight.</p>
+<p>The module-level <code>_guard_lock</code> is a plain <code>threading.Lock</code> (not an
+<code>RLock</code>) acquired <em>non-blockingly</em> on entry. A <code>Lock</code> is chosen over
+an <code>RLock</code> deliberately: an <code>RLock</code> would let the same thread re-enter
+silently and paper over the very corruption we are guarding against.
+Failure to acquire the lock raises
+<code>SandboxResourceError(SINGLE_FLIGHT_RESOURCE, limit=None)</code> — reusing
+the Layer-3 exception type so callers only need to catch one type
+regardless of which guard fired — with a message that names the
+process-global resource and tells the caller to serialise.</p>
+<p>The lock is released in the <code>finally</code> block of <code>resource_limits</code>, so
+it is always freed even when the body raises <code>SandboxResourceError</code>.
+The teardown (<code>_teardown_guards</code>) runs <em>before</em> the lock is released,
+so a racing second entry cannot observe a half-torn-down state (e.g.
+our SIGALRM handler still installed with its timer already disarmed).</p>
+<p>In the production deployment the host sandbox already serialises
+evaluations via its asyncio <code>_eval_lock</code>; the module-level guard is
+defence-in-depth for any caller that invokes <code>resource_limits(...)</code>
+directly — tests, ad-hoc tooling, a future embedding host.</p>
+<h3 id="why-host-side-imports-of-blocked-modules-are-safe">Why host-side imports of blocked modules are safe<a class="headerlink" href="#why-host-side-imports-of-blocked-modules-are-safe" title="Permanent link">&para;</a></h3>
+<p><code>signal</code>, <code>tracemalloc</code>, and <code>threading</code> are all on the sandbox
+deny-list (a sandboxed strategy cannot <code>import</code> them). This module is
+imported once, at engine start-up, <em>before</em> any sandbox restrictions
+are activated, so those imports succeed. The captured module objects
+are aliased (<code>_signal</code>, <code>_tracemalloc</code>, <code>_threading</code>) and referenced
+only via local variables inside the context manager; no module-level
+binding is exposed for sandboxed code to discover, and importing
+<code>engine.plugins.sandbox.resource_limits</code> is itself denied by the
+restricted importer (<code>engine.*</code> is not on the allowlist). This is the
+same pattern the outer <code>StrategySandbox</code> uses for <code>os</code>, <code>asyncio</code>, and
+<code>resource</code> — see the security note at the top of
+<a href="../../engine/plugins/sandbox/__init__.py"><code>engine/plugins/sandbox/__init__.py</code></a>.</p>
+<h2 id="pros-and-cons-of-the-options">Pros and Cons of the Options<a class="headerlink" href="#pros-and-cons-of-the-options" title="Permanent link">&para;</a></h2>
+<h3 id="option-1-asynciowait_for-as-the-only-guard">Option 1 — <code>asyncio.wait_for</code> as the only guard<a class="headerlink" href="#option-1-asynciowait_for-as-the-only-guard" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Simplest; no signal-handler state, no threads, no lock.</li>
+<li><strong>Cons:</strong> Cannot preempt a pure-compute loop or a GIL-holding C
+  call; the asyncio scheduler never runs. Defeat-attempts that simply
+  avoid <code>await</code> succeed. Unacceptable for the threat model.</li>
+</ul>
+<h3 id="option-2-sigalrm-tracemalloc-no-single-flight-lock">Option 2 — <code>SIGALRM</code> + <code>tracemalloc</code>, no single-flight lock<a class="headerlink" href="#option-2-sigalrm-tracemalloc-no-single-flight-lock" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Smaller surface area; no re-entrancy error path to
+  document.</li>
+<li><strong>Cons:</strong> Two overlapping guarded regions silently corrupt each
+  other's teardown (the inner <code>__exit__</code> disarms the outer's timer
+  and stops the outer's tracemalloc session). In the production
+  deployment the host <code>_eval_lock</code> happens to mask this, but tests
+  and ad-hoc callers do not. A latent footgun.</li>
+</ul>
+<h3 id="option-3-sigalrm-tracemalloc-non-reentrant-lock-chosen">Option 3 — <code>SIGALRM</code> + <code>tracemalloc</code> + non-reentrant <code>Lock</code> (chosen)<a class="headerlink" href="#option-3-sigalrm-tracemalloc-non-reentrant-lock-chosen" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Preempts pure-compute loops; carries structured
+  <code>kind</code>/<code>limit</code>/<code>actual</code> metadata; cannot be swallowed by
+  <code>except Exception: pass</code>; rejects overlapping regions loudly
+  rather than corrupting state; degrades gracefully on unsupported
+  runtimes.</li>
+<li><strong>Cons:</strong> <code>tracemalloc</code> is a soft-cap (see above); CPU guard is
+  main-thread / POSIX only; callers must catch <code>BaseException</code>.</li>
+</ul>
+<h3 id="option-4-subprocess-per-strategy-kill-9-on-timeout">Option 4 — Subprocess per strategy, <code>kill -9</code> on timeout<a class="headerlink" href="#option-4-subprocess-per-strategy-kill-9-on-timeout" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Strongest — the host never shares an address space with
+  the strategy, so a runaway allocation crashes the child, not the
+  engine. Wall-clock timeouts become trivially reliable.</li>
+<li><strong>Cons:</strong> Premature. Layer 5 (process / container isolation) is the
+  stated production target of the sandbox and is not yet built
+  (<a href="../../architecture/plugins/#sandboxing"><code>architecture/plugins.md</code></a>).
+  Building it now would duplicate the boundary and the IPC surface
+  (<code>MarketState</code> in, <code>Signal[]</code> out) would have to be redesigned when
+  layer 5 lands for real. This ADR is the in-process ring layer 5
+  will <em>replace</em>, not duplicate.</li>
+</ul>
+<h2 id="links">Links<a class="headerlink" href="#links" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Add single-flight lock to resource limits: gh#1539</li>
+<li>Inherit <code>SandboxResourceError</code> from <code>BaseException</code> (defeat-resistance):
+  gh#1545</li>
+<li>Resolve Prometheus review findings + tests: gh#1553</li>
+<li>Source:
+  <a href="../../engine/plugins/sandbox/resource_limits.py"><code>engine/plugins/sandbox/resource_limits.py</code></a>
+  (<code>ResourceLimits</code>, <code>SandboxResourceError</code>, <code>resource_limits</code>,
+  <code>_guard_lock</code>); host-side <code>RLIMIT_AS</code> / <code>RLIMIT_NOFILE</code> backstop in
+  <a href="../../engine/plugins/sandbox/__init__.py"><code>engine/plugins/sandbox/__init__.py</code></a>
+  (<code>StrategySandbox._apply_resource_limits</code>,
+  <code>StrategySandbox._restore_resource_limits</code>)</li>
+<li>Tests:
+  <a href="../../tests/test_sandbox_resource_limits.py"><code>tests/test_sandbox_resource_limits.py</code></a>
+  (<code>TestPublicAPISurface</code>, <code>TestCpuGuard</code>, <code>TestMemoryGuard</code>,
+  <code>TestSingleFlightGuard</code>)</li>
+<li>Builds on: <a href="../0007-strategy-sandbox-allowlist-imports/">ADR-0007</a>
+  (runtime import allowlist),
+  <a href="../0010-static-ast-validation-toctou-loading/">ADR-0010</a> (static AST
+  validation + TOCTOU-safe loading), and
+  <a href="../0011-runtime-introspection-blocking/">ADR-0011</a> (runtime
+  introspection blocking). All remain Accepted; this ADR is the
+  resource-cost-facing companion ring.</li>
+<li>Related: <a href="../../architecture/plugins/#sandboxing"><code>architecture/plugins.md</code></a>
+  (Layer-3 row of the sandbox table); threat-model note that only
+  layer 5 is a real security boundary.</li>
+</ul>
 
 
 
@@ -3019,7 +3356,7 @@ shape — these trees grow as new kinds land.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../database/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Database &amp; migrations">
+          <a href="../0011-runtime-introspection-blocking/" class="md-footer__link md-footer__link--prev" aria-label="Previous: 0011 — Runtime introspection / dunder blocking">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -3029,20 +3366,20 @@ shape — these trees grow as new kinds land.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Database & migrations
+                0011 — Runtime introspection / dunder blocking
               </div>
             </div>
           </a>
         
         
           
-          <a href="../../api-reference/" class="md-footer__link md-footer__link--next" aria-label="Next: API reference">
+          <a href="../template/" class="md-footer__link md-footer__link--next" aria-label="Next: ADR template">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                API reference
+                ADR template
               </div>
             </div>
             <div class="md-footer__button md-icon">

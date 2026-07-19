@@ -3642,6 +3642,18 @@ record the acceptance the gate checks for. Source:
 <td>—</td>
 <td><code>DataProviderAttribution</code> rows shown in the UI footer.</td>
 </tr>
+<tr>
+<td>POST</td>
+<td><code>/api/legal/accept</code></td>
+<td><code>user</code></td>
+<td><strong>Legal-gate</strong> endpoint (note: no <code>/v1/</code>). The legacy/companion route to the document-managed <code>/api/v1/legal/accept</code> above: it accepts a single <code>document_version</code> field, validates it against <code>settings.legal_terms_version</code>, and on match persists the <em>server-authoritative</em> version (never the client string, so the audit trail can't be polluted). <code>422 {code:"LEGAL_VERSION_MISMATCH", current_version, submitted_version}</code> on a stale/future version. The caller IP is resolved via <code>resolve_client_ip</code>, which honours <code>trusted_proxies</code> (CIDR-aware) and <code>X-Forwarded-For</code>, so the recorded address is the real end user behind a reverse proxy. Source: <a href="../engine/api/routes/legal.py"><code>routes/legal.py</code></a>.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/legal/status</code></td>
+<td><code>user</code></td>
+<td><strong>Legal-gate</strong> status. <code>200 GateStatusResponse{accepted, current_version, accepted_version?, accepted_at?, needs_acceptance}</code> — <code>accepted</code> is true iff the user's most recent acceptance matches the current version; <code>needs_acceptance</code> is the negation, for client UX.</td>
+</tr>
 </tbody>
 </table>
 <h2 id="portfolio">Portfolio<a class="headerlink" href="#portfolio" title="Permanent link">&para;</a></h2>
