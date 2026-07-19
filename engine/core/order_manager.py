@@ -5,6 +5,7 @@ Signal → Validate → Cost → Risk Check → Execute → Reconcile → Log
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -215,12 +216,17 @@ class OrderManager:
                 )
 
             logger.info("order.filled", order_id=order.id, price=fill.price, qty=fill.quantity)
-            await self._publish_fill_event(order)
         else:
             order.transition(OrderStatus.FAILED, fill.reason)
             logger.error("order.failed", order_id=order.id, reason=fill.reason)
 
+        # Record the order BEFORE publishing the fill event so a publish
+        # failure — whether swallowed (infrastructure) or propagated
+        # (programmer bug) — never loses it from the completed-orders log
+        # that downstream reconciliation relies on.
         self.completed_orders.append(order)
+        if order.status == OrderStatus.FILLED:
+            await self._publish_fill_event(order)
         return order
 
     async def _publish_fill_event(self, order: Order) -> None:
@@ -257,8 +263,16 @@ class OrderManager:
             "signal_id": order.signal_id,
         }
         try:
-            await self._event_bus.emit(
-                EventType.ORDER_FILLED, payload, source="order_manager"
+            # Bound how long we wait on the bus: a wedged Redis or
+            # in-process dispatcher must never stall order execution.
+            # ``asyncio.wait_for`` raises ``TimeoutError`` on expiry,
+            # which the clause below treats as best-effort infrastructure
+            # failure alongside the bus' own transport errors.
+            await asyncio.wait_for(
+                self._event_bus.emit(
+                    EventType.ORDER_FILLED, payload, source="order_manager"
+                ),
+                timeout=2.0,
             )
         except (ConnectionError, TimeoutError, RuntimeError) as exc:
             # Bus / transport infrastructure failures are best-effort:
