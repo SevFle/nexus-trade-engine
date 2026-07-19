@@ -14,11 +14,13 @@ import structlog
 from pydantic import BaseModel, Field
 
 from engine.core.signal import Side, Signal
+from engine.events.bus import EventType
 
 if TYPE_CHECKING:
     from engine.core.cost_model import ICostModel
     from engine.core.portfolio import Portfolio
     from engine.core.risk_engine import RiskEngine
+    from engine.events.bus import EventBus
 
 logger = structlog.get_logger()
 
@@ -95,10 +97,14 @@ class OrderManager:
         cost_model: ICostModel,
         risk_engine: RiskEngine,
         portfolio: Portfolio,
+        event_bus: EventBus | None = None,
     ):
         self.cost_model = cost_model
         self.risk_engine = risk_engine
         self.portfolio = portfolio
+        # Optional event bus. When wired, fill events are published so the
+        # WebSocket event bridge can broadcast them to connected clients.
+        self._event_bus = event_bus
         self.execution_backend = None  # Set by engine based on mode
         self.pending_orders: dict[str, Order] = {}
         self.completed_orders: list[Order] = []
@@ -200,12 +206,45 @@ class OrderManager:
                 )
 
             logger.info("order.filled", order_id=order.id, price=fill.price, qty=fill.quantity)
+            await self._publish_fill_event(order)
         else:
             order.transition(OrderStatus.FAILED, fill.reason)
             logger.error("order.failed", order_id=order.id, reason=fill.reason)
 
         self.completed_orders.append(order)
         return order
+
+    async def _publish_fill_event(self, order: Order) -> None:
+        """Publish an ``ORDER_FILLED`` event to the event bus.
+
+        The :class:`~engine.api.ws.event_bridge.EventBusBridge` subscribes
+        to ``ORDER_FILLED`` and fans the event out to WebSocket clients on
+        the ``orders`` channel, giving connected clients real-time order
+        status updates. Publishing is best-effort: a bus failure is logged
+        but never propagates, so a WebSocket/outbox outage cannot break order
+        execution.
+        """
+        if self._event_bus is None:
+            return
+        payload = {
+            "order_id": order.id,
+            "symbol": order.symbol,
+            "side": order.side.value,
+            "qty": order.fill_quantity,
+            "price": order.fill_price,
+            "timestamp": order.filled_at.isoformat() if order.filled_at else None,
+            "status": order.status.value,
+            "strategy_id": order.strategy_id,
+            "signal_id": order.signal_id,
+        }
+        try:
+            await self._event_bus.emit(
+                EventType.ORDER_FILLED, payload, source="order_manager"
+            )
+        except Exception:
+            logger.exception(
+                "order_manager.fill_event_publish_failed", order_id=order.id
+            )
 
     def _calculate_quantity(self, signal: Signal, price: float) -> int:
         """Convert signal weight to share quantity."""

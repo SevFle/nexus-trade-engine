@@ -93,6 +93,13 @@ class EventBusBridge:
     async def _handle(self, payload: dict[str, Any]) -> None:
         event_type = payload.get("type")
         mapping = _EVENT_TO_CHANNEL.get(event_type)
+        if mapping is None and event_type:
+            # ``EventBus.emit`` serializes the ``EventType`` using its dotted
+            # value (e.g. ``"order.filled"``). Normalise to the underscore
+            # convention used by ``_EVENT_TO_CHANNEL`` (e.g.
+            # ``"order_filled"``) so domain emitters route correctly without
+            # having to know about the bridge's internal mapping key format.
+            mapping = _EVENT_TO_CHANNEL.get(str(event_type).replace(".", "_"))
         if mapping is None:
             return
         channel = mapping
