@@ -1,0 +1,3547 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Engineering documentation for Nexus Trade Engine — an AI-native, plugin-driven algorithmic trading framework with a cost-first backtest engine. Written for engineers who read the source alongside the prose.">
+      
+      
+      
+        <link rel="canonical" href="https://github.com/SevFle/nexus-trade-engine/adr/0012-sandbox-resource-limits-single-flight/">
+      
+      
+        <link rel="prev" href="../0011-runtime-introspection-blocking/">
+      
+      
+        <link rel="next" href="../template/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>0012 — Sandbox resource limits (SIGALRM + tracemalloc + single-flight) - Nexus Trade Engine</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#adr-0012-sandbox-resource-limits-sigalrm-tracemalloc-single-flight-lock" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Nexus Trade Engine" class="md-header__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m3.5 18.5 6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Nexus Trade Engine
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              0012 — Sandbox resource limits (SIGALRM + tracemalloc + single-flight)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/SevFle/nexus-trade-engine" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    SevFle/nexus-trade-engine
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../api-reference/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../development/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Decisions (ADRs)
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../operations/slos/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Operations
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../observability/logging/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Observability
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../legal/processors/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Compliance
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../known-limitations/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Status
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Nexus Trade Engine" class="md-nav__button md-logo" aria-label="Nexus Trade Engine" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m3.5 18.5 6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17z"/></svg>
+
+    </a>
+    Nexus Trade Engine
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/SevFle/nexus-trade-engine" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    SevFle/nexus-trade-engine
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../architecture/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/core-domains/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/analytics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Analytics & optimization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/multi-strategy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-strategy coordination
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/data-providers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data providers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database & migrations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/plugins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugin system
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mcp-server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mcp/capability-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP capability audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mcp/tool-catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP tool catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../RELEASING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releasing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../PLUGIN_DEV_GUIDE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugin developer guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decisions (ADRs)
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Decisions (ADRs)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0001-scaffold-tech-choices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0001 — Scaffold technology choices
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0002-auth-rbac/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0002 — Auth & RBAC model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0003-mobile-app-strategy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0003 — Mobile experience strategy (PWA)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0004-task-queue-taskiq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0004 — Task queue — TaskIQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0005-valkey-over-redis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0005 — Valkey client + broker over redis-py / Redis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0006-bcrypt-fernet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0006 — Password hashing (bcrypt) & MFA at rest (Fernet)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0007-strategy-sandbox-allowlist-imports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0007 — Strategy sandbox allowlist imports
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0008-pluggable-metrics-backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0008 — Pluggable MetricsBackend Protocol
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0009-cross-replica-eventbus-bridge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0009 — Cross-replica WebSocket event bridge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0010-static-ast-validation-toctou-loading/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0010 — Static AST validation + TOCTOU-safe loading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0011-runtime-introspection-blocking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0011 — Runtime introspection / dunder blocking
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0012 — Sandbox resource limits (SIGALRM + tracemalloc + single-flight)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0012 — Sandbox resource limits (SIGALRM + tracemalloc + single-flight)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#context-and-problem-statement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context and Problem Statement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-drivers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Drivers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#considered-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Considered Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-outcome" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Outcome
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision Outcome">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Details
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-sigalrm-over-rlimit_cpu-sigxcpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why SIGALRM over RLIMIT_CPU / SIGXCPU
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-a-baseexception-not-an-exception" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why a BaseException, not an Exception
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-a-single-flight-lock-not-a-queue-or-a-reentrant-lock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why a single-flight lock, not a queue or a reentrant lock
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#teardown-ordering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Teardown ordering
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-this-does-not-cover" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this does not cover
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#integration-status-important-caveat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Integration status (important caveat)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pros and Cons of the Options
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pros and Cons of the Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-1-do-nothing-in-layer-3-keep-wait_for-rlimit_as" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 1 — Do nothing in Layer 3; keep wait_for + RLIMIT_AS
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-2-rlimit_cpu-sigxcpu-for-cpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 2 — RLIMIT_CPU / SIGXCPU for CPU
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-3-monitor-thread-polling-psutil-process-stats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 3 — Monitor thread polling psutil process stats
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-4-sigalrm-tracemalloc-single-flight-lock-sandboxresourceerrorbaseexception-chosen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 4 — SIGALRM + tracemalloc + single-flight lock, SandboxResourceError(BaseException) (chosen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Links
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../operations/runbooks/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/slos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SLOs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/backup-and-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backup & recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/dr-drill-checklist/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DR drill checklist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/load-testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Load testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_6" id="__nav_6_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runbooks
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Runbooks
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/api-availability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API availability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/api-latency/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API latency
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/auth-mfa/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth & MFA
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/backtest-submit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backtest submit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/webhook-delivery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Webhook delivery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/task-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Task pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/runbooks/common-issues/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Common issues
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Observability
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../observability/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging schema & redaction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compliance
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Compliance
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../legal/processors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Legal data processors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Status
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Status
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../known-limitations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Known limitations & tech debt
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../LAST_AUDIT/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Last audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#context-and-problem-statement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context and Problem Statement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-drivers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Drivers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#considered-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Considered Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-outcome" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision Outcome
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision Outcome">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Details
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-sigalrm-over-rlimit_cpu-sigxcpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why SIGALRM over RLIMIT_CPU / SIGXCPU
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-a-baseexception-not-an-exception" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why a BaseException, not an Exception
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-a-single-flight-lock-not-a-queue-or-a-reentrant-lock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why a single-flight lock, not a queue or a reentrant lock
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#teardown-ordering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Teardown ordering
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-this-does-not-cover" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this does not cover
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#integration-status-important-caveat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Integration status (important caveat)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pros-and-cons-of-the-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pros and Cons of the Options
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pros and Cons of the Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-1-do-nothing-in-layer-3-keep-wait_for-rlimit_as" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 1 — Do nothing in Layer 3; keep wait_for + RLIMIT_AS
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-2-rlimit_cpu-sigxcpu-for-cpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 2 — RLIMIT_CPU / SIGXCPU for CPU
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-3-monitor-thread-polling-psutil-process-stats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 3 — Monitor thread polling psutil process stats
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-4-sigalrm-tracemalloc-single-flight-lock-sandboxresourceerrorbaseexception-chosen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 4 — SIGALRM + tracemalloc + single-flight lock, SandboxResourceError(BaseException) (chosen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Links
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="adr-0012-sandbox-resource-limits-sigalrm-tracemalloc-single-flight-lock">ADR-0012: Sandbox resource limits — SIGALRM + tracemalloc + single-flight lock<a class="headerlink" href="#adr-0012-sandbox-resource-limits-sigalrm-tracemalloc-single-flight-lock" title="Permanent link">&para;</a></h1>
+<ul>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-07-16</li>
+<li><strong>Deciders</strong>: Lead maintainer + security reviewer</li>
+<li><strong>Tags</strong>: security, plugins, sandbox</li>
+</ul>
+<h2 id="context-and-problem-statement">Context and Problem Statement<a class="headerlink" href="#context-and-problem-statement" title="Permanent link">&para;</a></h2>
+<p><a href="../0011-runtime-introspection-blocking/">ADR-0011</a> closed the dynamic
+<code>getattr</code> escape class. <a href="../0007-strategy-sandbox-allowlist-imports/">ADR-0007</a>
+closed <code>import</code>. <a href="../0010-static-ast-validation-toctou-loading/">ADR-0010</a>
+closed <code>__import__</code>/<code>exec</code>/<code>eval</code>/<code>compile</code> and the loader TOCTOU window.
+The 5-layer sandbox table in
+<a href="../../architecture/plugins/#sandboxing"><code>architecture/plugins.md</code></a> names
+<strong>Layer 3 — Resource limits</strong> as a best-effort in-process control with a
+concrete job: stop a buggy or hostile strategy from running away with the
+host process by <strong>spinning on the CPU</strong> or <strong>allocating unbounded memory</strong>.</p>
+<p>Until Layer 3 landed, the only resource control was the asyncio
+<code>wait_for(self._call_strategy(...), timeout=self._max_eval_seconds)</code> in
+<a href="../../engine/plugins/sandbox/__init__.py"><code>engine/plugins/sandbox/__init__.py</code></a>
+plus a kernel-level <code>RLIMIT_AS</code> / <code>RLIMIT_NOFILE</code> cap applied by the host
+sandbox's <code>_apply_resource_limits</code>. That combination has two documented
+holes:</p>
+<ol>
+<li><strong><code>wait_for</code> cannot preempt a non-<code>await</code>ing tight loop.</strong> The asyncio
+   timeout fires only when the event loop regains control. A strategy
+   that does <code>while True: pass</code> (or the moral equivalent in a hot C
+   extension call that never yields) starves the loop and the timeout
+   never raises. In production this hangs the engine's evaluator task
+   and, because evaluations are serialised by the <code>_eval_lock</code>, every
+   subsequent strategy on that worker.</li>
+<li><strong><code>RLIMIT_AS</code> aborts via <code>MemoryError</code>, not a structured signal.</strong> The
+   kernel backstop is essential (it is the only thing that bounds native /
+   C-extension allocations <code>tracemalloc</code> cannot see — NumPy buffers,
+   <code>mmap</code>, etc.), but a raw <code>MemoryError</code> carries no <code>kind</code>/<code>limit</code>/
+   <code>actual</code> metadata, gets raised from wherever the failing allocation
+   happens to land, and is trivially caught and swallowed by a strategy
+   that wraps its hot loop in <code>except Exception: pass</code>. Dashboards then
+   cannot distinguish a CPU blow-up from a memory blow-up, and a hostile
+   strategy can keep eating the cap forever.</li>
+</ol>
+<p>This ADR records why Layer 3 was built as a <strong>standalone host-side
+<code>resource_limits(...)</code> context manager</strong> in
+<a href="../../engine/plugins/sandbox/resource_limits.py"><code>engine/plugins/sandbox/resource_limits.py</code></a>,
+why <code>SandboxResourceError</code> inherits from <code>BaseException</code> (not <code>Exception</code>),
+and why a module-level single-flight lock serialises entry into the
+context manager.</p>
+<h2 id="decision-drivers">Decision Drivers<a class="headerlink" href="#decision-drivers" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Preempt tight compute loops the asyncio timeout cannot reach.</strong> Only a
+  kernel-delivered signal — <code>SIGALRM</code> via <code>setitimer(ITIMER_REAL, ...)</code>,
+  which fires on the next bytecode boundary — can preempt a non-<code>await</code>ing
+  body. The signal handler raises a structured exception so the violation
+  propagates as a Python-level error rather than killing the process.</li>
+<li><strong>Defeat-resistance against the canonical <code>except Exception: pass</code>
+  wrap.</strong> A hostile strategy's first move is to wrap its hot loop in
+  <code>try: ... except Exception: pass</code>. If the resource-violation signal
+  derived from <code>Exception</code>, that wrap would swallow it and the cap would
+  be cosmetic. The exception type is therefore the load-bearing defeat
+  resistance primitive of Layer 3.</li>
+<li><strong>Bound Python-visible allocations before the kernel <code>MemoryError</code>.</strong>
+  <code>tracemalloc</code> sees <code>PyMem_*</code> / <code>PyObject_*</code> allocations, so a strategy
+  that allocates large Python objects can be caught with a structured
+  <code>SandboxResourceError(kind="memory", limit=…, actual=…)</code> <em>before</em> the
+  harder <code>RLIMIT_AS</code> <code>MemoryError</code> would fire. Native allocations remain
+  the kernel backstop's job; tracemalloc is a best-effort trip-wire, not
+  the hard cap.</li>
+<li><strong>No silent corruption of process-global state.</strong> There is exactly one
+  <code>SIGALRM</code> handler slot and one <code>tracemalloc</code> peak counter per
+  interpreter. Two overlapping <code>resource_limits(...)</code> regions would
+  clobber each other's teardown (the inner exit restores the outer's
+  handler and stops the outer's tracemalloc session mid-flight). Whatever
+  we ship must make that physically impossible.</li>
+<li><strong>Honest labelling.</strong> Layer 3 is in-process best-effort. It is not a
+  security boundary — Layer 5 (process/container isolation) is. The
+  design must say so plainly, and must degrade gracefully when the
+  runtime cannot support a given guard rather than crashing the sandbox.</li>
+</ul>
+<h2 id="considered-options">Considered Options<a class="headerlink" href="#considered-options" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Do nothing in Layer 3; keep <code>wait_for</code> + <code>RLIMIT_AS</code> only.</strong> Document
+   that tight-loop CPU hangs and unstructured <code>MemoryError</code>s are the
+   status quo until Layer 5 lands.</li>
+<li><strong><code>resource.setrlimit(RLIMIT_CPU, …)</code> for CPU.</strong> A kernel-delivered
+   <code>SIGXCPU</code> on CPU-time exhaustion. No Python-visible tracemalloc
+   memory cap.</li>
+<li><strong>A monitor thread that polls process stats (<code>psutil.Process.cpu_percent</code>,
+   <code>memory_info().rss</code>) and cancels the asyncio task on breach.</strong></li>
+<li><strong>SIGALRM-based CPU guard + <code>tracemalloc</code> peak/current memory cap + a
+   module-level non-reentrant <code>threading.Lock</code> to serialise entry, with
+   <code>SandboxResourceError(BaseException)</code> as the violation type (chosen).</strong></li>
+</ol>
+<h2 id="decision-outcome">Decision Outcome<a class="headerlink" href="#decision-outcome" title="Permanent link">&para;</a></h2>
+<p>Chosen option: <strong>Option 4</strong>, because it is the only option that combines
+<em>kernel-level CPU preemption</em> (Option 1's gap), <em>structured Python-visible
+memory detection before the kernel <code>MemoryError</code></em> (Option 2's gap), and
+<em>correct handling of the process-global state the two guards mutate</em>
+(Option 3's gap). It also degrades gracefully on platforms where signals
+or tracemalloc are unavailable.</p>
+<p>The module
+<a href="../../engine/plugins/sandbox/resource_limits.py"><code>engine/plugins/sandbox/resource_limits.py</code></a>
+ships five things together. They are designed as a single defence unit —
+picking one out in isolation would re-open one of the holes above.</p>
+<ol>
+<li>
+<p><strong><code>resource_limits(limits: ResourceLimits)</code> context manager.</strong> The
+   public entry point. On entry it acquires the single-flight lock, arms
+   the SIGALRM CPU timer (when usable), and (re)starts <code>tracemalloc</code>
+   peak tracing. On exit it stops the memory monitor, disarms the timer,
+   restores the caller's prior <code>SIGALRM</code> handler, performs the
+   deterministic exit-time peak comparison, and releases the lock. A
+   breach surfaces as <code>SandboxResourceError</code>.</p>
+</li>
+<li>
+<p><strong>CPU guard via <code>signal.SIGALRM</code> / <code>signal.setitimer(ITIMER_REAL, …)</code>.</strong>
+   The handler raises <code>SandboxResourceError(CPU_RESOURCE, limit=…)</code> from
+   the next bytecode boundary, so a strategy that spins without <code>await</code>ing
+   is preempted <em>without</em> the event loop ever getting control back. The
+   caller's existing handler is snapshotted on entry and restored on exit
+   even if the body itself replaces <code>signal.SIGALRM</code>, so the guard is
+   safe to compose with a host that has its own signal handlers.</p>
+</li>
+<li>
+<p><strong>Memory cap via <code>tracemalloc</code>.</strong> On entry we <code>reset_peak()</code> so the
+   observed peak is attributable to <em>this</em> guarded call (not the
+   cumulative process peak). A daemon-thread poller wakes every
+   <code>poll_interval</code> (default 10 ms), reads <code>tracemalloc.get_traced_memory()</code>,
+   and sets a <code>breach_event</code> on a sustained over-limit allocation. On
+   exit, <code>_finalize_memory</code> reads the peak one final time and raises
+   <code>SandboxResourceError(MEMORY_RESOURCE, limit=…, actual=peak_mb)</code> if
+   either the <code>breach_event</code> fired or the peak exceeds the cap. The
+   daemon flag on the thread guarantees it never outlives the process
+   even if <code>__exit__</code> is skipped (e.g. during interpreter shutdown).</p>
+</li>
+<li>
+<p><strong><code>SandboxResourceError(BaseException)</code> — the defeat-resistance
+   primitive.</strong> This is the single most important invariant of Layer 3.
+   The class inherits <strong>directly from <code>BaseException</code>, not from
+   <code>Exception</code></strong>, so the canonical defeat-attempt
+   (<code>except Exception: pass</code> around the hot loop) <strong>cannot</strong> match it.
+   If the inheritance were ever reverted to derive from <code>RuntimeError</code> /
+   <code>Exception</code>, the CPU timeout would become trivially defeatable and
+   the whole guard cosmetic. Host-side callers that wish to observe a
+   violation must therefore catch <code>BaseException</code> (or the specific
+   <code>SandboxResourceError</code> type) — a blanket <code>except Exception</code> will <em>not</em>
+   see it. That is intended: a resource violation is a hard kill that
+   should propagate past ordinary error-handling middleware, not be
+   silently logged-and-swallowed as a routine strategy error.</p>
+</li>
+</ol>
+<p>The same exception type carries <code>kind</code> (<code>"cpu"</code> / <code>"memory"</code> /
+   <code>"single_flight"</code>), <code>limit</code>, and <code>actual</code> metadata so dashboards can
+   tell a CPU blow-up from a memory blow-up without parsing the message
+   string, and so the single-flight violation can reuse the same catch
+   type without inventing a second exception.</p>
+<ol>
+<li><strong>Module-level non-reentrant <code>threading.Lock</code> (<code>_guard_lock</code>).</strong>
+   Serialises entry into <code>resource_limits</code> because <code>SIGALRM</code> handler
+   slots and the <code>tracemalloc</code> peak counter are process-global.
+   <code>_guard_lock.acquire(blocking=False)</code> on entry: failure means another
+   guarded call is mid-flight and we raise
+   <code>SandboxResourceError(SINGLE_FLIGHT_RESOURCE)</code> rather than deadlocking
+   (same thread, with a plain <code>Lock</code>) or silently corrupting the
+   in-flight handler / peak (another thread). A plain <code>Lock</code> is
+   deliberate — a <code>RLock</code> would let the same thread re-enter silently
+   and paper over the very corruption we are guarding against. The lock
+   is released in a <code>finally</code> so it is always freed, including when the
+   body itself raises <code>SandboxResourceError</code>.</li>
+</ol>
+<h3 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Positive</strong> — a tight compute loop that never <code>await</code>s is preempted
+  on the next bytecode boundary by the kernel-delivered <code>SIGALRM</code>, not
+  starved until the worker is restarted.</li>
+<li><strong>Positive</strong> — the canonical <code>except Exception: pass</code> defeat-attempt
+  fails on its own: <code>SandboxResourceError</code> is a <code>BaseException</code>
+  subclass and does not match the generic <code>except Exception</code> clause.
+  The introspection blocks from <a href="../0011-runtime-introspection-blocking/">ADR-0011</a>
+  are additional defence-in-depth (a sandboxed strategy cannot name the
+  <code>SandboxResourceError</code> type in an <code>except</code> clause because importing
+  <code>engine.*</code> is denied and host frames are stripped from raised
+  exceptions), but the <code>BaseException</code> base is the <em>first</em> line of
+  defence.</li>
+<li><strong>Positive</strong> — Python-visible allocations produce a structured
+  <code>SandboxResourceError(kind="memory", limit=…, actual=…)</code> <em>before</em> the
+  harder <code>RLIMIT_AS</code> <code>MemoryError</code> would fire, so dashboards get
+  actionable metadata.</li>
+<li><strong>Positive</strong> — overlapping invocations are physically impossible
+  (<code>_guard_lock</code> rejects re-entrant and concurrent entry with a clear
+  error), so the process-global SIGALRM handler and tracemalloc peak
+  counter cannot be corrupted.</li>
+<li><strong>Positive</strong> — graceful degradation: when <code>signal</code> is unavailable
+  (off-main-thread, non-POSIX) the CPU guard is skipped and the asyncio
+  <code>wait_for</code> wall-clock timeout remains as fallback; when <code>tracemalloc</code>
+  cannot start (e.g. <code>PYTHONMALLOC</code>) the memory guard is skipped rather
+  than crashing the sandbox; values <code>&lt;= 0</code> for either limit disable the
+  corresponding guard.</li>
+<li><strong>Negative — and stated plainly — Layer 3 is not a security boundary.</strong>
+  It is best-effort in-process, exactly like Layers 0–4. A hostile
+  strategy that finds a path past the import and introspection controls
+  can still attempt to escape before the guards fire (or after the timer
+  is disarmed but before teardown completes — see "What this does <em>not</em>
+  cover" below). Real sandboxing is Layer 5's job.</li>
+<li><strong>Negative</strong> — <code>tracemalloc</code> is a <strong>Python-allocation soft-cap only</strong>.
+  It traces allocations performed through <code>PyMem_*</code> / <code>PyObject_*</code>. It
+  does <strong>not</strong> see native / C-extension heap allocations (<code>malloc</code>/
+  <code>calloc</code>, NumPy internal buffers, pandas block storage, extension
+  working memory), memory-mapped files, file-system page cache, or
+  kernel buffers. The kernel-level <code>RLIMIT_AS</code> backstop installed by
+  the host sandbox's <code>_apply_resource_limits</code> is what actually bounds
+  the address space; the tracemalloc layer is the <em>structured</em>
+  Python-visible trip-wire that fires before the harder <code>MemoryError</code>.</li>
+<li><strong>Negative</strong> — <code>SIGALRM</code> only works on the main thread of the main
+  interpreter and only on POSIX. Off-main-thread or on Windows the CPU
+  guard is skipped; the asyncio wall-clock timeout remains in effect as
+  fallback but, as noted in the Context, it cannot preempt a
+  non-<code>await</code>ing loop. On those runtimes a hostile tight loop is still
+  uncatchable in-process.</li>
+<li><strong>Negative</strong> — the single-flight lock serialises every
+  <code>resource_limits(...)</code> call across the whole interpreter. In the
+  production deployment this is fine (the host sandbox already
+  serialises evaluations via <code>_eval_lock</code>), but ad-hoc tooling and
+  tests that try to nest or parallelise guarded regions get a
+  <code>SandboxResourceError(kind="single_flight")</code> instead. That is the
+  intended behaviour — see "Why a hard error, not a queue or reentrant
+  lock" below.</li>
+</ul>
+<h2 id="details">Details<a class="headerlink" href="#details" title="Permanent link">&para;</a></h2>
+<h3 id="why-sigalrm-over-rlimit_cpu-sigxcpu">Why <code>SIGALRM</code> over <code>RLIMIT_CPU</code> / <code>SIGXCPU</code><a class="headerlink" href="#why-sigalrm-over-rlimit_cpu-sigxcpu" title="Permanent link">&para;</a></h3>
+<p><code>RLIMIT_CPU</code> counts <em>consumed CPU seconds</em> and delivers <code>SIGXCPU</code> (which
+by default core-dumps) on exhaustion. We rejected it for three reasons:</p>
+<ul>
+<li><strong>It is a <em>consumed</em> counter, not a wall-clock budget.</strong> A strategy
+  that does <code>time.sleep(60)</code> consumes ~0 s of CPU and would not trip
+  the limit, but the asyncio <code>wait_for</code> covers that case fine. The gap
+  Layer 3 needs to close is the <em>non-yielding CPU-bound</em> loop, so
+  <code>setitimer(ITIMER_REAL, …)</code> (wall-clock) is the right timer.</li>
+<li><strong><code>SIGXCPU</code>'s default disposition is to terminate.</strong> Layer 3 wants a
+  Python-level exception, not a process kill. We can install our own
+  <code>SIGXCPU</code> handler, but the handler is process-global too, so we would
+  be paying the single-flight complexity this ADR already pays for
+  <code>SIGALRM</code> and gaining nothing.</li>
+<li><strong><code>SIGALRM</code> / <code>setitimer</code> compose with the host's existing signal
+  handlers.</strong> The prior handler is snapshotted on entry and restored on
+  exit, so a host that already uses <code>SIGALRM</code> (e.g. for its own
+  timeouts) is not silently overwritten.</li>
+</ul>
+<h3 id="why-a-baseexception-not-an-exception">Why a <code>BaseException</code>, not an <code>Exception</code><a class="headerlink" href="#why-a-baseexception-not-an-exception" title="Permanent link">&para;</a></h3>
+<p>The class docstring spells it out, but it bears repeating because the
+inheritance choice is load-bearing and easy to "tidy up" by accident.</p>
+<p>A strategy can wrap its hot loop in <code>try: ... except Exception: pass</code>.
+This is the <em>canonical</em> defeat-attempt because every Python tutorial
+teaches <code>except Exception</code> as the polite way to catch "real" errors. If
+<code>SandboxResourceError</code> derived from <code>Exception</code>, that wrap would match
+and swallow the violation; the strategy would keep running, the cap
+would be cosmetic, and dashboards would show nothing.</p>
+<p><code>SandboxResourceError</code> therefore inherits directly from <code>BaseException</code>.
+The generic <code>except Exception</code> clause does not match a <code>BaseException</code>
+subclass, so the canonical defeat-attempt fails on its own. The
+introspection blocks from <a href="../0011-runtime-introspection-blocking/">ADR-0011</a>
+mean a sandboxed strategy cannot even <em>name</em> <code>SandboxResourceError</code> in an
+<code>except</code> clause (importing <code>engine.*</code> is denied; host frames are stripped
+from raised exceptions), but the <code>BaseException</code> base is the <em>first</em>
+line of defence and is what makes the guard robust against a strategy
+that somehow does manage to introspect host types.</p>
+<p>Host-side callers that wish to observe a violation must catch
+<code>BaseException</code> (or the specific <code>SandboxResourceError</code> type). This is
+documented on the class and tested by
+<code>test_sandbox_resource_error_inherits_from_baseexception</code> /
+<code>test_cpu_timeout_kills_strategy_that_swallows_exception</code> in
+<a href="../../tests/test_sandbox_resource_limits.py"><code>tests/test_sandbox_resource_limits.py</code></a>.</p>
+<p>This choice landed in #1545 (<code>fix(sandbox): inherit
+SandboxResourceError from BaseException</code>). The earlier implementation
+inherited from <code>RuntimeError</code>; the fix is what made the guard actually
+defeat-resistant.</p>
+<h3 id="why-a-single-flight-lock-not-a-queue-or-a-reentrant-lock">Why a single-flight lock, not a queue or a reentrant lock<a class="headerlink" href="#why-a-single-flight-lock-not-a-queue-or-a-reentrant-lock" title="Permanent link">&para;</a></h3>
+<p>The SIGALRM handler slot and the tracemalloc peak counter are
+process-global. Two overlapping <code>resource_limits(...)</code> regions would
+corrupt each other's teardown:</p>
+<ul>
+<li>The <em>inner</em> <code>__exit__</code> would restore the <em>outer's</em> snapshotted signal
+  handler while the outer body is still running — disarming the outer's
+  CPU guard prematurely.</li>
+<li>The <em>inner</em> <code>__exit__</code> would call <code>tracemalloc.stop()</code> (if the inner
+  call was what started tracing), throwing away the peak the outer is
+  about to read.</li>
+<li>The <em>inner</em> teardown's deterministic peak comparison would read a
+  peak contaminated by the outer body's allocations.</li>
+</ul>
+<p>We considered three synchronisation strategies:</p>
+<ul>
+<li><strong><code>threading.RLock</code> (reentrant).</strong> Would let the same thread re-enter
+  silently and paper over the very corruption above. Rejected.</li>
+<li><strong>A queue of pending guarded regions.</strong> Would make re-entrant calls
+  <em>block</em> until the outer region exits. This looks polite but is almost
+  always wrong: a re-entrant call from inside a strategy body would
+  deadlock (the outer body is waiting for the inner call, the inner
+  call is waiting for the outer body to return), and a concurrent call
+  from another thread would block indefinitely in a code path that
+  almost certainly did not expect to wait. Rejected — fail fast is
+  better than fail silent.</li>
+<li><strong>Non-reentrant <code>threading.Lock</code>, <code>acquire(blocking=False)</code>, raise on
+  failure (chosen).</strong> Re-entrant entry (same thread) and concurrent
+  entry (another thread) both fail fast with a clear
+  <code>SandboxResourceError(kind="single_flight")</code> whose message names the
+  process-global resource that motivates the lock and tells the caller
+  how to fix the call site (serialise guarded regions, e.g. via the
+  host sandbox's <code>_eval_lock</code>). In the production deployment the host
+  sandbox already serialises evaluations, so the single-flight lock is
+  defence-in-depth for callers that invoke <code>resource_limits</code> directly
+  (tests, ad-hoc tooling).</li>
+</ul>
+<h3 id="teardown-ordering">Teardown ordering<a class="headerlink" href="#teardown-ordering" title="Permanent link">&para;</a></h3>
+<p>The <code>finally</code> in <code>__exit__</code> does four things in a deliberate order:</p>
+<ol>
+<li><strong>Stop the memory monitor thread</strong> (<code>stop_event.set()</code> + bounded
+   <code>join</code>). The monitor only sets a flag; it does not raise across
+   threads (the deterministic exit-time check is what raises).</li>
+<li><strong>Disarm the CPU timer and restore the prior <code>SIGALRM</code> handler.</strong>
+   <code>setitimer(ITIMER_REAL, 0)</code> disarms; <code>signal(SIGALRM, prior_handler)</code>
+   restores. Both are wrapped in <code>contextlib.suppress(ValueError,
+   OSError)</code> so a racing thread-context change cannot crash teardown.</li>
+<li><strong>Finalise memory</strong> — read the peak one last time, stop tracemalloc
+   if we started it, and raise <code>SandboxResourceError(MEMORY_RESOURCE)</code>
+   on breach.</li>
+<li><strong>Release the single-flight lock</strong> in the outer <code>finally</code> so it is
+   freed even if step 3 raised.</li>
+</ol>
+<p>Teardown runs <em>before</em> the single-flight lock is released, so a racing
+second entry cannot observe a half-torn-down state (e.g. our SIGALRM
+handler still installed with its timer already disarmed).</p>
+<h3 id="what-this-does-not-cover">What this does <em>not</em> cover<a class="headerlink" href="#what-this-does-not-cover" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Native / C-extension allocations.</strong> <code>tracemalloc</code> does not see
+  <code>malloc</code>/<code>calloc</code>, NumPy internal buffers, <code>mmap</code>, file-system page
+  cache, or kernel buffers. The kernel-level <code>RLIMIT_AS</code> backstop
+  installed by the host sandbox's <code>_apply_resource_limits</code> is what
+  bounds the address space; a strategy that allocates huge native
+  buffers can blow past the <code>max_memory_mb</code> cap <em>without</em> tripping
+  tracemalloc, and the harder <code>MemoryError</code> is what aborts it. The
+  module docstring states this plainly.</li>
+<li><strong>CPU consumption inside C extensions that block signal delivery.</strong>
+  <code>SIGALRM</code> is delivered on the next bytecode boundary, but a C
+  extension that enters a <code>Py_BEGIN_ALLOW_THREADS</code> region and spins
+  there will not be preempted until it returns to Python. This is a
+  fundamental limitation of in-process signal-based preemption; Layer
+  5 (process kill) is the only complete answer.</li>
+<li><strong>Off-main-thread or non-POSIX runtimes.</strong> <code>_can_use_signals()</code>
+  returns <code>False</code> and the CPU guard is skipped. The asyncio wall-clock
+  timeout remains in effect but cannot preempt a non-<code>await</code>ing loop
+  (see Context). On those runtimes a hostile tight loop is still
+  uncatchable in-process.</li>
+<li><strong>Reaching the <code>SandboxResourceError</code> type from sandboxed code.</strong> The
+  <code>BaseException</code> base is the <em>first</em> line of defence; the introspection
+  blocks from <a href="../0011-runtime-introspection-blocking/">ADR-0011</a> are
+  the second. Together they make the canonical defeat-attempt fail
+  twice over, but Layer 5 is the only complete answer.</li>
+</ul>
+<h3 id="integration-status-important-caveat">Integration status (important caveat)<a class="headerlink" href="#integration-status-important-caveat" title="Permanent link">&para;</a></h3>
+<p>As of this ADR, the <code>resource_limits</code> module is <strong>landed, tested, and
+documented but not yet wired into the active host sandbox.</strong> The host
+sandbox in
+<a href="../../engine/plugins/sandbox/__init__.py"><code>engine/plugins/sandbox/__init__.py</code></a>
+still uses its own <code>_apply_resource_limits</code> (<code>RLIMIT_AS</code> /
+<code>RLIMIT_NOFILE</code> via <code>resource.setrlimit</code>) and the asyncio <code>wait_for</code>
+wall-clock timeout. The <code>resource_limits(...)</code> context manager is a
+reusable, fully unit-tested primitive (30 tests in
+<a href="../../tests/test_sandbox_resource_limits.py"><code>tests/test_sandbox_resource_limits.py</code></a>)
+that is <strong>defence-in-depth waiting to be plugged in</strong>. Wiring it into
+<code>_evaluate_inner</code> around the <code>_call_strategy</code> body is tracked as a
+follow-up; the ADR records the <em>design</em> so the wiring PR does not need
+to re-litigate any of the choices above.</p>
+<p>This status is mirrored in the Layer-3 row of the sandbox table in
+<a href="../../architecture/plugins/#sandboxing"><code>architecture/plugins.md</code></a> and in
+<a href="../../known-limitations/"><code>known-limitations.md</code></a>.</p>
+<h2 id="pros-and-cons-of-the-options">Pros and Cons of the Options<a class="headerlink" href="#pros-and-cons-of-the-options" title="Permanent link">&para;</a></h2>
+<h3 id="option-1-do-nothing-in-layer-3-keep-wait_for-rlimit_as">Option 1 — Do nothing in Layer 3; keep <code>wait_for</code> + <code>RLIMIT_AS</code><a class="headerlink" href="#option-1-do-nothing-in-layer-3-keep-wait_for-rlimit_as" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Simplest; zero new code; the asyncio timeout is honest about
+  its limits.</li>
+<li><strong>Cons:</strong> A non-<code>await</code>ing tight loop hangs the worker indefinitely;
+  <code>RLIMIT_AS</code> aborts via unstructured <code>MemoryError</code>; the canonical
+  <code>except Exception: pass</code> defeat-attempt swallows it. We would be
+  shipping a known trivial DoS with no speed bump.</li>
+</ul>
+<h3 id="option-2-rlimit_cpu-sigxcpu-for-cpu">Option 2 — <code>RLIMIT_CPU</code> / <code>SIGXCPU</code> for CPU<a class="headerlink" href="#option-2-rlimit_cpu-sigxcpu-for-cpu" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Kernel-delivered signal; no monkeypatching of <code>signal</code>.</li>
+<li><strong>Cons:</strong> Counts <em>consumed</em> CPU seconds, not wall-clock, so a
+  <code>time.sleep</code> loop is exempt (the asyncio timeout already covers that
+  case, so we gain nothing in the gap Layer 3 needs to close). <code>SIGXCPU</code>'s
+  default disposition is to terminate; we would need our own handler
+  anyway, paying the single-flight complexity for no benefit. Rejected.</li>
+</ul>
+<h3 id="option-3-monitor-thread-polling-psutil-process-stats">Option 3 — Monitor thread polling <code>psutil</code> process stats<a class="headerlink" href="#option-3-monitor-thread-polling-psutil-process-stats" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Cross-platform; no signal handlers; no <code>tracemalloc</code> quirks.</li>
+<li><strong>Cons:</strong> Polling latency is inherent — by the time the monitor sees a
+  breach and cancels the asyncio task, the strategy has already burned
+  the budget plus a poll interval. Cancelling an asyncio task does not
+  preempt a non-<code>await</code>ing body (the same gap as Option 1). <code>psutil</code>
+  adds a heavy dependency and is not on the sandbox allowlist, so it
+  would have to be host-side only. Rejected.</li>
+</ul>
+<h3 id="option-4-sigalrm-tracemalloc-single-flight-lock-sandboxresourceerrorbaseexception-chosen">Option 4 — SIGALRM + tracemalloc + single-flight lock, <code>SandboxResourceError(BaseException)</code> (chosen)<a class="headerlink" href="#option-4-sigalrm-tracemalloc-single-flight-lock-sandboxresourceerrorbaseexception-chosen" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Kernel-level CPU preemption on the next bytecode boundary;
+  structured Python-visible memory detection before the kernel
+  <code>MemoryError</code>; defeat-resistant via <code>BaseException</code>; correct handling
+  of process-global state; graceful degradation on unsupported
+  runtimes; no new dependencies (all stdlib).</li>
+<li><strong>Cons:</strong> <code>SIGALRM</code> requires POSIX main thread; <code>tracemalloc</code> is a
+  Python-allocation soft-cap only (native allocations are the kernel
+  backstop's job); single-flight lock serialises guarded regions
+  interpreter-wide; not a security boundary — Layer 5 is. All stated
+  plainly in the module docstring and in the Consequences above.</li>
+</ul>
+<h2 id="links">Links<a class="headerlink" href="#links" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Single-flight lock + initial implementation: gh#1539
+  (<code>fix(sandbox): add single-flight lock to resource limits</code>)</li>
+<li><code>BaseException</code> inheritance (defeat-resistance fix): gh#1545
+  (<code>fix(sandbox): inherit SandboxResourceError from BaseException</code>)</li>
+<li>Source:
+  <a href="../../engine/plugins/sandbox/resource_limits.py"><code>engine/plugins/sandbox/resource_limits.py</code></a>
+  (<code>resource_limits</code>, <code>ResourceLimits</code>, <code>SandboxResourceError</code>,
+  <code>_guard_lock</code>, <code>_arm_cpu_guard</code>, <code>_setup_memory_guard</code>,
+  <code>_teardown_guards</code>)</li>
+<li>Tests:
+  <a href="../../tests/test_sandbox_resource_limits.py"><code>tests/test_sandbox_resource_limits.py</code></a>
+  (30 tests covering the public API, CPU guard, memory guard,
+  single-flight guard, graceful degradation, and teardown correctness)</li>
+<li>Builds on: <a href="../0007-strategy-sandbox-allowlist-imports/">ADR-0007</a>
+  (runtime import allowlist) and
+  <a href="../0011-runtime-introspection-blocking/">ADR-0011</a> (runtime
+  introspection blocking). Both remain Accepted; this ADR is the
+  resource-limiting companion ring.</li>
+<li>Related: <a href="../../architecture/plugins/#sandboxing"><code>architecture/plugins.md</code></a>
+  (threat model and the layer table) and
+  <a href="../../known-limitations/"><code>known-limitations.md</code></a> (integration status
+  caveat).</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../0011-runtime-introspection-blocking/" class="md-footer__link md-footer__link--prev" aria-label="Previous: 0011 — Runtime introspection / dunder blocking">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                0011 — Runtime introspection / dunder blocking
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../template/" class="md-footer__link md-footer__link--next" aria-label="Next: ADR template">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                ADR template
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/SevFle/nexus-trade-engine" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
