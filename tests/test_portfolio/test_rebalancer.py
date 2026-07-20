@@ -20,6 +20,8 @@ behaviour documented in the module:
 
 from __future__ import annotations
 
+from unittest import mock
+
 import pytest
 
 from engine.portfolio.rebalancer import (
@@ -288,6 +290,23 @@ class TestDrift:
     def test_needs_rebalance_false_with_zero_capital(self) -> None:
         rb = PortfolioRebalancer({"a": 1.0}, {})
         assert rb.needs_rebalance() is False
+
+    def test_max_drift_raises_on_empty_drifts_invariant_violation(self) -> None:
+        # Empty ``target_weights`` is rejected at construction, so under the
+        # public API ``compute_drift`` is never empty and the guard in
+        # ``max_drift`` is unreachable. Patch ``compute_drift`` to return an
+        # empty mapping, forcing the broken invariant to surface as a
+        # PortfolioRebalancerError instead of being masked by a silent 0.0.
+        # Using a mock (rather than mutating private ``_target_weights`` /
+        # ``_current_values``) keeps the test decoupled from internal state
+        # and makes the precondition explicit.
+        rb = PortfolioRebalancer({"a": 1.0}, {"a": 100.0})
+        assert len(rb.compute_drift()) > 0  # sanity: non-empty in normal state
+
+        with mock.patch.object(rb, "compute_drift", return_value={}), pytest.raises(
+            PortfolioRebalancerError, match="drifts unexpectedly empty"
+        ):
+            rb.max_drift()
 
 
 # --------------------------------------------------------------------------- #
