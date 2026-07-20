@@ -63,6 +63,7 @@ import time
 import weakref
 from typing import TYPE_CHECKING
 
+import structlog
 from prometheus_client import REGISTRY, CollectorRegistry, Counter, Gauge, Histogram
 
 if TYPE_CHECKING:
@@ -187,7 +188,21 @@ _collectors_cache: weakref.WeakKeyDictionary[
 # second raising ``Duplicated timeseries``. The lock is held for the
 # whole create-and-store critical section because ``prometheus_client``
 # constructor calls are fast and never re-enter this module.
-_collectors_lock = threading.Lock()
+#
+# An :class:`threading.RLock` (re-entrant) is used rather than a plain
+# :class:`threading.Lock`: ``reset_collectors_for_tests`` is occasionally
+# invoked from code paths that already hold the lock on the same thread
+# (notably some test harnesses that wrap teardown in a locked critical
+# section). A plain ``Lock`` would self-deadlock there; ``RLock`` makes
+# re-entrancy safe without changing the happy-path serialisation
+# semantics for *different* threads.
+_collectors_lock = threading.RLock()
+
+# Module-level structlog logger. Bound at import time so the cleanup
+# path in :func:`_get_collectors` can emit a warning if best-effort
+# ``unregister`` calls fail without needing to construct a logger on
+# the exception path.
+_log = structlog.get_logger(__name__)
 
 
 def _get_collectors(
@@ -263,14 +278,33 @@ def _get_collectors(
                 registry=registry,
             )
             created.append(in_flight)
-        except Exception:
+        except ValueError:
             # Best-effort cleanup of any partially-created collectors.
-            # ``unregister`` raises ``KeyError`` if the collector was
-            # never fully registered (defensive against future
-            # ``prometheus_client`` internals); that is suppressed.
+            # ``prometheus_client`` raises ``ValueError`` (with the
+            # "Duplicated timeseries" message) when a collector with the
+            # same name is already registered against this registry —
+            # that is the only expected failure mode here, so the catch
+            # is narrowed to ``ValueError`` to let unrelated programming
+            # errors (``TypeError``, ``AttributeError``, ...) surface
+            # instead of being masked as cleanup failures.
+            #
+            # ``unregister`` itself can raise if the collector was never
+            # fully registered (a defensive guard against future
+            # ``prometheus_client`` internals). Historically only
+            # ``KeyError`` was suppressed there; the suppression has
+            # been broadened to any ``Exception`` while emitting a
+            # ``structlog`` warning, so an unexpected failure in the
+            # cleanup path is observable in logs but can never mask the
+            # original ``ValueError`` propagating to the caller.
             for partial in created:
-                with contextlib.suppress(KeyError):
+                try:
                     registry.unregister(partial)
+                except Exception as cleanup_exc:
+                    _log.warning(
+                        "prometheus_collector_cleanup_failed",
+                        collector=getattr(partial, "_name", repr(partial)),
+                        error=str(cleanup_exc),
+                    )
             raise
 
         collectors: dict[str, Counter | Gauge | Histogram] = {

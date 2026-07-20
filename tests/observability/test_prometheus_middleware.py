@@ -320,17 +320,25 @@ class TestConstructorFailureCleansUp:
         # Counter has already been registered. We patch the Histogram
         # class in the prometheus_client namespace that the module
         # under test imported.
+        #
+        # The failure is raised as ``ValueError`` to mirror what
+        # ``prometheus_client`` itself does for ``Duplicated
+        # timeseries`` — the narrowed ``except ValueError`` in
+        # :func:`_get_collectors` must catch exactly this exception
+        # family. A broader ``RuntimeError`` would now propagate
+        # *without* cleanup (intentional: unrelated programming errors
+        # should not be masked as registration failures).
         from engine.middleware import prometheus as prom_module
 
         original_histogram = prom_module.Histogram
 
         class _ExplodingHistogram(original_histogram):  # type: ignore[misc]
             def __init__(self, *args, **kwargs):
-                raise RuntimeError("simulated prometheus_client failure")
+                raise ValueError("Duplicated timeseries in registry")
 
         monkeypatch.setattr(prom_module, "Histogram", _ExplodingHistogram)
 
-        with pytest.raises(RuntimeError, match="simulated"):
+        with pytest.raises(ValueError, match="Duplicated timeseries"):
             _get_collectors(registry, metric_prefix="http")
 
         # The Counter that was successfully created before the
@@ -361,13 +369,13 @@ class TestConstructorFailureCleansUp:
             def __init__(self, *args, **kwargs):
                 call_count["n"] += 1
                 if call_count["n"] == 1:
-                    raise RuntimeError("first attempt fails")
+                    raise ValueError("first attempt fails")
                 super().__init__(*args, **kwargs)
 
         monkeypatch.setattr(prom_module, "Gauge", _ExplodingGauge)
 
         # First attempt fails partway through.
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ValueError):
             _get_collectors(registry, metric_prefix="http")
 
         # Second attempt must succeed — proving partial cleanup worked.
@@ -375,6 +383,107 @@ class TestConstructorFailureCleansUp:
         assert "requests" in collectors
         assert "latency" in collectors
         assert "in_flight" in collectors
+
+    def test_non_value_error_propagates_without_cleanup(self, monkeypatch):
+        """Only ``ValueError`` (the ``Duplicated timeseries`` family)
+        should trigger the partial-collector cleanup. Any other
+        exception — e.g. a ``RuntimeError`` from a buggy
+        ``prometheus_client`` upgrade, or a ``TypeError`` from a
+        programming error — must propagate *untouched* WITHOUT running
+        the cleanup loop. This is the whole point of narrowing the
+        ``except Exception`` to ``except ValueError``: we don't want
+        unrelated errors to be masked by best-effort teardown logic
+        that itself might fail.
+
+        Note: because cleanup does not run, the Counter that was
+        already registered against the registry stays put. The test
+        asserts exactly this — it is the contract of the narrowed
+        catch, not a bug.
+        """
+        registry = CollectorRegistry()
+        from engine.middleware import prometheus as prom_module
+
+        original_histogram = prom_module.Histogram
+
+        class _ExplodingHistogram(original_histogram):  # type: ignore[misc]
+            def __init__(self, *args, **kwargs):
+                raise RuntimeError("unrelated prometheus_client bug")
+
+        monkeypatch.setattr(prom_module, "Histogram", _ExplodingHistogram)
+
+        # The RuntimeError propagates without being caught and
+        # re-raised by the narrowed ``except ValueError``.
+        with pytest.raises(RuntimeError, match="unrelated"):
+            _get_collectors(registry, metric_prefix="http")
+
+        # Cleanup did NOT run, so the Counter that successfully
+        # registered before the Histogram blew up is still there.
+        # This is the intentional contract of the narrowed catch.
+        out = generate_latest(registry).decode()
+        assert "http_requests_total" in out
+
+    def test_cleanup_warning_emitted_on_unregister_failure(
+        self, monkeypatch
+    ):
+        """If the best-effort ``unregister`` call itself raises during
+        cleanup, the exception must be suppressed AND a ``structlog``
+        warning must be emitted so the failure is observable in logs.
+
+        Before this change only ``KeyError`` was suppressed, so an
+        unexpected ``unregister`` failure mode would have crashed the
+        cleanup loop and masked the original ``ValueError``. Now any
+        ``Exception`` from ``unregister`` is logged at warning level
+        and swallowed.
+        """
+        registry = CollectorRegistry()
+        from engine.middleware import prometheus as prom_module
+
+        original_histogram = prom_module.Histogram
+
+        class _ExplodingHistogram(original_histogram):  # type: ignore[misc]
+            def __init__(self, *args, **kwargs):
+                raise ValueError("Duplicated timeseries in registry")
+
+        monkeypatch.setattr(prom_module, "Histogram", _ExplodingHistogram)
+
+        # Force the ``CollectorRegistry.unregister`` call itself to
+        # blow up with a non-``KeyError`` exception, so we can verify
+        # the broadened suppression + warning path is exercised.
+        def _boom_unregister(_collector):
+            raise OSError("simulated registry corruption")
+
+        monkeypatch.setattr(registry, "unregister", _boom_unregister)
+
+        # Capture ``structlog`` warnings by spying on the module-level
+        # logger. We can't rely on ``caplog`` because structlog's
+        # ConsoleRenderer writes straight to stdout under the test
+        # config and does not propagate to the stdlib root logger that
+        # ``caplog`` hooks.
+        warnings: list[dict] = []
+        original_warn = prom_module._log.warning
+
+        def _spy_warning(event, **kwargs):
+            warnings.append({"event": event, **kwargs})
+            original_warn(event, **kwargs)
+
+        monkeypatch.setattr(prom_module._log, "warning", _spy_warning)
+
+        # ``ValueError`` from Histogram construction still propagates —
+        # the cleanup-loop failures are suppressed.
+        with pytest.raises(ValueError, match="Duplicated timeseries"):
+            _get_collectors(registry, metric_prefix="http")
+
+        # A warning must have been emitted for the failed cleanup call.
+        # The structured event name is ``prometheus_collector_cleanup_failed``
+        # and it carries the offending collector's name plus the
+        # underlying error string.
+        assert warnings, (
+            "expected a structlog warning to be emitted when the "
+            "best-effort unregister fails during cleanup"
+        )
+        assert warnings[0]["event"] == "prometheus_collector_cleanup_failed"
+        assert warnings[0]["collector"] == "http_requests"
+        assert "simulated registry corruption" in str(warnings[0]["error"])
 
 
 def _default_buckets_tuple():
@@ -403,9 +512,44 @@ class TestCollectorsLock:
     def test_lock_exists_and_is_a_lock(self):
         import threading
 
-        # ``threading.Lock`` returns a non-reentrant `_thread.lock`
-        # object; ``RLock`` would also be acceptable for this guard.
-        assert isinstance(_collectors_lock, type(threading.Lock()))
+        # The guard must be either a plain ``threading.Lock`` or a
+        # re-entrant ``threading.RLock`` — both serialise different
+        # threads correctly. ``RLock`` is the current choice so that
+        # ``reset_collectors_for_tests`` can be re-entered from a
+        # code path that already holds the lock on the same thread.
+        assert isinstance(
+            _collectors_lock,
+            (type(threading.Lock()), type(threading.RLock())),
+        )
+
+    def test_lock_is_reentrant(self):
+        """The lock must be re-entrant (an ``RLock``), not a plain
+        ``Lock``. ``reset_collectors_for_tests`` can legitimately be
+        invoked from code paths that already hold the lock on the same
+        thread; a plain non-reentrant ``Lock`` would deadlock there.
+        Acquiring the lock twice in succession on the same thread must
+        therefore succeed without raising ``RecursiveError`` or
+        blocking.
+        """
+        # Both acquisitions on the same thread must succeed (RLock).
+        with _collectors_lock, _collectors_lock:
+            pass
+
+    def test_reset_is_safe_to_call_while_holding_lock(self):
+        """``reset_collectors_for_tests`` runs under :data:`_collectors_lock`.
+        With a re-entrant ``RLock`` it must be safe to call from a
+        context that already holds the lock (no self-deadlock).
+        """
+        registry = CollectorRegistry()
+        _get_collectors(registry, metric_prefix="http")
+        assert registry in _collectors_cache
+
+        with _collectors_lock:
+            # This re-acquires the same lock on the same thread. A
+            # plain ``Lock`` would deadlock here; ``RLock`` allows it.
+            reset_collectors_for_tests()
+
+        assert registry not in _collectors_cache
 
     def test_concurrent_get_collectors_does_not_raise_duplicate(self):
         """Spin up many threads all racing to lazily create the same
