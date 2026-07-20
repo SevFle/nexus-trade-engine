@@ -353,14 +353,24 @@ class PortfolioRebalancer:
         return drifts
 
     def max_drift(self) -> float:
-        """Largest absolute drift across all strategies (``0.0`` when the
-        union of strategies is empty — only reachable if both inputs are
-        empty, which is otherwise rejected at construction)."""
+        """Largest absolute drift across all strategies.
+
+        The union of strategies is never empty in practice: empty
+        ``target_weights`` is rejected at construction, so
+        ``strategy_ids`` (and hence ``drifts``) always has at least one
+        entry. The empty-``drifts`` branch below is therefore an
+        unreachable internal invariant; if a defensively-built subclass
+        ever reaches it (e.g. by relaxing construction validation) the
+        method degrades gracefully to ``0.0`` ("no drift") rather than
+        raising — call sites like :meth:`needs_rebalance` treat that as
+        "within tolerance", the safest non-rebalancing default.
+        """
         drifts = self.compute_drift()
         if not drifts:
-            # Unreachable through the public API: empty ``target_weights``
-            # is rejected at construction, so ``strategy_ids`` (and hence
-            # ``drifts``) is never empty. Guard kept for defensive safety.
+            # Unreachable through the public API: see docstring. Kept as
+            # a defensive guard (returning 0.0 rather than asserting) so a
+            # subclass that loosens construction validation degrades to a
+            # safe no-rebalance state instead of crashing its caller.
             return 0.0  # pragma: no cover - unreachable, see docstring
         return max(abs(d) for d in drifts.values())
 

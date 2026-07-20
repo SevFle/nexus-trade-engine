@@ -42,6 +42,7 @@ source of truth.)
 
 ---
 
+<a id="backtest-results-not-persisted"></a>
 ## P0 — Backtest results are not persisted
 
 **Where**: [`engine/api/routes/backtest.py:22`](../engine/api/routes/backtest.py#L22)
@@ -162,6 +163,7 @@ are already in place — the missing piece is the route + worker glue.
 
 ---
 
+<a id="marketplace-ratings-not-persisted"></a>
 ## P1 — Strategy Marketplace is mostly a stub (search + ratings real, in-memory)
 
 **Where**: [`engine/api/routes/marketplace.py`](../engine/api/routes/marketplace.py)
