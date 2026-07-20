@@ -423,6 +423,110 @@ class TestShutdownGuaranteesCloseSentry:
 
         mock_close.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_event_bus_optional_defaults_to_app_state(self):
+        """``_shutdown`` accepts calls without ``event_bus``.
+
+        When ``event_bus`` is omitted, the helper must fall back to
+        ``app.state.event_bus`` (set during startup) and disconnect it
+        rather than raising. This keeps teardown robust for callers
+        that rely on app state instead of threading the bus through.
+        """
+        from engine.app import _shutdown
+
+        ws_bridge = MagicMock()
+        ws_manager = MagicMock()
+        ws_manager.close_all = AsyncMock()
+        state_event_bus = MagicMock()
+        state_event_bus.disconnect = AsyncMock()
+        app = MagicMock()
+        app.state.event_bus = state_event_bus
+        app.state.valkey.aclose = AsyncMock()
+
+        with (
+            patch("engine.app.dispose_engine", new=AsyncMock()),
+            patch("engine.app.close_sentry") as mock_close,
+        ):
+            # event_bus omitted — should NOT raise, should use app.state.event_bus.
+            await _shutdown(app, ws_bridge, ws_manager)
+
+        state_event_bus.disconnect.assert_awaited_once()
+        mock_close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_event_bus_none_and_no_state_skips_gracefully(self):
+        """When ``event_bus`` is ``None`` and ``app.state.event_bus`` is
+        absent, the cleanup step must be skipped gracefully (logged)
+        rather than raising ``AttributeError``.
+        """
+        from engine.app import _shutdown
+
+        ws_bridge = MagicMock()
+        ws_manager = MagicMock()
+        ws_manager.close_all = AsyncMock()
+        app = MagicMock()
+        # ``app.state`` has no ``event_bus`` attribute.
+        del app.state.event_bus
+        app.state.valkey.aclose = AsyncMock()
+
+        with (
+            patch("engine.app.dispose_engine", new=AsyncMock()),
+            patch("engine.app.close_sentry") as mock_close,
+        ):
+            # Should NOT raise even though there is no event bus anywhere.
+            await _shutdown(app, ws_bridge, ws_manager, event_bus=None)
+
+        mock_close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_event_bus_none_uses_app_state_when_present(self):
+        """``event_bus=None`` explicitly should still fall back to
+        ``app.state.event_bus`` and disconnect it."""
+        from engine.app import _shutdown
+
+        ws_bridge = MagicMock()
+        ws_manager = MagicMock()
+        ws_manager.close_all = AsyncMock()
+        state_event_bus = MagicMock()
+        state_event_bus.disconnect = AsyncMock()
+        app = MagicMock()
+        app.state.event_bus = state_event_bus
+        app.state.valkey.aclose = AsyncMock()
+
+        with (
+            patch("engine.app.dispose_engine", new=AsyncMock()),
+            patch("engine.app.close_sentry"),
+        ):
+            await _shutdown(app, ws_bridge, ws_manager, event_bus=None)
+
+        state_event_bus.disconnect.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_explicit_event_bus_takes_precedence_over_state(self):
+        """When ``event_bus`` is supplied explicitly it must be used in
+        preference to ``app.state.event_bus`` so callers retain control."""
+        from engine.app import _shutdown
+
+        ws_bridge = MagicMock()
+        ws_manager = MagicMock()
+        ws_manager.close_all = AsyncMock()
+        explicit_bus = MagicMock()
+        explicit_bus.disconnect = AsyncMock()
+        state_event_bus = MagicMock()
+        state_event_bus.disconnect = AsyncMock()
+        app = MagicMock()
+        app.state.event_bus = state_event_bus
+        app.state.valkey.aclose = AsyncMock()
+
+        with (
+            patch("engine.app.dispose_engine", new=AsyncMock()),
+            patch("engine.app.close_sentry"),
+        ):
+            await _shutdown(app, ws_bridge, ws_manager, event_bus=explicit_bus)
+
+        explicit_bus.disconnect.assert_awaited_once()
+        state_event_bus.disconnect.assert_not_called()
+
 
 class TestInitSentryGuard:
     """``init_sentry()`` in the lifespan startup must be wrapped in a

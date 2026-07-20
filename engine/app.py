@@ -264,7 +264,7 @@ async def _shutdown(
     app: FastAPI,
     ws_bridge: EventBusBridge,
     ws_manager: ConnectionManager,
-    event_bus: EventBus,
+    event_bus: EventBus | None = None,
     ws_order_signal_bridge: OrderSignalEventBusBridge | None = None,
 ) -> None:
     """Run graceful teardown.
@@ -274,8 +274,22 @@ async def _shutdown(
     executing.  :func:`close_sentry` runs last, inside its own guard, so
     the Sentry SDK flushes its event queue regardless of what happened
     above.
+
+    ``event_bus`` is optional: when omitted (or ``None``), the helper
+    falls back to ``app.state.event_bus`` if it was wired during
+    startup, and otherwise skips event-bus cleanup gracefully. This
+    keeps teardown robust for callers that built only a subset of the
+    runtime (e.g. unit tests, lightweight scripts).
     """
     logger.info("nexus.shutdown")
+
+    # Resolve the event bus: prefer the explicit argument, fall back to
+    # the one bound to ``app.state`` during startup, and otherwise treat
+    # the bus as absent so the cleanup step is skipped rather than
+    # raising ``AttributeError`` / ``NameError``.
+    resolved_event_bus: EventBus | None = event_bus
+    if resolved_event_bus is None:
+        resolved_event_bus = getattr(app.state, "event_bus", None)
 
     async def _stop_bridge() -> None:
         ws_bridge.stop()
@@ -288,7 +302,10 @@ async def _shutdown(
         await ws_manager.close_all(code=1000, reason="server_shutdown")
 
     async def _disconnect_bus() -> None:
-        await event_bus.disconnect()
+        if resolved_event_bus is None:
+            logger.warning("nexus.shutdown.event_bus_missing")
+            return
+        await resolved_event_bus.disconnect()
 
     async def _close_valkey() -> None:
         await app.state.valkey.aclose()
