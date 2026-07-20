@@ -90,7 +90,7 @@ statement):
    every candidate failed, not just *that* they did.
 
 This fail-over posture is also what the REST error mapping in
-[`api-reference.md`](../api-reference.md#market-data) reflects:
+[`api-reference/routes.md`](../api-reference/routes.md#market-data) reflects:
 `TransientProviderError`/`TimeoutError` → `503`,
 `NoProviderAvailableError` → `503`, `CapabilityNotSupportedError` →
 `501`, `FatalProviderError` → `400`.
@@ -312,7 +312,7 @@ exposes a torn view.
 `IDataProvider.health_check()` returns a `HealthCheckResult(name,
 status, latency_ms, detail)` with `status ∈ {up, degraded, down}`. The
 `GET /health/providers` route (see
-[`api-reference.md`](../api-reference.md#health-observability)) fans
+[`api-reference/routes.md`](../api-reference/routes.md#observability)) fans
 this out across every registered provider so an operator can tell at a
 glance which vendor is degraded — the registry's fail-over hides a
 single degraded provider from callers, so `/health/providers` is often
@@ -331,7 +331,7 @@ the *only* signal that a vendor is struggling.
 
 - [`core-domains.md`](core-domains.md) — the `MarketState` and `MarketView`
   types that consume provider output on the strategy path.
-- [`api-reference.md`](../api-reference.md#market-data) — the REST error
+- [`api-reference/routes.md`](../api-reference/routes.md#market-data) — the REST error
   mapping for provider exceptions.
 - [`plugins.md`](plugins.md) — the (target) model where data providers
   are a plugin kind; today they're YAML-registered, not filesystem-discovered.

@@ -898,6 +898,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -960,6 +964,62 @@
     
   
     API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api-reference/routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    REST routes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api-reference/websocket/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WebSocket API
   
 
     
@@ -2742,7 +2802,7 @@ we explain <em>why</em>, not <em>what</em>.</p>
 </tr>
 <tr>
 <td>Call the REST / WebSocket API</td>
-<td><a href="api-reference/"><code>api-reference.md</code></a></td>
+<td><a href="api-reference/"><code>api-reference.md</code></a> (conventions) · <a href="api-reference/routes/"><code>api-reference/routes.md</code></a> (per-endpoint catalog) · <a href="api-reference/websocket/"><code>api-reference/websocket.md</code></a> (WS wire protocol)</td>
 </tr>
 <tr>
 <td>Drive the engine from an LLM agent (MCP)</td>
@@ -2804,30 +2864,33 @@ we explain <em>why</em>, not <em>what</em>.</p>
 </span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>│   ├── 0010-static-ast-validation-toctou-loading.md
 </span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>│   ├── 0011-runtime-introspection-blocking.md
 </span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>│   └── 0012-sandbox-resource-limits-single-flight.md
-</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>├── api-reference.md                ← every HTTP/WS route, auth, schemas
-</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>├── mcp-server.md                   ← MCP tools/resources/auth (LLM agent surface)
-</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>├── mcp/                            ← MCP surface audit + catalog (generated map)
-</span><span id="__span-1-29"><a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>│   ├── capability-audit.md         ← whole-surface review (findings, inventory)
-</span><span id="__span-1-30"><a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>│   ├── api-surface-map.yaml        ← GENERATED tool/resource/auth inventory
-</span><span id="__span-1-31"><a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>│   └── tool-catalog.md             ← per-tool reference (roles, args, pagination)
-</span><span id="__span-1-32"><a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>├── data-model.md                   ← entities, relationships, invariants
-</span><span id="__span-1-33"><a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a>├── deployment.md                   ← infra requirements, env, rollout
-</span><span id="__span-1-34"><a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a>├── development.md                  ← local setup, test suite, lint loop
-</span><span id="__span-1-35"><a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a>├── known-limitations.md            ← tech debt, ranked
-</span><span id="__span-1-36"><a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a>├── RELEASING.md                    ← release engineering
-</span><span id="__span-1-37"><a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a>├── PLUGIN_DEV_GUIDE.md             ← writing strategies
-</span><span id="__span-1-38"><a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>├── contributors.md                 ← contributor onboarding
-</span><span id="__span-1-39"><a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a>├── observability/
-</span><span id="__span-1-40"><a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a>│   └── logging.md                  ← structlog schema, redaction rules
-</span><span id="__span-1-41"><a id="__codelineno-1-41" name="__codelineno-1-41" href="#__codelineno-1-41"></a>├── operations/                     ← how we run it in prod
-</span><span id="__span-1-42"><a id="__codelineno-1-42" name="__codelineno-1-42" href="#__codelineno-1-42"></a>│   ├── slos.md
-</span><span id="__span-1-43"><a id="__codelineno-1-43" name="__codelineno-1-43" href="#__codelineno-1-43"></a>│   ├── backup-and-recovery.md
-</span><span id="__span-1-44"><a id="__codelineno-1-44" name="__codelineno-1-44" href="#__codelineno-1-44"></a>│   ├── dr-drill-checklist.md
-</span><span id="__span-1-45"><a id="__codelineno-1-45" name="__codelineno-1-45" href="#__codelineno-1-45"></a>│   ├── load-testing.md
-</span><span id="__span-1-46"><a id="__codelineno-1-46" name="__codelineno-1-46" href="#__codelineno-1-46"></a>│   └── runbooks/                   ← per-SLO + common debug runbooks
-</span><span id="__span-1-47"><a id="__codelineno-1-47" name="__codelineno-1-47" href="#__codelineno-1-47"></a>├── legal/
-</span><span id="__span-1-48"><a id="__codelineno-1-48" name="__codelineno-1-48" href="#__codelineno-1-48"></a>│   └── processors.md               ← GDPR data-processor inventory
-</span><span id="__span-1-49"><a id="__codelineno-1-49" name="__codelineno-1-49" href="#__codelineno-1-49"></a>└── LAST_AUDIT.md                   ← most recent code/security audit summary
+</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>├── api-reference.md                ← conventions: auth, legal gate, errors, middleware
+</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>├── api-reference/                  ← per-endpoint catalogs (split out of api-reference.md)
+</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>│   ├── routes.md                   ← every HTTP endpoint, grouped by router module
+</span><span id="__span-1-29"><a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>│   └── websocket.md                ← /ws + /ws/events wire protocol, channels, close codes
+</span><span id="__span-1-30"><a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>├── mcp-server.md                   ← MCP tools/resources/auth (LLM agent surface)
+</span><span id="__span-1-31"><a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>├── mcp/                            ← MCP surface audit + catalog (generated map)
+</span><span id="__span-1-32"><a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>│   ├── capability-audit.md         ← whole-surface review (findings, inventory)
+</span><span id="__span-1-33"><a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a>│   ├── api-surface-map.yaml        ← GENERATED tool/resource/auth inventory
+</span><span id="__span-1-34"><a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a>│   └── tool-catalog.md             ← per-tool reference (roles, args, pagination)
+</span><span id="__span-1-35"><a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a>├── data-model.md                   ← entities, relationships, invariants
+</span><span id="__span-1-36"><a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a>├── deployment.md                   ← infra requirements, env, rollout
+</span><span id="__span-1-37"><a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a>├── development.md                  ← local setup, test suite, lint loop
+</span><span id="__span-1-38"><a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>├── known-limitations.md            ← tech debt, ranked
+</span><span id="__span-1-39"><a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a>├── RELEASING.md                    ← release engineering
+</span><span id="__span-1-40"><a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a>├── PLUGIN_DEV_GUIDE.md             ← writing strategies
+</span><span id="__span-1-41"><a id="__codelineno-1-41" name="__codelineno-1-41" href="#__codelineno-1-41"></a>├── contributors.md                 ← contributor onboarding
+</span><span id="__span-1-42"><a id="__codelineno-1-42" name="__codelineno-1-42" href="#__codelineno-1-42"></a>├── observability/
+</span><span id="__span-1-43"><a id="__codelineno-1-43" name="__codelineno-1-43" href="#__codelineno-1-43"></a>│   └── logging.md                  ← structlog schema, redaction rules
+</span><span id="__span-1-44"><a id="__codelineno-1-44" name="__codelineno-1-44" href="#__codelineno-1-44"></a>├── operations/                     ← how we run it in prod
+</span><span id="__span-1-45"><a id="__codelineno-1-45" name="__codelineno-1-45" href="#__codelineno-1-45"></a>│   ├── slos.md
+</span><span id="__span-1-46"><a id="__codelineno-1-46" name="__codelineno-1-46" href="#__codelineno-1-46"></a>│   ├── backup-and-recovery.md
+</span><span id="__span-1-47"><a id="__codelineno-1-47" name="__codelineno-1-47" href="#__codelineno-1-47"></a>│   ├── dr-drill-checklist.md
+</span><span id="__span-1-48"><a id="__codelineno-1-48" name="__codelineno-1-48" href="#__codelineno-1-48"></a>│   ├── load-testing.md
+</span><span id="__span-1-49"><a id="__codelineno-1-49" name="__codelineno-1-49" href="#__codelineno-1-49"></a>│   └── runbooks/                   ← per-SLO + common debug runbooks
+</span><span id="__span-1-50"><a id="__codelineno-1-50" name="__codelineno-1-50" href="#__codelineno-1-50"></a>├── legal/
+</span><span id="__span-1-51"><a id="__codelineno-1-51" name="__codelineno-1-51" href="#__codelineno-1-51"></a>│   └── processors.md               ← GDPR data-processor inventory
+</span><span id="__span-1-52"><a id="__codelineno-1-52" name="__codelineno-1-52" href="#__codelineno-1-52"></a>└── LAST_AUDIT.md                   ← most recent code/security audit summary
 </span></code></pre></div>
 <h2 id="conventions">Conventions<a class="headerlink" href="#conventions" title="Permanent link">&para;</a></h2>
 <ul>
@@ -2840,17 +2903,21 @@ we explain <em>why</em>, not <em>what</em>.</p>
 <li><strong>Linking</strong>: relative paths only (<code>../architecture/overview.md</code>), so
   links work both on GitHub and in any local Markdown viewer.</li>
 <li><strong>Per-file length cap</strong>: 500 lines. Split a file rather than letting
-  it accrete. Two exhaustive reference docs intentionally run a little
-  over because they grow monotonically with the surface they describe
-  and are heavily cross-linked by anchor — splitting them would fragment
-  navigation more than it helps:</li>
-<li><a href="api-reference/"><code>api-reference.md</code></a> (~570 lines) is the full HTTP/WS
-    route catalog, split by domain <em>within</em> the file; it has 9 inbound
-    anchor links from other docs.</li>
-<li><a href="known-limitations/"><code>known-limitations.md</code></a> (~510 lines) is the
-    ranked tech-debt inventory; anchor-linked from the README roadmap
-    and runbooks.
-  Everything else is well under the cap.</li>
+  it accrete. <a href="known-limitations/"><code>known-limitations.md</code></a> is the one
+  exhaustive reference doc that intentionally runs a little over,
+  because it grows monotonically as we surface debt and is heavily
+  cross-linked by anchor from the README roadmap and the runbooks —
+  splitting it would fragment navigation more than it helps. It now
+  runs to ~575 lines; the cap is still respected in spirit by splitting
+  debt items into discrete anchored sections (<code>&lt;a id="…"&gt;&lt;/a&gt;</code>) rather
+  than free-form prose. The HTTP/WS surface <em>used</em> to be a single
+  ~570-line <code>api-reference.md</code>; it has since been split into a
+  conventions page (<a href="api-reference/"><code>api-reference.md</code></a>, ~190 lines)
+  plus two per-endpoint catalogs
+  (<a href="api-reference/routes/"><code>api-reference/routes.md</code></a> and
+  <a href="api-reference/websocket/"><code>api-reference/websocket.md</code></a>) — exactly
+  the pattern this rule prescribes. Everything else is well under the
+  cap.</li>
 <li><strong>No marketing copy.</strong> The README at the repo root is the public
   face; everything under <code>docs/</code> is engineering-grade.</li>
 </ul>
@@ -2867,7 +2934,11 @@ same PR (enforced in CODEOWNERS, not yet in CI):</p>
 <tbody>
 <tr>
 <td>New / changed HTTP route</td>
-<td><code>api-reference.md</code></td>
+<td><a href="api-reference/routes/"><code>api-reference/routes.md</code></a> (and <code>api-reference.md</code> if conventions change)</td>
+</tr>
+<tr>
+<td>New / changed WebSocket route or message</td>
+<td><a href="api-reference/websocket/"><code>api-reference/websocket.md</code></a></td>
 </tr>
 <tr>
 <td>New / changed MCP tool or resource</td>

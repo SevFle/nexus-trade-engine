@@ -69,7 +69,7 @@ we explain *why*, not *what*.
 | Understand how market data is routed, failed over, and validated | [`architecture/data-providers.md`](architecture/data-providers.md) |
 | Understand every table and its constraints | [`data-model.md`](data-model.md) |
 | Pick the right multi-strategy coordinator (voters vs. capital-aware) | [`architecture/multi-strategy.md`](architecture/multi-strategy.md) |
-| Call the REST / WebSocket API | [`api-reference.md`](api-reference.md) |
+| Call the REST / WebSocket API | [`api-reference.md`](api-reference.md) (conventions) · [`api-reference/routes.md`](api-reference/routes.md) (per-endpoint catalog) · [`api-reference/websocket.md`](api-reference/websocket.md) (WS wire protocol) |
 | Drive the engine from an LLM agent (MCP) | [`mcp-server.md`](mcp-server.md) · [`mcp/capability-audit.md`](mcp/capability-audit.md) · [`mcp/tool-catalog.md`](mcp/tool-catalog.md) |
 | Run the engine locally | [`development.md`](development.md) |
 | Ship a release | [`deployment.md`](deployment.md) · [`RELEASING.md`](RELEASING.md) |
@@ -107,7 +107,10 @@ docs/
 │   ├── 0010-static-ast-validation-toctou-loading.md
 │   ├── 0011-runtime-introspection-blocking.md
 │   └── 0012-sandbox-resource-limits-single-flight.md
-├── api-reference.md                ← every HTTP/WS route, auth, schemas
+├── api-reference.md                ← conventions: auth, legal gate, errors, middleware
+├── api-reference/                  ← per-endpoint catalogs (split out of api-reference.md)
+│   ├── routes.md                   ← every HTTP endpoint, grouped by router module
+│   └── websocket.md                ← /ws + /ws/events wire protocol, channels, close codes
 ├── mcp-server.md                   ← MCP tools/resources/auth (LLM agent surface)
 ├── mcp/                            ← MCP surface audit + catalog (generated map)
 │   ├── capability-audit.md         ← whole-surface review (findings, inventory)
@@ -144,17 +147,21 @@ docs/
 - **Linking**: relative paths only (`../architecture/overview.md`), so
   links work both on GitHub and in any local Markdown viewer.
 - **Per-file length cap**: 500 lines. Split a file rather than letting
-  it accrete. Two exhaustive reference docs intentionally run a little
-  over because they grow monotonically with the surface they describe
-  and are heavily cross-linked by anchor — splitting them would fragment
-  navigation more than it helps:
-  - [`api-reference.md`](api-reference.md) (~570 lines) is the full HTTP/WS
-    route catalog, split by domain *within* the file; it has 9 inbound
-    anchor links from other docs.
-  - [`known-limitations.md`](known-limitations.md) (~510 lines) is the
-    ranked tech-debt inventory; anchor-linked from the README roadmap
-    and runbooks.
-  Everything else is well under the cap.
+  it accrete. [`known-limitations.md`](known-limitations.md) is the one
+  exhaustive reference doc that intentionally runs a little over,
+  because it grows monotonically as we surface debt and is heavily
+  cross-linked by anchor from the README roadmap and the runbooks —
+  splitting it would fragment navigation more than it helps. It now
+  runs to ~575 lines; the cap is still respected in spirit by splitting
+  debt items into discrete anchored sections (`<a id="…"></a>`) rather
+  than free-form prose. The HTTP/WS surface *used* to be a single
+  ~570-line `api-reference.md`; it has since been split into a
+  conventions page ([`api-reference.md`](api-reference.md), ~190 lines)
+  plus two per-endpoint catalogs
+  ([`api-reference/routes.md`](api-reference/routes.md) and
+  [`api-reference/websocket.md`](api-reference/websocket.md)) — exactly
+  the pattern this rule prescribes. Everything else is well under the
+  cap.
 - **No marketing copy.** The README at the repo root is the public
   face; everything under `docs/` is engineering-grade.
 
@@ -165,7 +172,8 @@ same PR (enforced in CODEOWNERS, not yet in CI):
 
 | Code change | Required doc update |
 |---|---|
-| New / changed HTTP route | `api-reference.md` |
+| New / changed HTTP route | [`api-reference/routes.md`](api-reference/routes.md) (and `api-reference.md` if conventions change) |
+| New / changed WebSocket route or message | [`api-reference/websocket.md`](api-reference/websocket.md) |
 | New / changed MCP tool or resource | `mcp-server.md` |
 | New / changed DB model or migration | `data-model.md` + `architecture/database.md` |
 | New env var | `deployment.md` + `architecture/overview.md` "Configuration" |

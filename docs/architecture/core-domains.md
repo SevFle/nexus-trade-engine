@@ -107,7 +107,7 @@ is unambiguous.
 
 > **Status.** The model, the per-class invariants, the provider-class
 > bridge, and the market-data route's symbol-shape `detect_asset_class`
-> (see [`api-reference.md`](../api-reference.md#market-data)) are landed
+> (see [`api-reference/routes.md`](../api-reference/routes.md#market-data)) are landed
 > and unit-tested. Multi-asset support is still **partial**: not every
 > cost model and tax jurisdiction path has been validated against every
 > asset class, and live/paper execution for non-equity instruments is
@@ -424,7 +424,7 @@ this edge is pinned by tests.
 Tax reporting lives in [`engine/core/tax/`](../../engine/core/tax/):
 FIFO/LIFO lot matching, US wash-sale detection (`wash_sale.py`), and
 per-jurisdiction summarizers exposed by `POST /api/v1/tax/report/{code}`
-(`US`, `GB`, `DE`, `FR`) — see [`api-reference.md`](../api-reference.md#tax).
+(`US`, `GB`, `DE`, `FR`) — see [`api-reference/routes.md`](../api-reference/routes.md#tax).
 
 ---
 

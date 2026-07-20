@@ -177,6 +177,8 @@ nav:
       - Plugin system: architecture/plugins.md
   - Reference:
       - API reference: api-reference.md
+      - REST routes: api-reference/routes.md
+      - WebSocket API: api-reference/websocket.md
       - MCP server: mcp-server.md
       - MCP capability audit: mcp/capability-audit.md
       - MCP tool catalog: mcp/tool-catalog.md

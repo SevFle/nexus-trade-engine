@@ -319,21 +319,88 @@ the API-key branch from the legacy endpoint into `ws/auth.py`.
 
 ---
 
-## P1 — TaskIQ plumbing incomplete
+## P1 — TaskIQ plumbing is wired but backtests still run in-process
 
-`engine/tasks/worker.py` defines the broker; the compose file runs
-it. But:
+The TaskIQ broker lifecycle is now correctly owned by the FastAPI app
+([`engine/tasks/broker.py`](../engine/tasks/broker.py) is the canonical
+broker; [`engine/app.py`](../engine/app.py) calls `await
+broker.startup()` / `await broker.shutdown()` in the lifespan), and
+`GET /api/v1/tasks/status` is a real, **unauthenticated** liveness
+probe that reflects the broker's *actual* state (`running` /
+`stopped`) rather than a hardcoded constant. So the *broker* side of
+the plumbing is complete.
 
-- `POST /backtest/run` uses FastAPI `BackgroundTasks`, not TaskIQ —
-  so backtests run in the *web* process, not the worker. A long
-  backtest stalls the uvicorn worker pool.
+What is **still** incomplete:
+
+- `POST /api/v1/backtest/run` and `POST /api/v1/backtest` use FastAPI
+  `BackgroundTasks`, not TaskIQ — so backtests still run in the *web*
+  process, not the worker. A long backtest stalls the uvicorn worker
+  pool that served the request. The TaskIQ task `run_backtest_task`
+  ([`engine/tasks/worker.py`](../engine/tasks/worker.py)) exists and
+  works, but no REST route enqueues onto it.
 - The task-pipeline SLO in [`operations/slos.md`](operations/slos.md)
   is defined but has no emitter yet — `nexus.task.runs_total` is the
-  intended metric name.
+  intended metric name. `/tasks/status` itself emits `tasks.status.*`
+  logs but not a Prometheus counter.
 
 **Workaround today**: run uvicorn with `--workers N` and tune
 `NEXUS_WORKER_CONCURRENCY` high enough to absorb long backtests. Do
-not depend on the worker process for backtest isolation today.
+not depend on the worker process for backtest isolation today. The
+`/tasks/status` endpoint can at least tell you whether the broker is
+reachable from the web process.
+
+---
+
+<a id="ldap-has-no-route"></a>
+## P1 — LDAP is registered but has no route
+
+**Where**:
+[`engine/app.py`](../engine/app.py) (`_build_auth_registry`, the
+`case "ldap"` branch),
+[`engine/api/auth/ldap.py`](../engine/api/auth/ldap.py) (the
+`python-ldap`-backed provider wired into the registry), and
+[`engine/auth/providers/ldap.py`](../engine/auth/providers/ldap.py)
+(a newer, more robust `ldap3`-backed provider landed in PR #1368 that
+is *not* wired).
+
+`NEXUS_AUTH_PROVIDERS=…,ldap` makes `create_app()` register an
+`LDAPAuthProvider` in the `AuthProviderRegistry`, so a caller that
+imports the registry can drive it via
+`registry.authenticate("ldap", username=…, password=…, db=…)`. But
+**no HTTP route does so**:
+
+- `POST /api/v1/auth/login` hard-codes `"local"`
+  ([`engine/api/routes/auth.py`](../engine/api/routes/auth.py)).
+- `GET /api/v1/auth/{provider}/callback` is OAuth-shaped — it expects a
+  `code` and validates an OAuth state cookie, neither of which fits
+  LDAP's username/password flow.
+
+Consequence: an operator who enables LDAP can prove the bind works
+from a Python shell, but no end user can log in through the engine.
+
+There is also a second, more sophisticated LDAP implementation now:
+`engine/auth/providers/ldap.py` (PR #1368, 662 lines — search-then-bind,
+an `LDAPConnectionPool` with single-flight safety, typed exceptions
+inheriting from the shared `OAuthError`, lazy `ldap3` import). It is
+exported from `engine.auth.providers` but **not** registered in the
+app — it is library-only, paralleling the wired `engine/api/auth/ldap.py`.
+
+**Workaround today**: none at runtime over HTTP. Treat LDAP as a
+library-callable provider; do not list it in `NEXUS_AUTH_PROVIDERS`
+expecting end users to authenticate against it. Operators who need
+LDAP today must add a route that calls
+`registry.authenticate("ldap", …)` and mints tokens via the existing
+`_mint_tokens` / `_store_refresh_token` helpers.
+
+**Fix path**: (1) add `POST /api/v1/auth/ldap/login` (body
+`{username, password}`) that drives the registry's `ldap` provider;
+(2) decide whether to keep the simpler `engine/api/auth/ldap.py`
+(`python-ldap`) or replace it with the newer
+`engine/auth/providers/ldap.py` (`ldap3`, pooled, search-then-bind)
+and rewire `_build_auth_registry`'s `case "ldap"` branch to the new
+one; (3) extend the role-mapping documentation in
+[`adr/0002-auth-rbac.md`](adr/0002-auth-rbac.md) once the wiring
+choice is made.
 
 ---
 
@@ -476,19 +543,21 @@ SLO because live isn't shipped.
 
 ## P2 — Some decisions still lack an ADR
 
-[`docs/adr/`](adr/README.md) now captures eleven decisions: scaffold
+[`docs/adr/`](adr/README.md) now captures twelve decisions: scaffold
 (0001), auth/RBAC (0002), mobile/PWA (0003), TaskIQ (0004), Valkey
 (0005), bcrypt+Fernet (0006), the strategy sandbox allowlist import
 model (0007), the pluggable `MetricsBackend` Protocol (0008), the
 cross-replica `EventBus` WebSocket bridge (0009), the static AST
-validation + TOCTOU-safe strategy loader (0010), and the runtime
-introspection / dunder-attribute guard (0011). A handful of smaller
-decisions are still recorded only as PR descriptions or commit
-messages — e.g. the in-process backtest result store (this is tech
-debt to be fixed, P0 above, rather than an accepted architecture
-decision). Use [`adr/template.md`](adr/template.md) to capture
-remaining decisions as they come up in code review; don't batch them
-into one mega-ADR.
+validation + TOCTOU-safe strategy loader (0010), the runtime
+introspection / dunder-attribute guard (0011), and the Layer-3 sandbox
+resource limits — SIGALRM + tracemalloc + single-flight lock (0012).
+A handful of smaller decisions are still recorded only as PR
+descriptions or commit messages — e.g. the in-process backtest result
+store (this is tech debt to be fixed, P0 above, rather than an
+accepted architecture decision), and the dual LDAP-provider situation
+(see [LDAP has no route](#ldap-has-no-route) above). Use
+[`adr/template.md`](adr/template.md) to capture remaining decisions as
+they come up in code review; don't batch them into one mega-ADR.
 
 ---
 
