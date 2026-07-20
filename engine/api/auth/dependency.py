@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import uuid
 from typing import TYPE_CHECKING
 
@@ -163,14 +164,38 @@ def require_roles(*roles: str):
     # Freeze into a set once at registration time for O(1) lookup and to
     # decouple the closure from later mutation of the caller's iterable.
     allowed = set(roles)
+    # Materialise the sorted representation once at registration time so the
+    # per-request path doesn't re-sort on every denial and the rendered
+    # detail message is stable across requests.
+    allowed_sorted = sorted(allowed)
 
-    async def _check(user: User = Depends(get_current_user)) -> User:
+    async def _check(
+        request: Request,
+        user: User = Depends(get_current_user),
+    ) -> User:
         if user.role not in allowed:
-            raise HTTPException(
+            # Construct the exception first so its detail string is available
+            # to the audit log without duplicating the formatting work.
+            exc = HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Role {user.role!r} is not permitted; requires one of: "
-                f"{sorted(allowed)}",
+                f"{allowed_sorted}",
             )
+            # Audit the denial. Logging must never alter the authz decision, so
+            # guard it defensively — if structlog is misconfigured or the log
+            # call itself raises, we still surface the proper 403 to the
+            # caller. Capturing request.url.path and request.method lets the
+            # audit trail pinpoint the denied endpoint and verb.
+            with contextlib.suppress(Exception):  # pragma: no cover - defensive, never fatal
+                logger.warning(
+                    "rbac.deny",
+                    role=user.role,
+                    allowed=allowed_sorted,
+                    path=request.url.path,
+                    method=request.method,
+                    detail=exc.detail,
+                )
+            raise exc
         return user
 
     return _check
