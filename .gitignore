@@ -54,6 +54,9 @@ htmlcov/
 .coverage
 .coverage.*
 
+# MkDocs build output (pure build artifacts, never import from here)
+site/
+
 # Celery
 celerybeat-schedule
 celerybeat.pid

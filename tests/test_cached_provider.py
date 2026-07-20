@@ -78,6 +78,17 @@ def test_negative_ttl_is_rejected():
         CachedDataProvider(_make_mock_provider(), ttl=-1)
 
 
+def test_provider_property_exposes_wrapped_provider():
+    """The read-only ``provider`` property returns the exact wrapped instance.
+
+    This pins the introspection surface used by tests / diagnostics so that
+    the underlying provider is reachable without poking at private attrs.
+    """
+    wrapped = _make_mock_provider()
+    cached = CachedDataProvider(wrapped, ttl=30.0)
+    assert cached.provider is wrapped
+
+
 # --------------------------------------------------------------------------- #
 # 1. cache miss delegates to the underlying provider
 # --------------------------------------------------------------------------- #

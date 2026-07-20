@@ -126,6 +126,26 @@ class TestConstruction:
         # runtime_checkable Protocol: structural isinstance check passes.
         assert isinstance(_Stub("a"), IStrategy)
 
+    @pytest.mark.parametrize("bad", ["soon", None, [1.0], object()])
+    def test_non_numeric_timeout_rejected(self, bad: Any):
+        # ``_validate_timeout`` must reject anything ``float()`` cannot coerce.
+        with pytest.raises(StrategyOrchestratorError, match="eval_timeout must be a number"):
+            StrategyOrchestrator([(_Stub("a"), 1.0)], eval_timeout=bad)
+
+    @pytest.mark.parametrize("bad", [0, -0.01, -1, float("nan"), float("inf"), float("-inf")])
+    def test_invalid_timeout_rejected(self, bad: Any):
+        # ``_validate_timeout`` must reject non-finite and non-positive numbers.
+        with pytest.raises(
+            StrategyOrchestratorError,
+            match="eval_timeout must be a finite, positive number",
+        ):
+            StrategyOrchestrator([(_Stub("a"), 1.0)], eval_timeout=bad)
+
+    def test_valid_timeout_is_stored(self):
+        # A legitimate positive finite timeout round-trips through validation.
+        orch = StrategyOrchestrator([(_Stub("a"), 1.0)], eval_timeout=12.5)
+        assert orch._eval_timeout == 12.5
+
 
 # --------------------------------------------------------------------------- #
 # Happy-path aggregation
