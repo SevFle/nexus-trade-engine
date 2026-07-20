@@ -12,6 +12,10 @@ Cases exercised (one per ``test_*``):
   4. edge cases — empty allow-list raises ``ValueError`` at registration
      time, and a multi-role allow-list admits any matching role while
      still rejecting non-members.
+  5. role validation — unknown role names in the allow-list raise
+     ``ValueError`` at registration time.
+  6. audit logging — denials emit a structlog warning carrying the
+     ``user_id``, ``user_role``, and ``required_roles``.
 """
 
 from __future__ import annotations
@@ -83,9 +87,12 @@ class TestRequireRolesViewerBlocked:
         status_code = await _get_with_role(app, "viewer")
         assert status_code == 403
 
-    async def test_blocked_response_body_is_descriptive(self):
-        """The 403 body should explain which roles were required so the
-        caller (or operator) can diagnose the denial."""
+    async def test_blocked_response_body_is_generic(self):
+        """The 403 body must use a generic ``Insufficient permissions``
+        message rather than enumerating the offending role or the required
+        set. Surfacing the allow-list shape leaks endpoint topology to a
+        caller who is already forbidden — a low-effort reconnaissance
+        vector — and the offending role is captured in audit logs instead."""
         app = _build_app(("admin", "developer"))
 
         fake_user = _make_user("viewer")
@@ -100,11 +107,7 @@ class TestRequireRolesViewerBlocked:
             resp = await ac.get("/restricted")
 
         assert resp.status_code == 403
-        detail = resp.json()["detail"].lower()
-        # Mentions the offending role and the required set.
-        assert "viewer" in detail
-        assert "admin" in detail
-        assert "developer" in detail
+        assert resp.json()["detail"] == "Insufficient permissions"
 
 
 class TestRequireRolesMissingRoleDenied:
@@ -147,3 +150,89 @@ class TestRequireRolesEdgeCases:
         is the key behavioral difference vs. ``require_role``."""
         app = _build_app(("developer",))
         assert await _get_with_role(app, "admin") == 403
+
+
+class TestRequireRolesRoleValidation:
+    """Case 5: the factory validates that every supplied role exists in
+    ROLE_HIERARCHY at registration time. A typo in an endpoint's allow-list
+    would otherwise silently lock the endpoint since no real user could
+    ever match the misnamed role — failing fast surfaces the bug at route
+    registration instead of at first forbidden request."""
+
+    def test_single_unknown_role_raises_at_registration(self):
+        with pytest.raises(ValueError, match="unknown role"):
+            require_roles("superuser")
+
+    def test_unknown_role_among_known_raises_at_registration(self):
+        """Even a single unknown role mixed with valid ones must fail —
+        the factory is all-or-nothing so a partial registration can never
+        leave an endpoint silently locked to a typo'd role."""
+        with pytest.raises(ValueError, match="unknown role"):
+            require_roles("admin", "superuser", "developer")
+
+    def test_unknown_role_error_names_offenders(self):
+        """The error message must enumerate *which* roles were unknown so
+        an operator reading the startup traceback can fix the typo without
+        grepping ROLE_HIERARCHY."""
+        try:
+            require_roles("admin", "wizard", "overlord")
+        except ValueError as exc:
+            msg = str(exc)
+        else:  # pragma: no cover - defensive
+            pytest.fail("require_roles() should have raised ValueError")
+        assert "wizard" in msg
+        assert "overlord" in msg
+
+    def test_all_known_roles_register_without_error(self):
+        """Sanity: every role in ROLE_HIERARCHY is accepted."""
+        from engine.api.auth.dependency import ROLE_HIERARCHY
+
+        dep = require_roles(*ROLE_HIERARCHY.keys())
+        assert callable(dep)
+
+
+class TestRequireRolesAuditLogging:
+    """Case 6: every denial emits a structlog warning so operators can
+    trace unexpected RBAC failures back to a principal and required set.
+    The forbidden caller never sees this data (the 403 body is generic),
+    but the audit trail captures it for incident response."""
+
+    async def test_denial_emits_warning_with_audit_fields(self, monkeypatch):
+        """On a denial, ``logger.warning`` must be called exactly once with
+        the event tag plus ``user_id``, ``user_role``, and ``required_roles``
+        keyword args so structured-log consumers can index on them."""
+        from engine.api.auth import dependency as dep_mod
+
+        captured: list[tuple[tuple, dict]] = []
+
+        def _fake_warning(event, *args, **kwargs):
+            captured.append((args, kwargs))
+
+        monkeypatch.setattr(dep_mod.logger, "warning", _fake_warning)
+
+        app = _build_app(("admin", "developer"))
+        status_code = await _get_with_role(app, "viewer")
+
+        assert status_code == 403
+        assert len(captured) == 1
+        _, kwargs = captured[0]
+        assert kwargs["user_role"] == "viewer"
+        assert kwargs["user_id"] == str(FAKE_USER_ID)
+        assert kwargs["required_roles"] == ["admin", "developer"]
+
+    async def test_granted_request_emits_no_warning(self, monkeypatch):
+        """Happy path: an allowed request must not emit a denial warning."""
+        from engine.api.auth import dependency as dep_mod
+
+        captured: list[tuple[tuple, dict]] = []
+
+        def _fake_warning(event, *args, **kwargs):
+            captured.append((args, kwargs))
+
+        monkeypatch.setattr(dep_mod.logger, "warning", _fake_warning)
+
+        app = _build_app(("admin",))
+        status_code = await _get_with_role(app, "admin")
+
+        assert status_code == 200
+        assert captured == []

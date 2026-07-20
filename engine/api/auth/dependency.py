@@ -155,10 +155,19 @@ def require_roles(*roles: str):
     Raises:
         ValueError: if no roles are supplied (an empty allow-list would lock
             the endpoint for every principal, including admins — almost
-            always a misconfiguration).
+            always a misconfiguration), or if any supplied role is not
+            present in :data:`ROLE_HIERARCHY` (a typo would silently lock
+            the endpoint since no real user could ever match it).
     """
     if not roles:
         raise ValueError("require_roles() requires at least one role")
+
+    unknown = [r for r in roles if r not in ROLE_HIERARCHY]
+    if unknown:
+        raise ValueError(
+            "require_roles() received unknown role(s): "
+            f"{unknown!r}; known roles: {sorted(ROLE_HIERARCHY)}"
+        )
 
     # Freeze into a set once at registration time for O(1) lookup and to
     # decouple the closure from later mutation of the caller's iterable.
@@ -166,10 +175,21 @@ def require_roles(*roles: str):
 
     async def _check(user: User = Depends(get_current_user)) -> User:
         if user.role not in allowed:
+            # Audit the denial *before* surfacing the 403 so operators can
+            # trace unexpected RBAC failures back to a principal + required
+            # set. The HTTP *response body* stays generic (no role
+            # enumeration) to avoid leaking the allow-list shape to a
+            # forbidden caller, but the structured *audit log* carries the
+            # full context for incident response.
+            logger.warning(
+                "rbac.deny.require_roles",
+                user_id=str(user.id),
+                user_role=user.role,
+                required_roles=sorted(allowed),
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Role {user.role!r} is not permitted; requires one of: "
-                f"{sorted(allowed)}",
+                detail="Insufficient permissions",
             )
         return user
 
