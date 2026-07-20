@@ -981,6 +981,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1043,6 +1047,62 @@
     
   
     API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    REST routes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/websocket/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WebSocket API
   
 
     
@@ -2933,7 +2993,7 @@ is unambiguous.</p>
 <blockquote>
 <p><strong>Status.</strong> The model, the per-class invariants, the provider-class
 bridge, and the market-data route's symbol-shape <code>detect_asset_class</code>
-(see <a href="../../api-reference/#market-data"><code>api-reference.md</code></a>) are landed
+(see <a href="../../api-reference/routes/#market-data"><code>api-reference/routes.md</code></a>) are landed
 and unit-tested. Multi-asset support is still <strong>partial</strong>: not every
 cost model and tax jurisdiction path has been validated against every
 asset class, and live/paper execution for non-equity instruments is
@@ -3356,7 +3416,7 @@ would naturally consume it — see <a href="../../known-limitations/"><code>know
 <p>Tax reporting lives in <a href="../../engine/core/tax/"><code>engine/core/tax/</code></a>:
 FIFO/LIFO lot matching, US wash-sale detection (<code>wash_sale.py</code>), and
 per-jurisdiction summarizers exposed by <code>POST /api/v1/tax/report/{code}</code>
-(<code>US</code>, <code>GB</code>, <code>DE</code>, <code>FR</code>) — see <a href="../../api-reference/#tax"><code>api-reference.md</code></a>.</p>
+(<code>US</code>, <code>GB</code>, <code>DE</code>, <code>FR</code>) — see <a href="../../api-reference/routes/#tax"><code>api-reference/routes.md</code></a>.</p>
 <hr />
 <p>The <strong>analytics &amp; evaluation</strong> layer — the two performance-report
 containers (<code>MetricsReport</code> vs. the 86-KPI <code>PerformanceReport</code>), the

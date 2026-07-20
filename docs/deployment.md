@@ -129,7 +129,7 @@ Field names map to env as `NEXUS_WS_<UPPER>` (see
 | `NEXUS_WS_EVENT_BRIDGE_CONCURRENCY` | `32` | Fan-out concurrency of the cross-replica `EventBusBridge`. |
 
 The live socket registry is per-process; event *delivery* is
-[already cross-replica](api-reference.md#event-delivery) via the
+[already cross-replica](api-reference/websocket.md#cross-replica-event-delivery) via the
 `EventBusBridge` + Valkey pub/sub — see
 [`known-limitations.md`](known-limitations.md). Auth is JWT-only (no
 `nxs_*` API keys on WS).

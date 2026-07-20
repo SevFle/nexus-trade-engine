@@ -238,12 +238,13 @@ class TestShutdownGuaranteesCloseSentry:
     async def test_close_sentry_called_on_clean_shutdown(self):
         from engine.app import _shutdown
 
-        ws_bridge = MagicMock()
-        ws_manager = MagicMock()
+        ws_bridge = MagicMock(spec=["stop"])
+        ws_manager = MagicMock(spec=["close_all"])
         ws_manager.close_all = AsyncMock()
-        event_bus = MagicMock()
+        event_bus = MagicMock(spec=["disconnect"])
         event_bus.disconnect = AsyncMock()
         app = MagicMock()
+        app.state.valkey = MagicMock(spec=["aclose"])
         app.state.valkey.aclose = AsyncMock()
 
         with (
@@ -258,13 +259,14 @@ class TestShutdownGuaranteesCloseSentry:
     async def test_close_sentry_called_even_when_step_raises(self):
         from engine.app import _shutdown
 
-        ws_bridge = MagicMock()
+        ws_bridge = MagicMock(spec=["stop"])
         ws_bridge.stop.side_effect = RuntimeError("boom")
-        ws_manager = MagicMock()
+        ws_manager = MagicMock(spec=["close_all"])
         ws_manager.close_all = AsyncMock()
-        event_bus = MagicMock()
+        event_bus = MagicMock(spec=["disconnect"])
         event_bus.disconnect = AsyncMock()
         app = MagicMock()
+        app.state.valkey = MagicMock(spec=["aclose"])
         app.state.valkey.aclose = AsyncMock()
 
         with (
@@ -282,13 +284,14 @@ class TestShutdownGuaranteesCloseSentry:
         """A failure in one step must not skip subsequent steps."""
         from engine.app import _shutdown
 
-        ws_bridge = MagicMock()
+        ws_bridge = MagicMock(spec=["stop"])
         ws_bridge.stop.side_effect = RuntimeError("bridge down")
-        ws_manager = MagicMock()
+        ws_manager = MagicMock(spec=["close_all"])
         ws_manager.close_all = AsyncMock()
-        event_bus = MagicMock()
+        event_bus = MagicMock(spec=["disconnect"])
         event_bus.disconnect = AsyncMock()
         app = MagicMock()
+        app.state.valkey = MagicMock(spec=["aclose"])
         app.state.valkey.aclose = AsyncMock()
 
         with (
@@ -307,12 +310,13 @@ class TestShutdownGuaranteesCloseSentry:
         """A failure in a middle step must not skip remaining steps."""
         from engine.app import _shutdown
 
-        ws_bridge = MagicMock()
-        ws_manager = MagicMock()
+        ws_bridge = MagicMock(spec=["stop"])
+        ws_manager = MagicMock(spec=["close_all"])
         ws_manager.close_all = AsyncMock(side_effect=RuntimeError("ws boom"))
-        event_bus = MagicMock()
+        event_bus = MagicMock(spec=["disconnect"])
         event_bus.disconnect = AsyncMock()
         app = MagicMock()
+        app.state.valkey = MagicMock(spec=["aclose"])
         app.state.valkey.aclose = AsyncMock()
 
         with (
@@ -331,12 +335,13 @@ class TestShutdownGuaranteesCloseSentry:
         """If close_sentry itself raises the error must be swallowed."""
         from engine.app import _shutdown
 
-        ws_bridge = MagicMock()
-        ws_manager = MagicMock()
+        ws_bridge = MagicMock(spec=["stop"])
+        ws_manager = MagicMock(spec=["close_all"])
         ws_manager.close_all = AsyncMock()
-        event_bus = MagicMock()
+        event_bus = MagicMock(spec=["disconnect"])
         event_bus.disconnect = AsyncMock()
         app = MagicMock()
+        app.state.valkey = MagicMock(spec=["aclose"])
         app.state.valkey.aclose = AsyncMock()
 
         with (
@@ -351,13 +356,14 @@ class TestShutdownGuaranteesCloseSentry:
         """When every step raises, close_sentry must still execute."""
         from engine.app import _shutdown
 
-        ws_bridge = MagicMock()
+        ws_bridge = MagicMock(spec=["stop"])
         ws_bridge.stop.side_effect = RuntimeError("a")
-        ws_manager = MagicMock()
+        ws_manager = MagicMock(spec=["close_all"])
         ws_manager.close_all = AsyncMock(side_effect=RuntimeError("b"))
-        event_bus = MagicMock()
+        event_bus = MagicMock(spec=["disconnect"])
         event_bus.disconnect = AsyncMock(side_effect=RuntimeError("c"))
         app = MagicMock()
+        app.state.valkey = MagicMock(spec=["aclose"])
         app.state.valkey.aclose = AsyncMock(side_effect=RuntimeError("d"))
 
         with (
@@ -373,13 +379,14 @@ class TestShutdownGuaranteesCloseSentry:
         """When ``ws_order_signal_bridge`` is passed it must also be stopped."""
         from engine.app import _shutdown
 
-        ws_bridge = MagicMock()
-        ws_order_signal_bridge = MagicMock()
-        ws_manager = MagicMock()
+        ws_bridge = MagicMock(spec=["stop"])
+        ws_order_signal_bridge = MagicMock(spec=["stop"])
+        ws_manager = MagicMock(spec=["close_all"])
         ws_manager.close_all = AsyncMock()
-        event_bus = MagicMock()
+        event_bus = MagicMock(spec=["disconnect"])
         event_bus.disconnect = AsyncMock()
         app = MagicMock()
+        app.state.valkey = MagicMock(spec=["aclose"])
         app.state.valkey.aclose = AsyncMock()
 
         with (
@@ -406,12 +413,13 @@ class TestShutdownGuaranteesCloseSentry:
         """
         from engine.app import _shutdown
 
-        ws_bridge = MagicMock()
-        ws_manager = MagicMock()
+        ws_bridge = MagicMock(spec=["stop"])
+        ws_manager = MagicMock(spec=["close_all"])
         ws_manager.close_all = AsyncMock()
-        event_bus = MagicMock()
+        event_bus = MagicMock(spec=["disconnect"])
         event_bus.disconnect = AsyncMock()
         app = MagicMock()
+        app.state.valkey = MagicMock(spec=["aclose"])
         app.state.valkey.aclose = AsyncMock()
 
         with (
@@ -432,26 +440,35 @@ class TestShutdownGuaranteesCloseSentry:
         rather than raising. This keeps teardown robust for callers
         that rely on app state instead of threading the bus through.
         """
+        from structlog.testing import capture_logs
+
         from engine.app import _shutdown
 
-        ws_bridge = MagicMock()
-        ws_manager = MagicMock()
+        ws_bridge = MagicMock(spec=["stop"])
+        ws_manager = MagicMock(spec=["close_all"])
         ws_manager.close_all = AsyncMock()
-        state_event_bus = MagicMock()
+        state_event_bus = MagicMock(spec=["disconnect"])
         state_event_bus.disconnect = AsyncMock()
         app = MagicMock()
         app.state.event_bus = state_event_bus
+        app.state.valkey = MagicMock(spec=["aclose"])
         app.state.valkey.aclose = AsyncMock()
 
         with (
             patch("engine.app.dispose_engine", new=AsyncMock()),
-            patch("engine.app.close_sentry") as mock_close,
+            patch("engine.app.close_sentry") as mock_close,capture_logs() as cap_logs
         ):
             # event_bus omitted — should NOT raise, should use app.state.event_bus.
             await _shutdown(app, ws_bridge, ws_manager)
 
         state_event_bus.disconnect.assert_awaited_once()
         mock_close.assert_called_once()
+        # state.event_bus was present and was disconnected, so the
+        # "missing" warning must NOT have been emitted.
+        assert not any(
+            entry.get("event") == "nexus.shutdown.event_bus_missing"
+            for entry in cap_logs
+        )
 
     @pytest.mark.asyncio
     async def test_event_bus_none_and_no_state_skips_gracefully(self):
@@ -461,12 +478,13 @@ class TestShutdownGuaranteesCloseSentry:
         """
         from engine.app import _shutdown
 
-        ws_bridge = MagicMock()
-        ws_manager = MagicMock()
+        ws_bridge = MagicMock(spec=["stop"])
+        ws_manager = MagicMock(spec=["close_all"])
         ws_manager.close_all = AsyncMock()
         app = MagicMock()
         # ``app.state`` has no ``event_bus`` attribute.
         del app.state.event_bus
+        app.state.valkey = MagicMock(spec=["aclose"])
         app.state.valkey.aclose = AsyncMock()
 
         with (
@@ -479,43 +497,21 @@ class TestShutdownGuaranteesCloseSentry:
         mock_close.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_event_bus_none_uses_app_state_when_present(self):
-        """``event_bus=None`` explicitly should still fall back to
-        ``app.state.event_bus`` and disconnect it."""
-        from engine.app import _shutdown
-
-        ws_bridge = MagicMock()
-        ws_manager = MagicMock()
-        ws_manager.close_all = AsyncMock()
-        state_event_bus = MagicMock()
-        state_event_bus.disconnect = AsyncMock()
-        app = MagicMock()
-        app.state.event_bus = state_event_bus
-        app.state.valkey.aclose = AsyncMock()
-
-        with (
-            patch("engine.app.dispose_engine", new=AsyncMock()),
-            patch("engine.app.close_sentry"),
-        ):
-            await _shutdown(app, ws_bridge, ws_manager, event_bus=None)
-
-        state_event_bus.disconnect.assert_awaited_once()
-
-    @pytest.mark.asyncio
     async def test_explicit_event_bus_takes_precedence_over_state(self):
         """When ``event_bus`` is supplied explicitly it must be used in
         preference to ``app.state.event_bus`` so callers retain control."""
         from engine.app import _shutdown
 
-        ws_bridge = MagicMock()
-        ws_manager = MagicMock()
+        ws_bridge = MagicMock(spec=["stop"])
+        ws_manager = MagicMock(spec=["close_all"])
         ws_manager.close_all = AsyncMock()
-        explicit_bus = MagicMock()
+        explicit_bus = MagicMock(spec=["disconnect"])
         explicit_bus.disconnect = AsyncMock()
-        state_event_bus = MagicMock()
+        state_event_bus = MagicMock(spec=["disconnect"])
         state_event_bus.disconnect = AsyncMock()
         app = MagicMock()
         app.state.event_bus = state_event_bus
+        app.state.valkey = MagicMock(spec=["aclose"])
         app.state.valkey.aclose = AsyncMock()
 
         with (
@@ -540,21 +536,33 @@ class TestInitSentryGuard:
         proceeds to the next step (``set_metrics``)."""
         from engine.app import lifespan
 
-        mock_valkey = MagicMock()
+        mock_valkey = MagicMock(spec=["aclose"])
         mock_valkey.aclose = AsyncMock()
 
         mock_app = MagicMock()
         mock_app.state.valkey = mock_valkey
 
-        mock_ws_manager = MagicMock()
+        mock_ws_manager = MagicMock(spec=["close_all"])
         mock_ws_manager.close_all = AsyncMock()
 
-        mock_event_bus = MagicMock()
+        mock_event_bus = MagicMock(spec=["disconnect", "connect"])
         mock_event_bus.disconnect = AsyncMock()
         mock_event_bus.connect = AsyncMock()
 
-        mock_ws_bridge = MagicMock()
+        # ``EventBusBridge`` exposes both ``start`` (called during
+        # startup) and ``stop`` (called during shutdown); spec both so
+        # the mock faithfully simulates the bridge API surface.
+        mock_ws_bridge = MagicMock(spec=["start", "stop"])
+        mock_ws_bridge.start = MagicMock()
         mock_ws_bridge.stop = MagicMock()
+
+        # The order/trade/signal bridge (``engine.ws.bridge.EventBusBridge``)
+        # is constructed separately inside ``_init_websockets_and_events``
+        # and exposes the same ``start``/``stop`` surface; mock it too so
+        # its real ``start()`` does not reach into the stub event bus.
+        mock_order_signal_bridge = MagicMock(spec=["start", "stop"])
+        mock_order_signal_bridge.start = MagicMock()
+        mock_order_signal_bridge.stop = MagicMock()
 
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
@@ -577,6 +585,10 @@ class TestInitSentryGuard:
             patch("engine.app.init_ws"),
             patch("engine.events.bus.EventBus", return_value=mock_event_bus),
             patch("engine.app.EventBusBridge", return_value=mock_ws_bridge),
+            patch(
+                "engine.ws.bridge.EventBusBridge",
+                return_value=mock_order_signal_bridge,
+            ),
             patch("engine.app.dispose_engine", new=AsyncMock()),
             patch("engine.app.close_sentry"),
         ):
@@ -592,21 +604,33 @@ class TestInitSentryGuard:
         """When init_sentry succeeds no warning is emitted."""
         from engine.app import lifespan
 
-        mock_valkey = MagicMock()
+        mock_valkey = MagicMock(spec=["aclose"])
         mock_valkey.aclose = AsyncMock()
 
         mock_app = MagicMock()
         mock_app.state.valkey = mock_valkey
 
-        mock_ws_manager = MagicMock()
+        mock_ws_manager = MagicMock(spec=["close_all"])
         mock_ws_manager.close_all = AsyncMock()
 
-        mock_event_bus = MagicMock()
+        mock_event_bus = MagicMock(spec=["disconnect", "connect"])
         mock_event_bus.disconnect = AsyncMock()
         mock_event_bus.connect = AsyncMock()
 
-        mock_ws_bridge = MagicMock()
+        # Mirror the real ``EventBusBridge`` API: ``start`` is invoked
+        # during startup and ``stop`` during shutdown, so both must be
+        # present on the spec-constrained mock.
+        mock_ws_bridge = MagicMock(spec=["start", "stop"])
+        mock_ws_bridge.start = MagicMock()
         mock_ws_bridge.stop = MagicMock()
+
+        # The order/trade/signal bridge is constructed inside
+        # ``_init_websockets_and_events`` from ``engine.ws.bridge``; mock
+        # its constructor so its real ``start()`` does not invoke
+        # ``subscribe`` on the stub event bus.
+        mock_order_signal_bridge = MagicMock(spec=["start", "stop"])
+        mock_order_signal_bridge.start = MagicMock()
+        mock_order_signal_bridge.stop = MagicMock()
 
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
@@ -629,6 +653,10 @@ class TestInitSentryGuard:
             patch("engine.app.init_ws"),
             patch("engine.events.bus.EventBus", return_value=mock_event_bus),
             patch("engine.app.EventBusBridge", return_value=mock_ws_bridge),
+            patch(
+                "engine.ws.bridge.EventBusBridge",
+                return_value=mock_order_signal_bridge,
+            ),
             patch("engine.app.dispose_engine", new=AsyncMock()),
             patch("engine.app.close_sentry"),
             patch("engine.app.logger") as mock_logger,

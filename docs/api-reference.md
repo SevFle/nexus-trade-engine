@@ -19,6 +19,16 @@ two sibling pages that grew too large to keep inline:
   cross-replica event delivery.
 
 All routes are mounted by [`engine/api/router.py`](../engine/api/router.py).
+Two cross-cutting probes worth calling out at the top because they sit
+outside the auth model:
+
+- **`GET /api/v1/tasks/status`** — TaskIQ-broker liveness. Deliberately
+  **unauthenticated** because load balancers / CI hit it during deploys;
+  always returns 200 with a real `broker: "running" | "stopped"` field
+  derived from the broker's own state so a probe actually catches a dead
+  queue without tripping orchestrator restarts. See
+  [routes.md](api-reference/routes.md#tasks).
+- **`GET /ready`** — orchestrator readiness hook. Real DB + Valkey probes.
 
 ## Authentication
 
@@ -92,6 +102,27 @@ the `APIRouter(dependencies=…)` level
 `privacy`, and `auth` are **not** gated — they need to be reachable
 before the user has accepted anything (e.g. the legal docs UI itself
 calls `/reference/suggest` to render attributions).
+
+### Providers in the registry vs. routes on the wire
+
+`NEXUS_AUTH_PROVIDERS` is a CSV of providers that
+[`create_app()._build_auth_registry()`](../engine/app.py) loads lazily
+and registers: `local`, `google`, `github`, `oidc`, `ldap`. **Being in
+the registry is not the same as being reachable from an HTTP route.**
+The only routes that exercise `registry.authenticate` are
+`POST /api/v1/auth/login` (hard-coded to `"local"`) and
+`GET /api/v1/auth/{provider}/callback` (OAuth-shaped — it expects a
+`code` and validates an OAuth state cookie, which does not fit LDAP's
+username/password flow). Consequence:
+
+- `local`, `google`, `github`, `oidc` are reachable end-to-end.
+- **`ldap` is registered but has no route.** The provider is callable as
+  a library (`registry.authenticate("ldap", username=…, password=…,
+  db=…)`) but no `/auth/ldap/login` (or similar) endpoint exists. A
+  second, more robust `ldap3`-backed LDAP provider also landed in
+  [`engine/auth/providers/ldap.py`](../engine/auth/providers/ldap.py)
+  (PR #1368) and is *also* not wired. See
+  [known-limitations.md](known-limitations.md#ldap-has-no-route).
 
 ---
 

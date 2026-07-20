@@ -798,6 +798,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -860,6 +864,62 @@
     
   
     API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-reference/routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    REST routes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-reference/websocket/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WebSocket API
   
 
     
@@ -2558,10 +2618,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#p1-taskiq-plumbing-incomplete" class="md-nav__link">
+  <a href="#p1-taskiq-plumbing-is-wired-but-backtests-still-run-in-process" class="md-nav__link">
     <span class="md-ellipsis">
       
-        P1 — TaskIQ plumbing incomplete
+        P1 — TaskIQ plumbing is wired but backtests still run in-process
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#p1-ldap-is-registered-but-has-no-route" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        P1 — LDAP is registered but has no route
       
     </span>
   </a>
@@ -2837,10 +2908,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#p1-taskiq-plumbing-incomplete" class="md-nav__link">
+  <a href="#p1-taskiq-plumbing-is-wired-but-backtests-still-run-in-process" class="md-nav__link">
     <span class="md-ellipsis">
       
-        P1 — TaskIQ plumbing incomplete
+        P1 — TaskIQ plumbing is wired but backtests still run in-process
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#p1-ldap-is-registered-but-has-no-route" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        P1 — LDAP is registered but has no route
       
     </span>
   </a>
@@ -3225,20 +3307,79 @@ that code is no longer mounted.</p>
 use that for WS. If long-lived WS access for automation is needed, port
 the API-key branch from the legacy endpoint into <code>ws/auth.py</code>.</p>
 <hr />
-<h2 id="p1-taskiq-plumbing-incomplete">P1 — TaskIQ plumbing incomplete<a class="headerlink" href="#p1-taskiq-plumbing-incomplete" title="Permanent link">&para;</a></h2>
-<p><code>engine/tasks/worker.py</code> defines the broker; the compose file runs
-it. But:</p>
+<h2 id="p1-taskiq-plumbing-is-wired-but-backtests-still-run-in-process">P1 — TaskIQ plumbing is wired but backtests still run in-process<a class="headerlink" href="#p1-taskiq-plumbing-is-wired-but-backtests-still-run-in-process" title="Permanent link">&para;</a></h2>
+<p>The TaskIQ broker lifecycle is now correctly owned by the FastAPI app
+(<a href="../engine/tasks/broker.py"><code>engine/tasks/broker.py</code></a> is the canonical
+broker; <a href="../engine/app.py"><code>engine/app.py</code></a> calls <code>await
+broker.startup()</code> / <code>await broker.shutdown()</code> in the lifespan), and
+<code>GET /api/v1/tasks/status</code> is a real, <strong>unauthenticated</strong> liveness
+probe that reflects the broker's <em>actual</em> state (<code>running</code> /
+<code>stopped</code>) rather than a hardcoded constant. So the <em>broker</em> side of
+the plumbing is complete.</p>
+<p>What is <strong>still</strong> incomplete:</p>
 <ul>
-<li><code>POST /backtest/run</code> uses FastAPI <code>BackgroundTasks</code>, not TaskIQ —
-  so backtests run in the <em>web</em> process, not the worker. A long
-  backtest stalls the uvicorn worker pool.</li>
+<li><code>POST /api/v1/backtest/run</code> and <code>POST /api/v1/backtest</code> use FastAPI
+  <code>BackgroundTasks</code>, not TaskIQ — so backtests still run in the <em>web</em>
+  process, not the worker. A long backtest stalls the uvicorn worker
+  pool that served the request. The TaskIQ task <code>run_backtest_task</code>
+  (<a href="../engine/tasks/worker.py"><code>engine/tasks/worker.py</code></a>) exists and
+  works, but no REST route enqueues onto it.</li>
 <li>The task-pipeline SLO in <a href="../operations/slos/"><code>operations/slos.md</code></a>
   is defined but has no emitter yet — <code>nexus.task.runs_total</code> is the
-  intended metric name.</li>
+  intended metric name. <code>/tasks/status</code> itself emits <code>tasks.status.*</code>
+  logs but not a Prometheus counter.</li>
 </ul>
 <p><strong>Workaround today</strong>: run uvicorn with <code>--workers N</code> and tune
 <code>NEXUS_WORKER_CONCURRENCY</code> high enough to absorb long backtests. Do
-not depend on the worker process for backtest isolation today.</p>
+not depend on the worker process for backtest isolation today. The
+<code>/tasks/status</code> endpoint can at least tell you whether the broker is
+reachable from the web process.</p>
+<hr />
+<p><a id="ldap-has-no-route"></a></p>
+<h2 id="p1-ldap-is-registered-but-has-no-route">P1 — LDAP is registered but has no route<a class="headerlink" href="#p1-ldap-is-registered-but-has-no-route" title="Permanent link">&para;</a></h2>
+<p><strong>Where</strong>:
+<a href="../engine/app.py"><code>engine/app.py</code></a> (<code>_build_auth_registry</code>, the
+<code>case "ldap"</code> branch),
+<a href="../engine/api/auth/ldap.py"><code>engine/api/auth/ldap.py</code></a> (the
+<code>python-ldap</code>-backed provider wired into the registry), and
+<a href="../engine/auth/providers/ldap.py"><code>engine/auth/providers/ldap.py</code></a>
+(a newer, more robust <code>ldap3</code>-backed provider landed in PR #1368 that
+is <em>not</em> wired).</p>
+<p><code>NEXUS_AUTH_PROVIDERS=…,ldap</code> makes <code>create_app()</code> register an
+<code>LDAPAuthProvider</code> in the <code>AuthProviderRegistry</code>, so a caller that
+imports the registry can drive it via
+<code>registry.authenticate("ldap", username=…, password=…, db=…)</code>. But
+<strong>no HTTP route does so</strong>:</p>
+<ul>
+<li><code>POST /api/v1/auth/login</code> hard-codes <code>"local"</code>
+  (<a href="../engine/api/routes/auth.py"><code>engine/api/routes/auth.py</code></a>).</li>
+<li><code>GET /api/v1/auth/{provider}/callback</code> is OAuth-shaped — it expects a
+  <code>code</code> and validates an OAuth state cookie, neither of which fits
+  LDAP's username/password flow.</li>
+</ul>
+<p>Consequence: an operator who enables LDAP can prove the bind works
+from a Python shell, but no end user can log in through the engine.</p>
+<p>There is also a second, more sophisticated LDAP implementation now:
+<code>engine/auth/providers/ldap.py</code> (PR #1368, 662 lines — search-then-bind,
+an <code>LDAPConnectionPool</code> with single-flight safety, typed exceptions
+inheriting from the shared <code>OAuthError</code>, lazy <code>ldap3</code> import). It is
+exported from <code>engine.auth.providers</code> but <strong>not</strong> registered in the
+app — it is library-only, paralleling the wired <code>engine/api/auth/ldap.py</code>.</p>
+<p><strong>Workaround today</strong>: none at runtime over HTTP. Treat LDAP as a
+library-callable provider; do not list it in <code>NEXUS_AUTH_PROVIDERS</code>
+expecting end users to authenticate against it. Operators who need
+LDAP today must add a route that calls
+<code>registry.authenticate("ldap", …)</code> and mints tokens via the existing
+<code>_mint_tokens</code> / <code>_store_refresh_token</code> helpers.</p>
+<p><strong>Fix path</strong>: (1) add <code>POST /api/v1/auth/ldap/login</code> (body
+<code>{username, password}</code>) that drives the registry's <code>ldap</code> provider;
+(2) decide whether to keep the simpler <code>engine/api/auth/ldap.py</code>
+(<code>python-ldap</code>) or replace it with the newer
+<code>engine/auth/providers/ldap.py</code> (<code>ldap3</code>, pooled, search-then-bind)
+and rewire <code>_build_auth_registry</code>'s <code>case "ldap"</code> branch to the new
+one; (3) extend the role-mapping documentation in
+<a href="../adr/0002-auth-rbac/"><code>adr/0002-auth-rbac.md</code></a> once the wiring
+choice is made.</p>
 <hr />
 <p><a id="mcp"></a></p>
 <h2 id="p1-mcp-server-is-a-library-not-a-runnable-process">P1 — MCP server is a library, not a runnable process<a class="headerlink" href="#p1-mcp-server-is-a-library-not-a-runnable-process" title="Permanent link">&para;</a></h2>
@@ -3348,19 +3489,21 @@ will need its own SLOs when #109/#111 land. Today there's nothing to
 SLO because live isn't shipped.</p>
 <hr />
 <h2 id="p2-some-decisions-still-lack-an-adr">P2 — Some decisions still lack an ADR<a class="headerlink" href="#p2-some-decisions-still-lack-an-adr" title="Permanent link">&para;</a></h2>
-<p><a href="../adr/"><code>docs/adr/</code></a> now captures eleven decisions: scaffold
+<p><a href="../adr/"><code>docs/adr/</code></a> now captures twelve decisions: scaffold
 (0001), auth/RBAC (0002), mobile/PWA (0003), TaskIQ (0004), Valkey
 (0005), bcrypt+Fernet (0006), the strategy sandbox allowlist import
 model (0007), the pluggable <code>MetricsBackend</code> Protocol (0008), the
 cross-replica <code>EventBus</code> WebSocket bridge (0009), the static AST
-validation + TOCTOU-safe strategy loader (0010), and the runtime
-introspection / dunder-attribute guard (0011). A handful of smaller
-decisions are still recorded only as PR descriptions or commit
-messages — e.g. the in-process backtest result store (this is tech
-debt to be fixed, P0 above, rather than an accepted architecture
-decision). Use <a href="../adr/template/"><code>adr/template.md</code></a> to capture
-remaining decisions as they come up in code review; don't batch them
-into one mega-ADR.</p>
+validation + TOCTOU-safe strategy loader (0010), the runtime
+introspection / dunder-attribute guard (0011), and the Layer-3 sandbox
+resource limits — SIGALRM + tracemalloc + single-flight lock (0012).
+A handful of smaller decisions are still recorded only as PR
+descriptions or commit messages — e.g. the in-process backtest result
+store (this is tech debt to be fixed, P0 above, rather than an
+accepted architecture decision), and the dual LDAP-provider situation
+(see <a href="#ldap-has-no-route">LDAP has no route</a> above). Use
+<a href="../adr/template/"><code>adr/template.md</code></a> to capture remaining decisions as
+they come up in code review; don't batch them into one mega-ADR.</p>
 <hr />
 <h2 id="not-a-limitation-intentional-non-goals">Not-a-limitation: intentional non-goals<a class="headerlink" href="#not-a-limitation-intentional-non-goals" title="Permanent link">&para;</a></h2>
 <p>These come up enough in code review that they're worth listing:</p>

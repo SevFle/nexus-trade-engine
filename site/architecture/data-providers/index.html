@@ -1019,6 +1019,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1081,6 +1085,62 @@
     
   
     API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    REST routes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/websocket/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WebSocket API
   
 
     
@@ -3000,7 +3060,7 @@ statement):</p>
    every candidate failed, not just <em>that</em> they did.</li>
 </ol>
 <p>This fail-over posture is also what the REST error mapping in
-<a href="../../api-reference/#market-data"><code>api-reference.md</code></a> reflects:
+<a href="../../api-reference/routes/#market-data"><code>api-reference/routes.md</code></a> reflects:
 <code>TransientProviderError</code>/<code>TimeoutError</code> → <code>503</code>,
 <code>NoProviderAvailableError</code> → <code>503</code>, <code>CapabilityNotSupportedError</code> →
 <code>501</code>, <code>FatalProviderError</code> → <code>400</code>.</p>
@@ -3287,7 +3347,7 @@ exposes a torn view.</p>
 <p><code>IDataProvider.health_check()</code> returns a <code>HealthCheckResult(name,
 status, latency_ms, detail)</code> with <code>status ∈ {up, degraded, down}</code>. The
 <code>GET /health/providers</code> route (see
-<a href="../../api-reference/#health-observability"><code>api-reference.md</code></a>) fans
+<a href="../../api-reference/routes/#observability"><code>api-reference/routes.md</code></a>) fans
 this out across every registered provider so an operator can tell at a
 glance which vendor is degraded — the registry's fail-over hides a
 single degraded provider from callers, so <code>/health/providers</code> is often
@@ -3323,7 +3383,7 @@ the <em>only</em> signal that a vendor is struggling.</p>
 <ul>
 <li><a href="../core-domains/"><code>core-domains.md</code></a> — the <code>MarketState</code> and <code>MarketView</code>
   types that consume provider output on the strategy path.</li>
-<li><a href="../../api-reference/#market-data"><code>api-reference.md</code></a> — the REST error
+<li><a href="../../api-reference/routes/#market-data"><code>api-reference/routes.md</code></a> — the REST error
   mapping for provider exceptions.</li>
 <li><a href="../plugins/"><code>plugins.md</code></a> — the (target) model where data providers
   are a plugin kind; today they're YAML-registered, not filesystem-discovered.</li>

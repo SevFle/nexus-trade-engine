@@ -798,6 +798,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -860,6 +864,62 @@
     
   
     API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-reference/routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    REST routes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-reference/websocket/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WebSocket API
   
 
     
@@ -3165,7 +3225,7 @@ Field names map to env as <code>NEXUS_WS_&lt;UPPER&gt;</code> (see
 </tbody>
 </table>
 <p>The live socket registry is per-process; event <em>delivery</em> is
-<a href="../api-reference/#event-delivery">already cross-replica</a> via the
+<a href="../api-reference/websocket/#cross-replica-event-delivery">already cross-replica</a> via the
 <code>EventBusBridge</code> + Valkey pub/sub — see
 <a href="../known-limitations/"><code>known-limitations.md</code></a>. Auth is JWT-only (no
 <code>nxs_*</code> API keys on WS).</p>

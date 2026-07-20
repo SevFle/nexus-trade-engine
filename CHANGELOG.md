@@ -13,6 +13,10 @@ edit this file by hand — it is regenerated as part of every release PR.
 ## [Unreleased]
 
 ### Internal
+- (fix) Constrain MagicMock objects in tests/test_app_coverage.py with spec= to prevent auto-attribute false positives, remove r
+
+
+### Internal
 - (write_tests) Write tests for engine/ws/bridge.py uncovered lines (95-118, 131-145, 163-165, 232-257, 282-306, 344-387) to raise cover
 
 

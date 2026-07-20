@@ -358,7 +358,10 @@ class PortfolioRebalancer:
         empty, which is otherwise rejected at construction)."""
         drifts = self.compute_drift()
         if not drifts:
-            return 0.0
+            # Unreachable through the public API: empty ``target_weights``
+            # is rejected at construction, so ``strategy_ids`` (and hence
+            # ``drifts``) is never empty. Guard kept for defensive safety.
+            return 0.0  # pragma: no cover - unreachable, see docstring
         return max(abs(d) for d in drifts.values())
 
     def needs_rebalance(self) -> bool:
