@@ -45,6 +45,16 @@ from engine.auth.providers.google import (
 from engine.auth.providers.google import (
     TokenSet as GoogleTokenSet,
 )
+from engine.auth.providers.ldap import (
+    LDAPAuthError,
+    LDAPAuthProvider,
+    LDAPConfigurationError,
+    LDAPConnectionError,
+    LDAPConnectionPool,
+    LDAPInvalidCredentialsError,
+    LDAPUser,
+    LDAPUserNotFoundError,
+)
 
 __all__ = [
     "GitHubInvalidTokenError",
@@ -60,6 +70,14 @@ __all__ = [
     "IDTokenClaims",
     "IOAuthProvider",
     "InvalidTokenError",
+    "LDAPAuthError",
+    "LDAPAuthProvider",
+    "LDAPConfigurationError",
+    "LDAPConnectionError",
+    "LDAPConnectionPool",
+    "LDAPInvalidCredentialsError",
+    "LDAPUser",
+    "LDAPUserNotFoundError",
     "OAuthError",
     "TokenExchangeError",
     "TokenSet",
