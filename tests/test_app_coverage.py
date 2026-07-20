@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -431,7 +432,14 @@ class TestShutdownGuaranteesCloseSentry:
         ``app.state.event_bus`` (set during startup) and disconnect it
         rather than raising. This keeps teardown robust for callers
         that rely on app state instead of threading the bus through.
+
+        Uses ``types.SimpleNamespace`` for ``app.state`` so attribute
+        access is genuine (no MagicMock auto-creation), and asserts the
+        "event_bus_missing" warning is NOT emitted — proving the
+        fallback to ``app.state`` actually resolved a bus.
         """
+        from structlog.testing import capture_logs
+
         from engine.app import _shutdown
 
         ws_bridge = MagicMock()
@@ -439,49 +447,95 @@ class TestShutdownGuaranteesCloseSentry:
         ws_manager.close_all = AsyncMock()
         state_event_bus = MagicMock()
         state_event_bus.disconnect = AsyncMock()
-        app = MagicMock()
-        app.state.event_bus = state_event_bus
-        app.state.valkey.aclose = AsyncMock()
+        valkey = MagicMock()
+        valkey.aclose = AsyncMock()
+        app = types.SimpleNamespace(
+            state=types.SimpleNamespace(
+                event_bus=state_event_bus,
+                valkey=valkey,
+            ),
+        )
 
         with (
             patch("engine.app.dispose_engine", new=AsyncMock()),
             patch("engine.app.close_sentry") as mock_close,
+            capture_logs() as cap_logs,
         ):
             # event_bus omitted — should NOT raise, should use app.state.event_bus.
             await _shutdown(app, ws_bridge, ws_manager)
 
         state_event_bus.disconnect.assert_awaited_once()
         mock_close.assert_called_once()
+        # Fallback succeeded: the "missing" warning must NOT fire.
+        assert not any(
+            entry.get("event") == "nexus.shutdown.event_bus_missing"
+            for entry in cap_logs
+        ), f"unexpected event_bus_missing warning, got {cap_logs}"
 
     @pytest.mark.asyncio
     async def test_event_bus_none_and_no_state_skips_gracefully(self):
         """When ``event_bus`` is ``None`` and ``app.state.event_bus`` is
         absent, the cleanup step must be skipped gracefully (logged)
         rather than raising ``AttributeError``.
+
+        Uses ``types.SimpleNamespace`` for ``app.state`` so the missing
+        ``event_bus`` attribute genuinely returns ``None`` via
+        ``getattr``'s default — ``MagicMock`` would otherwise auto-create
+        the attribute on access (or rely on the ``del``-then-AttributeError
+        quirk) and mask the very None-skip branch under test. We also
+        assert the ``nexus.shutdown.event_bus_missing`` warning is logged
+        so the path is provably executed rather than silently swallowed.
         """
+        from structlog.testing import capture_logs
+
         from engine.app import _shutdown
 
         ws_bridge = MagicMock()
         ws_manager = MagicMock()
         ws_manager.close_all = AsyncMock()
-        app = MagicMock()
-        # ``app.state`` has no ``event_bus`` attribute.
-        del app.state.event_bus
-        app.state.valkey.aclose = AsyncMock()
+        valkey = MagicMock()
+        valkey.aclose = AsyncMock()
+        # SimpleNamespace: getattr returns the default (None) for any
+        # attribute that was never set, so the None-skip branch is the
+        # genuine code path exercised here.
+        app = types.SimpleNamespace(
+            state=types.SimpleNamespace(valkey=valkey),
+        )
+        # Sanity-check the precondition: no event_bus anywhere.
+        assert getattr(app.state, "event_bus", None) is None
 
         with (
             patch("engine.app.dispose_engine", new=AsyncMock()),
             patch("engine.app.close_sentry") as mock_close,
+            capture_logs() as cap_logs,
         ):
             # Should NOT raise even though there is no event bus anywhere.
             await _shutdown(app, ws_bridge, ws_manager, event_bus=None)
 
         mock_close.assert_called_once()
+        # The None-skip path was genuinely hit and logged a warning.
+        assert any(
+            entry.get("event") == "nexus.shutdown.event_bus_missing"
+            and entry.get("log_level") == "warning"
+            for entry in cap_logs
+        ), f"expected event_bus_missing warning, got {cap_logs}"
+        # Remaining cleanup steps still ran despite the missing event bus.
+        valkey.aclose.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_event_bus_none_uses_app_state_when_present(self):
         """``event_bus=None`` explicitly should still fall back to
-        ``app.state.event_bus`` and disconnect it."""
+        ``app.state.event_bus`` and disconnect it.
+
+        Distinct from ``test_event_bus_optional_defaults_to_app_state``
+        (which omits the kwarg to pin backward-compat for the 4-positional-arg
+        call form): this variant passes ``event_bus=None`` explicitly to
+        prove an explicit ``None`` is treated identically to omission.
+        The incremental assertion here is that the state fallback runs
+        to completion — ``state_event_bus.disconnect`` is awaited exactly
+        once — and the ``valkey.aclose`` step is not skipped as a side
+        effect (the per-step guards must isolate the optional bus).
+        """
         from engine.app import _shutdown
 
         ws_bridge = MagicMock()
@@ -489,9 +543,14 @@ class TestShutdownGuaranteesCloseSentry:
         ws_manager.close_all = AsyncMock()
         state_event_bus = MagicMock()
         state_event_bus.disconnect = AsyncMock()
-        app = MagicMock()
-        app.state.event_bus = state_event_bus
-        app.state.valkey.aclose = AsyncMock()
+        valkey = MagicMock()
+        valkey.aclose = AsyncMock()
+        app = types.SimpleNamespace(
+            state=types.SimpleNamespace(
+                event_bus=state_event_bus,
+                valkey=valkey,
+            ),
+        )
 
         with (
             patch("engine.app.dispose_engine", new=AsyncMock()),
@@ -500,6 +559,8 @@ class TestShutdownGuaranteesCloseSentry:
             await _shutdown(app, ws_bridge, ws_manager, event_bus=None)
 
         state_event_bus.disconnect.assert_awaited_once()
+        # Per-step isolation: the bus cleanup did not skip valkey teardown.
+        valkey.aclose.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_explicit_event_bus_takes_precedence_over_state(self):
