@@ -12,6 +12,10 @@ edit this file by hand — it is regenerated as part of every release PR.
 
 ## [Unreleased]
 
+### Internal
+- (write_tests) Write tests for engine/ws/bridge.py uncovered lines (95-118, 131-145, 163-165, 232-257, 282-306, 344-387) to raise cover
+
+
 ### Fixed
 - (fix) Narrow broad `except Exception` in `engine/core/order_manager.py` (fill-event publish path) to the expected bus failure types and add a `fill_event_publish_failures` metric counter so swallowed errors are observable instead of silent.
 - (fix) Replace fragile dotted-to-underscore string normalization in `engine/api/ws/event_bridge.py` by keying `_EVENT_TO_CHANNEL` on actual `EventType` enum values, eliminating a class of channel-resolution bugs from string mangling.
