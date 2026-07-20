@@ -353,15 +353,23 @@ class PortfolioRebalancer:
         return drifts
 
     def max_drift(self) -> float:
-        """Largest absolute drift across all strategies (``0.0`` when the
-        union of strategies is empty — only reachable if both inputs are
-        empty, which is otherwise rejected at construction)."""
+        """Largest absolute drift across all strategies.
+
+        Raises
+        ------
+        RuntimeError
+            If ``compute_drift`` somehow returns an empty mapping. This is
+            unreachable through the public API — empty ``target_weights`` is
+            rejected at construction, so ``strategy_ids`` (and hence
+            ``drifts``) is never empty — and indicates a violated invariant.
+        """
         drifts = self.compute_drift()
         if not drifts:
             # Unreachable through the public API: empty ``target_weights``
             # is rejected at construction, so ``strategy_ids`` (and hence
-            # ``drifts``) is never empty. Guard kept for defensive safety.
-            return 0.0  # pragma: no cover - unreachable, see docstring
+            # ``drifts``) is never empty. Surface the broken invariant
+            # loudly rather than masking it with a silent zero.
+            raise RuntimeError("drifts unexpectedly empty — invariant violated")
         return max(abs(d) for d in drifts.values())
 
     def needs_rebalance(self) -> bool:

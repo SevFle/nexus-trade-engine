@@ -289,6 +289,22 @@ class TestDrift:
         rb = PortfolioRebalancer({"a": 1.0}, {})
         assert rb.needs_rebalance() is False
 
+    def test_max_drift_raises_on_empty_drifts_invariant_violation(self) -> None:
+        # Empty ``target_weights`` is rejected at construction, so under the
+        # public API ``compute_drift`` is never empty and the guard in
+        # ``max_drift`` is unreachable. Corrupt the internal state directly
+        # (clear both backing dicts) to force ``strategy_ids`` — and hence
+        # ``compute_drift`` — to be empty, then assert the broken invariant
+        # surfaces as a RuntimeError instead of being masked by a silent 0.0.
+        rb = PortfolioRebalancer({"a": 1.0}, {"a": 100.0})
+        assert rb.compute_drift()  # sanity: non-empty in normal state
+
+        rb._target_weights.clear()
+        rb._current_values.clear()
+
+        with pytest.raises(RuntimeError, match="drifts unexpectedly empty"):
+            rb.max_drift()
+
 
 # --------------------------------------------------------------------------- #
 # Order generation
