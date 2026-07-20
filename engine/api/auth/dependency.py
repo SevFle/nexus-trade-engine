@@ -141,6 +141,41 @@ def require_role(minimum_role: str):
     return _check
 
 
+def require_roles(*roles: str):
+    """FastAPI dependency factory enforcing *exact* set-membership RBAC.
+
+    Unlike :func:`require_role` (which applies a role *hierarchy* — any role
+    at or above ``minimum_role`` is admitted), this factory admits only users
+    whose ``role`` is **exactly** one of the supplied ``roles``. Use it for
+    endpoints that must be locked to a specific role set without granting
+    implicit access to more privileged roles (e.g. an audit-log viewer that
+    only ``admin`` and ``developer`` may access, even though a hypothetical
+    ``super_admin`` would normally outrank both).
+
+    Raises:
+        ValueError: if no roles are supplied (an empty allow-list would lock
+            the endpoint for every principal, including admins — almost
+            always a misconfiguration).
+    """
+    if not roles:
+        raise ValueError("require_roles() requires at least one role")
+
+    # Freeze into a set once at registration time for O(1) lookup and to
+    # decouple the closure from later mutation of the caller's iterable.
+    allowed = set(roles)
+
+    async def _check(user: User = Depends(get_current_user)) -> User:
+        if user.role not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Role {user.role!r} is not permitted; requires one of: "
+                f"{sorted(allowed)}",
+            )
+        return user
+
+    return _check
+
+
 # ---------------------------------------------------------------------------
 # API-key scope enforcement (gh#86 / gh#94)
 # ---------------------------------------------------------------------------
