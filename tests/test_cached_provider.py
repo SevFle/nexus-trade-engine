@@ -366,3 +366,30 @@ async def test_clear_evicts_all_entries():
 
     await cached.get_ohlcv("AAPL")
     assert provider.get_ohlcv.await_count == 2
+
+
+async def test_cache_returns_provider_object_by_identity_no_defensive_copy():
+    """The cache hands back the provider's exact return object by reference.
+
+    Regression guard: an earlier implementation wrapped every return in a
+    defensive ``DataFrame.copy(deep=True)`` on both the miss and hit paths,
+    which broke the documented identity contract (``second is first``) —
+    each call returned a fresh frame. The cache must store the object the
+    provider returned and serve that *same* object on every subsequent
+    hit. Callers that need isolation are responsible for copying.
+    """
+    provider = _make_mock_provider()
+    original = _ohlcv_df(close=42.0)
+    provider.get_ohlcv.return_value = original
+
+    cached = CachedDataProvider(provider, ttl=60.0)
+
+    first = await cached.get_ohlcv("AAPL", date_range="1y", interval="1d")
+    second = await cached.get_ohlcv("AAPL", date_range="1y", interval="1d")
+
+    # No defensive copy on store or on retrieval: the provider's exact
+    # object is what callers receive, on every call.
+    assert first is original
+    assert second is original
+    assert second is first
+    provider.get_ohlcv.assert_awaited_once()

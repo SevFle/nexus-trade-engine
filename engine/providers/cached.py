@@ -16,6 +16,7 @@ already layer underneath.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -84,6 +85,11 @@ class CachedDataProvider:
         self._ttl = float(ttl)
         # key (symbol, interval, date_range) -> (stored_at_monotonic, value)
         self._cache: dict[tuple[Any, Any, Any], tuple[float, Any]] = {}
+        # Per-key single-flight locks. When N coroutines request the same
+        # key concurrently only the first one misses and fetches from the
+        # wrapped provider; the rest await the lock and then observe the
+        # freshly stored value (see :meth:`_lock_for`).
+        self._key_locks: dict[Any, asyncio.Lock] = {}
 
     # ------------------------------------------------------------------ #
     # read-only surface, mainly for tests / introspection
@@ -101,6 +107,7 @@ class CachedDataProvider:
     def clear(self) -> None:
         """Drop every cached entry. Mainly used between tests."""
         self._cache.clear()
+        self._key_locks.clear()
 
     # ------------------------------------------------------------------ #
     # internal helpers
@@ -125,6 +132,18 @@ class CachedDataProvider:
 
     def _store(self, key: tuple[Any, Any, Any], value: Any) -> None:
         self._cache[key] = (time.monotonic(), value)
+
+    def _lock_for(self, key: Any) -> asyncio.Lock:
+        """Return the per-key single-flight :class:`asyncio.Lock`.
+
+        ``dict.setdefault`` is synchronous — it never awaits — so under
+        asyncio's cooperative scheduling two coroutines cannot interleave
+        inside it. Exactly one :class:`~asyncio.Lock` is therefore created
+        per key and shared by every concurrent caller, serialising the
+        check-then-fetch-then-store critical section in the cached methods
+        (preventing a "thundering herd" of identical upstream fetches).
+        """
+        return self._key_locks.setdefault(key, asyncio.Lock())
 
     def _age_all(self, seconds: float) -> None:
         """Subtract ``seconds`` from every entry's stored timestamp.
@@ -151,29 +170,40 @@ class CachedDataProvider:
         Cache key: ``(symbol, interval, date_range)``. The wrapped provider's
         ``get_ohlcv`` is invoked with ``period=date_range`` so the cached
         call matches the underlying :class:`IDataProvider` signature.
+
+        The check-then-fetch-then-store critical section is guarded by a
+        per-key :class:`asyncio.Lock` so that ``N`` concurrent requests for
+        the *same* key collapse into a single upstream fetch (single-flight).
+        The exact stored object is returned by reference on every call
+        (hit or miss): callers rely on identity equality between repeated
+        lookups, so no defensive copy is made. Callers that need to mutate
+        the frame should copy it themselves.
         """
         key: tuple[Any, Any, Any] = (symbol, interval, date_range)
-        hit = self._lookup(key)
-        if hit is not _MISS:
+        async with self._lock_for(key):
+            hit = self._lookup(key)
+            if hit is not _MISS:
+                logger.debug(
+                    "data_provider.cache.hit",
+                    method="get_ohlcv",
+                    symbol=symbol,
+                    interval=interval,
+                    date_range=date_range,
+                )
+                return hit
+
             logger.debug(
-                "data_provider.cache.hit",
+                "data_provider.cache.miss",
                 method="get_ohlcv",
                 symbol=symbol,
                 interval=interval,
                 date_range=date_range,
             )
-            return hit
-
-        logger.debug(
-            "data_provider.cache.miss",
-            method="get_ohlcv",
-            symbol=symbol,
-            interval=interval,
-            date_range=date_range,
-        )
-        value = await self._provider.get_ohlcv(symbol, period=date_range, interval=interval)
-        self._store(key, value)
-        return value
+            value = await self._provider.get_ohlcv(
+                symbol, period=date_range, interval=interval
+            )
+            self._store(key, value)
+            return value
 
     async def get_latest_price(self, symbol: str) -> float | None:
         """Return cached latest price or fetch it from the wrapped provider.
@@ -183,25 +213,31 @@ class CachedDataProvider:
         ``None``. A cached ``None`` ("no price available") is served from
         cache like any other value to avoid repeatedly asking an upstream
         that has nothing to return.
+
+        As with :meth:`get_ohlcv`, the critical section is guarded by a
+        per-key lock so concurrent requests for the same symbol make at
+        most one upstream call within the window. Prices are immutable
+        scalars so no defensive copy is required here.
         """
         key: tuple[Any, Any, Any] = (symbol, None, None)
-        hit = self._lookup(key)
-        if hit is not _MISS:
+        async with self._lock_for(key):
+            hit = self._lookup(key)
+            if hit is not _MISS:
+                logger.debug(
+                    "data_provider.cache.hit",
+                    method="get_latest_price",
+                    symbol=symbol,
+                )
+                return hit
+
             logger.debug(
-                "data_provider.cache.hit",
+                "data_provider.cache.miss",
                 method="get_latest_price",
                 symbol=symbol,
             )
-            return hit
-
-        logger.debug(
-            "data_provider.cache.miss",
-            method="get_latest_price",
-            symbol=symbol,
-        )
-        value = await self._provider.get_latest_price(symbol)
-        self._store(key, value)
-        return value
+            value = await self._provider.get_latest_price(symbol)
+            self._store(key, value)
+            return value
 
 
 __all__ = ["DEFAULT_TTL_SECONDS", "CachedDataProvider"]
