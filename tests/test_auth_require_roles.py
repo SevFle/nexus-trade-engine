@@ -16,10 +16,13 @@ Cases exercised (one per ``test_*``):
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from engine.api.auth import dependency as dependency_module
 from engine.api.auth.dependency import get_current_user, require_roles
 from engine.db.models import User
 from tests.conftest import FAKE_USER_ID
@@ -147,3 +150,87 @@ class TestRequireRolesEdgeCases:
         is the key behavioral difference vs. ``require_role``."""
         app = _build_app(("developer",))
         assert await _get_with_role(app, "admin") == 403
+
+
+class TestRequireRolesAuditLog:
+    """The denial path must emit an audit-log record carrying the request
+    path/method and the offending role, and that log call must never break
+    the authz decision (a logging failure still surfaces a 403)."""
+
+    async def test_denial_emits_audit_log_with_path_and_method(self):
+        app = _build_app(("admin",))
+
+        fake_user = _make_user("viewer")
+
+        async def _override():
+            yield fake_user
+
+        app.dependency_overrides[get_current_user] = _override
+
+        with patch.object(
+            dependency_module.logger, "warning", return_value=None
+        ) as mock_warn:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as ac:
+                resp = await ac.get("/restricted")
+
+        assert resp.status_code == 403
+        mock_warn.assert_called_once()
+        kwargs = mock_warn.call_args.kwargs
+        # Event name is the first positional arg.
+        assert mock_warn.call_args.args == ("rbac.deny",)
+        assert kwargs["role"] == "viewer"
+        assert kwargs["allowed"] == ["admin"]
+        # Path/method are captured from the request for the audit trail.
+        assert kwargs["path"] == "/restricted"
+        assert kwargs["method"] == "GET"
+        assert "viewer" in kwargs["detail"]
+        assert "admin" in kwargs["detail"]
+
+    async def test_sorted_allowed_is_cached_at_registration_time(self):
+        """``sorted(allowed)`` should be computed once when the factory is
+        called, not on every denial. Verify the closure exposes a
+        registration-time cached list rather than recomputing per call."""
+        dep = require_roles("developer", "admin", "viewer")
+        # The cached sorted list lives in the closure namespace.
+        assert dep.__code__.co_freevars
+        closure_values = {
+            name: cell.cell_contents
+            for name, cell in zip(
+                dep.__code__.co_freevars, dep.__closure__, strict=True
+            )
+        }
+        assert closure_values["allowed_sorted"] == [
+            "admin",
+            "developer",
+            "viewer",
+        ]
+        # And the set form is preserved for membership lookup.
+        assert closure_values["allowed"] == {"admin", "developer", "viewer"}
+
+    async def test_logger_failure_does_not_mask_403(self):
+        """If structlog raises inside the audit-log call, the dependency
+        must still raise the original 403 — logging must never change the
+        authz outcome."""
+        app = _build_app(("admin",))
+
+        fake_user = _make_user("viewer")
+
+        async def _override():
+            yield fake_user
+
+        app.dependency_overrides[get_current_user] = _override
+
+        with patch.object(
+            dependency_module.logger, "warning", side_effect=RuntimeError("boom")
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as ac:
+                resp = await ac.get("/restricted")
+
+        assert resp.status_code == 403
+        assert resp.json()["detail"].startswith("Role 'viewer' is not permitted")
