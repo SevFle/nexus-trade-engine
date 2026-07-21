@@ -339,22 +339,28 @@ class TestRawAsgiStreamingAndBackgroundScope:
 
 
 class TestStateCorrelationIdBinding:
-    """The raw-ASGI middleware exposes the sanitized cid on
-    ``scope['state']`` so downstream consumers can read it without going
-    through contextvars. Both Starlette ``State`` (attribute access) and
-    a plain ``dict`` (left by an upstream raw-ASGI component) are
-    supported, and the dict is preserved rather than clobbered.
+    """The raw-ASGI middleware normalises ``scope['state']`` to a real
+    Starlette ``State`` and exposes the sanitized cid *and* the
+    per-request ``request_id`` on it via attribute access, so downstream
+    consumers can read them without going through contextvars. A plain
+    ``dict`` left by an upstream raw-ASGI component is converted to a
+    ``State`` while preserving its keys; an arbitrary object is coerced
+    to a fresh ``State``; ``None`` yields a fresh ``State``.
     """
 
     @staticmethod
-    async def _drive_with_state(initial_state: Any) -> tuple[Any, Any]:
+    async def _drive_with_state(
+        initial_state: Any, *, cid_header: bytes = b"state-cid-999"
+    ) -> tuple[Any, Any, Any]:
         """Drive the raw-ASGI middleware with a pre-populated
-        ``scope['state']`` and return ``(state_after, downstream_saw_cid)``."""
+        ``scope['state']`` and return
+        ``(state_after, downstream_saw_cid, downstream_saw_request_id)``."""
         seen: dict[str, Any] = {}
 
         async def downstream(scope, receive, send):
             seen["state"] = scope["state"]
             seen["cid"] = ctx.get_correlation_id()
+            seen["request_id"] = ctx.get_request_id()
             await send(
                 {"type": "http.response.start", "status": 200, "headers": []}
             )
@@ -379,7 +385,7 @@ class TestStateCorrelationIdBinding:
             "path": "/",
             "raw_path": b"/",
             "query_string": b"",
-            "headers": [(_HEADER_NAME_BYTES, b"state-cid-999")],
+            "headers": [(_HEADER_NAME_BYTES, cid_header)],
             "client": ("127.0.0.1", 60000),
             "server": ("test", 80),
             "state": initial_state,
@@ -387,33 +393,84 @@ class TestStateCorrelationIdBinding:
 
         mw = CorrelationIdMiddleware(downstream)
         await mw(scope, receive, send)
-        return seen["state"], seen["cid"]
+        return seen["state"], seen["cid"], seen["request_id"]
 
     async def test_state_attribute_set_when_state_is_starlette_state(self):
-        state_after, cid = await self._drive_with_state(State())
+        state_after, cid, _request_id = await self._drive_with_state(State())
         # Attribute-style access works on a Starlette State.
         assert state_after.correlation_id == "state-cid-999"
         # Downstream observed the same sanitized cid in the context.
         assert cid == "state-cid-999"
         assert isinstance(state_after, State)
 
-    async def test_state_dict_key_set_when_state_is_plain_dict(self):
+    async def test_state_dict_converted_to_state_preserving_keys(self):
+        """A plain ``dict`` left by an upstream raw-ASGI component is
+        converted to a Starlette ``State`` so attribute access works
+        everywhere, while the dict's existing keys are preserved."""
         initial = {"upstream_key": "upstream_value"}
-        state_after, cid = await self._drive_with_state(initial)
-        # Dict-style access works and the existing keys are preserved.
+        state_after, cid, _request_id = await self._drive_with_state(initial)
+        # The dict was converted to a State (not left as a dict, not
+        # clobbered with an empty State).
+        assert isinstance(state_after, State)
+        # Attribute access works for both the freshly-set cid and the
+        # pre-existing upstream key (preserved, not lost in conversion).
+        assert state_after.correlation_id == "state-cid-999"
+        assert state_after.upstream_key == "upstream_value"
+        # Item access also works (Starlette State supports both styles),
+        # so raw-ASGI consumers using dict subscript keep working.
         assert state_after["correlation_id"] == "state-cid-999"
         assert state_after["upstream_key"] == "upstream_value"
-        # The dict was not clobbered with a fresh State.
-        assert isinstance(state_after, dict)
+        assert set(iter(state_after)) >= {"correlation_id", "request_id", "upstream_key"}
         # Downstream observed the sanitized cid in the context.
+        assert cid == "state-cid-999"
+
+    async def test_state_arbitrary_object_coerced_to_fresh_state(self):
+        """An arbitrary non-State, non-dict, non-None object cannot be
+        trusted for attribute mutation, so it is coerced to a fresh
+        ``State`` on which the cid and request_id are then set."""
+
+        class ArbitraryBareObject:
+            pass
+
+        initial = ArbitraryBareObject()
+        state_after, cid, _request_id = await self._drive_with_state(initial)
+        # Coerced to a real Starlette State, not the original object.
+        assert isinstance(state_after, State)
+        assert state_after is not initial
+        # The cid and request_id are visible on the fresh State.
+        assert state_after.correlation_id == "state-cid-999"
         assert cid == "state-cid-999"
 
     async def test_state_initialised_when_missing(self):
         # When no upstream component populated state, the middleware
         # lazily initialises a Starlette State so attribute access works.
-        state_after, _ = await self._drive_with_state(None)
+        state_after, _, _ = await self._drive_with_state(None)
         assert isinstance(state_after, State)
         assert state_after.correlation_id is not None
+
+    async def test_request_id_visible_on_state(self):
+        """``request_id`` must be set on ``scope['state']`` (attribute access)
+        so downstream consumers can distinguish individual requests within
+        a single correlation chain without touching contextvars. The
+        value matches the one bound in the observability context."""
+        state_after, _cid, request_id = await self._drive_with_state(State())
+        # Both identifiers are present on the normalised State.
+        assert state_after.correlation_id == "state-cid-999"
+        assert isinstance(state_after, State)
+        # request_id is a non-empty hex string.
+        assert state_after.request_id == request_id
+        assert isinstance(state_after.request_id, str)
+        assert state_after.request_id
+        # Distinct from the correlation id (request_id is per-request,
+        # correlation id spans the whole causal chain).
+        assert state_after.request_id != state_after.correlation_id
+        # request_id is also visible after dict->State conversion.
+        state_from_dict, _, rid_from_dict = await self._drive_with_state(
+            {"upstream_key": "v"}
+        )
+        assert isinstance(state_from_dict, State)
+        assert state_from_dict.request_id == rid_from_dict
+        assert state_from_dict.request_id
 
     async def test_state_cid_is_sanitized_not_raw_header(self):
         """The value written to ``scope['state']`` must be the sanitized

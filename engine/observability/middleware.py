@@ -122,13 +122,21 @@ class CorrelationIdMiddleware:
             return
 
         # Starlette's ``Request.state`` is backed by ``scope['state']``.
-        # Lazily initialise it to a real ``State`` only when it is missing —
-        # we deliberately do NOT clobber an existing bag, whether it is a
-        # ``State`` (Starlette's canonical attribute bag) or a plain ``dict``
-        # left by an upstream raw-ASGI component. Preserving the dict keeps
-        # any keys the upstream component stashed there intact; the
-        # correlation id is exposed via the appropriate style below.
-        if scope.get("state") is None:
+        # Normalise it to a real Starlette ``State`` so every downstream
+        # consumer can rely on attribute access (``request.state.<x>``):
+        #   * ``None``          -> a fresh empty ``State``.
+        #   * ``dict``          -> a ``State`` wrapping the dict, so any keys
+        #                          an upstream raw-ASGI component stashed there
+        #                          are preserved (we never clobber that data).
+        #   * arbitrary object  -> a fresh empty ``State`` (coerced, since we
+        #                          cannot trust attribute mutation on it).
+        #   * ``State``         -> left untouched.
+        state = scope.get("state")
+        if state is None:
+            scope["state"] = State()
+        elif isinstance(state, dict):
+            scope["state"] = State(state)
+        elif not isinstance(state, State):
             scope["state"] = State()
 
         incoming: str | None = None
@@ -151,16 +159,16 @@ class CorrelationIdMiddleware:
         request_id = uuid.uuid4().hex
         span_id = uuid.uuid4().hex[:16]
 
-        # Expose the sanitized correlation id on ``scope['state']`` so
-        # downstream code can read it via ``request.state.correlation_id``
-        # (Starlette ``State``) or ``scope['state']['correlation_id']``
-        # (raw-ASGI consumers passing a plain ``dict``). The guard picks the
-        # appropriate style without clobbering the existing bag.
+        # Expose the sanitized correlation id AND the per-request
+        # ``request_id`` on ``scope['state']`` via attribute access. The
+        # normalisation guard above guarantees ``scope['state']`` is now a
+        # Starlette ``State``, so both ``request.state.correlation_id`` and
+        # ``request.state.request_id`` are visible to every downstream
+        # consumer (handlers, other raw-ASGI middleware, ...) without going
+        # through contextvars.
         state = scope["state"]
-        if isinstance(state, State):
-            state.correlation_id = cid
-        else:
-            state["correlation_id"] = cid
+        state.correlation_id = cid
+        state.request_id = request_id
 
         # Tokens are captured into a list so the ``finally`` cleanup is safe
         # even if binding fails partway through: a partially-bound context
