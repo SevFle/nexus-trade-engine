@@ -23,6 +23,7 @@ from engine.data.providers.base import (
     TransientProviderError,
 )
 from engine.data.providers.binance import BinanceDataProvider
+from engine.data.providers.cached import DEFAULT_TTL_SECONDS, CachedDataProvider
 from engine.data.providers.coingecko import CoinGeckoDataProvider
 from engine.data.providers.config import (
     ProviderConfig,
@@ -45,9 +46,11 @@ from engine.data.providers.registry import (
 from engine.data.providers.yahoo import YahooDataProvider
 
 __all__ = [
+    "DEFAULT_TTL_SECONDS",
     "AlpacaDataProvider",
     "AssetClass",
     "BinanceDataProvider",
+    "CachedDataProvider",
     "CoinGeckoDataProvider",
     "DataProviderCapability",
     "DataProviderRegistry",
