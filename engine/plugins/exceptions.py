@@ -8,6 +8,51 @@ sandbox package (which is itself blocked by the restricted importer).
 
 from __future__ import annotations
 
+from typing import Any
+
+
+class SandboxSecurityError(ImportError):
+    """Raised when a sandboxed plugin violates the Layer-1 import policy.
+
+    This is the **typed** security exception surfaced by
+    :class:`engine.plugins.sandbox.import_guard.ImportGuard` (Layer 1 of the
+    five-layer sandbox) whenever strategy plugin code attempts to import a
+    module that is not on the allowlist (or is explicitly on the denylist).
+
+    It deliberately subclasses :class:`ImportError` so that existing call-sites
+    and the stdlib import machinery — which expect an ``ImportError`` (or its
+    subclass) when a finder rejects a name — continue to behave correctly,
+    while giving application code a *specific* exception type to catch and
+    report distinctly from ordinary missing-module errors::
+
+        try:
+            import_guard.check_import(name)
+        except SandboxSecurityError as e:
+            audit.log("sandbox.import_violation", module=e.module)
+
+    Attributes
+    ----------
+    module:
+        The fully-qualified module name whose import was rejected.
+    reason:
+        A short human-readable explanation of *why* it was rejected (e.g.
+        ``"not in allowlist"`` or ``"explicitly denylisted"``).
+    """
+
+    def __init__(self, module: str, reason: str = "not in allowlist") -> None:
+        self.module: str = module
+        self.reason: str = reason
+        super().__init__(
+            f"Import of module {module!r} blocked by strategy sandbox: {reason}"
+        )
+
+    def __reduce__(self) -> Any:
+        # Pickle support for the typed exception (tests / structured logging
+        # may round-trip it).  ``__reduce__`` itself is *not* reachable from
+        # sandboxed strategy code — this exception class lives outside the
+        # sandboxed execution context.
+        return (self.__class__, (self.module, self.reason))
+
 
 class ResourceLimitExceededError(Exception):
     """Raised when a sandboxed strategy exceeds a declared resource limit.
