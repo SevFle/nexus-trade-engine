@@ -21,6 +21,9 @@ The wrapped provider is mocked with :mod:`unittest.mock` (``MagicMock`` +
 
 from __future__ import annotations
 
+import asyncio
+import gc
+import weakref
 from unittest.mock import AsyncMock, MagicMock
 
 import pandas as pd
@@ -393,3 +396,152 @@ async def test_cache_returns_provider_object_by_identity_no_defensive_copy():
     assert second is original
     assert second is first
     provider.get_ohlcv.assert_awaited_once()
+
+
+# --------------------------------------------------------------------------- #
+# 5. per-key lock mapping does not grow unboundedly
+# --------------------------------------------------------------------------- #
+
+
+def test_key_locks_is_weak_value_dictionary():
+    """``_key_locks`` must be a ``WeakValueDictionary`` so it cannot leak."""
+    cached = CachedDataProvider(_make_mock_provider(), ttl=60.0)
+    assert isinstance(cached._key_locks, weakref.WeakValueDictionary)
+
+
+async def test_key_locks_do_not_grow_unboundedly():
+    """Per-key locks must be GC'd once no coroutine holds them.
+
+    Regression guard: an earlier implementation stored the single-flight
+    locks in a plain ``dict``, so every distinct cache key added a
+    permanent entry. Over a long-running process churning through many
+    symbols (e.g. a dashboard polling the whole universe each tick) this
+    leaked memory without bound — ``len(_key_locks)`` tracked the number
+    of *distinct keys ever seen*, not the number of keys *currently in
+    flight*.
+
+    Using a :class:`weakref.WeakValueDictionary` lets each lock be
+    reclaimed as soon as no coroutine is waiting on / holding it, so the
+    mapping size is bounded by in-flight concurrency rather than by
+    historical churn.
+    """
+    provider = _make_mock_provider()
+    provider.get_ohlcv.return_value = _ohlcv_df(close=1.0)
+
+    cached = CachedDataProvider(provider, ttl=60.0)
+
+    # Exercise many distinct cache keys — far more than any reasonable
+    # in-flight concurrency.
+    n_keys = 500
+    for i in range(n_keys):
+        await cached.get_ohlcv(f"SYM{i}", date_range="1y", interval="1d")
+
+    # No coroutine holds a lock reference once each await returns. Force a
+    # collection so any deferred reclamation (non-CPython runtimes) is
+    # flushed, then assert the lock mapping has drained.
+    gc.collect()
+    assert len(cached._key_locks) == 0
+
+    # The value cache is unaffected — it must still hold every distinct
+    # key (that's the whole point of the cache) and remain a plain dict.
+    assert isinstance(cached._cache, dict)
+    assert len(cached._cache) == n_keys
+
+
+async def test_key_locks_reclaimed_after_latest_price_calls():
+    """The ``get_latest_price`` path must also drain its per-key locks."""
+    provider = _make_mock_provider()
+    provider.get_latest_price.return_value = 1.0
+
+    cached = CachedDataProvider(provider, ttl=60.0)
+
+    for i in range(200):
+        await cached.get_latest_price(f"SYM{i}")
+
+    gc.collect()
+    assert len(cached._key_locks) == 0
+    assert len(cached._cache) == 200
+
+
+async def test_clear_does_not_touch_key_locks_mapping():
+    """``clear()`` must not reset ``_key_locks`` — it would drop live locks.
+
+    ``_key_locks`` is a :class:`weakref.WeakValueDictionary`: its entries
+    self-reclaim when no coroutine holds them, so explicit clearing is
+    unnecessary. Worse, clearing it while a concurrent coroutine is
+    awaiting a lock would drop that lock from the mapping, letting a late
+    arrival create a *different* lock and break the single-flight
+    invariant. ``clear()`` therefore only resets ``_cache``.
+    """
+    provider = _make_mock_provider()
+    provider.get_ohlcv.return_value = _ohlcv_df(close=1.0)
+
+    cached = CachedDataProvider(provider, ttl=60.0)
+    await cached.get_ohlcv("AAPL")
+
+    # Hold a strong reference to a lock so it survives gc — emulating a
+    # coroutine that is still inside the ``async with`` critical section.
+    held_lock = cached._lock_for(("AAPL", "1d", "1y"))
+    assert held_lock in cached._key_locks.values()
+
+    cached.clear()
+
+    # _cache is gone, but the live lock is *not* dropped — the weak
+    # mapping still tracks it because a coroutine holds a reference.
+    assert cached._cache == {}
+    assert held_lock in cached._key_locks.values()
+
+    # Once the holder releases its reference, the lock is reclaimed.
+    del held_lock
+    gc.collect()
+    assert len(cached._key_locks) == 0
+
+
+async def test_single_flight_collapses_concurrent_misses_to_one_fetch():
+    """The weak-ref lock still provides single-flight correctness.
+
+    Sanity check that switching the lock mapping to a
+    :class:`weakref.WeakValueDictionary` did not weaken the single-flight
+    guarantee: ``N`` concurrent requests for the *same* key must collapse
+    into a single upstream fetch, with the rest observing the cached value
+    once the leader stores it.
+    """
+    provider = _make_mock_provider()
+
+    # Gate the upstream fetch so all N coroutines are guaranteed to be
+    # parked inside the critical section before the leader returns.
+    fetch_gate = asyncio.Event()
+    fetch_started = asyncio.Event()
+
+    async def slow_get_ohlcv(symbol, *, period, interval):
+        fetch_started.set()
+        await fetch_gate.wait()
+        return _ohlcv_df(close=123.0)
+
+    provider.get_ohlcv.side_effect = slow_get_ohlcv
+
+    cached = CachedDataProvider(provider, ttl=60.0)
+
+    n = 10
+    tasks = [
+        asyncio.create_task(
+            cached.get_ohlcv("AAPL", date_range="1y", interval="1d")
+        )
+        for _ in range(n)
+    ]
+
+    # Wait until the leader has entered the wrapped provider, proving all
+    # followers are parked on the same per-key lock.
+    await asyncio.wait_for(fetch_started.wait(), timeout=5.0)
+    fetch_gate.set()
+
+    results = await asyncio.gather(*tasks)
+
+    # Exactly one upstream fetch across N concurrent callers.
+    assert provider.get_ohlcv.await_count == 1
+    # Every caller observes the same cached object.
+    assert all(r is results[0] for r in results)
+
+    # And once everyone has returned, the lock drains again.
+    gc.collect()
+    assert len(cached._key_locks) == 0

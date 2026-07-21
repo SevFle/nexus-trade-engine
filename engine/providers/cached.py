@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import weakref
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -88,8 +89,14 @@ class CachedDataProvider:
         # Per-key single-flight locks. When N coroutines request the same
         # key concurrently only the first one misses and fetches from the
         # wrapped provider; the rest await the lock and then observe the
-        # freshly stored value (see :meth:`_lock_for`).
-        self._key_locks: dict[Any, asyncio.Lock] = {}
+        # freshly stored value (see :meth:`_lock_for`). A
+        # :class:`weakref.WeakValueDictionary` is used deliberately: once
+        # no coroutine is holding/awaiting a lock it is garbage-collected,
+        # so the mapping cannot grow unboundedly as distinct keys churn
+        # through the cache over the process lifetime.
+        self._key_locks: weakref.WeakValueDictionary[Any, asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
 
     # ------------------------------------------------------------------ #
     # read-only surface, mainly for tests / introspection
@@ -105,9 +112,15 @@ class CachedDataProvider:
         return self._ttl
 
     def clear(self) -> None:
-        """Drop every cached entry. Mainly used between tests."""
+        """Drop every cached entry. Mainly used between tests.
+
+        Only ``_cache`` is reset: ``_key_locks`` is a
+        :class:`weakref.WeakValueDictionary` whose entries are reclaimed
+        automatically once no coroutine holds a lock, so it needs no
+        explicit clearing (and clearing it could drop a lock that a
+        concurrent coroutine is still waiting on, breaking single-flight).
+        """
         self._cache.clear()
-        self._key_locks.clear()
 
     # ------------------------------------------------------------------ #
     # internal helpers
@@ -136,14 +149,28 @@ class CachedDataProvider:
     def _lock_for(self, key: Any) -> asyncio.Lock:
         """Return the per-key single-flight :class:`asyncio.Lock`.
 
-        ``dict.setdefault`` is synchronous — it never awaits — so under
-        asyncio's cooperative scheduling two coroutines cannot interleave
-        inside it. Exactly one :class:`~asyncio.Lock` is therefore created
-        per key and shared by every concurrent caller, serialising the
-        check-then-fetch-then-store critical section in the cached methods
-        (preventing a "thundering herd" of identical upstream fetches).
+        Because ``asyncio`` is cooperative, two coroutines cannot
+        interleave inside this synchronous method. At most one
+        :class:`~asyncio.Lock` is therefore created per key and shared by
+        every concurrent caller, serialising the check-then-fetch-then-
+        store critical section in the cached methods (preventing a
+        "thundering herd" of identical upstream fetches).
+
+        The mapping is a :class:`weakref.WeakValueDictionary`, so the
+        lookup uses an explicit get-then-create-then-set sequence rather
+        than ``setdefault``: we must hold a strong reference to the freshly
+        created lock in a local variable *before* storing it, otherwise the
+        weak entry could be reclaimed between insertion and return. Once
+        the caller's ``async with`` releases the lock and drops the last
+        strong reference, the entry is garbage-collected and the mapping
+        shrinks — the dict therefore cannot grow unboundedly as distinct
+        keys churn through the cache.
         """
-        return self._key_locks.setdefault(key, asyncio.Lock())
+        lock = self._key_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._key_locks[key] = lock
+        return lock
 
     def _age_all(self, seconds: float) -> None:
         """Subtract ``seconds`` from every entry's stored timestamp.
