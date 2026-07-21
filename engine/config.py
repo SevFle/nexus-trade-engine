@@ -90,6 +90,17 @@ class Settings(BaseSettings):
     # users must accept. Bump this to force re-acceptance on next request.
     # Used by the self-contained acceptance dependency in engine.api.legal.
     legal_terms_version: str = "1.0.0"
+    # Legal scoring gate. Comma-separated strategy ids that are under a
+    # compliance hold: their surfaced scores are suppressed (dropped) by
+    # :class:`engine.legal.scoring_gate.LegalScoreValidator` before any
+    # marketplace / backtest / scoring surface exposes them. Empty (default)
+    # means no strategy is flagged.
+    legal_score_flagged_strategies: str = ""
+    # Hard legal cap applied to a strategy's composite score (0-100). Any
+    # score above this ceiling is clamped down before exposure. Defaults to
+    # 100.0 (the technical max) so the cap is a no-op unless an operator
+    # configures a tighter compliance ceiling.
+    legal_score_max_composite: float = 100.0
     operator_name: str = "Nexus Trade Engine"
     operator_email: str = "legal@example.com"
     operator_url: str = "https://example.com"
