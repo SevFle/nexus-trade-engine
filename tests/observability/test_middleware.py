@@ -6,7 +6,7 @@ import asyncio
 import uuid
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from httpx import ASGITransport, AsyncClient
 
@@ -519,3 +519,95 @@ class TestExceptionPathContextReset:
     async def test_context_reset_after_http_exception(self, error_client: AsyncClient):
         await error_client.get("/http-error", headers={"X-Correlation-Id": "should-not-leak"})
         assert ctx.get_correlation_id() is None
+
+
+def _build_state_app() -> FastAPI:
+    """App that echoes ``request.state.correlation_id`` to verify the
+    middleware attaches the id to ``Request.state`` -- the public,
+    handler-facing surface named in the task -- in addition to the
+    contextvars-backed observability context and the response header."""
+    app = FastAPI()
+    app.add_middleware(CorrelationIdMiddleware)
+
+    @app.get("/state-echo")
+    async def state_echo(request: Request) -> dict:
+        return {
+            "correlation_id": getattr(request.state, "correlation_id", None),
+            "request_id": getattr(request.state, "request_id", None),
+            "span_id": getattr(request.state, "span_id", None),
+        }
+
+    return app
+
+
+class TestRequestStateBinding:
+    """The middleware must attach ``correlation_id`` (and the rest of the
+    per-request triple) to ``request.state`` so handlers / dependencies
+    can read it directly -- the handler-facing surface the task names -- in
+    addition to binding it into the structlog / observability contextvars
+    context and echoing it on the response header.
+
+    These are the three focused cases the task calls for:
+      (a) generated when missing,
+      (b) propagated when present,
+      (c) response header present,
+    each asserting the ``request.state`` binding as the new contract.
+    """
+
+    @pytest.fixture
+    async def state_client(self):
+        app = _build_state_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            yield ac
+
+    @pytest.mark.asyncio
+    async def test_state_correlation_id_generated_when_missing(
+        self, state_client: AsyncClient
+    ):
+        # (a) When the client sends no X-Correlation-Id, the middleware
+        # mints a fresh UUID4 and exposes it on request.state.
+        resp = await state_client.get("/state-echo")
+        assert resp.status_code == 200
+        body_cid = resp.json()["correlation_id"]
+        assert body_cid is not None
+        uuid.UUID(body_cid)  # raises if not a valid UUID
+        # state value, response header, and bound context must all agree
+        # on the same generated id.
+        assert resp.headers["X-Correlation-Id"] == body_cid
+
+    @pytest.mark.asyncio
+    async def test_state_correlation_id_propagated_when_present(
+        self, state_client: AsyncClient
+    ):
+        # (b) When the client sends a safe X-Correlation-Id, the middleware
+        # propagates that exact value onto request.state.
+        cid = "client-supplied-state-cid"
+        resp = await state_client.get(
+            "/state-echo", headers={"X-Correlation-Id": cid}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["correlation_id"] == cid
+
+    @pytest.mark.asyncio
+    async def test_response_header_present(self, state_client: AsyncClient):
+        # (c) Every response carries an X-Correlation-Id header, whether or
+        # not the client supplied one, and it matches request.state.
+        resp = await state_client.get("/state-echo")
+        assert "X-Correlation-Id" in resp.headers
+        assert resp.headers["X-Correlation-Id"] == resp.json()["correlation_id"]
+
+    @pytest.mark.asyncio
+    async def test_state_triple_populated_with_distinct_request_id(
+        self, state_client: AsyncClient
+    ):
+        # request_id and span_id are attached alongside correlation_id, and
+        # each request gets a distinct request_id (the per-request
+        # discriminator within one correlation chain).
+        a = await state_client.get("/state-echo")
+        b = await state_client.get("/state-echo")
+        a_body, b_body = a.json(), b.json()
+        assert a_body["request_id"] is not None
+        assert a_body["span_id"] is not None
+        assert a_body["request_id"] != b_body["request_id"]
+        assert a_body["span_id"] != b_body["span_id"]

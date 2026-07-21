@@ -9,9 +9,12 @@ in :func:`engine.app.create_app`.
 
 from __future__ import annotations
 
+import uuid
 import warnings
 
 import pytest
+from fastapi import FastAPI, Request
+from httpx import ASGITransport, AsyncClient
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from engine import middleware as mw_pkg
@@ -111,3 +114,56 @@ class TestCreateAppRegistersCorrectClass:
         app = create_app()
         entry = self._correlation_entry(app)
         assert not issubclass(entry.cls, BaseHTTPMiddleware)
+
+
+def _build_base_http_state_app() -> FastAPI:
+    """App wired with the ``BaseHTTPMiddleware`` variant, echoing
+    ``request.state.correlation_id`` so we can verify the variant also
+    honours the handler-facing ``request.state`` contract (not just the
+    raw-ASGI default registered by the app factory)."""
+    app = FastAPI()
+    app.add_middleware(BaseHTTPCorrelationIdMiddleware)
+
+    @app.get("/state-echo")
+    async def state_echo(request: Request) -> dict:
+        return {
+            "correlation_id": getattr(request.state, "correlation_id", None),
+            "request_id": getattr(request.state, "request_id", None),
+            "span_id": getattr(request.state, "span_id", None),
+        }
+
+    return app
+
+
+class TestBaseHTTPVariantRequestStateBinding:
+    """The ``BaseHTTPMiddleware`` variant must attach ``correlation_id`` to
+    ``request.state`` exactly like the raw-ASGI default, so handler-facing
+    consumers see the same contract regardless of which transport is wired."""
+
+    @pytest.fixture
+    async def client(self):
+        app = _build_base_http_state_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            yield ac
+
+    @pytest.mark.asyncio
+    async def test_state_correlation_id_generated_when_missing(
+        self, client: AsyncClient
+    ):
+        resp = await client.get("/state-echo")
+        assert resp.status_code == 200
+        body_cid = resp.json()["correlation_id"]
+        assert body_cid is not None
+        uuid.UUID(body_cid)
+        assert resp.headers["X-Correlation-Id"] == body_cid
+
+    @pytest.mark.asyncio
+    async def test_state_correlation_id_propagated_when_present(
+        self, client: AsyncClient
+    ):
+        cid = "basehttp-client-cid"
+        resp = await client.get("/state-echo", headers={"X-Correlation-Id": cid})
+        assert resp.status_code == 200
+        assert resp.json()["correlation_id"] == cid
+        assert resp.headers["X-Correlation-Id"] == cid

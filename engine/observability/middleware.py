@@ -145,6 +145,19 @@ class CorrelationIdMiddleware:
         request_id = uuid.uuid4().hex
         span_id = uuid.uuid4().hex[:16]
 
+        # Expose the per-request correlation triple on ``request.state``
+        # (backed by ``scope['state']``) so route handlers and dependencies
+        # can read ``request.state.correlation_id`` / ``request_id`` /
+        # ``span_id`` directly, without importing the contextvars-backed
+        # context module. This is the handler-facing surface callers reach
+        # via ``request.state.<attr>``; the contextvars bindings below
+        # remain the source of truth for logs / outbound HTTP / tasks.
+        # Mirrors the ``request.state.api_key`` pattern already used by the
+        # auth dependency chain.
+        scope["state"].correlation_id = cid
+        scope["state"].request_id = request_id
+        scope["state"].span_id = span_id
+
         # Tokens are captured into a list so the ``finally`` cleanup is safe
         # even if binding fails partway through: a partially-bound context
         # must still be reset, and ``reset_tokens`` isolates each reset so a

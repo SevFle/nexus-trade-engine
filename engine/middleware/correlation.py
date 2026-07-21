@@ -123,6 +123,17 @@ class BaseHTTPCorrelationIdMiddleware(BaseHTTPMiddleware):
         request_id = uuid.uuid4().hex
         span_id = _new_span_id()
 
+        # Expose the per-request correlation triple on ``request.state`` so
+        # route handlers and downstream dependencies can read
+        # ``request.state.correlation_id`` / ``request_id`` / ``span_id``
+        # directly, without importing the contextvars-backed context module.
+        # This mirrors the raw-ASGI variant and the ``request.state.api_key``
+        # pattern already used by the auth dependency chain, and keeps both
+        # middleware transports consistent for handler-facing consumers.
+        request.state.correlation_id = correlation_id
+        request.state.request_id = request_id
+        request.state.span_id = span_id
+
         structlog_tokens = structlog.contextvars.bind_contextvars(
             correlation_id=correlation_id,
             request_id=request_id,
