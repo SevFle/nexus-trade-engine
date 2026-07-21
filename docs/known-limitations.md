@@ -543,21 +543,27 @@ SLO because live isn't shipped.
 
 ## P2 — Some decisions still lack an ADR
 
-[`docs/adr/`](adr/README.md) now captures twelve decisions: scaffold
+[`docs/adr/`](adr/README.md) now captures thirteen decisions: scaffold
 (0001), auth/RBAC (0002), mobile/PWA (0003), TaskIQ (0004), Valkey
 (0005), bcrypt+Fernet (0006), the strategy sandbox allowlist import
 model (0007), the pluggable `MetricsBackend` Protocol (0008), the
 cross-replica `EventBus` WebSocket bridge (0009), the static AST
 validation + TOCTOU-safe strategy loader (0010), the runtime
-introspection / dunder-attribute guard (0011), and the Layer-3 sandbox
-resource limits — SIGALRM + tracemalloc + single-flight lock (0012).
+introspection / dunder-attribute guard (0011), the Layer-3 sandbox
+resource limits — SIGALRM + tracemalloc + single-flight lock (0012),
+and the legal compliance gate for scoring surfaces (0013).
 A handful of smaller decisions are still recorded only as PR
 descriptions or commit messages — e.g. the in-process backtest result
 store (this is tech debt to be fixed, P0 above, rather than an
-accepted architecture decision), and the dual LDAP-provider situation
-(see [LDAP has no route](#ldap-has-no-route) above). Use
-[`adr/template.md`](adr/template.md) to capture remaining decisions as
-they come up in code review; don't batch them into one mega-ADR.
+accepted architecture decision), the dual LDAP-provider situation
+(see [LDAP has no route](#ldap-has-no-route) above), and the
+`CachedDataProvider` TTL cache wrapper (see
+[`architecture/data-providers.md`](architecture/data-providers.md)
+§ In-memory TTL cache — not yet ADR'd because the design is
+straightforward and may evolve as the registry integration lands).
+Use [`adr/template.md`](adr/template.md) to capture remaining
+decisions as they come up in code review; don't batch them into one
+mega-ADR.
 
 ---
 

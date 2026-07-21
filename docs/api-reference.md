@@ -63,6 +63,38 @@ in [`engine/api/auth/dependency.py`](../engine/api/auth/dependency.py#L27):
 A request with role `R` satisfies `require_role(X)` iff
 `level(R) >= level(X)`.
 
+<a id="roles-rbac-exact-set"></a>
+#### Exact-set enforcement: `require_roles()`
+
+`require_roles(*roles: str)` (added gh#1597, hardened gh#1601) admits
+**only** users whose `role` is exactly one of the supplied names —
+no hierarchy. It is the right dependency when a route must be locked to
+a specific role set without granting implicit access to more privileged
+roles (e.g. an audit-log viewer that only `admin` and `developer` may
+access, even though a hypothetical `super_admin` would normally
+outrank both).
+
+Key behaviours:
+
+- Empty `roles` → `ValueError` at registration time (an empty
+  allow-list would lock every principal, including admins — almost
+  always a misconfiguration).
+- The allowed set is frozen into a `set` once at registration time
+  for O(1) lookup. A sorted copy is materialized once for stable
+  audit-log messages.
+- Denied requests emit an `rbac.deny` structlog warning with the
+  caller's `role`, the allowed set, `request.url.path`, and
+  `request.method` — logging is guarded by `contextlib.suppress` so a
+  log failure never alters the 403 decision.
+- Injected as `Depends(require_roles("admin", "developer"))` —
+  composable with `get_current_user` (the RBAC check chains after
+  authentication).
+
+Audit note: `require_roles()` is currently exported from
+`engine/api/auth/__init__.py` but not yet applied to any route. It
+exists for routes that need exact-set gating once the role vocabulary
+stabilises.
+
 ### API-key scopes
 
 Hierarchy (gh#86): `admin > trade > read`. JWT-authenticated requests

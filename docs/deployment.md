@@ -94,6 +94,14 @@ Naming convention: field `foo_bar` → env `NEXUS_FOO_BAR`.
 |---|---|---|
 | `NEXUS_SECRET_KEY_PREVIOUS` | `""` | Enables dual-key rotation window for JWT verification. |
 | `NEXUS_AUTH_PROVIDERS` | `local` | CSV subset of `local,google,github,oidc,ldap`. Each adds its own `*_CLIENT_ID`/`*_CLIENT_SECRET`/etc. |
+| `NEXUS_GOOGLE_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URI` | `""` | Google OAuth2. Required when `google` is in `AUTH_PROVIDERS`. |
+| `NEXUS_GITHUB_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URI` | `""` | GitHub OAuth2. Required when `github` is in `AUTH_PROVIDERS`. |
+| `NEXUS_OIDC_DISCOVERY_URL` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URI` | `""` | Generic OIDC. Required when `oidc` is in `AUTH_PROVIDERS`. `NEXUS_OIDC_ROLE_CLAIM` (default `"roles"`) names the JWT claim carrying group memberships. |
+| `NEXUS_LDAP_SERVER_URL` | `""` | LDAP server URI (e.g. `ldap://ldap.example.com:389`). Required when `ldap` is in `AUTH_PROVIDERS`. |
+| `NEXUS_LDAP_BIND_DN` | `""` | Bind DN template with `{{username}}` placeholder (e.g. `uid={{username}},ou=users,dc=example,dc=com`). |
+| `NEXUS_LDAP_BIND_PASSWORD` | `""` | Password for the bind DN. |
+| `NEXUS_LDAP_SEARCH_BASE` | `""` | Search base for user lookups (e.g. `ou=users,dc=example,dc=com`). |
+| `NEXUS_LDAP_ROLE_MAPPING` | `{}` | JSON mapping LDAP group DNs → Nexus roles (e.g. `{"cn=admins,ou=groups,dc=example,dc=com":"admin"}`). Default role is `user` when no mapping matches. |
 | `NEXUS_CORS_ORIGINS` | `["http://localhost:3000"]` | JSON array literal in env: `["https://app.example.com"]`. |
 | `NEXUS_RATE_LIMIT_PER_MINUTE` / `_BURST` | 600 / 60 | Per-IP. Tune for known frontends. |
 | `NEXUS_RATE_LIMIT_VALKEY_ENABLED` | `false` | **Set `true` for multi-replica.** When on, limits are enforced globally via Valkey instead of per-pod (otherwise the effective limit becomes `per_minute × replica_count`). |

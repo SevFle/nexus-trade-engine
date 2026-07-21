@@ -177,6 +177,45 @@ opt in per call. Design choices worth knowing:
   `cache.redis_unavailable` and the adapter proceeds uncached. The
   *trading path* must never depend on the cache being up.
 
+### In-memory TTL cache (`engine/data/providers/cached.py`)
+
+`CachedDataProvider` is a *transparent* decorator that wraps any
+`IDataProvider` and memoizes `get_ohlcv` / `get_instruments` responses
+in an in-process dict with a configurable TTL. It occupies a distinct
+niche from the two caches above:
+
+- **Process-local, non-distributed** — like `HistoricalDataCache`, not
+  like `ProviderCache`. No Valkey, no cross-replica sharing.
+- **TTL-based, not fingerprint-based** — entries expire after a
+  wall-clock TTL (default 60 s) rather than on source-file change.
+  Freshness is measured with `time.monotonic` so NTP jumps or DST
+  transitions cannot artificially extend or shrink an entry's lifetime.
+- **Sentinel-miss semantics.** A `_Miss` sentinel distinguishes "no
+cache entry" from a cached falsy value (`None`, empty DataFrame) so
+that a provider returning nothing for a symbol doesn't defeat the
+cache and re-hit the upstream on every poll.
+- **Defensive copies on read.** Cached DataFrames are returned via
+`copy(deep=True)` when possible so a caller that mutates the frame
+  in place cannot corrupt the cached copy for subsequent readers.
+- **Per-key single-flight locks.** When N coroutines request the same
+  key concurrently, only the first misses and fetches; the rest await
+  the lock and observe the freshly stored value, preventing a
+  thundering herd against the upstream provider.
+
+Design rationale: the HTTP adapters already layer `ProviderCache`
+(Valkey-backed) *underneath* themselves for cross-request sharing.
+`CachedDataProvider` sits *above* them — a caller wraps a registered
+provider with it to avoid hammering the upstream with identical
+requests within a short window (repeated backtest sweeps, dashboard
+polling) without a network round-trip to Valkey.
+
+The wrapper is a drop-in replacement: uncached methods
+(`get_latest_price`, `stream_prices`, `health_check`, etc.) fall
+through `__getattr__` to the wrapped provider. It is exported from
+`engine.data.providers` but is **not** wired into the registry or
+the `build_provider` factory — callers opt in by wrapping their
+provider manually.
+
 ### Historical load cache (`engine/data/historical_cache.py`)
 
 A *separate*, deliberately in-process cache backs the **historical /

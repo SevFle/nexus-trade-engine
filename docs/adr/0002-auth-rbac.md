@@ -133,6 +133,18 @@ agree. The original decision text is left intact above as history.
 - The **alternatives considered** (session-only, external OAuth2 proxy,
   hosted Auth0/Clerk) were all rejected for the reasons recorded above.
 
+### Post-landing additions
+
+- **`require_roles()` exact-set RBAC** (gh#1597, hardened gh#1601).
+  The as-built table above shows the 7-level `require_role()` hierarchy.
+  `require_roles(*roles)` is a complementary FastAPI dependency that
+  admits **only** users whose `role` is exactly one of the supplied
+  names — no hierarchy, no implicit access for higher-level roles.
+  Denied requests emit an `rbac.deny` structlog warning with the path
+  and method. Exported from `engine/api/auth/__init__.py`; not yet
+  applied to any route but ready for endpoints that need exact-set
+  gating.
+
 ### Why the divergence
 
 The provider ABC + registry landed simpler to extend than a single-backend
