@@ -142,6 +142,16 @@ def require_role(minimum_role: str):
     return _check
 
 
+def _sort_roles(roles: set[str]) -> list[str]:
+    """Return ``roles`` sorted into a stable, human-readable order.
+
+    Extracted as a named, module-level helper so tests can patch it and
+    assert that the sort runs exactly once at :func:`require_roles`
+    registration time rather than on every per-request denial.
+    """
+    return sorted(roles)
+
+
 def require_roles(*roles: str):
     """FastAPI dependency factory enforcing *exact* set-membership RBAC.
 
@@ -166,8 +176,10 @@ def require_roles(*roles: str):
     allowed = set(roles)
     # Materialise the sorted representation once at registration time so the
     # per-request path doesn't re-sort on every denial and the rendered
-    # detail message is stable across requests.
-    allowed_sorted = sorted(allowed)
+    # detail message is stable across requests. Routed through _sort_roles
+    # (a named, patchable helper) so tests can assert registration-time
+    # caching behaviour.
+    allowed_sorted = _sort_roles(allowed)
 
     async def _check(
         request: Request,
@@ -186,7 +198,7 @@ def require_roles(*roles: str):
             # call itself raises, we still surface the proper 403 to the
             # caller. Capturing request.url.path and request.method lets the
             # audit trail pinpoint the denied endpoint and verb.
-            with contextlib.suppress(Exception):  # pragma: no cover - defensive, never fatal
+            with contextlib.suppress(OSError, RuntimeError):
                 logger.warning(
                     "rbac.deny",
                     role=user.role,
