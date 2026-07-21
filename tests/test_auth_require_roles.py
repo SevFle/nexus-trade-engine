@@ -16,7 +16,7 @@ Cases exercised (one per ``test_*``):
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import pytest
 from fastapi import Depends, FastAPI
@@ -190,25 +190,64 @@ class TestRequireRolesAuditLog:
         assert "admin" in kwargs["detail"]
 
     async def test_sorted_allowed_is_cached_at_registration_time(self):
-        """``sorted(allowed)`` should be computed once when the factory is
-        called, not on every denial. Verify the closure exposes a
-        registration-time cached list rather than recomputing per call."""
-        dep = require_roles("developer", "admin", "viewer")
-        # The cached sorted list lives in the closure namespace.
-        assert dep.__code__.co_freevars
-        closure_values = {
-            name: cell.cell_contents
-            for name, cell in zip(
-                dep.__code__.co_freevars, dep.__closure__, strict=True
-            )
-        }
-        assert closure_values["allowed_sorted"] == [
-            "admin",
-            "developer",
-            "viewer",
-        ]
-        # And the set form is preserved for membership lookup.
-        assert closure_values["allowed"] == {"admin", "developer", "viewer"}
+        """``_sort_roles(allowed)`` runs exactly once when the factory is
+        called (registration time) and never again on the per-request
+        denial path — the sorted list is frozen into the closure."""
+        with patch.object(
+            dependency_module,
+            "_sort_roles",
+            wraps=dependency_module._sort_roles,
+        ) as mock_sort:
+            dep = require_roles("developer", "admin", "viewer")
+
+            # _sort_roles is invoked exactly once, at registration time,
+            # with the allow-set as its sole argument.
+            assert mock_sort.call_count == 1
+            assert mock_sort.call_args == call({"admin", "developer", "viewer"})
+
+            # The sorted list and the allow-set are frozen into the closure
+            # namespace, so the per-request path never recomputes them.
+            assert dep.__code__.co_freevars
+            closure_values = {
+                name: cell.cell_contents
+                for name, cell in zip(
+                    dep.__code__.co_freevars,
+                    dep.__closure__,
+                    strict=True,
+                )
+            }
+            assert closure_values["allowed_sorted"] == [
+                "admin",
+                "developer",
+                "viewer",
+            ]
+            assert closure_values["allowed"] == {"admin", "developer", "viewer"}
+
+            # Trigger a denial: the cached sorted list must be reused for the
+            # 403 detail, so _sort_roles is NOT called a second time.
+            app = FastAPI()
+
+            @app.get("/restricted")
+            async def handler(user: User = Depends(dep)):
+                return {"role": user.role}
+
+            # quant_dev is NOT in the allow-list, so this must be denied.
+            fake_user = _make_user("quant_dev")
+
+            async def _override():
+                yield fake_user
+
+            app.dependency_overrides[get_current_user] = _override
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as ac:
+                resp = await ac.get("/restricted")
+
+            assert resp.status_code == 403
+            # Still exactly one call — the denial path did not re-sort.
+            assert mock_sort.call_count == 1
 
     async def test_logger_failure_does_not_mask_403(self):
         """If structlog raises inside the audit-log call, the dependency
