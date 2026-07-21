@@ -1698,6 +1698,8 @@
       
         
       
+        
+      
     
     
     
@@ -2077,6 +2079,34 @@
     
   
     0012 — Sandbox resource limits (SIGALRM + tracemalloc + single-flight)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0013-legal-score-compliance-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0013 — Legal compliance gate for scoring surfaces
   
 
     
@@ -3594,6 +3624,14 @@ controlling where each attribution renders.</p>
 <p>Per-strategy, per-run scoring output. <code>results</code> JSONB holds the
 <code>{scores: [...], ...}</code> shape returned by the scoring executor. Indexed
 <code>(strategy_id, created_at)</code> for the history scan.</p>
+<p><code>universe_size</code> is the <strong>pre-legal-gate</strong> count of symbols the executor
+scored — see <a href="../adr/0013-legal-score-compliance-gate/">ADR-0013</a>.
+Flagged-strategy suppression therefore shrinks the <code>scores</code> array exposed
+at read time but never the recorded <code>universe_size</code>; callers correlating
+the two should treat the difference as the count suppressed by the
+gate, not as missing data. <code>excluded_factors</code> (JSONB list) records which
+input factors the scorer dropped (e.g. all-<code>null</code> columns) so an audit
+can reconstruct what went into the composite.</p>
 <h2 id="legal">Legal<a class="headerlink" href="#legal" title="Permanent link">&para;</a></h2>
 <h3 id="legal_documents-004"><code>legal_documents</code> (004)<a class="headerlink" href="#legal_documents-004" title="Permanent link">&para;</a></h3>
 <p>Authoritative row per document (Terms, Privacy, EULA, Risk

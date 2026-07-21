@@ -257,6 +257,41 @@ is a `SafeIdentifier`.
 | `POST /{strategy_name}/run` | `{universe:[...], raw_data:{symbol:{factor:value}}}` | `200` / `404` / `400` | Loads a scoring strategy from the registry, computes scores, persists a `scoring_snapshots` row. `404` if the strategy is missing; `400` if it isn't a scoring strategy. |
 | `GET  /{strategy_name}/results` | `?limit=&offset=&sort_by=&sort_order=` | `200` | Paged scoring history. |
 
+<a id="scoring-legal-gate"></a>
+### Legal compliance gate
+
+Every score returned by **both** routes passes through the process-wide
+[`LegalScoreValidator`](../../engine/legal/scoring_gate.py) (see
+[ADR-0013](../adr/0013-legal-score-compliance-gate.md)). The validator is
+injected as a FastAPI dependency (`get_score_validator`) so tests override
+it via `app.dependency_overrides` rather than env surgery.
+
+The gate's decision tree, applied **per score** (first match wins):
+
+| Outcome | Trigger | Effect on the returned row |
+|---|---|---|
+| Suppressed | `composite_score` is `null` / `NaN` / `±inf`, **or** the strategy is on the operator's flagged hold list | The row is **dropped** from the response (and from the persisted snapshot's exposed view). |
+| Capped | `composite_score > NEXUS_LEGAL_SCORE_MAX_COMPOSITE` | The row is kept, but `composite_score` is clamped down to the ceiling. Stored `rank` is preserved. |
+| Pass-through | None of the above | Returned unchanged. |
+
+Two non-obvious invariants worth knowing as a caller:
+
+- **`universe_size` is the pre-gate count.** The response (and the
+  persisted `ScoringSnapshot.universe_size`) reports how many symbols were
+  *scored*, not how many *survived* the gate. A flagged strategy therefore
+  does not shrink the recorded universe — only what's exposed.
+- **The gate is re-applied on the read path.** A snapshot persisted *before*
+  a strategy was flagged (or before the cap was tightened) is filtered again
+  at `GET .../results` time. Today's compliance posture always wins over
+  yesterday's stored data — defence-in-depth.
+
+Operator knobs (see [deployment](../deployment.md)):
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `NEXUS_LEGAL_SCORE_FLAGGED_STRATEGIES` | `""` (empty) | CSV of `strategy_id` values whose scores are suppressed at every surface. Empty ⇒ no strategy is flagged. |
+| `NEXUS_LEGAL_SCORE_MAX_COMPOSITE` | `100.0` | Hard ceiling. Scores above this are clamped down. Misconfiguration (non-numeric) falls back to `100.0` and logs a warning rather than 500-ing every scoring call. |
+
 <a id="market-data"></a>
 ## Market data — `engine/api/routes/market_data.py`
 

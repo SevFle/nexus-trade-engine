@@ -10,7 +10,7 @@ theme. We picked it over the alternatives for concrete reasons:
 * Plain Markdown in /docs (the previous approach) renders on GitHub but
   gives no full-text search, no collapsible/versioned navigation, and no
   reliable Mermaid rendering. For a codebase this size (19 DB tables,
-  10 ADRs, a 452-line API reference, 7 runbooks) those matter.
+  13 ADRs, a 337-line API reference, 7 runbooks) those matter.
 * MkDocs Material consumes the existing Markdown verbatim, so the files
   stay first-class on GitHub AND get a navigable, searchable, themed
   site. Config lives in /mkdocs.yml; deps in the `docs` extra of

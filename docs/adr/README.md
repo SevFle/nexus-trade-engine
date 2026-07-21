@@ -25,6 +25,7 @@ We follow the [MADR](https://adr.github.io/madr/) format. See
 | 0010   | Accepted | [Static AST validation + TOCTOU-safe strategy loading](0010-static-ast-validation-toctou-loading.md) |
 | 0011   | Accepted | [Runtime blocking of introspection / sandbox-escape dunders](0011-runtime-introspection-blocking.md) |
 | 0012   | Accepted | [Sandbox resource limits — SIGALRM + tracemalloc + single-flight lock](0012-sandbox-resource-limits-single-flight.md) |
+| 0013   | Accepted | [Legal compliance gate for strategy scoring surfaces](0013-legal-score-compliance-gate.md) |
 
 When you accept a new ADR, add a row to this table in the same PR.
 

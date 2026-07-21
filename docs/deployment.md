@@ -109,6 +109,8 @@ Naming convention: field `foo_bar` → env `NEXUS_FOO_BAR`.
 | `NEXUS_OPERATOR_NAME/EMAIL/URL` | `"Nexus Trade Engine"` / `"legal@example.com"` / `"https://example.com"` | Substituted into legal docs at render time. |
 | `NEXUS_JURISDICTION` | `"United States"` | Same. |
 | `NEXUS_PLATFORM_FEE_PERCENT` | `30` | Same. |
+| `NEXUS_LEGAL_SCORE_FLAGGED_STRATEGIES` | `""` | CSV of `strategy_id` values whose composite scores are **suppressed** at every scoring surface. Empty ⇒ no strategy is flagged. Process-local config — apply via a redeploy, not an admin call. See [ADR-0013](adr/0013-legal-score-compliance-gate.md) and [scoring routes](api-reference/routes.md#scoring-legal-gate). |
+| `NEXUS_LEGAL_SCORE_MAX_COMPOSITE` | `100.0` | Hard compliance ceiling on the exposed composite. Scores above this are clamped down. Non-numeric value falls back to `100.0` and logs a warning rather than failing every scoring call. |
 
 ### WebSocket (`NEXUS_WS_*`)
 

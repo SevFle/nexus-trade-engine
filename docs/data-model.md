@@ -183,6 +183,15 @@ Per-strategy, per-run scoring output. `results` JSONB holds the
 `{scores: [...], ...}` shape returned by the scoring executor. Indexed
 `(strategy_id, created_at)` for the history scan.
 
+`universe_size` is the **pre-legal-gate** count of symbols the executor
+scored — see [ADR-0013](adr/0013-legal-score-compliance-gate.md).
+Flagged-strategy suppression therefore shrinks the `scores` array exposed
+at read time but never the recorded `universe_size`; callers correlating
+the two should treat the difference as the count suppressed by the
+gate, not as missing data. `excluded_factors` (JSONB list) records which
+input factors the scorer dropped (e.g. all-`null` columns) so an audit
+can reconstruct what went into the composite.
+
 ## Legal
 
 ### `legal_documents` (004)
