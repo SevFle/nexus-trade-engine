@@ -203,6 +203,7 @@ nav:
       - "0010 — Static AST validation + TOCTOU-safe loading": adr/0010-static-ast-validation-toctou-loading.md
       - "0011 — Runtime introspection / dunder blocking": adr/0011-runtime-introspection-blocking.md
       - "0012 — Sandbox resource limits (SIGALRM + tracemalloc + single-flight)": adr/0012-sandbox-resource-limits-single-flight.md
+      - "0013 — Legal compliance gate for scoring surfaces": adr/0013-legal-score-compliance-gate.md
       - ADR template: adr/template.md
   - Operations:
       - SLOs: operations/slos.md

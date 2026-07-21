@@ -107,6 +107,45 @@ Composite = `Σ(dimension × weight)`. The evaluator is **stateless** —
 construct one per weight configuration. (See also the persisted
 `scoring_snapshots` table, written by the scoring routes.)
 
+### Legal compliance gate — [`engine/legal/scoring_gate.py`](../../engine/legal/scoring_gate.py)
+
+A composite score is also a **compliance act**: exposing it is governed
+by a single stateless `LegalScoreValidator` that every scoring surface
+composes. Full rationale in
+[ADR-0013](../adr/0013-legal-score-compliance-gate.md); the short
+version: one operator-configured class is the only structurally
+enforceable way to guarantee every exposure surface (scoring API, read
+path, future marketplace sort) applies the *same* rule.
+
+Two distinct requirements drive the gate, both operator-controlled:
+
+1. **Flagged strategies** (`NEXUS_LEGAL_SCORE_FLAGGED_STRATEGIES`, CSV).
+   A strategy on the hold list has its score **suppressed** (dropped) —
+   the maths is fine, the exposure is the problem.
+2. **Hard compliance ceiling** (`NEXUS_LEGAL_SCORE_MAX_COMPOSITE`, float).
+   A score above the operator's ceiling is **clamped down**, not dropped.
+
+The gate runs at the compute→expose boundary on `POST /scoring/…/run`
+(*before* the snapshot is persisted *and* before the response is
+serialised), and again on the read path in
+`GET /scoring/…/results` so a snapshot stored before a strategy was
+flagged is brought into compliance at exposure time. Two invariants are
+load-bearing:
+
+- **`universe_size` is captured pre-gate.** The recorded count reflects
+  how many symbols were *scored*, not how many *survived* the gate — a
+  flagged strategy must not silently shrink the recorded universe.
+- **Misconfiguration degrades to no-op.** A non-numeric ceiling falls
+  back to `100.0` and logs a warning rather than failing every scoring
+  call; the validator is built lazily from settings, so a bad env value
+  cannot take the surface down.
+
+Scope is intentionally narrow for v1: per-symbol flagging,
+time-windowed holds, per-user overrides, and DB-backed persistence of
+the flagged set are all out of scope. The class boundary is preserved
+so a future DB-backed source can land behind the same interface
+without touching a caller.
+
 ### Lifecycle & versioning
 
 Two services govern *when* a strategy may run and *what code* runs:

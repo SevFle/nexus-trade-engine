@@ -1514,6 +1514,8 @@
       
         
       
+        
+      
     
     
     
@@ -1893,6 +1895,34 @@
     
   
     0012 — Sandbox resource limits (SIGALRM + tracemalloc + single-flight)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0013-legal-score-compliance-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0013 — Legal compliance gate for scoring surfaces
   
 
     
@@ -3165,6 +3195,16 @@ Naming convention: field <code>foo_bar</code> → env <code>NEXUS_FOO_BAR</code>
 <td><code>NEXUS_PLATFORM_FEE_PERCENT</code></td>
 <td><code>30</code></td>
 <td>Same.</td>
+</tr>
+<tr>
+<td><code>NEXUS_LEGAL_SCORE_FLAGGED_STRATEGIES</code></td>
+<td><code>""</code></td>
+<td>CSV of <code>strategy_id</code> values whose composite scores are <strong>suppressed</strong> at every scoring surface. Empty ⇒ no strategy is flagged. Process-local config — apply via a redeploy, not an admin call. See <a href="../adr/0013-legal-score-compliance-gate/">ADR-0013</a> and <a href="../api-reference/routes/#scoring-legal-gate">scoring routes</a>.</td>
+</tr>
+<tr>
+<td><code>NEXUS_LEGAL_SCORE_MAX_COMPOSITE</code></td>
+<td><code>100.0</code></td>
+<td>Hard compliance ceiling on the exposed composite. Scores above this are clamped down. Non-numeric value falls back to <code>100.0</code> and logs a warning rather than failing every scoring call.</td>
 </tr>
 </tbody>
 </table>

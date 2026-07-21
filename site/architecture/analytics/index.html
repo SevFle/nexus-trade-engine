@@ -786,6 +786,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#legal-compliance-gate-enginelegalscoring_gatepy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Legal compliance gate — engine/legal/scoring_gate.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#lifecycle-versioning" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1487,6 +1498,8 @@
       
         
       
+        
+      
     
     
     
@@ -1866,6 +1879,34 @@
     
   
     0012 — Sandbox resource limits (SIGALRM + tracemalloc + single-flight)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0013-legal-score-compliance-gate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0013 — Legal compliance gate for scoring surfaces
   
 
     
@@ -2806,6 +2847,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#legal-compliance-gate-enginelegalscoring_gatepy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Legal compliance gate — engine/legal/scoring_gate.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#lifecycle-versioning" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3062,6 +3114,42 @@ normalized to <code>[0, 100]</code>:</p>
 Composite = <code>Σ(dimension × weight)</code>. The evaluator is <strong>stateless</strong> —
 construct one per weight configuration. (See also the persisted
 <code>scoring_snapshots</code> table, written by the scoring routes.)</p>
+<h3 id="legal-compliance-gate-enginelegalscoring_gatepy">Legal compliance gate — <a href="../../engine/legal/scoring_gate.py"><code>engine/legal/scoring_gate.py</code></a><a class="headerlink" href="#legal-compliance-gate-enginelegalscoring_gatepy" title="Permanent link">&para;</a></h3>
+<p>A composite score is also a <strong>compliance act</strong>: exposing it is governed
+by a single stateless <code>LegalScoreValidator</code> that every scoring surface
+composes. Full rationale in
+<a href="../../adr/0013-legal-score-compliance-gate/">ADR-0013</a>; the short
+version: one operator-configured class is the only structurally
+enforceable way to guarantee every exposure surface (scoring API, read
+path, future marketplace sort) applies the <em>same</em> rule.</p>
+<p>Two distinct requirements drive the gate, both operator-controlled:</p>
+<ol>
+<li><strong>Flagged strategies</strong> (<code>NEXUS_LEGAL_SCORE_FLAGGED_STRATEGIES</code>, CSV).
+   A strategy on the hold list has its score <strong>suppressed</strong> (dropped) —
+   the maths is fine, the exposure is the problem.</li>
+<li><strong>Hard compliance ceiling</strong> (<code>NEXUS_LEGAL_SCORE_MAX_COMPOSITE</code>, float).
+   A score above the operator's ceiling is <strong>clamped down</strong>, not dropped.</li>
+</ol>
+<p>The gate runs at the compute→expose boundary on <code>POST /scoring/…/run</code>
+(<em>before</em> the snapshot is persisted <em>and</em> before the response is
+serialised), and again on the read path in
+<code>GET /scoring/…/results</code> so a snapshot stored before a strategy was
+flagged is brought into compliance at exposure time. Two invariants are
+load-bearing:</p>
+<ul>
+<li><strong><code>universe_size</code> is captured pre-gate.</strong> The recorded count reflects
+  how many symbols were <em>scored</em>, not how many <em>survived</em> the gate — a
+  flagged strategy must not silently shrink the recorded universe.</li>
+<li><strong>Misconfiguration degrades to no-op.</strong> A non-numeric ceiling falls
+  back to <code>100.0</code> and logs a warning rather than failing every scoring
+  call; the validator is built lazily from settings, so a bad env value
+  cannot take the surface down.</li>
+</ul>
+<p>Scope is intentionally narrow for v1: per-symbol flagging,
+time-windowed holds, per-user overrides, and DB-backed persistence of
+the flagged set are all out of scope. The class boundary is preserved
+so a future DB-backed source can land behind the same interface
+without touching a caller.</p>
 <h3 id="lifecycle-versioning">Lifecycle &amp; versioning<a class="headerlink" href="#lifecycle-versioning" title="Permanent link">&para;</a></h3>
 <p>Two services govern <em>when</em> a strategy may run and <em>what code</em> runs:</p>
 <table>
