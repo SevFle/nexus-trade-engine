@@ -111,3 +111,114 @@ class TestCreateAppRegistersCorrectClass:
         app = create_app()
         entry = self._correlation_entry(app)
         assert not issubclass(entry.cls, BaseHTTPMiddleware)
+
+
+class TestCorrelationIdBehavior:
+    """End-to-end behavior of the correlation middleware covering the four
+    required contracts: (1) header passthrough, (2) auto-generation when the
+    header is absent, (3) response-header presence, (4) structlog contextvar
+    binding — plus the ``request.state.correlation_id`` contract that both
+    middleware variants must satisfy.
+    """
+
+    HEADER = "X-Correlation-Id"
+
+    @staticmethod
+    def _probe_response(request):
+        import structlog
+        from starlette.responses import JSONResponse
+
+        # Return what is bound to structlog contextvars *during* the request
+        # plus the value surfaced on ``request.state`` — exercising both the
+        # contextvar binding and the state contract.
+        return JSONResponse(
+            {
+                "bound": structlog.contextvars.get_contextvars(),
+                "state": getattr(request.state, "correlation_id", None),
+            }
+        )
+
+    def _build_base_http_app(self):
+        from starlette.applications import Starlette
+        from starlette.routing import Route
+
+        app = Starlette(routes=[Route("/probe", self._probe_response)])
+        app.add_middleware(BaseHTTPCorrelationIdMiddleware)
+        return app
+
+    def _build_raw_asgi_app(self):
+        from starlette.applications import Starlette
+        from starlette.routing import Route
+
+        from engine.observability.middleware import CorrelationIdMiddleware
+
+        app = Starlette(routes=[Route("/probe", self._probe_response)])
+        app.add_middleware(CorrelationIdMiddleware)
+        return app
+
+    def test_header_passthrough(self):
+        from starlette.testclient import TestClient
+
+        cid = "client-supplied-id-123"
+        resp = TestClient(self._build_base_http_app()).get(
+            "/probe", headers={self.HEADER: cid}
+        )
+        assert resp.status_code == 200
+        assert resp.headers[self.HEADER] == cid                # echoed back
+        assert resp.json()["bound"]["correlation_id"] == cid  # structlog bound
+        assert resp.json()["state"] == cid                     # request.state set
+
+    def test_auto_generated_when_absent(self):
+        import uuid
+
+        from starlette.testclient import TestClient
+
+        resp = TestClient(self._build_base_http_app()).get("/probe")
+        assert resp.status_code == 200
+        cid = resp.headers[self.HEADER]
+        assert uuid.UUID(cid).version == 4          # fresh uuid4 was minted
+        assert resp.json()["bound"]["correlation_id"] == cid
+        assert resp.json()["state"] == cid
+
+    def test_response_header_always_present(self):
+        from starlette.testclient import TestClient
+
+        client = TestClient(self._build_base_http_app())
+        # Absent incoming header -> generated and still echoed back.
+        assert self.HEADER in client.get("/probe").headers
+        # Provided incoming header -> echoed back unchanged.
+        assert (
+            client.get("/probe", headers={self.HEADER: "abc"}).headers[self.HEADER]
+            == "abc"
+        )
+
+    def test_structlog_context_binding_scoped_to_request(self):
+        import structlog
+        from starlette.testclient import TestClient
+
+        structlog.contextvars.clear_contextvars()
+        resp = TestClient(self._build_base_http_app()).get(
+            "/probe", headers={self.HEADER: "log-ctx-1"}
+        )
+        bound = resp.json()["bound"]
+        assert bound["correlation_id"] == "log-ctx-1"   # bound during request
+        assert "request_id" in bound                      # per-request id too
+        # After the request completes the binding must be reset (no leak into
+        # the next request that happens to share this task context).
+        assert "correlation_id" not in structlog.contextvars.get_contextvars()
+
+    @pytest.mark.parametrize("builder", ["base_http", "raw_asgi"])
+    def test_request_state_correlation_id_contract(self, builder):
+        """Both middleware variants must expose ``request.state.correlation_id``.
+        The raw-ASGI variant is what ``create_app`` registers by default, so it
+        must satisfy the same public contract as the BaseHTTP variant."""
+        from starlette.testclient import TestClient
+
+        app = (
+            self._build_base_http_app()
+            if builder == "base_http"
+            else self._build_raw_asgi_app()
+        )
+        resp = TestClient(app).get("/probe", headers={self.HEADER: "state-xyz"})
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "state-xyz"

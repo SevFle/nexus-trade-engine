@@ -123,6 +123,10 @@ class BaseHTTPCorrelationIdMiddleware(BaseHTTPMiddleware):
         request_id = uuid.uuid4().hex
         span_id = _new_span_id()
 
+        # Expose on ``request.state`` so handlers / dependencies can read it
+        # directly without touching the contextvar (public contract).
+        request.state.correlation_id = correlation_id
+
         structlog_tokens = structlog.contextvars.bind_contextvars(
             correlation_id=correlation_id,
             request_id=request_id,

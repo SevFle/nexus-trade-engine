@@ -145,6 +145,12 @@ class CorrelationIdMiddleware:
         request_id = uuid.uuid4().hex
         span_id = uuid.uuid4().hex[:16]
 
+        # Expose the correlation id on ``request.state`` (backed by
+        # ``scope['state']``, normalized to a ``State`` above) so handlers /
+        # dependencies can read it directly without touching the contextvar.
+        # This is part of the middleware's public contract.
+        scope["state"].correlation_id = cid
+
         # Tokens are captured into a list so the ``finally`` cleanup is safe
         # even if binding fails partway through: a partially-bound context
         # must still be reset, and ``reset_tokens`` isolates each reset so a
