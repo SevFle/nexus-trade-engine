@@ -47,6 +47,20 @@ from engine.auth.github import (
 from engine.auth.github import (
     TokenExchangeError as GitHubTokenExchangeError,
 )
+from engine.auth.oidc import (
+    DiscoveryError,
+    OIDCError,
+    OIDCProvider,
+)
+from engine.auth.oidc import (
+    IDTokenClaims as OIDCIDTokenClaims,
+)
+from engine.auth.oidc import (
+    InvalidTokenError as OIDCInvalidTokenError,
+)
+from engine.auth.oidc import (
+    TokenExchangeError as OIDCTokenExchangeError,
+)
 from engine.auth.providers.google import (
     GoogleOAuthError,
     GoogleOAuthProvider,
@@ -63,6 +77,7 @@ from engine.auth.providers.google import (
 )
 
 __all__ = [
+    "DiscoveryError",
     "GitHubInvalidTokenError",
     "GitHubOAuthError",
     "GitHubOAuthProvider",
@@ -77,6 +92,11 @@ __all__ = [
     "IOAuthProvider",
     "InvalidTokenError",
     "OAuthError",
+    "OIDCError",
+    "OIDCIDTokenClaims",
+    "OIDCInvalidTokenError",
+    "OIDCProvider",
+    "OIDCTokenExchangeError",
     "TokenExchangeError",
     "TokenSet",
     "generate_state",
@@ -125,5 +145,19 @@ def get_oauth_provider(name: str) -> IOAuthProvider | None:
             client_id=settings.google_client_id,
             client_secret=settings.google_client_secret,
             redirect_uri=settings.google_redirect_uri,
+        )
+    if normalized == "oidc":
+        # The generic OIDC provider needs an issuer and a registered client.
+        # ``oidc_jwks_uri`` is optional (defaults to the issuer's well-known
+        # path). Returns ``None`` when unconfigured, matching the policy for
+        # the other providers so callers treat it as "provider unavailable".
+        if not settings.oidc_issuer or not settings.oidc_client_id:
+            return None
+        return OIDCProvider(
+            issuer=settings.oidc_issuer,
+            client_id=settings.oidc_client_id,
+            client_secret=settings.oidc_client_secret,
+            redirect_uri=settings.oidc_redirect_uri,
+            jwks_uri=settings.oidc_jwks_uri or None,
         )
     raise ValueError(f"Unknown OAuth provider: {name!r}")

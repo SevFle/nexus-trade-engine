@@ -31,6 +31,22 @@ from engine.auth.github import (
 from engine.auth.github import (
     TokenExchangeError as GitHubTokenExchangeError,
 )
+from engine.auth.oidc import (
+    DiscoveryError as OIDCDiscoveryError,
+)
+from engine.auth.oidc import (
+    IDTokenClaims as OIDCIDTokenClaims,
+)
+from engine.auth.oidc import (
+    InvalidTokenError as OIDCInvalidTokenError,
+)
+from engine.auth.oidc import (
+    OIDCError,
+    OIDCProvider,
+)
+from engine.auth.oidc import (
+    TokenExchangeError as OIDCTokenExchangeError,
+)
 from engine.auth.providers.google import (
     GoogleOAuthError,
     GoogleOAuthProvider,
@@ -79,6 +95,12 @@ __all__ = [
     "LDAPUser",
     "LDAPUserNotFoundError",
     "OAuthError",
+    "OIDCDiscoveryError",
+    "OIDCError",
+    "OIDCIDTokenClaims",
+    "OIDCInvalidTokenError",
+    "OIDCProvider",
+    "OIDCTokenExchangeError",
     "TokenExchangeError",
     "TokenSet",
     "generate_state",
