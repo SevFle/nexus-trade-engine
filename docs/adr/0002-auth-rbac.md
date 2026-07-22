@@ -153,13 +153,25 @@ token-bearing non-interactive clients.
   tree is the legacy/SDK-facing one. Consolidate before more providers land.
 - The per-portfolio ACL vs per-user RBAC open question is still open —
   RBAC alone is in force.
-- **Two parallel provider roots.** There are genuinely **two independent**
-  Google OAuth implementations: `engine/api/auth/google.py`
-  (`GoogleAuthProvider`, the `IAuthProvider` adapter `create_app` actually
-  registers) and `engine/auth/providers/google.py`
-  (`GoogleOAuthProvider` + `IDTokenClaims`, a standalone protocol-step
-  decomposition its docstring says "complements" `api/auth` for independent
-  unit testing). The latter is **not imported by** the former and **not
-  wired** into the runtime registry. Consolidate the pair before more
-  providers land, or formally designate `engine/auth/providers/` as a
-  reusable protocol library that the `api/auth` adapters consume.
+- **Two parallel provider roots — now three providers wide.** The split
+  is no longer just the Google pair recorded when this section was first
+  written: the `engine/auth/` tree (a standalone, protocol-step library
+  whose modules decompose each OAuth2/OIDC flow into independently
+  testable steps and whose docstrings say they "complement" `api/auth`)
+  now hosts a **third** standalone provider beside Google. As-built:
+  - `engine/auth/providers/google.py` (`GoogleOAuthProvider` +
+    `IDTokenClaims`) — the original alternate; not wired.
+  - `engine/auth/github.py` (`GitHubOAuthProvider`, `GitHubUserInfo`) —
+    standalone; not wired into the runtime registry.
+  - `engine/auth/oidc.py` (`OIDCProvider` + `IDTokenClaims`, PR #1633) —
+    a generic, issuer-configurable OIDC client with JWKS caching,
+    `alg=none` rejection, and an injectable `_JWKSClient`/transport for
+    tests; **not** wired into the runtime registry.
+  None of these are imported by the matching `api/auth/` adapter, and
+  `create_app()._build_auth_registry()` resolves only the `api/auth/`
+  set (`engine/auth/get_oauth_provider` can *build* the OIDC one, but
+  that factory is not on the request path). The advice below therefore
+  hardened: **do not land more standalone providers in `engine/auth/`
+  until the split is reconciled** — formally designate `engine/auth/`
+  as a reusable protocol library that the `api/auth` adapters consume,
+  or fold the standalone implementations into the wired adapters.

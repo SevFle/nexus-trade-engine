@@ -44,6 +44,7 @@ Three forces shape the design:
 | [`_http.py`](../../engine/data/providers/_http.py) | Shared async HTTP client: `validate_symbol` / `encode_path_segment`, response-size guard, redaction of bearer-like strings from logs. |
 | [`_resilience.py`](../../engine/data/providers/_resilience.py) | `TokenBucket` (per-provider throttle) + `call_with_retry` (exponential backoff + jitter on transient errors). |
 | [`_cache.py`](../../engine/data/providers/_cache.py) | `ProviderCache` — optional Valkey/Redis response cache with an 8 MiB per-payload cap. |
+| [`cached.py`](../../engine/data/providers/cached.py) | `CachedDataProvider` — process-local in-memory TTL *wrapper* (decorator) around any `IDataProvider`; distinct from the network-backed `ProviderCache` below. |
 | [`yahoo.py`](../../engine/data/providers/yahoo.py), [`polygon.py`](../../engine/data/providers/polygon.py), [`alpaca_data.py`](../../engine/data/providers/alpaca_data.py), [`binance.py`](../../engine/data/providers/binance.py), [`coingecko.py`](../../engine/data/providers/coingecko.py), [`oanda.py`](../../engine/data/providers/oanda.py) | Concrete adapters. |
 
 ## How a request is routed
@@ -202,6 +203,58 @@ network-backed:
 - **Type-stable keys.** Non-primitive read kwargs (e.g. polars
   `schema_overrides`) are folded through `fingerprint_kwargs` before
   hashing, so `"1"` and `1` can never collide.
+
+### In-process TTL wrapper (`cached.py`)
+
+`CachedDataProvider` (PR #1621) is a *different* cache from both
+`ProviderCache` and `HistoricalDataCache` above, and the distinction
+matters operationally:
+
+- **What it is.** A *transparent decorator* — it implements the full
+  `IDataProvider` surface by delegating to a wrapped provider, but
+  memoizes the expensive `get_ohlcv` / `get_instruments` responses in a
+  plain `dict` keyed by the (JSON-serialized, sorted) call arguments. A
+  cached entry is served while it is younger than the configured TTL;
+  once it expires the next call delegates to the wrapped provider and
+  the fresh result is stored. Non-cached methods (`get_latest_price`,
+  `stream_prices`, `health_check`, …) fall through `__getattr__` to the
+  wrapped provider unchanged, so it is a drop-in replacement anywhere an
+  `IDataProvider` is expected.
+- **Why it exists separately from `ProviderCache`.** `ProviderCache` is
+  *network-backed* (Valkey/Redis), shared across replicas, opt-in per
+  call, and degrades to uncached when the cache node is down.
+  `CachedDataProvider` is *process-local and non-distributed* — it exists
+  to stop a single process from hammering one upstream with identical
+  OHLCV/instrument requests inside a short window (repeated backtest
+  sweeps, dashboard polling) **without** paying a Valkey round-trip on
+  every read. They compose: a `CachedDataProvider` can wrap a provider
+  that itself consults `ProviderCache` underneath.
+- **Freshness uses `time.monotonic`, not wall-clock.** NTP jumps,
+  clock skew, and DST transitions therefore cannot artificially extend
+  or shrink an entry's lifetime.
+- **A sentinel distinguishes "no entry" from a cached falsy value.**
+  `get_ohlcv` may legitimately return an empty frame and
+  `get_instruments` may return `[]` ("nothing trades here"); without
+  the `_MISS` sentinel those would be indistinguishable from an absent
+  entry and every polling tick would re-hit the upstream.
+- **Per-key single-flight, weakly held.** When N coroutines request the
+  same key concurrently only the first one misses and fetches; the rest
+  await a per-key `asyncio.Lock` and then observe the stored value
+  (prevents a thundering herd of identical upstream fetches). The lock
+  map is a `weakref.WeakValueDictionary`, so once no coroutine is
+  awaiting a lock it is garbage-collected and the map cannot grow
+  unboundedly as distinct keys churn — this is the fix landed in #1627
+  for an earlier unbounded-leak variant of the pattern.
+- **Defensive deep copies on read.** Cached DataFrames are never handed
+  back by reference; a caller mutating the returned frame in place would
+  otherwise silently corrupt the cached copy (and every later reader).
+- **`ttl_seconds=0` disables serving from cache** (every call delegates);
+  negative values are rejected at construction.
+
+Trade-off accepted: because it is process-local, a cache fill on one
+replica does *not* warm any other replica, and there is no cross-process
+invalidation. Use it for read-amplification within one process; keep
+using `ProviderCache` when you need a shared, cluster-wide answer.
 
 ### Shared HTTP client (`_http.py`)
 

@@ -152,7 +152,7 @@ docs/
   because it grows monotonically as we surface debt and is heavily
   cross-linked by anchor from the README roadmap and the runbooks —
   splitting it would fragment navigation more than it helps. It now
-  runs to ~575 lines; the cap is still respected in spirit by splitting
+  runs to ~635 lines; the cap is still respected in spirit by splitting
   debt items into discrete anchored sections (`<a id="…"></a>`) rather
   than free-form prose. The HTTP/WS surface *used* to be a single
   ~570-line `api-reference.md`; it has since been split into a
