@@ -32,6 +32,9 @@ from engine.auth.github import (
     TokenExchangeError as GitHubTokenExchangeError,
 )
 from engine.auth.oidc import (
+    AuthURL as OIDCAuthURL,
+)
+from engine.auth.oidc import (
     DiscoveryError as OIDCDiscoveryError,
 )
 from engine.auth.oidc import (
@@ -95,6 +98,7 @@ __all__ = [
     "LDAPUser",
     "LDAPUserNotFoundError",
     "OAuthError",
+    "OIDCAuthURL",
     "OIDCDiscoveryError",
     "OIDCError",
     "OIDCIDTokenClaims",

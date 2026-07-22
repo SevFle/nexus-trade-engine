@@ -48,6 +48,7 @@ from engine.auth.github import (
     TokenExchangeError as GitHubTokenExchangeError,
 )
 from engine.auth.oidc import (
+    AuthURL,
     DiscoveryError,
     OIDCError,
     OIDCProvider,
@@ -78,6 +79,7 @@ from engine.auth.providers.google import (
 )
 
 __all__ = [
+    "AuthURL",
     "DiscoveryError",
     "GitHubInvalidTokenError",
     "GitHubOAuthError",

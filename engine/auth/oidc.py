@@ -13,7 +13,9 @@ registry exactly like the Google / GitHub providers.
 The OIDC login flow is split into discrete, independently testable steps:
 
 * :meth:`OIDCProvider.get_authorize_url` -- build the IdP authorization
-  endpoint URL, embedding a caller-supplied CSRF ``state`` token.
+  endpoint URL, embedding a caller-supplied CSRF ``state`` token, and return
+  it together with the PKCE ``code_verifier`` (as an :class:`AuthURL`) that
+  the caller must replay in :meth:`OIDCProvider.exchange_code`.
 * :meth:`OIDCProvider.fetch_jwks` -- fetch the issuer's JSON Web Key Set over
   HTTPS via :mod:`httpx` (with caching), used to verify ID-token signatures.
 * :meth:`OIDCProvider.verify_id_token` -- cryptographically verify an ID token
@@ -209,6 +211,29 @@ class IDTokenClaims:
     raw: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class AuthURL:
+    """Result of :meth:`OIDCProvider.get_authorize_url`.
+
+    Carries the authorization-endpoint ``url`` to redirect the user to **and**
+    the PKCE ``code_verifier`` that was bound to that URL's
+    ``code_challenge``. The verifier MUST be replayed verbatim in the matching
+    :meth:`OIDCProvider.exchange_code` call.
+
+    Returning the verifier alongside the URL (instead of stashing it on the
+    provider instance) keeps a single provider object stateless and therefore
+    safe to share across concurrent authorization requests -- each caller owns
+    its own verifier, so the authorize-step of one request can never leak or
+    overwrite the verifier belonging to another in-flight request. The caller
+    is responsible for persisting the verifier across the redirect (e.g. in a
+    server-side session keyed by ``state``) and forwarding it to
+    :meth:`OIDCProvider.exchange_code` on the callback.
+    """
+
+    url: str
+    code_verifier: str
+
+
 class _JWKSClient(Protocol):
     """Minimal slice of :class:`jwt.PyJWKClient` we depend on.
 
@@ -308,10 +333,6 @@ class OIDCProvider(IOAuthProvider):
         # In-memory JWKS cache populated by :meth:`fetch_jwks`. Cleared by
         # passing ``force=True`` to :meth:`fetch_jwks`.
         self._jwks_cache: dict[str, Any] | None = None
-        # PKCE ``code_verifier`` captured by :meth:`get_authorize_url` so the
-        # matching :meth:`exchange_code` call can replay it without the caller
-        # having to thread it through. Overwritten on each authorize call.
-        self._code_verifier: str | None = None
 
     @property
     def name(self) -> str:
@@ -348,7 +369,7 @@ class OIDCProvider(IOAuthProvider):
         state: str,
         scope: str | None = None,
         code_verifier: str | None = None,
-    ) -> str:
+    ) -> AuthURL:
         """Build the IdP authorization endpoint URL (with PKCE S256).
 
         ``state`` is **required** -- it is the CSRF token. Building a URL
@@ -356,14 +377,17 @@ class OIDCProvider(IOAuthProvider):
         refuse to do it.
 
         PKCE (RFC 7636) is applied to every request: a fresh
-        ``code_verifier`` is generated when one is not supplied, its S256
+        ``code_verifier`` is generated when one is not supplied, and its S256
         ``code_challenge`` is sent in the URL alongside
-        ``code_challenge_method=S256``, and the verifier is stored on the
-        instance so the subsequent :meth:`exchange_code` call can replay it
-        automatically. Callers that persist the verifier themselves (e.g. in
-        a server-side session for a horizontally-scaled deployment) may pass
-        it in explicitly and must then also forward it to
-        :meth:`exchange_code`.
+        ``code_challenge_method=S256``. The verifier is returned in the
+        resulting :class:`AuthURL` -- it is NOT stored on the instance -- so
+        the caller must carry it across the redirect and forward it to
+        :meth:`exchange_code`. Callers that prefer their own verifier may pass
+        it in via ``code_verifier`` (it is then echoed back unchanged in the
+        :class:`AuthURL`).
+
+        Returns an :class:`AuthURL` holding both the redirect ``url`` and the
+        ``code_verifier`` that must be replayed at token-exchange time.
         """
         if not state:
             raise OIDCError("state is required for CSRF protection")
@@ -372,8 +396,6 @@ class OIDCProvider(IOAuthProvider):
             code_verifier, code_challenge = generate_pkce_pair()
         else:
             code_challenge = _derive_code_challenge(code_verifier)
-        # Stash the verifier so exchange_code() can replay it by default.
-        self._code_verifier = code_verifier
 
         params: dict[str, str] = {
             "client_id": self.client_id,
@@ -384,7 +406,8 @@ class OIDCProvider(IOAuthProvider):
             "code_challenge": code_challenge,
             "code_challenge_method": _PKCE_CHALLENGE_METHOD,
         }
-        return f"{self.authorize_endpoint}?{urllib.parse.urlencode(params)}"
+        url = f"{self.authorize_endpoint}?{urllib.parse.urlencode(params)}"
+        return AuthURL(url=url, code_verifier=code_verifier)
 
     @staticmethod
     def generate_pkce_pair() -> tuple[str, str]:
@@ -607,33 +630,39 @@ class OIDCProvider(IOAuthProvider):
             raise InvalidTokenError(f"id token verification failed: {exc}") from exc
 
     # -- Authorization-code exchange ----------------------------------------
-    async def exchange_code(self, code: str, *, code_verifier: str | None = None) -> TokenSet:
+    async def exchange_code(self, code: str, *, code_verifier: str) -> TokenSet:
         """Exchange an authorization code for a :class:`TokenSet`.
 
         Any transport-level failure or non-2xx HTTP response from the token
         endpoint is wrapped in :class:`TokenExchangeError` so callers see a
-        single typed failure mode. The PKCE ``code_verifier`` is sent in the
-        token request body: an explicit argument wins, otherwise the verifier
-        captured by :meth:`get_authorize_url` (and stored on the instance) is
-        replayed so a caller using the two-step helper flow does not have to
-        thread it through manually.
+        single typed failure mode.
+
+        ``code_verifier`` is **required**: it is the PKCE verifier bound to the
+        ``code_challenge`` that :meth:`get_authorize_url` embedded in the
+        authorization URL, and the IdP rejects the exchange unless the two
+        match. Because the provider no longer remembers the verifier between
+        calls (that instance state was unsafe under concurrent use), the
+        caller MUST thread the :class:`AuthURL.code_verifier` it received from
+        :meth:`get_authorize_url` back in here -- typically by persisting it
+        in a server-side session keyed by the ``state`` token across the
+        authorization redirect.
         """
         if not code:
             raise TokenExchangeError("authorization code is required")
+        if not code_verifier:
+            raise TokenExchangeError("code_verifier is required")
 
         token_url = self.token_endpoint
         _enforce_https(token_url, what="token endpoint")
 
-        verifier = code_verifier if code_verifier is not None else self._code_verifier
         data: dict[str, str] = {
             "code": code,
             "client_id": self.client_id,
             "client_secret": self.client_secret,
             "redirect_uri": self.redirect_uri,
             "grant_type": "authorization_code",
+            "code_verifier": code_verifier,
         }
-        if verifier:
-            data["code_verifier"] = verifier
 
         try:
             async with httpx.AsyncClient(
