@@ -197,6 +197,21 @@ nexus-sdk publish ./my-strategy-1.0.0.tar.gz
 
 For security, strategies run in a sandboxed environment:
 
+- **Imports are allowlisted.** A strategy may `import` only modules whose
+  root name is in the frozen [`FROZEN_ALLOWED_MODULES`](../engine/plugins/allowlist.py)
+  set (pure-math/numeric, data structures, datetime, `numpy`/`polars`/
+  `pandas`/`pydantic`, `httpx`, `structlog`, plus `engine`/`nexus_sdk`).
+  `os`, `subprocess`, `socket`, `pickle`, `ctypes`, `sys`, `importlib`,
+  `pathlib`, … are all blocked by default. See
+  [ADR-0007](adr/0007-strategy-sandbox-allowlist-imports.md). This is
+  enforced *both* statically (the source AST is walked before
+  compile/exec — [ADR-0010](adr/0010-static-ast-validation-toctou-loading.md))
+  and at runtime (`sys.meta_path` + `builtins.__import__`).
+- **No dynamic code execution.** Bare calls to `__import__`, `exec`,
+  `eval`, `compile`, and `importlib.import_module` / `importlib.__import__`
+  are rejected at parse time — they bypass the static `import` statement
+  the runtime hooks intercept. See
+  [`architecture/plugins.md`](architecture/plugins.md) (Layer 0).
 - **No filesystem access** (except bundled artifacts)
 - **No raw network** (only endpoints declared in manifest)
 - **Resource limits** (memory, CPU time as declared)
