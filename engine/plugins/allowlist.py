@@ -146,7 +146,13 @@ DENYLIST_MODULES: frozenset[str] = frozenset(
         "_sysconfig",
         "sysconfig",
         "platform",
-        "importlib",
+        # NOTE: ``importlib`` is intentionally *not* in the static denylist.
+        # Importing it is benign on its own; its danger — dynamic loading via
+        # ``importlib.import_module`` / ``importlib.__import__`` — is caught
+        # as a *call* both statically (Layer-1 AST validator) and at runtime
+        # (RestrictedImporter's call walker). A bare ``import importlib`` is
+        # still blocked at runtime because ``importlib`` is absent from
+        # :data:`FROZEN_ALLOWED_MODULES` (the allowlist is authoritative).
         "pkgutil",
         "inspect",
         "dis",
