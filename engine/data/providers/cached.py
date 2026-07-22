@@ -32,7 +32,10 @@ Design notes:
 
 from __future__ import annotations
 
+import asyncio
+import json
 import time
+import weakref
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -106,6 +109,19 @@ class CachedDataProvider:
         object.__setattr__(self, "_ttl_seconds", float(ttl_seconds))
         # key -> (stored_at_monotonic, value)
         object.__setattr__(self, "_cache", {})
+        # Per-key single-flight locks. When N coroutines request the same
+        # key concurrently only the first one misses and fetches from the
+        # wrapped provider; the rest await the lock and then observe the
+        # freshly stored value (see :meth:`_lock_for`). A
+        # :class:`weakref.WeakValueDictionary` is used deliberately: once
+        # no coroutine is holding/awaiting a lock it is garbage-collected,
+        # so the mapping cannot grow unboundedly as distinct keys churn
+        # through the cache over the process lifetime.
+        object.__setattr__(
+            self,
+            "_key_locks",
+            weakref.WeakValueDictionary(),
+        )
 
     # ------------------------------------------------------------------ #
     # read-only surface, mainly for tests / introspection
@@ -127,7 +143,14 @@ class CachedDataProvider:
         return self._ttl_seconds
 
     def clear(self) -> None:
-        """Drop every cached entry. Mainly used between tests."""
+        """Drop every cached entry. Mainly used between tests.
+
+        Only ``_cache`` is reset: ``_key_locks`` is a
+        :class:`weakref.WeakValueDictionary` whose entries are reclaimed
+        automatically once no coroutine holds a lock, so it needs no
+        explicit clearing (and clearing it could drop a lock that a
+        concurrent coroutine is still waiting on, breaking single-flight).
+        """
         self._cache.clear()
 
     # ------------------------------------------------------------------ #
@@ -153,6 +176,74 @@ class CachedDataProvider:
 
     def _store(self, key: Any, value: Any) -> None:
         self._cache[key] = (time.monotonic(), value)
+
+    def _lock_for(self, key: Any) -> asyncio.Lock:
+        """Return the per-key single-flight :class:`asyncio.Lock`.
+
+        Because ``asyncio`` is cooperative, two coroutines cannot
+        interleave inside this synchronous method. At most one
+        :class:`~asyncio.Lock` is therefore created per key and shared by
+        every concurrent caller, serialising the check-then-fetch-then-
+        store critical section in the cached methods (preventing a
+        "thundering herd" of identical upstream fetches).
+
+        The mapping is a :class:`weakref.WeakValueDictionary`, so the
+        lookup uses an explicit get-then-create-then-set sequence rather
+        than ``setdefault``: we must hold a strong reference to the freshly
+        created lock in a local variable *before* storing it, otherwise the
+        weak entry could be reclaimed between insertion and return. Once
+        the caller's ``async with`` releases the lock and drops the last
+        strong reference, the entry is garbage-collected and the mapping
+        shrinks — the dict therefore cannot grow unboundedly as distinct
+        keys churn through the cache.
+        """
+        lock = self._key_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._key_locks[key] = lock
+        return lock
+
+    def _copy_result(self, value: Any) -> Any:
+        """Return a defensive deep copy of a cached value when possible.
+
+        Cached DataFrames are never handed back by reference: a caller that
+        mutated the returned frame in place would silently corrupt the
+        cached copy (and every subsequent reader). Scalars (``float``,
+        ``None``) and objects without a ``copy`` method are returned
+        unchanged.
+        """
+        copy = getattr(value, "copy", None)
+        if not callable(copy):
+            return value
+        try:
+            return copy(deep=True)
+        except TypeError:
+            # ``copy`` exists but doesn't take ``deep=`` (e.g.
+            # ``list.copy``) — fall back to its default arity, and if even
+            # that fails just return the original.
+            try:
+                return copy()
+            except TypeError:
+                return value
+
+    @staticmethod
+    def _stable_key(*parts: Any) -> tuple[Any, ...]:
+        """Build a hashable cache key from arbitrary, possibly-unhashable parts.
+
+        ``tuple(sorted(kwargs.items()))`` blows up with a ``TypeError`` the
+        moment any argument is a ``list`` / ``dict`` (common for filter
+        specs passed to ``get_instruments``) — and even when it doesn't
+        raise, the resulting tuple embeds those mutable values directly so
+        it cannot be used as a ``dict`` key. We instead serialise the
+        parts with :func:`json.dumps` using ``sort_keys=True`` (so
+        equivalent kwargs hash identically regardless of insertion order)
+        and ``default=str`` (so non-JSON objects still produce a stable
+        string rather than raising). The JSON string *is* hashable, so the
+        returned tuple can safely index ``_cache``.
+        """
+        return tuple(
+            json.dumps(part, sort_keys=True, default=str) for part in parts
+        )
 
     def _age_all(self, seconds: float) -> None:
         """Subtract ``seconds`` from every entry's stored timestamp.
