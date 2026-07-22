@@ -404,6 +404,63 @@ choice is made.
 
 ---
 
+<a id="oidc-two-implementations"></a>
+## P1 — OIDC has two implementations; only the discovery-based one is wired
+
+**Where**: [`engine/api/auth/oidc.py`](../engine/api/auth/oidc.py)
+(wired) vs [`engine/auth/oidc.py`](../engine/auth/oidc.py) (PR #1633,
+library-only)
+
+There are **two OIDC providers** on disk, and they are not the same
+code path:
+
+- **`OIDCAuthProvider`** in `engine/api/auth/oidc.py` is the one
+  `create_app()._build_auth_registry()` actually registers
+  (`case "oidc"` in [`engine/app.py`](../engine/app.py)). It is
+  discovery-document driven: it fetches `oidc_discovery_url`, reads
+  `token_endpoint` / `jwks_uri` / `authorization_endpoint` from it, and
+  creates/upserts the `User` row (`auth_provider="oidc"`). This is the
+  provider an operator reaches by setting
+  `NEXUS_AUTH_PROVIDERS=…,oidc` and hitting
+  `GET /api/v1/auth/oidc/callback`.
+- **`OIDCProvider`** in `engine/auth/oidc.py` (PR #1633) is a generic,
+  issuer-configurable OIDC client implementing the
+  `IOAuthProvider` contract (`engine/auth/base.py`). It is more
+  rigorous than the wired adapter — JWKS caching with `force=` refresh,
+  an injectable `_JWKSClient`/`httpx` transport for tests, an explicit
+  signing-algorithm allowlist that makes `alg=none` impossible, HTTPS
+  enforcement on JWKS/token endpoints (localhost exempt), PKCE
+  `code_verifier` forwarding, and a typed exception hierarchy
+  (`OIDCError` / `InvalidTokenError` / `TokenExchangeError` /
+  `DiscoveryError`). It is configurable via the **separate**
+  `oidc_issuer` / `oidc_jwks_uri` settings (not `oidc_discovery_url`)
+  and can be built by `engine.auth.get_oauth_provider("oidc")` — but
+  **that factory is not on the request path**, so this provider is
+  library-only today.
+
+This is the same shape as the [LDAP split](#ldap-has-no-route) and the
+Google/GitHub split recorded in
+[ADR-0002](adr/0002-auth-rbac.md#evolution--how-this-actually-landed):
+the `engine/auth/` tree is a standalone protocol library whose providers
+are not wired into the runtime registry.
+
+**Workaround today**: the wired `OIDCAuthProvider` works end-to-end for
+real users — use it. Treat `engine/auth/oidc.OIDCProvider` as a
+library/reusable component (or as the stricter reference implementation)
+until the two are reconciled. Do not assume configuring `oidc_issuer`
+will change login behaviour; login is driven by `oidc_discovery_url`.
+
+**Fix path**: (1) decide whether the JWKS-verify strictness of
+`engine/auth/oidc.py` (alg allowlist, HTTPS enforcement, typed
+errors) should replace the inline verification in
+`engine/api/auth/oidc.py`; (2) if so, have the wired adapter delegate
+verification to `OIDCProvider.verify_id_token` and collapse the two
+config surfaces (`oidc_discovery_url` vs `oidc_issuer`/`oidc_jwks_uri`);
+(3) record the choice in
+[ADR-0002](adr/0002-auth-rbac.md#evolution--how-this-actually-landed).
+
+---
+
 <a id="mcp"></a>
 ## P1 — MCP server is a library, not a runnable process
 

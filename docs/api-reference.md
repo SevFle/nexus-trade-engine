@@ -63,6 +63,29 @@ in [`engine/api/auth/dependency.py`](../engine/api/auth/dependency.py#L27):
 A request with role `R` satisfies `require_role(X)` iff
 `level(R) >= level(X)`.
 
+**Two RBAC dependencies, deliberately distinct**
+([`engine/api/auth/dependency.py`](../engine/api/auth/dependency.py)):
+
+- `require_role(minimum_role)` — the **hierarchical** gate described
+  above: any role at or above `minimum_role` is admitted. Use this for
+  the common case ("this endpoint needs at least `developer`").
+- `require_roles(*roles)` — an **exact set-membership** gate (PR #1597):
+  only users whose `role` is *exactly* one of the supplied `roles` are
+  admitted, with **no** implicit grant to more-privileged roles. Use it
+  for endpoints that must be locked to a specific set without that grant
+  (e.g. an audit-log viewer restricted to `admin` and `developer`, where
+  a hypothetical higher role should *not* be auto-admitted). It raises
+  `ValueError` if called with no roles — an empty allow-list would lock
+  the endpoint for every principal including admins, which is almost
+  always a misconfiguration — and it emits a structured
+  `rbac.deny` audit event (role, allowed list, path, method) on every
+  denial. The allowed set is frozen and sorted once at *registration*
+  time, so the per-request path is an O(1) membership check and the
+  rendered 403 detail is stable across requests.
+
+Denials from either dependency return `403` with a detail string naming
+the role(s) required.
+
 ### API-key scopes
 
 Hierarchy (gh#86): `admin > trade > read`. JWT-authenticated requests
