@@ -51,6 +51,7 @@ from engine.auth.oidc import (
     DiscoveryError,
     OIDCError,
     OIDCProvider,
+    generate_pkce_pair,
 )
 from engine.auth.oidc import (
     IDTokenClaims as OIDCIDTokenClaims,
@@ -99,6 +100,7 @@ __all__ = [
     "OIDCTokenExchangeError",
     "TokenExchangeError",
     "TokenSet",
+    "generate_pkce_pair",
     "generate_state",
     "get_oauth_provider",
     "validate_state",
