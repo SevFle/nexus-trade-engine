@@ -32,6 +32,7 @@ from engine.auth import get_oauth_provider
 from engine.auth.base import InvalidTokenError as BaseInvalidTokenError
 from engine.auth.base import IOAuthProvider
 from engine.auth.oidc import (
+    AuthURL,
     DiscoveryError,
     IDTokenClaims,
     OIDCError,
@@ -293,11 +294,17 @@ def test_get_authorize_url_embeds_state_and_client_id():
         redirect_uri=REDIRECT_URI,
     )
     url = provider.get_authorize_url(state="csrf-token-xyz")
-    assert url.startswith(f"{ISSUER}/authorize?")
-    assert "client_id=nexus-client" in url
-    assert "response_type=code" in url
-    assert "state=csrf-token-xyz" in url
-    assert "scope=openid+email+profile" in url or "scope=openid" in url
+    # The authorize step now returns the URL *and* the PKCE code_verifier that
+    # must be replayed in exchange_code() -- no verifier is stored on the
+    # provider instance (it is stateless).
+    assert isinstance(url, AuthURL)
+    assert not hasattr(provider, "_code_verifier")
+    assert url.code_verifier
+    assert url.url.startswith(f"{ISSUER}/authorize?")
+    assert "client_id=nexus-client" in url.url
+    assert "response_type=code" in url.url
+    assert "state=csrf-token-xyz" in url.url
+    assert "scope=openid+email+profile" in url.url or "scope=openid" in url.url
 
 
 def test_get_authorize_url_requires_state():
@@ -369,6 +376,8 @@ async def test_exchange_code_happy_path():
         body = request.read().decode()
         assert "grant_type=authorization_code" in body
         assert f"client_id={CLIENT_ID}" in body
+        # The PKCE verifier threaded in by the caller is forwarded verbatim.
+        assert "code_verifier=pkce-verifier-123" in body
         return httpx.Response(
             200,
             json={
@@ -380,7 +389,7 @@ async def test_exchange_code_happy_path():
         )
 
     provider = _build_provider(transport=MockTransport(handler))
-    token_set = await provider.exchange_code("the-auth-code")
+    token_set = await provider.exchange_code("the-auth-code", code_verifier="pkce-verifier-123")
     assert token_set.access_token == "at-123"
     # The shared base TokenSet keeps provider-specific fields (like the OIDC
     # id_token) in ``raw`` rather than modelling them.
@@ -394,4 +403,24 @@ async def test_exchange_code_error_on_http_400():
 
     provider = _build_provider(transport=MockTransport(handler))
     with pytest.raises(OIDCTokenExchangeError, match="HTTP 400"):
-        await provider.exchange_code("bad-code")
+        await provider.exchange_code("bad-code", code_verifier="v")
+
+
+async def test_exchange_code_requires_code_verifier():
+    # ``code_verifier`` is now a required keyword argument: the provider no
+    # longer remembers the verifier between calls, so omitting it is a
+    # programmer error surfaced by Python as a TypeError.
+    provider = _build_provider(
+        transport=MockTransport(lambda r: httpx.Response(200, json={"access_token": "at"}))
+    )
+    with pytest.raises(TypeError):
+        await provider.exchange_code("the-code")  # type: ignore[call-arg]
+
+
+async def test_exchange_code_rejects_empty_code_verifier():
+    # An empty verifier can never match a challenge and is rejected up front.
+    provider = _build_provider(
+        transport=MockTransport(lambda r: httpx.Response(200, json={"access_token": "at"}))
+    )
+    with pytest.raises(OIDCTokenExchangeError, match="code_verifier is required"):
+        await provider.exchange_code("the-code", code_verifier="")

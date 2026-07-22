@@ -7,11 +7,14 @@ Covers, in isolation:
 * :func:`engine.auth.oidc._derive_code_challenge` -- independent recomputation
   of the S256 challenge.
 * :meth:`OIDCProvider.get_authorize_url` -- PKCE params in the authorize URL
-  and verifier capture/storage, both for auto-generated and caller-supplied
-  verifiers.
-* :meth:`OIDCProvider.exchange_code` -- the ``code_verifier`` is sent in the
-  token request body, whether supplied explicitly or replayed from the
-  instance state captured by ``get_authorize_url``.
+  and the verifier being **returned** (alongside the URL, in an
+  :class:`~engine.auth.oidc.AuthURL`) rather than stashed on the instance,
+  both for auto-generated and caller-supplied verifiers.
+* :meth:`OIDCProvider.exchange_code` -- the ``code_verifier`` is a required
+  argument and is forwarded verbatim in the token request body. The provider
+  instance never retains the verifier (it is stateless), so the caller must
+  thread the verifier returned by ``get_authorize_url`` back into
+  ``exchange_code`` -- typically across an authorization redirect.
 """
 
 from __future__ import annotations
@@ -23,14 +26,17 @@ import urllib.parse
 from typing import Any
 
 import httpx
+import pytest
 from httpx import MockTransport
 
 from engine.auth import generate_pkce_pair as pkg_generate_pkce_pair
 from engine.auth.oidc import (
     _PKCE_CHALLENGE_METHOD,
     _PKCE_VERIFIER_BYTES,
+    AuthURL,
     OIDCError,
     OIDCProvider,
+    TokenExchangeError,
     _derive_code_challenge,
     generate_pkce_pair,
 )
@@ -90,7 +96,7 @@ def test_generate_pkce_pair_returns_verifier_and_challenge():
 
     # Challenge is the independent S256 derivation of the verifier.
     assert challenge == _independent_s256_challenge(verifier)
-    # No base64 padding leaks into the URL-embedded challenge.
+    # No base64padding leaks into the URL-embedded challenge.
     assert "=" not in challenge
 
 
@@ -122,23 +128,26 @@ def test_generate_pkce_pair_exposed_at_package_level():
     assert challenge == _independent_s256_challenge(verifier)
 
 
-# --- get_authorize_url: PKCE params + verifier capture --------------------
-def test_get_authorize_url_includes_pkce_params_and_stores_verifier():
+# --- get_authorize_url: PKCE params + verifier returned (not stored) -------
+def test_get_authorize_url_includes_pkce_params_and_returns_verifier():
     provider = _provider()
-    assert provider._code_verifier is None
 
-    url = provider.get_authorize_url(state="csrf-token-xyz")
-    params = _query(url)
+    result = provider.get_authorize_url(state="csrf-token-xyz")
+    params = _query(result.url)
 
     # The S256 challenge and method are present in the authorize URL.
     assert "code_challenge" in params
     assert params["code_challenge_method"] == _PKCE_CHALLENGE_METHOD == "S256"
     assert "=" not in params["code_challenge"]
 
-    # The stored verifier is the secret counterpart to the embedded challenge.
-    stored = provider._code_verifier
-    assert stored is not None
-    assert _independent_s256_challenge(stored) == params["code_challenge"]
+    # The verifier is *returned* (as part of an AuthURL), not stored on the
+    # instance, and is the secret counterpart to the embedded challenge.
+    assert isinstance(result, AuthURL)
+    assert result.code_verifier
+    assert _independent_s256_challenge(result.code_verifier) == params["code_challenge"]
+
+    # The provider instance is stateless: it never retains the verifier.
+    assert not hasattr(provider, "_code_verifier")
 
     # Core OAuth2 params are still present.
     assert params["client_id"] == CLIENT_ID
@@ -150,25 +159,40 @@ def test_get_authorize_url_accepts_explicit_code_verifier():
     provider = _provider()
     verifier, challenge = generate_pkce_pair()
 
-    url = provider.get_authorize_url(state="s", code_verifier=verifier)
-    params = _query(url)
+    result = provider.get_authorize_url(state="s", code_verifier=verifier)
+    params = _query(result.url)
 
     # The challenge is derived from the caller-supplied verifier (not freshly
-    # generated), and that verifier is the one stashed for later exchange.
+    # generated), and that same verifier is echoed back in the AuthURL.
     assert params["code_challenge"] == challenge == _independent_s256_challenge(verifier)
-    assert provider._code_verifier == verifier
+    assert result.code_verifier == verifier
+    # Still nothing retained on the instance.
+    assert not hasattr(provider, "_code_verifier")
 
 
 def test_get_authorize_url_regenerates_verifier_per_call():
     provider = _provider()
     first = provider.get_authorize_url(state="s1")
-    v1 = provider._code_verifier
     second = provider.get_authorize_url(state="s2")
-    v2 = provider._code_verifier
 
-    # Each call produces a fresh challenge/verifier pair.
-    assert v1 != v2
-    assert _query(first)["code_challenge"] != _query(second)["code_challenge"]
+    # Each call produces a fresh verifier/challenge pair with no shared state.
+    assert first.code_verifier != second.code_verifier
+    assert _query(first.url)["code_challenge"] != _query(second.url)["code_challenge"]
+
+
+def test_get_authorize_url_concurrent_calls_do_not_clobber_verifier():
+    # The headline reason the verifier is returned rather than stored: two
+    # interleaved authorize requests must keep independent verifiers. With the
+    # old instance-storage design the second call would have overwritten the
+    # first provider's verifier, breaking the first request's token exchange.
+    provider = _provider()
+    first = provider.get_authorize_url(state="s1")
+    provider.get_authorize_url(state="s2")
+
+    # The first request's verifier still validates against its own URL even
+    # after a second request has been started on the same provider instance.
+    first_params = _query(first.url)
+    assert _independent_s256_challenge(first.code_verifier) == first_params["code_challenge"]
 
 
 def test_get_authorize_url_pkce_does_not_clobber_state_validation():
@@ -182,62 +206,75 @@ def test_get_authorize_url_pkce_does_not_clobber_state_validation():
         raise AssertionError("expected OIDCError for empty state")
 
 
-# --- exchange_code: code_verifier in the token request body ---------------
-async def test_exchange_code_replays_stored_code_verifier():
+# --- exchange_code: code_verifier is required + forwarded in the body -----
+async def test_exchange_code_sends_code_verifier_in_body():
     sent: dict[str, str] = {}
     provider = _provider(transport=MockTransport(_capturing_handler(sent)))
-    provider.get_authorize_url(state="s")  # captures a verifier on the instance
-    captured_verifier = provider._code_verifier
-    assert captured_verifier is not None
 
-    token_set = await provider.exchange_code("the-code")
+    verifier = "replayed-verifier-from-session"
+    token_set = await provider.exchange_code("the-code", code_verifier=verifier)
 
-    assert sent["code_verifier"] == captured_verifier
+    # The caller-supplied verifier is forwarded verbatim.
+    assert sent["code_verifier"] == verifier
     assert sent["grant_type"] == "authorization_code"
     assert sent["code"] == "the-code"
     assert token_set.access_token == "at"
 
 
-async def test_exchange_code_sends_explicit_code_verifier_over_stored():
+async def test_exchange_code_requires_code_verifier_argument():
+    # The provider no longer remembers the verifier between calls, so it MUST
+    # be passed in. Omitting the now-required keyword is a TypeError.
+    provider = _provider(
+        transport=MockTransport(_capturing_handler({})),
+    )
+    with pytest.raises(TypeError):
+        await provider.exchange_code("the-code")  # type: ignore[call-arg]
+
+
+async def test_exchange_code_rejects_empty_code_verifier():
     sent: dict[str, str] = {}
     provider = _provider(transport=MockTransport(_capturing_handler(sent)))
-    provider.get_authorize_url(state="s")  # populates _code_verifier
 
-    explicit = "explicit-verifier-value"
-    await provider.exchange_code("the-code", code_verifier=explicit)
+    # An empty verifier can never match a challenge; rejected up front without
+    # hitting the network.
+    with pytest.raises(TokenExchangeError, match="code_verifier is required"):
+        await provider.exchange_code("the-code", code_verifier="")
+    assert sent == {}
 
-    # An explicit verifier always wins over the stashed one.
-    assert sent["code_verifier"] == explicit
 
-
-async def test_exchange_code_omits_code_verifier_when_none_available():
-    sent: dict[str, str] = {}
-    provider = _provider(transport=MockTransport(_capturing_handler(sent)))
-    # No get_authorize_url() called -> no stored verifier.
-
-    await provider.exchange_code("the-code")
-
-    # Without a verifier anywhere, the param is simply absent (legacy IdPs).
-    assert "code_verifier" not in sent
+async def test_exchange_code_does_not_read_stored_state():
+    # Regression guard: even after get_authorize_url() the provider holds no
+    # verifier, so a caller that forgets to pass one cannot accidentally
+    # succeed by replaying stale instance state.
+    provider = _provider(
+        transport=MockTransport(_capturing_handler({})),
+    )
+    provider.get_authorize_url(state="s")
+    assert not hasattr(provider, "_code_verifier")
+    with pytest.raises(TypeError):
+        await provider.exchange_code("the-code")  # type: ignore[call-arg]
 
 
 # --- End-to-end PKCE round-trip -------------------------------------------
 async def test_pkce_round_trip_authorize_then_exchange():
-    """A single provider instance drives the full PKCE flow.
+    """The full PKCE flow with the verifier threaded by the caller.
 
-    1. ``get_authorize_url`` generates + stores the verifier and embeds the
-       matching S256 challenge in the URL.
-    2. ``exchange_code`` replays that exact verifier in the token request body.
+    1. ``get_authorize_url`` generates a verifier, returns it in the
+       :class:`AuthURL`, and embeds the matching S256 challenge in the URL.
+    2. The caller persists that verifier across the redirect.
+    3. ``exchange_code`` replays the caller-supplied verifier in the token
+       request body.
     The token endpoint handler asserts the verifier hashes back to the
     challenge that appeared in the authorize URL.
     """
     sent: dict[str, str] = {}
     provider = _provider(transport=MockTransport(_capturing_handler(sent)))
 
-    url = provider.get_authorize_url(state="roundtrip-state")
-    expected_challenge = _query(url)["code_challenge"]
+    auth = provider.get_authorize_url(state="roundtrip-state")
+    expected_challenge = _query(auth.url)["code_challenge"]
 
-    await provider.exchange_code("rc-code")
+    # The caller threads the returned verifier into the exchange.
+    await provider.exchange_code("rc-code", code_verifier=auth.code_verifier)
 
     # The verifier sent in the exchange hashes to the challenge in the URL.
     assert _independent_s256_challenge(sent["code_verifier"]) == expected_challenge
