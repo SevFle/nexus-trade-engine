@@ -14,12 +14,28 @@ CSV-style interface.
 
 The returned frames have the canonical lowercase OHLCV columns::
 
-    date, open, high, low, close, volume
+    timestamp, open, high, low, close, volume
 
-where ``date`` is a tz-aware (UTC) polars ``Datetime`` and the frame is sorted
-ascending. Rows with a null ``close`` (Yahoo inserts these for session halts
-and look-ahead protected periods) are dropped so downstream indicators never
-see a half-formed bar.
+where ``timestamp`` is a tz-aware (UTC) polars ``Datetime`` and the frame is
+sorted ascending. Rows with a null ``close`` (Yahoo inserts these for session
+halts and look-ahead protected periods) are dropped so downstream indicators
+never see a half-formed bar.
+
+Error contract
+--------------
+
+* **Malformed input symbol / bad parameters** → :class:`DataValidationError`
+  (e.g. path-traversal attempts, unknown interval). This fails fast because an
+  empty frame must never mask a malformed/abusive request.
+* **API-confirmed invalid symbol** (HTTP 404 / a Yahoo ``chart.error`` for an
+  unknown ticker) → an empty schema'd :class:`polars.DataFrame`. Graceful:
+  callers can treat "no data" uniformly.
+* **Network / transport failures** (timeout, connection reset, DNS) and HTTP
+  5xx → :class:`DataProviderError` (subclass :class:`YahooProviderError`).
+* **HTTP 429 rate-limit** → the ``Retry-After`` header (seconds or HTTP-date)
+  is honoured, the request is retried with exponential backoff, and — only
+  when retries are exhausted — a :class:`RateLimitError` is raised carrying
+  the last advised ``retry_after``.
 
 This module is deliberately independent of the live market-data
 :class:`~engine.data.providers.yahoo.YahooDataProvider` (pandas-based, wired
@@ -33,6 +49,7 @@ import concurrent.futures
 import re
 from collections.abc import Mapping
 from datetime import UTC, date, datetime
+from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -50,9 +67,9 @@ logger = structlog.get_logger()
 YAHOO_BASE_URL = "https://query1.finance.yahoo.com"
 
 #: Canonical column order produced by this provider. The timestamp column is
-#: named ``date`` (per the historical-Yahoo spec) rather than ``timestamp``.
+#: ``timestamp`` to match :data:`engine.data.provider.OHLCV_COLUMNS`.
 POLARS_OHLCV_COLUMNS: tuple[str, ...] = (
-    "date",
+    "timestamp",
     "open",
     "high",
     "low",
@@ -61,9 +78,9 @@ POLARS_OHLCV_COLUMNS: tuple[str, ...] = (
 )
 
 #: Empty-frame schema so callers can rely on column names/dtypes even when the
-#: API returns no bars.
+#: API returns no bars (e.g. an invalid symbol).
 _EMPTY_SCHEMA: dict[str, pl.DataType] = {
-    "date": pl.Datetime("us", "UTC"),
+    "timestamp": pl.Datetime("us", "UTC"),
     "open": pl.Float64,
     "high": pl.Float64,
     "low": pl.Float64,
@@ -76,7 +93,8 @@ VALID_PERIODS: frozenset[str] = frozenset(
     {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"}
 )
 
-#: Map our interval names to the Yahoo ``interval`` query tokens.
+#: Map our interval names to the Yahoo ``interval`` query tokens. The provider
+#: explicitly supports the task-required ``1d``, ``1h`` and ``5m`` intervals.
 INTERVAL_MAP: dict[str, str] = {
     "1m": "1m",
     "5m": "5m",
@@ -89,14 +107,25 @@ INTERVAL_MAP: dict[str, str] = {
 }
 
 #: Intervals finer than ``1d`` are subject to Yahoo's intraday lookback cap.
-_INTRADAY_INTERVALS: frozenset[str] = frozenset(
-    {"1m", "5m", "15m", "30m", "1h"}
-)
+_INTRADAY_INTERVALS: frozenset[str] = frozenset({"1m", "5m", "15m", "30m", "1h"})
 
 #: Yahoo only serves ~60 days of intraday history; enforce that on the client
 #: side so a wide intraday window fails fast with a clear error instead of
 #: silently returning a truncated/clamped frame.
 _MAX_INTRADAY_LOOKBACK_DAYS = 60
+
+#: Maximum number of 429 retries after which a :class:`RateLimitError` is
+#: raised. The initial request is always attempted, so ``max_retries=3`` → up
+#: to 4 total attempts.
+DEFAULT_MAX_RETRIES = 3
+
+#: Upper bound on a single retry sleep (seconds) so a hostile ``Retry-After``
+#: can never block the event loop for minutes.
+DEFAULT_MAX_RETRY_WAIT_S = 30.0
+
+#: Base for the exponential backoff between 429 retries when no
+#: ``Retry-After`` hint is supplied.
+DEFAULT_BACKOFF_BASE_S = 1.0
 
 # Symbol allow-list. Deliberately excludes ``/`` (a URL path separator) and
 # ``..`` (path traversal) so a hostile symbol can never be interpolated into
@@ -106,21 +135,45 @@ _SYMBOL_RE = re.compile(r"^[A-Z0-9._=^-]{1,32}$")
 
 DEFAULT_TIMEOUT_S = 10.0
 
+#: HTTP status code returned by Yahoo when the client is rate-limited.
+HTTP_TOO_MANY_REQUESTS = 429
 #: HTTP status code at/above which a response is treated as a Yahoo server
-#: error (5xx) and surfaced as :class:`YahooProviderError`.
+#: error (5xx) and surfaced as :class:`DataProviderError`.
 _HTTP_SERVER_ERROR_STATUS = 500
-#: HTTP status code at/above which a response is treated as a client error
-#: (4xx, e.g. unknown/delisted symbol) and surfaced as
-#: :class:`DataValidationError`.
+#: HTTP status code at/above which a response is treated as a client error.
 _HTTP_CLIENT_ERROR_STATUS = 400
+#: HTTP status code returned for an unknown / delisted symbol.
+_HTTP_NOT_FOUND = 404
 
 
-class YahooProviderError(RuntimeError):
-    """Raised on transient infrastructure failures (network, HTTP, timeout).
+class DataProviderError(RuntimeError):
+    """Base for all data-provider failures surfaced by this adapter.
 
-    Distinct from :class:`DataValidationError` (bad symbol / bad data shape)
-    so callers can decide whether to retry, fail-over, or surface to the user.
+    Network/transport errors, HTTP 5xx responses and exhausted rate-limit
+    retries all derive from this class so callers can catch the whole family
+    with a single ``except DataProviderError``.
     """
+
+
+class YahooProviderError(DataProviderError):
+    """Transient infrastructure failure (network, HTTP 5xx, timeout).
+
+    A subclass of :class:`DataProviderError` so it satisfies
+    ``isinstance(exc, DataProviderError)`` while remaining distinguishable.
+    """
+
+
+class RateLimitError(DataProviderError):
+    """Raised when Yahoo returns 429 and all retries are exhausted.
+
+    Attributes:
+        retry_after: the last ``Retry-After`` value advised by Yahoo, in
+            seconds, or ``None`` when no header was present.
+    """
+
+    def __init__(self, message: str, *, retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -163,14 +216,45 @@ def _to_epoch_seconds(value: date | datetime | str | int | float) -> int:
         try:
             dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError as exc:
-            raise DataValidationError(
-                f"invalid date string: {value!r}"
-            ) from exc
+            raise DataValidationError(f"invalid date string: {value!r}") from exc
     else:  # pragma: no cover - guarded by callers
         raise DataValidationError(f"unsupported date value: {value!r}")
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
     return int(dt.timestamp())
+
+
+def _parse_retry_after(header: str | None) -> float | None:
+    """Parse an HTTP ``Retry-After`` header into seconds.
+
+    Supports both the delta-seconds form (``"120"``) and the HTTP-date form
+    (``"Fri, 31 Dec 2025 23:59:59 GMT"``). Returns ``None`` when the header is
+    absent or unparseable. Negative/zero deltas are clamped to ``None`` so the
+    caller can fall back to its own backoff.
+    """
+    if not header:
+        return None
+    value = header.strip()
+    if not value:
+        return None
+    # Delta-seconds: a non-negative integer.
+    try:
+        seconds = float(value)
+    except ValueError:
+        pass
+    else:
+        return seconds if seconds > 0 else None
+    # HTTP-date form (RFC 7231).
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if when is None:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    delta = when.timestamp() - datetime.now(tz=UTC).timestamp()
+    return delta if delta > 0 else None
 
 
 class YahooFinanceProvider(IDataProvider):
@@ -191,6 +275,12 @@ class YahooFinanceProvider(IDataProvider):
         client is created per request.
     timeout:
         Per-request timeout in seconds for the owned client.
+    max_retries:
+        Maximum number of retries on a 429 response before raising
+        :class:`RateLimitError`.
+    max_retry_wait:
+        Cap (seconds) on a single retry sleep derived from ``Retry-After`` /
+        backoff, so a hostile header can never stall the event loop.
     enable_cache:
         When ``True``, parsed frames are memoised in-process keyed by
         ``(symbol, range, interval)`` so repeated ``load_data`` calls within a
@@ -204,10 +294,14 @@ class YahooFinanceProvider(IDataProvider):
         *,
         client: httpx.AsyncClient | None = None,
         timeout: float = DEFAULT_TIMEOUT_S,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        max_retry_wait: float = DEFAULT_MAX_RETRY_WAIT_S,
         enable_cache: bool = True,
     ) -> None:
         self._client = client
         self._timeout = timeout
+        self._max_retries = max(0, int(max_retries))
+        self._max_retry_wait = float(max_retry_wait)
         self._owns_client = client is None
         self._enable_cache = enable_cache
         self._cache: dict[str, pl.DataFrame] = {}
@@ -240,7 +334,8 @@ class YahooFinanceProvider(IDataProvider):
         window bounds may be passed in ``kwargs`` and are forwarded.
 
         Returns a :class:`polars.DataFrame` with columns
-        ``date, open, high, low, close, volume`` sorted ascending by ``date``.
+        ``timestamp, open, high, low, close, volume`` sorted ascending by
+        ``timestamp``.
         """
         coro = self.fetch_ohlcv(
             str(source),
@@ -275,15 +370,13 @@ class YahooFinanceProvider(IDataProvider):
         self._validate_period(period)
         yahoo_interval = self._validate_interval(interval)
 
-        params = self._build_params(
-            period, yahoo_interval, interval, start=start, end=end
-        )
+        params = self._build_params(period, yahoo_interval, interval, start=start, end=end)
         cache_key = self._cache_key(sym, params)
         if self._enable_cache and cache_key in self._cache:
             return self._cache[cache_key]
 
         payload = await self._get_chart(sym, params, client=client)
-        df = self._parse_chart(payload)
+        df = self._parse_chart(payload, symbol=sym)
         if self._enable_cache and not df.is_empty():
             self._cache[cache_key] = df
         return df
@@ -297,10 +390,14 @@ class YahooFinanceProvider(IDataProvider):
     ) -> Mapping[str, Any]:
         """Issue the GET to ``/v8/finance/chart/{symbol}`` and return JSON.
 
-        Translates httpx transport/timeout errors into
-        :class:`YahooProviderError` and HTTP error statuses into
-        :class:`DataValidationError` (4xx / Yahoo chart errors) or
-        :class:`YahooProviderError` (5xx).
+        Handles the full status-code matrix:
+
+        * 429 → honour ``Retry-After``, retry with backoff, then
+          :class:`RateLimitError`.
+        * 5xx → :class:`YahooProviderError`.
+        * 4xx (incl. 404) → return an empty mapping so a downstream empty
+          :class:`pl.DataFrame` is produced (graceful invalid-symbol handling).
+        * transport/timeout errors → :class:`YahooProviderError`.
         """
         owns_client = client is None
         active_client = client if client is not None else self._client
@@ -311,61 +408,130 @@ class YahooFinanceProvider(IDataProvider):
                 headers={"User-Agent": "nexus-trade-engine/1.0"},
             )
         try:
-            response = await active_client.get(
-                f"/v8/finance/chart/{symbol}",
-                params=params,
-            )
-        except httpx.TimeoutException as exc:
-            raise YahooProviderError(
-                f"yahoo request timed out for {symbol}"
-            ) from exc
-        except httpx.RequestError as exc:
-            raise YahooProviderError(
-                f"yahoo network error for {symbol}: {type(exc).__name__}"
-            ) from exc
+            return await self._fetch_with_retries(active_client, symbol, params)
         finally:
             if owns_client and client is None and active_client is not None:
                 # We created this client ourselves; close it to free sockets.
-                with _SuppressClose():
+                # Best-effort: never let a teardown error mask a real one.
+                try:
                     await active_client.aclose()
+                except Exception:  # pragma: no cover - defensive
+                    logger.debug("yahoo client close failed", symbol=symbol)
 
-        if response.status_code >= _HTTP_SERVER_ERROR_STATUS:
-            raise YahooProviderError(
-                f"yahoo server error {response.status_code} for {symbol}"
-            )
-        if response.status_code >= _HTTP_CLIENT_ERROR_STATUS:
-            # 404 / 400 typically means an unknown or delisted symbol.
-            raise DataValidationError(
-                f"yahoo returned HTTP {response.status_code} for {symbol}"
-            )
+    async def _fetch_with_retries(
+        self,
+        client: httpx.AsyncClient,
+        symbol: str,
+        params: dict[str, Any],
+    ) -> Mapping[str, Any]:
+        """Run the chart GET with a 429 retry/backoff loop.
 
-        try:
-            return response.json()
-        except ValueError as exc:
-            raise DataValidationError(
-                f"yahoo returned non-JSON for {symbol}"
-            ) from exc
+        Non-429 outcomes short-circuit immediately. ``asyncio.sleep`` is only
+        awaited between retries, never after a terminal outcome.
+        """
+        last_retry_after: float | None = None
+
+        for attempt in range(self._max_retries + 1):
+            try:
+                response = await client.get(
+                    f"/v8/finance/chart/{symbol}",
+                    params=params,
+                )
+            except httpx.TimeoutException as exc:
+                raise YahooProviderError(f"yahoo request timed out for {symbol}") from exc
+            except httpx.RequestError as exc:
+                raise YahooProviderError(
+                    f"yahoo network error for {symbol}: {type(exc).__name__}"
+                ) from exc
+
+            if response.status_code == HTTP_TOO_MANY_REQUESTS:
+                last_retry_after = _parse_retry_after(response.headers.get("retry-after"))
+                if attempt < self._max_retries:
+                    delay = self._retry_delay(last_retry_after, attempt)
+                    logger.warning(
+                        "yahoo rate-limited (429); retrying",
+                        symbol=symbol,
+                        attempt=attempt + 1,
+                        retry_after=last_retry_after,
+                        delay=round(delay, 3),
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.warning(
+                    "yahoo rate-limited (429); retries exhausted",
+                    symbol=symbol,
+                    attempts=attempt + 1,
+                )
+                raise RateLimitError(
+                    f"yahoo rate-limited for {symbol} after {attempt + 1} attempts",
+                    retry_after=last_retry_after,
+                )
+
+            if response.status_code >= _HTTP_SERVER_ERROR_STATUS:
+                raise YahooProviderError(f"yahoo server error {response.status_code} for {symbol}")
+            if response.status_code >= _HTTP_CLIENT_ERROR_STATUS:
+                # 404 / 400 typically means an unknown or delisted symbol —
+                # surface as an empty frame rather than an exception so callers
+                # can treat "no data" uniformly.
+                logger.info(
+                    "yahoo symbol not served",
+                    symbol=symbol,
+                    status=response.status_code,
+                )
+                return {}
+
+            try:
+                return response.json()
+            except ValueError as exc:
+                raise YahooProviderError(f"yahoo returned non-JSON for {symbol}") from exc
+
+        # Unreachable: the loop either returns, raises, or continues — but keep
+        # an explicit guard so a future refactor can't silently fall through.
+        raise YahooProviderError(  # pragma: no cover - defensive
+            f"yahoo request for {symbol} exited retry loop unexpectedly"
+        )
+
+    def _retry_delay(self, retry_after: float | None, attempt: int) -> float:
+        """Compute the sleep before the next 429 retry.
+
+        Prefer the server's ``Retry-After`` hint; otherwise use exponential
+        backoff with jitter. The result is always clamped to
+        :attr:`_max_retry_wait`.
+        """
+        if retry_after is not None and retry_after > 0:
+            return min(retry_after, self._max_retry_wait)
+        backoff = DEFAULT_BACKOFF_BASE_S * (2**attempt)
+        # Deterministic-ish jitter so callers don't thunder-herd in lock-step.
+        jitter = backoff * 0.1
+        return min(backoff + jitter, self._max_retry_wait)
 
     @staticmethod
-    def _parse_chart(payload: Mapping[str, Any] | None) -> pl.DataFrame:
+    def _parse_chart(
+        payload: Mapping[str, Any] | None, *, symbol: str | None = None
+    ) -> pl.DataFrame:
         """Parse a Yahoo v8 chart payload into a polars DataFrame.
 
-        * A non-null ``chart.error`` raises :class:`DataValidationError`.
+        * A non-null ``chart.error`` is treated as an invalid/unknown symbol:
+          a warning is logged and an empty schema'd frame is returned (graceful
+          handling) rather than raising.
         * Missing ``result`` or empty ``timestamp`` → empty schema'd frame.
         * Rows with a null ``close`` (session halts / protected bars) are
           dropped, matching the pandas live-provider behaviour.
-        * The result is sorted ascending by ``date``.
+        * The result is sorted ascending by ``timestamp``.
         """
         chart = (payload or {}).get("chart") or {}
         error = chart.get("error")
         if error:
-            description = (
-                error.get("description") if isinstance(error, Mapping)
-                else str(error)
+            description = error.get("description") if isinstance(error, Mapping) else str(error)
+            # Yahoo returns a chart error (rather than a 4xx) for an
+            # unknown/delisted symbol; treat it as "no data" so callers see an
+            # empty frame instead of an exception.
+            logger.warning(
+                "yahoo chart error (returning empty frame)",
+                symbol=symbol,
+                description=description,
             )
-            raise DataValidationError(
-                f"yahoo chart error: {description or error!r}"
-            )
+            return pl.DataFrame(schema=_EMPTY_SCHEMA)
 
         results = chart.get("result") or []
         if not results:
@@ -381,13 +547,13 @@ class YahooFinanceProvider(IDataProvider):
         quote = quotes[0] if quotes else {}
 
         # Convert epoch seconds → tz-aware UTC datetimes (polars-native).
-        date_col = pl.from_epoch(
+        timestamp_col = pl.from_epoch(
             pl.Series(timestamps, dtype=pl.Int64), time_unit="s"
         ).dt.replace_time_zone("UTC")
 
         df = pl.DataFrame(
             {
-                "date": date_col,
+                "timestamp": timestamp_col,
                 "open": pl.Series(quote.get("open"), dtype=pl.Float64),
                 "high": pl.Series(quote.get("high"), dtype=pl.Float64),
                 "low": pl.Series(quote.get("low"), dtype=pl.Float64),
@@ -398,7 +564,7 @@ class YahooFinanceProvider(IDataProvider):
         # Drop half-formed bars (null close). Yahoo emits these for market
         # sessions that haven't produced a print yet.
         df = df.filter(pl.col("close").is_not_null())
-        return df.sort("date")
+        return df.sort("timestamp")
 
     # ------------------------------------------------------------------
     # Validation + param building helpers
@@ -408,16 +574,14 @@ class YahooFinanceProvider(IDataProvider):
     def _validate_period(period: str) -> None:
         if period not in VALID_PERIODS:
             raise DataValidationError(
-                f"yahoo invalid period {period!r}; expected one of "
-                f"{sorted(VALID_PERIODS)}"
+                f"yahoo invalid period {period!r}; expected one of {sorted(VALID_PERIODS)}"
             )
 
     @staticmethod
     def _validate_interval(interval: str) -> str:
         if interval not in INTERVAL_MAP:
             raise DataValidationError(
-                f"yahoo invalid interval {interval!r}; expected one of "
-                f"{sorted(INTERVAL_MAP)}"
+                f"yahoo invalid interval {interval!r}; expected one of {sorted(INTERVAL_MAP)}"
             )
         return INTERVAL_MAP[interval]
 
@@ -438,13 +602,9 @@ class YahooFinanceProvider(IDataProvider):
         if start is None and end is None:
             return {"range": period, "interval": yahoo_interval}
         if start is not None and end is None:
-            raise DataValidationError(
-                "yahoo date window requires both start and end"
-            )
+            raise DataValidationError("yahoo date window requires both start and end")
         if start is None and end is not None:
-            raise DataValidationError(
-                "yahoo date window requires both start and end"
-            )
+            raise DataValidationError("yahoo date window requires both start and end")
 
         assert start is not None  # for type checkers
         assert end is not None  # for type checkers
@@ -505,24 +665,14 @@ class YahooFinanceProvider(IDataProvider):
             return pool.submit(asyncio.run, coro).result()
 
 
-class _SuppressClose:
-    """Context manager that swallows ``aclose`` errors during teardown.
-
-    A best-effort close after a successful response should never mask the
-    real outcome of the request.
-    """
-
-    def __enter__(self) -> _SuppressClose:
-        return self
-
-    def __exit__(self, *exc_info: object) -> bool:
-        return False  # do not suppress the *real* exception (none here)
-
-
 __all__ = [
+    "DEFAULT_MAX_RETRIES",
+    "DEFAULT_MAX_RETRY_WAIT_S",
     "INTERVAL_MAP",
     "POLARS_OHLCV_COLUMNS",
     "VALID_PERIODS",
+    "DataProviderError",
+    "RateLimitError",
     "YahooFinanceProvider",
     "YahooProviderError",
     "normalize_symbol",
