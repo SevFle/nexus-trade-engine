@@ -33,6 +33,9 @@ any provider.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import secrets
 import urllib.parse
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -94,6 +97,66 @@ _DEFAULT_SIGNING_ALGS = ("RS256",)
 # the loopback address. Everything else must be HTTPS to protect the key
 # material in transit.
 _TLS_EXEMPT_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+# --- PKCE (RFC 7636) -------------------------------------------------------
+# The unreserved character set permitted in a code_verifier (RFC 3986). A
+# code_verifier MUST be 43-128 characters drawn from this set.
+_PKCE_VERIFIER_ALPHABET = (
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+)
+_PKCE_VERIFIER_MIN_LEN = 43
+_PKCE_VERIFIER_MAX_LEN = 128
+_PKCE_VERIFIER_DEFAULT_LEN = 64
+# The only code_challenge_method we support. "plain" defeats the purpose of
+# PKCE (the challenge equals the verifier in transit), so we refuse it.
+_PKCE_CHALLENGE_METHOD_S256 = "S256"
+
+# Default per-phase HTTP timeouts (seconds). A short connect timeout fails
+# fast on an unreachable IdP, while the read/write/pool budget is more
+# generous to accommodate slow token/JWKS responses.
+_DEFAULT_CONNECT_TIMEOUT = 5.0
+
+
+def generate_code_verifier(length: int = _PKCE_VERIFIER_DEFAULT_LEN) -> str:
+    """Generate a cryptographically strong PKCE ``code_verifier``.
+
+    Per RFC 7636 the verifier is a high-entropy random string of 43-128
+    characters drawn from the unreserved set. We use
+    :func:`secrets.choice` (a CSPRNG) so the verifier is genuinely
+    unpredictable -- a weak RNG here would let an attacker guess the
+    challenge and impersonate the client.
+    """
+    if not _PKCE_VERIFIER_MIN_LEN <= length <= _PKCE_VERIFIER_MAX_LEN:
+        raise OIDCError(
+            f"code_verifier length must be between "
+            f"{_PKCE_VERIFIER_MIN_LEN} and {_PKCE_VERIFIER_MAX_LEN}, got {length}"
+        )
+    return "".join(secrets.choice(_PKCE_VERIFIER_ALPHABET) for _ in range(length))
+
+
+def derive_code_challenge(
+    code_verifier: str, *, method: str = _PKCE_CHALLENGE_METHOD_S256
+) -> str:
+    """Derive the PKCE ``code_challenge`` from a ``code_verifier``.
+
+    For ``S256`` (the only method we support) this is
+    ``BASE64URL-ENCODE(SHA256(ASCII(code_verifier)))`` with any trailing
+    ``=`` padding stripped, exactly as specified in RFC 7636 §4.2.
+    """
+    if method.upper() != _PKCE_CHALLENGE_METHOD_S256:
+        raise OIDCError(
+            f"unsupported code_challenge_method: expected "
+            f"{_PKCE_CHALLENGE_METHOD_S256!r}, got {method!r}"
+        )
+    if not code_verifier or not isinstance(code_verifier, str):
+        raise OIDCError("code_verifier is required to derive a code_challenge")
+    if not _PKCE_VERIFIER_MIN_LEN <= len(code_verifier) <= _PKCE_VERIFIER_MAX_LEN:
+        raise OIDCError(
+            f"code_verifier must be between {_PKCE_VERIFIER_MIN_LEN} and "
+            f"{_PKCE_VERIFIER_MAX_LEN} characters"
+        )
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
 
 # --- Exceptions -------------------------------------------------------------
@@ -164,6 +227,22 @@ class IDTokenClaims:
     preferred_username: str | None = None
     # The full decoded payload, for callers that need claims we don't model.
     raw: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AuthorizationRequest:
+    """The result of building an OIDC authorization request with PKCE.
+
+    The caller MUST persist ``code_verifier`` alongside ``state`` (typically in
+    the user's session / a signed cookie) so the verifier can be replayed when
+    calling :meth:`OIDCProvider.exchange_code`. Losing the verifier makes the
+    PKCE-protected code unredeemable -- by design, that is exactly the attack
+    PKCE prevents (authorization-code interception).
+    """
+
+    url: str
+    code_verifier: str
+    state: str
 
 
 class _JWKSClient(Protocol):
@@ -239,6 +318,7 @@ class OIDCProvider(IOAuthProvider):
         jwks_client: _JWKSClient | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         http_timeout: float = 10.0,
+        connect_timeout: float = _DEFAULT_CONNECT_TIMEOUT,
     ) -> None:
         if not issuer or not isinstance(issuer, str):
             raise OIDCError("issuer is required")
@@ -262,6 +342,16 @@ class OIDCProvider(IOAuthProvider):
         self._jwks_client = jwks_client
         self._transport = transport
         self._http_timeout = http_timeout
+        # Structured per-phase timeout passed straight to ``httpx.AsyncClient``.
+        # Using :class:`httpx.Timeout` (rather than a bare float) lets us fail
+        # fast on an unreachable IdP via a short connect budget while still
+        # allowing a generous read window for slow JWKS / token responses.
+        self._timeout = httpx.Timeout(
+            connect=connect_timeout,
+            read=http_timeout,
+            write=http_timeout,
+            pool=http_timeout,
+        )
         # In-memory JWKS cache populated by :meth:`fetch_jwks`. Cleared by
         # passing ``force=True`` to :meth:`fetch_jwks`.
         self._jwks_cache: dict[str, Any] | None = None
@@ -270,6 +360,11 @@ class OIDCProvider(IOAuthProvider):
     def name(self) -> str:
         """Stable lowercase provider identifier used as a registry key."""
         return "oidc"
+
+    @property
+    def timeout(self) -> httpx.Timeout:
+        """The structured :class:`httpx.Timeout` applied to all IdP requests."""
+        return self._timeout
 
     @property
     def jwks_uri(self) -> str:
@@ -300,12 +395,23 @@ class OIDCProvider(IOAuthProvider):
         *,
         state: str,
         scope: str | None = None,
+        code_verifier: str | None = None,
     ) -> str:
         """Build the IdP authorization endpoint URL.
 
         ``state`` is **required** -- it is the CSRF token. Building a URL
         without one would expose the callback to a login-CSRF attack, so we
         refuse to do it.
+
+        When ``code_verifier`` is supplied (PKCE, RFC 7636) the derived
+        ``code_challenge`` and ``code_challenge_method=S256`` are appended to
+        the URL. This is the *authorization* half of PKCE; the matching
+        ``code_verifier`` must later be passed to :meth:`exchange_code`.
+
+        Note that this method returns only the URL string; if you need the
+        generated verifier back (the normal case when using PKCE), call
+        :meth:`build_authorization_request` instead, which generates a fresh
+        verifier per request and returns it alongside the URL.
         """
         if not state:
             raise OIDCError("state is required for CSRF protection")
@@ -316,7 +422,35 @@ class OIDCProvider(IOAuthProvider):
             "scope": scope or self.scope,
             "state": state,
         }
+        if code_verifier:
+            params["code_challenge"] = derive_code_challenge(code_verifier)
+            params["code_challenge_method"] = _PKCE_CHALLENGE_METHOD_S256
         return f"{self.authorize_endpoint}?{urllib.parse.urlencode(params)}"
+
+    def build_authorization_request(
+        self,
+        *,
+        state: str | None = None,
+        scope: str | None = None,
+        code_verifier: str | None = None,
+    ) -> AuthorizationRequest:
+        """Build a PKCE-protected authorization request.
+
+        Generates a fresh per-request ``code_verifier`` (unless one is passed
+        in), derives the matching ``code_challenge`` (S256), and returns both
+        the authorize URL and the verifier. The caller must persist the
+        verifier so it can be replayed during :meth:`exchange_code`.
+
+        ``state`` defaults to a freshly generated CSRF token when omitted, but
+        callers that manage their own state (e.g. tying it to a session) may
+        pass one explicitly.
+        """
+        resolved_state = state or self.generate_state()
+        verifier = code_verifier or generate_code_verifier()
+        url = self.get_authorize_url(
+            state=resolved_state, scope=scope, code_verifier=verifier
+        )
+        return AuthorizationRequest(url=url, code_verifier=verifier, state=resolved_state)
 
     @staticmethod
     def generate_state() -> str:
@@ -354,7 +488,7 @@ class OIDCProvider(IOAuthProvider):
 
         try:
             async with httpx.AsyncClient(
-                transport=self._transport, timeout=self._http_timeout
+                transport=self._transport, timeout=self._timeout
             ) as client:
                 response = await client.get(url)
         except httpx.RequestError as exc:
@@ -556,7 +690,7 @@ class OIDCProvider(IOAuthProvider):
 
         try:
             async with httpx.AsyncClient(
-                transport=self._transport, timeout=self._http_timeout
+                transport=self._transport, timeout=self._timeout
             ) as client:
                 response = await client.post(token_url, data=data)
         except httpx.RequestError as exc:
