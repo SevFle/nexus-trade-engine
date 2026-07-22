@@ -142,6 +142,12 @@ class Settings(BaseSettings):
     oidc_client_secret: str = ""
     oidc_redirect_uri: str = ""
     oidc_role_claim: str = "roles"
+    # Generic OIDC provider (engine.auth.oidc.OIDCProvider). The ``issuer`` is
+    # the IdP issuer identifier used verbatim for ID-token ``iss`` validation;
+    # ``jwks_uri`` optionally overrides the JWKS endpoint (defaults to the
+    # issuer's well-known path). Used by engine.auth.get_oauth_provider.
+    oidc_issuer: str = ""
+    oidc_jwks_uri: str = ""
 
     # LDAP
     ldap_server_url: str = ""
