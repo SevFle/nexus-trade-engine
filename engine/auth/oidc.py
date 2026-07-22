@@ -33,6 +33,9 @@ any provider.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import secrets
 import urllib.parse
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -94,6 +97,46 @@ _DEFAULT_SIGNING_ALGS = ("RS256",)
 # the loopback address. Everything else must be HTTPS to protect the key
 # material in transit.
 _TLS_EXEMPT_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+# PKCE (RFC 7636) ``code_verifier`` generation. ``secrets.token_urlsafe(48)``
+# yields a 64-character verifier composed of URL-safe characters, comfortably
+# inside the spec's 43-128 character window while providing 384 bits of
+# entropy -- more than enough to defeat brute-force/prediction of the
+# challenge-binding secret.
+_PKCE_VERIFIER_BYTES = 48
+
+# The S256 ``code_challenge_method`` mandated by RFC 7636 (and the only one a
+# modern, spec-conformant IdP should accept). ``plain`` is intentionally not
+# supported because it offers no protection when the authorization request is
+# intercepted (the whole point of PKCE for public/mobile clients).
+_PKCE_CHALLENGE_METHOD = "S256"
+
+
+def _derive_code_challenge(code_verifier: str) -> str:
+    """Derive the S256 ``code_challenge`` from a ``code_verifier``.
+
+    Per RFC 7636: ``BASE64URL-ENCODE(SHA256(ASCII(code_verifier)))`` with the
+    trailing ``=`` padding stripped. The result is safe to embed directly in a
+    query string.
+    """
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+
+
+def generate_pkce_pair() -> tuple[str, str]:
+    """Generate a fresh PKCE ``(code_verifier, code_challenge)`` pair.
+
+    ``code_verifier`` is a cryptographically strong random string
+    (:func:`secrets.token_urlsafe`); ``code_challenge`` is its SHA-256 S256
+    derivation (see :func:`_derive_code_challenge`). The verifier MUST be kept
+    secret by the client and replayed in the token exchange, while the
+    challenge is sent (in the clear) in the authorization request.
+
+    A new pair should be generated for every authorization request so that a
+    stolen challenge cannot be reused.
+    """
+    code_verifier = secrets.token_urlsafe(_PKCE_VERIFIER_BYTES)
+    return code_verifier, _derive_code_challenge(code_verifier)
 
 
 # --- Exceptions -------------------------------------------------------------
@@ -265,6 +308,10 @@ class OIDCProvider(IOAuthProvider):
         # In-memory JWKS cache populated by :meth:`fetch_jwks`. Cleared by
         # passing ``force=True`` to :meth:`fetch_jwks`.
         self._jwks_cache: dict[str, Any] | None = None
+        # PKCE ``code_verifier`` captured by :meth:`get_authorize_url` so the
+        # matching :meth:`exchange_code` call can replay it without the caller
+        # having to thread it through. Overwritten on each authorize call.
+        self._code_verifier: str | None = None
 
     @property
     def name(self) -> str:
@@ -300,23 +347,53 @@ class OIDCProvider(IOAuthProvider):
         *,
         state: str,
         scope: str | None = None,
+        code_verifier: str | None = None,
     ) -> str:
-        """Build the IdP authorization endpoint URL.
+        """Build the IdP authorization endpoint URL (with PKCE S256).
 
         ``state`` is **required** -- it is the CSRF token. Building a URL
         without one would expose the callback to a login-CSRF attack, so we
         refuse to do it.
+
+        PKCE (RFC 7636) is applied to every request: a fresh
+        ``code_verifier`` is generated when one is not supplied, its S256
+        ``code_challenge`` is sent in the URL alongside
+        ``code_challenge_method=S256``, and the verifier is stored on the
+        instance so the subsequent :meth:`exchange_code` call can replay it
+        automatically. Callers that persist the verifier themselves (e.g. in
+        a server-side session for a horizontally-scaled deployment) may pass
+        it in explicitly and must then also forward it to
+        :meth:`exchange_code`.
         """
         if not state:
             raise OIDCError("state is required for CSRF protection")
+
+        if code_verifier is None:
+            code_verifier, code_challenge = generate_pkce_pair()
+        else:
+            code_challenge = _derive_code_challenge(code_verifier)
+        # Stash the verifier so exchange_code() can replay it by default.
+        self._code_verifier = code_verifier
+
         params: dict[str, str] = {
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
             "response_type": "code",
             "scope": scope or self.scope,
             "state": state,
+            "code_challenge": code_challenge,
+            "code_challenge_method": _PKCE_CHALLENGE_METHOD,
         }
         return f"{self.authorize_endpoint}?{urllib.parse.urlencode(params)}"
+
+    @staticmethod
+    def generate_pkce_pair() -> tuple[str, str]:
+        """Convenience alias for :func:`generate_pkce_pair`.
+
+        Exposed on the provider so callers can reach it through the same
+        object they use for the rest of the OIDC flow.
+        """
+        return generate_pkce_pair()
 
     @staticmethod
     def generate_state() -> str:
@@ -535,8 +612,11 @@ class OIDCProvider(IOAuthProvider):
 
         Any transport-level failure or non-2xx HTTP response from the token
         endpoint is wrapped in :class:`TokenExchangeError` so callers see a
-        single typed failure mode. PKCE ``code_verifier`` is forwarded when
-        supplied.
+        single typed failure mode. The PKCE ``code_verifier`` is sent in the
+        token request body: an explicit argument wins, otherwise the verifier
+        captured by :meth:`get_authorize_url` (and stored on the instance) is
+        replayed so a caller using the two-step helper flow does not have to
+        thread it through manually.
         """
         if not code:
             raise TokenExchangeError("authorization code is required")
@@ -544,6 +624,7 @@ class OIDCProvider(IOAuthProvider):
         token_url = self.token_endpoint
         _enforce_https(token_url, what="token endpoint")
 
+        verifier = code_verifier if code_verifier is not None else self._code_verifier
         data: dict[str, str] = {
             "code": code,
             "client_id": self.client_id,
@@ -551,8 +632,8 @@ class OIDCProvider(IOAuthProvider):
             "redirect_uri": self.redirect_uri,
             "grant_type": "authorization_code",
         }
-        if code_verifier:
-            data["code_verifier"] = code_verifier
+        if verifier:
+            data["code_verifier"] = verifier
 
         try:
             async with httpx.AsyncClient(
