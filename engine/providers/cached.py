@@ -67,23 +67,36 @@ class CachedDataProvider:
     Args:
         provider: The wrapped :class:`IDataProvider` to delegate to on a
             cache miss.
-        ttl: Cache time-to-live in seconds. Defaults to 60s. ``0`` disables
-            serving from cache (every call delegates). Negative values are
-            rejected.
+        ttl: Cache time-to-live in seconds. **Takes precedence** over
+            ``ttl_seconds`` when both are given. Defaults to 60s. ``0``
+            disables serving from cache (every call delegates). Negative
+            values are rejected.
+        ttl_seconds: Alias for ``ttl``; consulted only when ``ttl`` is
+            ``None``. Kept for symmetry with the underlying provider
+            surface and for callers that prefer the more explicit name.
 
     Raises:
-        ValueError: If ``ttl`` is negative.
+        ValueError: If the resolved TTL is negative.
     """
 
     def __init__(
         self,
         provider: IDataProvider,
-        ttl: float = DEFAULT_TTL_SECONDS,
+        ttl: float | None = None,
+        ttl_seconds: float | None = None,
     ) -> None:
-        if ttl < 0:
-            raise ValueError(f"ttl must be non-negative, got {ttl}")
+        # ``ttl`` is the canonical kwarg and wins over the ``ttl_seconds``
+        # alias; when neither is supplied the documented 60s default applies.
+        if ttl is not None:
+            effective_ttl = ttl
+        elif ttl_seconds is not None:
+            effective_ttl = ttl_seconds
+        else:
+            effective_ttl = DEFAULT_TTL_SECONDS
+        if effective_ttl < 0:
+            raise ValueError(f"ttl must be non-negative, got {effective_ttl}")
         self._provider = provider
-        self._ttl = float(ttl)
+        self._ttl = float(effective_ttl)
         # key (symbol, interval, date_range) -> (stored_at_monotonic, value)
         self._cache: dict[tuple[Any, Any, Any], tuple[float, Any]] = {}
         # Per-key single-flight locks. When N coroutines request the same
@@ -121,6 +134,44 @@ class CachedDataProvider:
         concurrent coroutine is still waiting on, breaking single-flight).
         """
         self._cache.clear()
+
+    # ------------------------------------------------------------------ #
+    # transparent delegation for the rest of the IDataProvider surface
+    # ------------------------------------------------------------------ #
+    def __getattr__(self, name: str) -> Any:
+        """Forward any uncached attribute to the wrapped provider.
+
+        ``__getattr__`` is only invoked when normal (``__dict__`` + class)
+        lookup fails, so explicitly-defined members — ``get_ohlcv``,
+        ``get_latest_price``, ``provider``, ``ttl``, ``clear``, the private
+        helpers — are served directly and never reach here. Any *other*
+        attribute (e.g. ``health_check``, ``get_multiple_prices``,
+        ``stream_prices``) is forwarded to ``self._provider`` so the wrapper
+        is a transparent, drop-in decorator for the parts of the
+        :class:`IDataProvider` surface it does not cache.
+
+        Dunder and underscore-prefixed names are deliberately **not**
+        forwarded: the copy/pickle protocols probe for hooks such as
+        ``__deepcopy__``, ``__copy__``, ``__getstate__`` and ``__reduce_ex__``
+        via ``getattr(obj, name, default)``. Forwarding them would let a mock
+        provider (which auto-creates any attribute) appear to implement those
+        hooks, or would leak the wrapped provider's own (de)serialisation
+        machinery onto the wrapper. Raising :class:`AttributeError` instead
+        makes the protocols fall back to their own defaults, so ``hasattr`` /
+        ``getattr(..., default)`` behave sanely.
+
+        ``self.__dict__`` is read directly rather than going through
+        ``self._provider`` so that, if ``_provider`` is not yet set — e.g.
+        during unpickling or :func:`copy.copy` before ``__init__`` runs —
+        we raise :class:`AttributeError` instead of recursing back into
+        ``__getattr__`` for ``_provider`` itself.
+        """
+        if name.startswith("_"):
+            raise AttributeError(name)
+        provider = self.__dict__.get("_provider")
+        if provider is None:
+            raise AttributeError(name)
+        return getattr(provider, name)
 
     # ------------------------------------------------------------------ #
     # internal helpers
@@ -189,14 +240,21 @@ class CachedDataProvider:
     async def get_ohlcv(
         self,
         symbol: str,
-        date_range: str = "1y",
+        period: str | None = None,
+        date_range: str | None = None,
         interval: str = "1d",
     ) -> pd.DataFrame:
         """Return cached OHLCV bars or fetch them from the wrapped provider.
 
-        Cache key: ``(symbol, interval, date_range)``. The wrapped provider's
-        ``get_ohlcv`` is invoked with ``period=date_range`` so the cached
-        call matches the underlying :class:`IDataProvider` signature.
+        ``period`` is the canonical window selector and **takes precedence**
+        over the legacy ``date_range`` alias: if both are given ``period``
+        wins, otherwise whichever is supplied is used (when neither is given
+        the window is ``None`` and is passed straight through to the wrapped
+        provider). The resolved window becomes the third slot of the cache
+        key and is forwarded to the wrapped provider's
+        ``get_ohlcv(period=…)`` call.
+
+        Cache key: ``(symbol, interval, resolved_window)``.
 
         The check-then-fetch-then-store critical section is guarded by a
         per-key :class:`asyncio.Lock` so that ``N`` concurrent requests for
@@ -206,7 +264,8 @@ class CachedDataProvider:
         lookups, so no defensive copy is made. Callers that need to mutate
         the frame should copy it themselves.
         """
-        key: tuple[Any, Any, Any] = (symbol, interval, date_range)
+        effective_period = period if period is not None else date_range
+        key: tuple[Any, Any, Any] = (symbol, interval, effective_period)
         async with self._lock_for(key):
             hit = self._lookup(key)
             if hit is not _MISS:
@@ -215,7 +274,7 @@ class CachedDataProvider:
                     method="get_ohlcv",
                     symbol=symbol,
                     interval=interval,
-                    date_range=date_range,
+                    period=effective_period,
                 )
                 return hit
 
@@ -224,10 +283,10 @@ class CachedDataProvider:
                 method="get_ohlcv",
                 symbol=symbol,
                 interval=interval,
-                date_range=date_range,
+                period=effective_period,
             )
             value = await self._provider.get_ohlcv(
-                symbol, period=date_range, interval=interval
+                symbol, period=effective_period, interval=interval
             )
             self._store(key, value)
             return value

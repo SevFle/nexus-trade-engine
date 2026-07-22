@@ -524,9 +524,7 @@ async def test_single_flight_collapses_concurrent_misses_to_one_fetch():
 
     n = 10
     tasks = [
-        asyncio.create_task(
-            cached.get_ohlcv("AAPL", date_range="1y", interval="1d")
-        )
+        asyncio.create_task(cached.get_ohlcv("AAPL", date_range="1y", interval="1d"))
         for _ in range(n)
     ]
 
@@ -545,3 +543,205 @@ async def test_single_flight_collapses_concurrent_misses_to_one_fetch():
     # And once everyone has returned, the lock drains again.
     gc.collect()
     assert len(cached._key_locks) == 0
+
+
+# --------------------------------------------------------------------------- #
+# 6. ttl_seconds alias / ttl precedence
+# --------------------------------------------------------------------------- #
+
+
+def test_ttl_seconds_alias_is_honoured_when_ttl_is_none():
+    """``ttl_seconds`` is the documented alias used when ``ttl`` is absent."""
+    cached = CachedDataProvider(_make_mock_provider(), ttl_seconds=30.0)
+    assert cached.ttl == 30.0
+
+
+def test_ttl_takes_precedence_over_ttl_seconds():
+    """``ttl`` wins when both ``ttl`` and ``ttl_seconds`` are supplied."""
+    cached = CachedDataProvider(_make_mock_provider(), ttl=10.0, ttl_seconds=99.0)
+    assert cached.ttl == 10.0
+
+
+def test_ttl_seconds_defaults_to_60_when_neither_given():
+    """No TTL kwargs → documented 60s default."""
+    cached = CachedDataProvider(_make_mock_provider())
+    assert cached.ttl == DEFAULT_TTL_SECONDS == 60.0
+
+
+def test_negative_ttl_seconds_is_rejected():
+    """A negative ``ttl_seconds`` is rejected just like a negative ``ttl``."""
+    with pytest.raises(ValueError, match="ttl must be non-negative"):
+        CachedDataProvider(_make_mock_provider(), ttl_seconds=-5)
+
+
+# --------------------------------------------------------------------------- #
+# 7. period precedence over date_range
+# --------------------------------------------------------------------------- #
+
+
+async def test_period_is_forwarded_to_provider():
+    """``period`` is the canonical kwarg and is passed straight through."""
+    provider = _make_mock_provider()
+    provider.get_ohlcv.return_value = _ohlcv_df(close=1.0)
+
+    cached = CachedDataProvider(provider, ttl=60.0)
+    await cached.get_ohlcv("AAPL", period="3mo", interval="1d")
+
+    provider.get_ohlcv.assert_awaited_once_with("AAPL", period="3mo", interval="1d")
+
+
+async def test_period_takes_precedence_over_date_range():
+    """When both are given, ``period`` wins and ``date_range`` is ignored."""
+    provider = _make_mock_provider()
+    provider.get_ohlcv.return_value = _ohlcv_df(close=1.0)
+
+    cached = CachedDataProvider(provider, ttl=60.0)
+    await cached.get_ohlcv("AAPL", period="3mo", date_range="1y", interval="1d")
+
+    # period wins → provider sees 3mo, not 1y.
+    provider.get_ohlcv.assert_awaited_once_with("AAPL", period="3mo", interval="1d")
+    # And the cache key carries the resolved window (3mo), so a follow-up
+    # call with the *same* period is a hit even if date_range differs.
+    assert ("AAPL", "1d", "3mo") in cached._cache
+    assert provider.get_ohlcv.await_count == 1
+
+    await cached.get_ohlcv("AAPL", period="3mo", date_range="6mo")
+    assert provider.get_ohlcv.await_count == 1  # still a hit
+
+
+async def test_date_range_still_works_as_legacy_alias():
+    """``date_range`` alone is resolved into the period forwarded downstream."""
+    provider = _make_mock_provider()
+    provider.get_ohlcv.return_value = _ohlcv_df(close=1.0)
+
+    cached = CachedDataProvider(provider, ttl=60.0)
+    await cached.get_ohlcv("AAPL", date_range="1mo", interval="1h")
+
+    provider.get_ohlcv.assert_awaited_once_with("AAPL", period="1mo", interval="1h")
+    assert ("AAPL", "1h", "1mo") in cached._cache
+
+
+# --------------------------------------------------------------------------- #
+# 8. __getattr__ delegation for non-cached methods
+# --------------------------------------------------------------------------- #
+
+
+async def test_health_check_delegates_to_wrapped_provider():
+    """An arbitrary provider method (``health_check``) is reachable via the wrapper.
+
+    The cache only implements ``get_ohlcv`` / ``get_latest_price`` itself;
+    every other :class:`IDataProvider` member must fall through
+    :meth:`__getattr__` to the wrapped provider so the wrapper is a
+    transparent, drop-in decorator.
+    """
+    provider = _make_mock_provider()
+    provider.health_check = AsyncMock(name="health_check", return_value={"ok": True})
+
+    cached = CachedDataProvider(provider, ttl=60.0)
+
+    # The attribute resolves to the wrapped provider's bound method, not a
+    # copy — identity holds.
+    assert cached.health_check is provider.health_check
+
+    # And invoking it actually services the call through the provider.
+    result = await cached.health_check()
+    assert result == {"ok": True}
+    provider.health_check.assert_awaited_once()
+
+
+def test_getattr_raises_attribute_error_for_missing_provider_attr():
+    """An attribute the wrapped provider lacks surfaces as AttributeError.
+
+    ``__getattr__`` must not swallow or mask a genuine miss: it should
+    propagate the provider's ``AttributeError`` so duck-typing
+    (``hasattr``, ``getattr(..., default)``) behaves exactly as it would on
+    the bare provider.
+
+    A real (non-mock) provider is used here deliberately: :class:`MagicMock`
+    auto-creates any attribute on access (so it can never represent "the
+    provider genuinely lacks this member") and it refuses assignment of
+    ``__getattr__`` (magic methods are unsupported on mocks), so the only
+    faithful way to model a missing attribute is a plain object that simply
+    does not define it.
+    """
+
+    class _BareProvider:
+        """Minimal provider shape: only the async data-access methods exist."""
+
+        async def get_ohlcv(self, *args: object, **kwargs: object) -> pd.DataFrame:
+            return pd.DataFrame()
+
+        async def get_latest_price(self, symbol: str) -> float | None:
+            return None
+
+    cached = CachedDataProvider(_BareProvider(), ttl=60.0)
+    with pytest.raises(AttributeError):
+        _ = cached.totally_made_up_method
+
+
+def test_getattr_does_not_forward_dunder_or_private_names():
+    """Dunder / underscore-prefixed names raise rather than hit the provider.
+
+    :mod:`copy` probes for ``__deepcopy__`` / ``__copy__`` via
+    ``getattr(obj, name, default)``; these are not defined on
+    :class:`object`, so they reach ``__getattr__``. Forwarding them to a mock
+    provider would let the mock appear to implement those hooks (it
+    auto-creates every attribute); raising :class:`AttributeError` lets the
+    protocols fall back to their own defaults. We prove non-forwarding with a
+    recording provider whose ``__getattr__`` logs every access: probing any
+    underscore name must leave that log empty.
+    """
+
+    class _RecordingProvider:
+        """Minimal provider that records any attribute access it receives."""
+
+        accessed: list[str]
+
+        def __init__(self) -> None:
+            # ``object.__setattr__`` keeps this off the auto-delegation path.
+            object.__setattr__(self, "accessed", [])
+
+        async def get_ohlcv(self, *args: object, **kwargs: object) -> pd.DataFrame:
+            return pd.DataFrame()
+
+        async def get_latest_price(self, symbol: str) -> float | None:
+            return None
+
+        def __getattr__(self, name: str):
+            self.accessed.append(name)
+            raise AttributeError(name)
+
+    provider = _RecordingProvider()
+    cached = CachedDataProvider(provider, ttl=60.0)
+
+    # ``__deepcopy__`` / ``__copy__`` are absent from ``object`` (unlike
+    # ``__reduce_ex__`` / ``__getstate__``, which exist on ``object`` in 3.11+
+    # and therefore never reach ``__getattr__``), so they exercise the guard.
+    for name in ("__deepcopy__", "__copy__", "_private"):
+        assert not hasattr(cached, name)
+        with pytest.raises(AttributeError):
+            getattr(cached, name)
+
+    # The underscore guard raised before delegating, so the provider's
+    # ``__getattr__`` must never have been consulted.
+    assert provider.accessed == []
+
+    # Sanity: a *public* missing name still delegates to the provider (the
+    # recording ``__getattr__`` is reached and records the access).
+    with pytest.raises(AttributeError):
+        _ = cached.totally_made_up_method
+    assert provider.accessed == ["totally_made_up_method"]
+
+
+def test_getattr_does_not_recurse_when_provider_not_set():
+    """Before ``_provider`` is set, ``__getattr__`` must raise, not recurse.
+
+    Regression guard: a naive ``return getattr(self._provider, name)`` would
+    re-enter ``__getattr__`` for ``_provider`` itself (since it isn't in
+    ``__dict__`` yet) and blow the stack — e.g. during unpickling or
+    :func:`copy.copy` before ``__init__`` runs.
+    """
+    obj = CachedDataProvider.__new__(CachedDataProvider)
+    # ``_provider`` deliberately not set.
+    with pytest.raises(AttributeError):
+        _ = obj.health_check
