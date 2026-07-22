@@ -37,8 +37,12 @@ The validator is configured with an **allowlist** and a **denylist** of module
   * **Empty allowlist** — when the allowlist is empty the allowlist gate is a
     no-op and only the denylist applies (permissive-unless-denied).
   * **Relative imports** — a ``from .`` import (level 1) resolves within the
-    strategy package and is permitted; a ``from ..`` (or deeper) import
+    strategy package; its module root is checked against the policy just like
+    an absolute import (consistency).  A ``from ..`` (or deeper) import
     reaches *outside* the package and is flagged as a potential escape vector.
+  * **Wildcard from-imports** — ``from … import *`` (relative or absolute)
+    cannot have its bound names enumerated statically, so it is blocked
+    outright as :data:`CODE_FORBIDDEN_FROM_IMPORT` (defence-in-depth).
 
 The detected call sites are the canonical code-execution / dynamic-import
 escape vectors that bypass the static ``import`` statement the runtime hook
@@ -203,6 +207,8 @@ class ASTValidator(ast.NodeVisitor):
     Walks the AST of a strategy's Python source and records violations for:
 
       * ``import`` / ``from … import`` of a forbidden module,
+      * wildcard from-imports (``from … import *``), whose bound names cannot
+        be enumerated statically,
       * relative imports that escape the strategy package (``level > 1``),
       * calls to code-execution / dynamic-import builtins
         (``exec``/``eval``/``compile``/``__import__``/``importlib.import_module``).
@@ -289,15 +295,20 @@ class ASTValidator(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        """Flag ``from <forbidden> import ...`` and escaping relative imports.
+        """Flag ``from <forbidden> import ...``, wildcards and escaping imports.
 
         * A relative import whose level exceeds :data:`_MAX_RELATIVE_LEVEL`
           reaches *outside* the strategy package and is flagged as a potential
           escape vector regardless of the imported name.
-        * A level-1 relative import (``from .``) resolves within the strategy
-          package and is permitted.
-        * An absolute from-import (level 0) is checked against the module
-          policy.
+        * A wildcard from-import (``from … import *``) cannot have its bound
+          names enumerated statically, so it is blocked outright — for both
+          absolute and relative forms — as a :data:`CODE_FORBIDDEN_FROM_IMPORT`
+          violation.
+        * Otherwise the *module root* (``node.module``) is checked against the
+          policy, applied **consistently** to both absolute (level 0) and
+          within-package relative (level 1) from-imports.  Individual imported
+          *names* are deliberately not checked: they may be legitimate local
+          submodules or functions rather than modules.
         """
         # Relative import reaching beyond the current package.
         if node.level and node.level > _MAX_RELATIVE_LEVEL:
@@ -315,10 +326,29 @@ class ASTValidator(ast.NodeVisitor):
             )
             self.generic_visit(node)
             return
-        # Within-package relative import (level == 1): permitted, no module check.
-        if node.level and node.level == _MAX_RELATIVE_LEVEL:
+        # Wildcard from-import: bound names cannot be enumerated statically, so
+        # block it outright regardless of whether the module is absolute or
+        # relative.
+        if any(alias.name == "*" for alias in node.names):
+            self._violations.append(
+                Violation(
+                    line=node.lineno,
+                    col=node.col_offset,
+                    code=CODE_FORBIDDEN_FROM_IMPORT,
+                    message=(
+                        "wildcard from-import is forbidden "
+                        "(cannot statically enumerate bound names)"
+                    ),
+                    module=node.module,
+                )
+            )
             self.generic_visit(node)
             return
+        # Module-root-only policy check.  Applied consistently to both
+        # absolute (level 0) and within-package relative (level 1) from-imports.
+        # Only ``node.module`` is checked — never individual imported names,
+        # which may be legitimate local submodules or functions rather than
+        # modules.
         module = node.module or ""
         if module and self._is_forbidden_module(module):
             self._violations.append(
