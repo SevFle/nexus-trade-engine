@@ -8,9 +8,10 @@ Covers the four contract areas of :class:`ASTValidator`:
 3. **Forbidden-call detection** — ``exec`` / ``eval`` / ``compile`` /
    ``__import__`` (plus the ``importlib.import_module`` dynamic-import form)
    are flagged.
-4. **Relative-import handling** — a level-1 ``from .`` import is allowed, while
-   a level >= 2 ``from ..`` import (which escapes the strategy package) is
-   flagged.
+4. **Relative-import handling** — a level-1 ``from .`` import is checked
+   against the policy (it is no longer blanket-permitted: a package can
+   re-export a forbidden module), while a level >= 2 ``from ..`` import
+   (which escapes the strategy package) is flagged.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import pytest
 
 from engine.plugins.sandbox.ast_validator import (
     CODE_FORBIDDEN_CALL,
+    CODE_FORBIDDEN_FROM_IMPORT,
     CODE_FORBIDDEN_IMPORT,
     CODE_RELATIVE_IMPORT,
     ASTValidator,
@@ -101,11 +103,78 @@ def test_importlib_dynamic_import_flagged() -> None:
 
 
 def test_relative_import_level_1_allowed() -> None:
-    """A level-1 relative import (``from .``) stays within the package."""
+    """A level-1 relative import (``from .``) of *neutral* names is permitted.
+
+    With an empty allowlist (permissive) and empty denylist, neither the
+    module part nor the imported names match the policy, so the import is
+    valid.  The policy is only triggered by names that actually match the
+    denylist/allowlist (see the dedicated tests below).
+    """
     validator = ASTValidator(allowlist=frozenset(), denylist=frozenset())
 
     assert validator.validate("from . import helpers").is_valid
     assert validator.validate("from .helpers import thing").is_valid
+
+
+def test_relative_import_level_1_forbidden_name_denied() -> None:
+    """A level-1 ``from . import <denied>`` is flagged (no blanket-skip).
+
+    ``from . import os`` resolves ``os`` within the strategy package, but a
+    package can re-export or shadow a forbidden module, so the imported name
+    is checked against the denylist and rejected.
+    """
+    validator = ASTValidator(allowlist=frozenset(), denylist={"os"})
+
+    result = validator.validate("from . import os")
+    assert not result.is_valid
+    assert any(
+        v.code == CODE_FORBIDDEN_FROM_IMPORT and v.module == "os"
+        for v in result.errors()
+    )
+
+
+def test_relative_import_level_1_forbidden_module_part() -> None:
+    """A level-1 ``from .<denied> import ...`` flags the *module* part.
+
+    ``from .os import path`` pulls ``path`` from a within-package module named
+    ``os`` — which could shadow the stdlib module.  The resolved module name is
+    checked heuristically and rejected.
+    """
+    validator = ASTValidator(allowlist=frozenset(), denylist={"os"})
+
+    result = validator.validate("from .os import path")
+    assert not result.is_valid
+    assert any(
+        v.code == CODE_FORBIDDEN_FROM_IMPORT and v.module == "os"
+        for v in result.errors()
+    )
+
+
+def test_relative_import_level_1_allowlist_blocks_unlisted() -> None:
+    """A non-empty allowlist rejects an unlisted relative-imported name.
+
+    ``from . import os`` with allowlist ``{math}``: ``os`` is neither denied
+    nor allow-listed, so the allowlist gate (applied to relative names too)
+    blocks it.
+    """
+    validator = ASTValidator(allowlist={"math"}, denylist=frozenset())
+
+    result = validator.validate("from . import os")
+    assert not result.is_valid
+    assert any(v.module == "os" for v in result.errors())
+
+
+def test_relative_import_level_1_denylist_overrides_allowlist() -> None:
+    """Denylist precedence holds for level-1 relative imports.
+
+    ``from . import os`` with ``os`` on *both* lists is blocked: the denylist
+    always wins, even for relative-imported names.
+    """
+    validator = ASTValidator(allowlist={"os"}, denylist={"os"})
+
+    result = validator.validate("from . import os")
+    assert not result.is_valid
+    assert any(v.module == "os" for v in result.errors())
 
 
 def test_relative_import_level_above_1_flagged() -> None:

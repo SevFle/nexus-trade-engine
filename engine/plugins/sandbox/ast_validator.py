@@ -36,9 +36,13 @@ The validator is configured with an **allowlist** and a **denylist** of module
     catches unlisted modules at parse time, not only at import time).
   * **Empty allowlist** — when the allowlist is empty the allowlist gate is a
     no-op and only the denylist applies (permissive-unless-denied).
-  * **Relative imports** — a ``from .`` import (level 1) resolves within the
-    strategy package and is permitted; a ``from ..`` (or deeper) import
-    reaches *outside* the package and is flagged as a potential escape vector.
+  * **Relative imports** — a ``from ..`` (or deeper) import reaches
+    *outside* the strategy package and is flagged as a potential escape vector
+    (rejected by default).  A ``from .`` import (level 1) resolves within the
+    strategy package, but its module name and imported names are *still*
+    checked against the denylist/allowlist — a strategy package can re-export
+    or shadow a forbidden module, so ``from . import os`` is not blanket-
+    permitted.
 
 The detected call sites are the canonical code-execution / dynamic-import
 escape vectors that bypass the static ``import`` statement the runtime hook
@@ -291,15 +295,27 @@ class ASTValidator(ast.NodeVisitor):
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         """Flag ``from <forbidden> import ...`` and escaping relative imports.
 
+        Relative imports are **not** blanket-skipped.  A strategy package can
+        re-export or shadow a forbidden module (e.g. a package-level
+        ``__init__`` that performs ``import os``), so a ``from . import os``
+        would hand the strategy a reference to a blocked module even though no
+        static ``import os`` line was ever written.  The validator therefore
+        resolves the relative module name *heuristically* and checks both it
+        and every imported name against the denylist/allowlist.
+
         * A relative import whose level exceeds :data:`_MAX_RELATIVE_LEVEL`
           reaches *outside* the strategy package and is flagged as a potential
-          escape vector regardless of the imported name.
+          escape vector regardless of the imported name — parent-package
+          traversal is high-risk and rejected by default.
         * A level-1 relative import (``from .``) resolves within the strategy
-          package and is permitted.
+          package; the module name (when present) and each imported name are
+          checked against the policy.  An offending name produces a
+          :data:`CODE_FORBIDDEN_FROM_IMPORT` violation.
         * An absolute from-import (level 0) is checked against the module
           policy.
         """
-        # Relative import reaching beyond the current package.
+        # Relative import reaching beyond the current package: parent-package
+        # traversal is suspicious / high-risk, so it is rejected by default.
         if node.level and node.level > _MAX_RELATIVE_LEVEL:
             self._violations.append(
                 Violation(
@@ -315,10 +331,52 @@ class ASTValidator(ast.NodeVisitor):
             )
             self.generic_visit(node)
             return
-        # Within-package relative import (level == 1): permitted, no module check.
-        if node.level and node.level == _MAX_RELATIVE_LEVEL:
+
+        if node.level:
+            # Level-1 relative import (``from .``): resolves within the
+            # strategy package, but a package can re-export or shadow a
+            # forbidden module.  Resolve the module name heuristically and
+            # check it, plus every imported name, against the denylist /
+            # allowlist so both ``from . import os`` and ``from .os import
+            # path`` are caught instead of blanket-permitted.
+            module = node.module or ""
+            if module and self._is_forbidden_module(module):
+                self._violations.append(
+                    Violation(
+                        line=node.lineno,
+                        col=node.col_offset,
+                        code=CODE_FORBIDDEN_FROM_IMPORT,
+                        message=(
+                            f"import from forbidden module {module!r} "
+                            "(relative)"
+                        ),
+                        module=module,
+                    )
+                )
+            for alias in node.names:
+                name = alias.name
+                # ``from . import os`` → ``name == "os"``;
+                # ``from .x import y`` → ``name == "y"``.  ``*`` is a wildcard
+                # and not a real identifier, so it is never a module root.
+                if not name or name == "*":
+                    continue
+                if self._is_forbidden_module(name):
+                    self._violations.append(
+                        Violation(
+                            line=node.lineno,
+                            col=node.col_offset,
+                            code=CODE_FORBIDDEN_FROM_IMPORT,
+                            message=(
+                                f"import of forbidden name {name!r} "
+                                "(relative)"
+                            ),
+                            module=name,
+                        )
+                    )
             self.generic_visit(node)
             return
+
+        # Absolute from-import (level 0).
         module = node.module or ""
         if module and self._is_forbidden_module(module):
             self._violations.append(
