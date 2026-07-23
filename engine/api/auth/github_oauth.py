@@ -94,12 +94,11 @@ class GitHubAuthProvider(IAuthProvider):
         """Build the GitHub authorization URL and return the embedded CSRF state.
 
         This is the canonical, self-documenting accessor for the ``(url,
-        state)`` pair and the typed resolution of the ``tuple[str, str]``
-        return type that :meth:`get_authorize_url` also exposes (as a
-        backward-compatible alias). Formalizing it as a named method lets the
-        auth route recover -- in a type-safe way -- the ``state`` value the
-        IdP will echo back on the callback, so it can persist and later
-        validate that exact value.
+        state)`` pair. Formalizing it as a named method lets the auth route
+        recover -- in a type-safe way -- the ``state`` value the IdP will echo
+        back on the callback, so it can persist and later validate that exact
+        value. (The plain :meth:`get_authorize_url` accessor returns only the
+        URL string, honouring the shared ``-> str`` provider contract.)
 
         Returning the state alongside the URL matters most when the caller did
         not supply one: without it the issuer would have no way to know which
@@ -115,22 +114,64 @@ class GitHubAuthProvider(IAuthProvider):
         case -- the auth route issues one and validates it on the callback)
         should supply their own ``state`` and persist it server-side (e.g. in a
         signed cookie).
+
+        The underlying provider's authorize-URL return is normalized through
+        :meth:`_normalize_authorize_url`, which accepts only a ``str`` or a
+        length-2 ``(url, state)`` tuple -- defence in depth against a
+        malformed provider implementation silently emitting a bad URL.
         """
         if not state:
             state = self._get_oauth().generate_state()
-        url = self._get_oauth().get_authorize_url(state=state, scope=_DEFAULT_SCOPE)
+        raw = self._get_oauth().get_authorize_url(state=state, scope=_DEFAULT_SCOPE)
+        url = self._normalize_authorize_url(raw)
         return url, state
 
-    def get_authorize_url(self, state: str = "") -> tuple[str, str]:
-        """Backward-compatible alias for :meth:`get_authorize_url_with_state`.
+    def get_authorize_url(self, state: str = "") -> str:
+        """Return the GitHub authorization endpoint URL **only**.
 
-        Returns the same ``(url, state)`` tuple so existing callers and tests
-        that destructure ``url, state = provider.get_authorize_url(...)`` keep
-        working. New callers should prefer the explicitly named
-        :meth:`get_authorize_url_with_state` so the tuple return type is
-        obvious at the call site.
+        A cryptographically strong CSRF ``state`` is generated internally
+        (and embedded in the URL) when none is supplied, so an authorization
+        URL is *never* produced without CSRF protection. Unlike
+        :meth:`get_authorize_url_with_state` this returns only the URL string,
+        honouring the ``get_authorize_url -> str`` contract shared by every
+        other registry provider (Google, OIDC) -- the previous tuple return
+        broke that interface contract. Callers that need to recover the
+        embedded ``state`` (to persist and validate it on the OAuth callback)
+        should call :meth:`get_authorize_url_with_state` instead.
         """
-        return self.get_authorize_url_with_state(state)
+        url, _state = self.get_authorize_url_with_state(state)
+        return url
+
+    @staticmethod
+    def _normalize_authorize_url(raw: Any) -> str:
+        """Validate and normalize the underlying provider's authorize-URL return.
+
+        :meth:`GitHubOAuthProvider.get_authorize_url` is typed to return a
+        ``str``, but -- defence in depth, never trusting the shape of upstream
+        data -- a misbehaving or monkey-patched provider could return a legacy
+        ``(url, state)`` tuple or an unexpected type. This guard accepts only a
+        ``str`` or a length-2 ``(url, str)`` tuple (extracting the URL in the
+        latter case) and raises :class:`GitHubOAuthError` for anything else, so
+        a malformed or non-string URL can never silently propagate to the
+        route and out to a user's browser.
+        """
+        authorize_tuple_length = 2
+        if isinstance(raw, tuple):
+            if len(raw) != authorize_tuple_length:
+                raise GitHubOAuthError(
+                    f"authorize URL tuple must be (url, state), got length {len(raw)}"
+                )
+            url = raw[0]
+        elif isinstance(raw, str):
+            url = raw
+        else:
+            raise GitHubOAuthError(
+                "authorize URL must be a str or (url, state) tuple, "
+                f"got {type(raw).__name__}"
+            )
+        if not isinstance(url, str):
+            raise GitHubOAuthError("authorize URL must be a string")
+        return url
 
     async def _resolve_profile(
         self, oauth: GitHubOAuthProvider, code: str

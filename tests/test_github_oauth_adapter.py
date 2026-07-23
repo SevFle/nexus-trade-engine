@@ -124,14 +124,15 @@ class TestAdapterIdentity:
 
     def test_get_authorize_url_delegates_to_provider(self):
         oauth = _make_oauth_provider()
-        url, state = GitHubAuthProvider(oauth_provider=oauth).get_authorize_url(state="abc")
+        url = GitHubAuthProvider(oauth_provider=oauth).get_authorize_url(state="abc")
         oauth.get_authorize_url.assert_called_once()
         kwargs = oauth.get_authorize_url.call_args.kwargs
         assert kwargs["state"] == "abc"
+        # ``get_authorize_url`` now returns the URL string only (honouring the
+        # ``-> str`` interface contract shared with the Google/OIDC providers);
+        # callers needing the state back use ``get_authorize_url_with_state``.
+        assert isinstance(url, str)
         assert url.startswith("https://github.com/login/oauth/authorize")
-        # The state is returned alongside the URL so the caller can persist
-        # and validate it on the callback.
-        assert state == "abc"
 
     def test_get_authorize_url_with_state_round_trips_state(self):
         # The canonical, typed ``(url, state)`` accessor (spec point 3) returns
@@ -152,7 +153,8 @@ class TestAdapterIdentity:
         # ``parse_qs`` so they compare *decoded* values rather than the raw
         # percent-encoded query string.
         adapter = GitHubAuthProvider()
-        url, state = adapter.get_authorize_url()
+        url = adapter.get_authorize_url()
+        assert isinstance(url, str)
         parsed = urlparse(url)
         assert parsed.scheme == "https"
         assert parsed.netloc == "github.com"
@@ -162,13 +164,11 @@ class TestAdapterIdentity:
         assert params["redirect_uri"] == ["https://app.example.com/callback"]
         assert "read:user" in params["scope"][0]
         assert "user:email" in params["scope"][0]
-        # state is always present and non-empty (auto-generated).
+        # state is always present and non-empty (auto-generated). The URL is
+        # returned as a plain string; callers recover the state via
+        # ``get_authorize_url_with_state``.
         assert params["state"]
         assert params["state"][0]
-        # The auto-generated state is returned alongside the URL so the
-        # caller can persist and validate it on the callback -- otherwise the
-        # CSRF protection would be unenforceable.
-        assert state == params["state"][0]
 
     def test_get_oauth_lazily_built_from_settings(self, mock_settings):
         adapter = GitHubAuthProvider()
