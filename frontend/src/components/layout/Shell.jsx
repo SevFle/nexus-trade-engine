@@ -11,6 +11,7 @@ const navItems = [
   { to: "/portfolio", label: "PORTFOLIO", icon: Wallet },
   { to: "/market-watch", label: "MARKET WATCH", icon: CandlestickChart },
   { to: "/strategies", label: "STRATEGIES", icon: Zap },
+  { to: "/strategies/runner", label: "STRATEGY RUNNER", icon: Rewind },
   { to: "/backtest", label: "BACKTEST", icon: Rewind },
   { to: "/marketplace", label: "MARKETPLACE", icon: Store },
   { to: "/positions", label: "POSITIONS", icon: BarChart3 },
@@ -48,7 +49,14 @@ function Sidebar({ collapsed, onToggle }) {
 
       <div className="flex-1 py-sm">
         {navItems.map(({ to, label, icon: Icon }) => {
-          const isActive = location.pathname === to || (to !== "/" && location.pathname.startsWith(to));
+          // Exact match for the strategies listing so that visiting
+          // /strategies/runner doesn't also highlight STRATEGIES. Every
+          // other item keeps the prefix-matching behaviour (so /costs/x
+          // still highlights COST ANALYSIS).
+          const exact = to === "/strategies";
+          const isActive = exact
+            ? location.pathname === to
+            : location.pathname === to || (to !== "/" && location.pathname.startsWith(to));
           return (
             <NavLink
               key={to}
