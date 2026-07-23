@@ -22,7 +22,7 @@ import PortfolioOverview from "./pages/PortfolioOverview";
 import StrategiesPage from "./pages/StrategiesPage";
 import MarketWatch from "./screens/MarketWatch";
 import Strategies from "./screens/Strategies";
-import Backtest from "./screens/Backtest";
+import BacktestPage from "./pages/BacktestPage";
 import Marketplace from "./screens/Marketplace";
 import Positions from "./screens/Positions";
 import CostAnalysis from "./screens/CostAnalysis";
@@ -93,7 +93,7 @@ export default function App() {
                     legacy interactive runner is preserved at /strategies/runner. */}
                 <Route path="/strategies" element={<StrategiesPage />} />
                 <Route path="/strategies/runner" element={<Strategies />} />
-                <Route path="/backtest" element={<Backtest />} />
+                <Route path="/backtest" element={<BacktestPage />} />
                 <Route path="/marketplace" element={<Marketplace />} />
                 <Route path="/positions" element={<Positions />} />
                 <Route path="/costs" element={<CostAnalysis />} />
