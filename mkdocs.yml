@@ -225,4 +225,5 @@ nav:
       - Legal data processors: legal/processors.md
   - Status:
       - Known limitations & tech debt: known-limitations.md
+      - Auth/sandbox & real-time drift: known-limitations/auth-and-sandbox-drift.md
       - Last audit: LAST_AUDIT.md

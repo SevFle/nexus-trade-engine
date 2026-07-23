@@ -145,7 +145,7 @@ username/password flow). Consequence:
   second, more robust `ldap3`-backed LDAP provider also landed in
   [`engine/auth/providers/ldap.py`](../engine/auth/providers/ldap.py)
   (PR #1368) and is *also* not wired. See
-  [known-limitations.md](known-limitations.md#ldap-has-no-route).
+  [known-limitations/auth-and-sandbox-drift.md](known-limitations/auth-and-sandbox-drift.md#ldap-has-no-route).
 
 ---
 
