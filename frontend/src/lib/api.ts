@@ -184,13 +184,21 @@ export interface PortfolioActionResponse {
 // Response interfaces — backtests
 // ---------------------------------------------------------------------------
 
-/** Body of `POST /api/v1/backtest` and `POST /api/v1/backtest/run`. */
+/**
+ * Body of `POST /api/v1/backtest` and `POST /api/v1/backtest/run`.
+ *
+ * `initial_capital` is transmitted as a string so the engine can parse it
+ * with its high-precision decimal type (e.g. Python `Decimal`) without any
+ * intermediate IEEE-754 rounding — important for large/notional capitals
+ * whose float representation is lossy. The frontend validates the string
+ * with a strict decimal regex before submission.
+ */
 export interface BacktestSubmitRequest {
   strategy_name: string;
   symbol: string;
   start_date: string;
   end_date: string;
-  initial_capital?: number;
+  initial_capital?: string;
   config?: Record<string, unknown>;
 }
 
