@@ -107,32 +107,40 @@ The full pinned set is in [`pyproject.toml`](../../pyproject.toml).
 
 A typical authenticated `POST /api/v1/backtest/run` does this:
 
-1. Reverse proxy forwards the request to uvicorn (`engine.app:create_app`).
-2. **CORS / security middleware** rejects disallowed origins.
-3. **Lineage middleware** ([`engine/observability/lineage.py`](../../engine/observability/lineage.py))
-   stamps a request id and propagates the OpenTelemetry context.
-4. **Rate limiter** ([`engine/api/rate_limit.py`](../../engine/api/rate_limit.py))
-   short-circuits abusive clients.
-5. **Auth dependency** ([`engine/api/auth/`](../../engine/api/auth/))
+1. Reverse proxy forwards the request to uvicorn
+   (`engine.app:create_app`).
+2. The **middleware stack** (see [Middleware stack](#middleware-stack))
+   runs in fixed order, outermost first: `HttpMetricsMiddleware` times
+   the whole request, `CorrelationIdMiddleware`
+   ([`engine/observability/middleware.py`](../../engine/observability/middleware.py)
+   — the raw-ASGI correlation-id middleware; *not* `lineage.py`, which is
+   the data-lineage DAG) stamps/resumes the `X-Correlation-ID`,
+   `BodySizeLimitMiddleware` rejects bodies over 1 MiB,
+   `RateLimitMiddleware`
+   ([`engine/api/rate_limit.py`](../../engine/api/rate_limit.py))
+   short-circuits abusive clients, `CORSMiddleware` enforces the origin
+   allow-list, and `SecurityHeadersMiddleware` stamps HSTS/CSP/etc.
+3. **Auth dependency** ([`engine/api/auth/`](../../engine/api/auth/))
    resolves the bearer token to a `User`. If the user has MFA enabled
    the request must carry a valid challenge token from `/login`.
-6. **Route handler** in `engine/api/routes/backtest.py` validates the
+4. **Route handler** in `engine/api/routes/backtest.py` validates the
    payload and runs the computation via FastAPI `BackgroundTasks`
    (**not** TaskIQ — see [known-limitations.md](../known-limitations.md)).
    Results land in an in-process dict keyed by `backtest_id` with a
    1-hour TTL; the `backtest_results` table exists but the REST route
    does not yet write to it.
-7. The handler returns `202 Accepted` with the new id; the background
+5. The handler returns `202 Accepted` with the new id; the background
    job runs the backtest through
    [`engine/core/backtest_runner.py`](../../engine/core/backtest_runner.py)
    and writes the composite score / breakdown back into the result.
-8. Listeners on `engine/events/bus.py` get notified. The
+6. Listeners on `engine/events/bus.py` get notified. The
    [`EventBusBridge`](../../engine/api/ws/event_bridge.py) fans events
    out to WebSocket rooms, and the webhook dispatcher fans out to
    every active webhook config that subscribed to the relevant event.
 
-Synchronous reads (`GET /api/v1/portfolio`, etc.) follow steps 1–5
-then return the result directly without enqueueing.
+Synchronous reads (`GET /api/v1/portfolio`, etc.) follow steps 1–3
+(proxy → middleware → auth) then return the result directly without
+enqueueing.
 
 ## Event flow
 
@@ -155,6 +163,59 @@ events to its local WebSocket rooms, so a portfolio update emitted on
 replica A reaches WS clients connected to replica B. If Redis is
 unavailable the bus falls back to in-process-only delivery (logged at
 warning level).
+
+## Middleware stack
+
+`create_app()` ([`engine/app.py`](../../engine/app.py)) registers
+middleware with `app.add_middleware(...)`. Starlette wraps such that the
+**last** middleware added is the **outermost** (it runs first on the
+request, last on the response). Added order and resulting execution
+order:
+
+| Added (#) → runs | Middleware | Role |
+|---|---|---|
+| 1 → innermost | `SecurityHeadersMiddleware` | HSTS, CSP, `X-Content-Type-Options`, frame-options, referrer-policy. Tunable via `SecurityHeadersConfig`. |
+| 2 | `CORSMiddleware` | Origin allow-list from `NEXUS_CORS_ORIGINS`; `allow_credentials=True`. |
+| 3 | `RateLimitMiddleware` | Token bucket per IP + per-role tiers. Valkey-backed when `NEXUS_RATE_LIMIT_VALKEY_ENABLED`, else in-process. Per-route override caps `/api/v1/client/errors` at 30/min. |
+| 4 | `BodySizeLimitMiddleware` | Hard 1 MiB request cap (Starlette ships no default). |
+| 5 | `CorrelationIdMiddleware` | Raw-ASGI: stamps/resumes `X-Correlation-ID` into the structlog context. A class-identity assertion in `create_app()` guards against re-pointing this at the `BaseHTTPMiddleware` variant, which leaks/unbinds correlation ids across streaming responses and `BackgroundTasks`. |
+| 6 → outermost | `HttpMetricsMiddleware` | Prometheus latency / counters / in-flight gauges. Added last so it times the entire stack, including `/metrics` itself. |
+
+> `engine/observability/lineage.py` is **not** a middleware. It is the
+> data-lineage DAG (`provider → bar → signal → backtest → report`). The
+> request-id/correlation surface lives in
+> [`engine/observability/middleware.py`](../../engine/observability/middleware.py).
+
+## Process lifecycle (lifespan)
+
+`create_app()` installs an async `lifespan`
+([`engine/app.py`](../../engine/app.py)). Startup runs, in order:
+
+1. **`_init_observability`** — structlog setup; installs the OTel
+   `TracerProvider` (a graceful no-op without a collector) and
+   instruments FastAPI + the async SQLAlchemy engine; initialises
+   Sentry; flips the global metrics singleton to `PrometheusBackend`.
+2. **`_check_secret_key`** — fails fast if `NEXUS_SECRET_KEY` is unset
+   outside the test environment (tests are exempt so the suite runs
+   without a vault).
+3. **`_init_app_state`** — opens the Valkey client; builds the
+   `AuthProviderRegistry` from `NEXUS_ENABLED_PROVIDERS`
+   (`local`/`google`/`github`/`oidc`/`ldap`); bootstraps data providers
+   from the YAML registry (falls back to a default Yahoo adapter in
+   dev); seeds the reference search index; syncs legal docs from
+   `legal/`.
+4. **`_init_websockets_and_events`** — builds the `ConnectionManager`,
+   the `EventBus` (Valkey pub/sub), and **two** bridges: the room-based
+   `EventBusBridge`, plus a user-scoped order/signal bridge that stamps
+   `user_id`/`tenant_id` and routes to `user:<id>` rooms so one user's
+   events never land on another user's socket.
+5. **`_init_taskiq_broker`** — opens the TaskIQ broker pool so the API
+   can enqueue tasks. A broker outage degrades task submission without
+   aborting startup.
+
+Shutdown (`_shutdown`) runs each teardown in its own `try/except`
+(ws bridges → ws manager → event bus → TaskIQ broker → Valkey → DB
+engine → Sentry flush) so a failure in one step cannot block the rest.
 
 ## Configuration
 
