@@ -59,7 +59,9 @@ describe("PortfolioOverview", () => {
     getPortfolioSummary.mockReturnValue(new Promise(() => {}));
     renderOverview();
     expect(screen.getByTestId("portfolio-summary-loading")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Retry" })).not.toBeTruthy();
+    // No retry control while still loading — queryByRole returns null
+    // instead of throwing when the element is absent.
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeTruthy();
   });
 
   it("renders the three summary cards once data arrives", async () => {
@@ -79,14 +81,16 @@ describe("PortfolioOverview", () => {
       expect(screen.getByTestId("portfolio-summary-cards")).toBeInTheDocument();
     });
 
-    // Total portfolio value card.
-    expect(screen.getByTestId("portfolio-card-total-portfolio-value")).toBeInTheDocument();
+    // Portfolio value card.
+    expect(screen.getByTestId("portfolio-card-portfolio-value")).toBeInTheDocument();
     expect(screen.getByText("$150,000.00")).toBeInTheDocument();
     expect(screen.getByText(/12 open positions/)).toBeInTheDocument();
 
-    // P&L card — positive tone, +$5,000.00 and +3.45%.
+    // P&L card — positive tone. The shared currency formatter has no
+    // signDisplay, so positive currency renders without a leading "+" (the
+    // sign is carried by the +3.45% percentage sub-value instead).
     expect(screen.getByTestId("portfolio-card-p-l")).toBeInTheDocument();
-    expect(screen.getByText("+$5,000.00")).toBeInTheDocument();
+    expect(screen.getByText("$5,000.00")).toBeInTheDocument();
     expect(screen.getByText("+3.45%")).toBeInTheDocument();
 
     // Active strategies card.
@@ -137,6 +141,41 @@ describe("PortfolioOverview", () => {
     expect(container.querySelector("svg.lucide-trending-up")).not.toBeNull();
     expect(container.querySelector("svg.lucide-trending-down")).toBeNull();
   });
+
+  it.each([
+    ["null", null],
+    ["undefined", undefined],
+  ])(
+    "renders 0 for the active strategies card when active_strategies is %s",
+    async (_label, activeStrategies) => {
+      // The summary contract types active_strategies as a number, but a real
+      // backend may omit/null it. The `?? 0` guard must coerce that to "0"
+      // instead of rendering "null"/"undefined" or crashing.
+      getPortfolioSummary.mockResolvedValue({
+        total_value: 100000,
+        total_pnl: 0,
+        total_pnl_pct: 0,
+        active_strategies: activeStrategies as unknown as number,
+        open_positions: 0,
+        currency: "USD",
+        as_of: "2099-01-01T00:00:00Z",
+      });
+
+      renderOverview();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("portfolio-summary-cards")).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByTestId("portfolio-card-active-strategies"),
+      ).toBeInTheDocument();
+      expect(screen.getByText("0")).toBeInTheDocument();
+      // Guard against the literal stringified nullish value leaking through.
+      expect(screen.queryByText("null")).not.toBeTruthy();
+      expect(screen.queryByText("undefined")).not.toBeTruthy();
+    },
+  );
 
   it("renders the error state with a retry control on failure", async () => {
     getPortfolioSummary.mockRejectedValue(new Error("boom: 503"));

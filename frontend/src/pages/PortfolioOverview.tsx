@@ -2,7 +2,7 @@
  * PortfolioOverview — dashboard page showing the aggregate portfolio summary.
  *
  * Fetches `GET /api/v1/portfolio/summary` via the typed {@link apiClient} and
- * TanStack Query, then renders three summary cards: total portfolio value,
+ * TanStack Query, then renders three summary cards: portfolio value,
  * P&L, and active strategy count. Loading and error states are first-class —
  * there are no charts yet, just the data cards.
  *
@@ -52,6 +52,10 @@ export default function PortfolioOverview() {
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ["portfolio", "summary"],
     queryFn: () => apiClient.getPortfolioSummary(),
+    // The portfolio summary is a live snapshot — poll every 15s and re-fetch
+    // when the tab regains focus so stale figures don't linger.
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
 
   return (
@@ -110,7 +114,7 @@ function SummaryCards({ data, refreshing }: SummaryCardsProps) {
       className="grid grid-cols-1 gap-lg md:grid-cols-3"
     >
       <SummaryCard
-        label="Total Portfolio Value"
+        label="Portfolio Value"
         value={formatCurrency(data.total_value)}
         icon={<Wallet size={16} strokeWidth={1.5} />}
         caption={`${data.open_positions} open position${
@@ -126,7 +130,7 @@ function SummaryCards({ data, refreshing }: SummaryCardsProps) {
       />
       <SummaryCard
         label="Active Strategies"
-        value={String(data.active_strategies)}
+        value={String(data.active_strategies ?? 0)}
         icon={<Zap size={16} strokeWidth={1.5} />}
         caption={data.currency}
       />
