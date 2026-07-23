@@ -634,6 +634,45 @@ the two-table drift this cycle surfaced.
 
 ---
 
+<a id="dead-root-alembic-dir"></a>
+## P2 — Orphan `alembic/` directory at the repo root is dead config
+
+**Where**: [`alembic/`](../alembic/) (repo root) — `env.py` and
+`versions/001_tax_lots.py` — sits next to the **active**
+[`engine/db/migrations/`](../engine/db/migrations/) tree.
+
+[`alembic.ini`](../alembic.ini) sets
+`script_location = engine/db/migrations`, so Alembic resolves revisions
+*only* from `engine/db/migrations/versions/`. The root copy is never
+read. Worse, `alembic/versions/001_tax_lots.py` is a **second,
+independent root** (`revision = "001_tax_lots"`, `down_revision = None`,
+dated 2026-04-16) that shares no history with the live linear chain
+`001_initial_schema → … → 013_user_processing_restricted` (verified
+via each revision's `down_revision`). It is unreachable dead config.
+
+**Impact**: a contributor running `alembic revision` or grepping "where
+do migrations live" sees two `versions/` dirs and two `env.py` files.
+The classic misstep is editing the root copy and expecting
+`alembic upgrade head` to apply it — it will not. The authoritative
+schema state lives entirely under `engine/db/migrations/versions/`
+(see [`development.md`](development.md) and
+[`architecture/database.md`](architecture/database.md)).
+
+**Workaround today**: ignore `alembic/` at the repo root. Add every new
+revision to `engine/db/migrations/versions/` as the next number in the
+active chain (`014_…` today).
+
+**Fix path**: `git rm -r alembic/` once a grep confirms nothing
+references the directory. Only [`engine/db/session.py`](../engine/db/session.py)
+loads Alembic config, and it does so by *filename*
+(`Config("alembic.ini")`) — that file stays at the repo root and its
+`script_location` already points at `engine/db/migrations`, so removing
+the orphan `alembic/` directory changes nothing at runtime. The
+proposed [Alembic-check CI job](#no-alembic-check) would also catch any
+future revision accidentally added to the dead tree.
+
+---
+
 ## P2 — Test coverage gate at 70% (`make test`), 80% in `pyproject.toml`
 
 `Makefile` runs `pytest --cov-fail-under=70`; `pyproject.toml`
@@ -680,14 +719,15 @@ SLO because live isn't shipped.
 
 ## P2 — Some decisions still lack an ADR
 
-[`docs/adr/`](adr/README.md) now captures twelve decisions: scaffold
+[`docs/adr/`](adr/README.md) now captures thirteen decisions: scaffold
 (0001), auth/RBAC (0002), mobile/PWA (0003), TaskIQ (0004), Valkey
 (0005), bcrypt+Fernet (0006), the strategy sandbox allowlist import
 model (0007), the pluggable `MetricsBackend` Protocol (0008), the
 cross-replica `EventBus` WebSocket bridge (0009), the static AST
 validation + TOCTOU-safe strategy loader (0010), the runtime
-introspection / dunder-attribute guard (0011), and the Layer-3 sandbox
-resource limits — SIGALRM + tracemalloc + single-flight lock (0012).
+introspection / dunder-attribute guard (0011), the Layer-3 sandbox
+resource limits — SIGALRM + tracemalloc + single-flight lock (0012),
+and the legal compliance gate for strategy scoring surfaces (0013).
 A handful of smaller decisions are still recorded only as PR
 descriptions or commit messages — e.g. the in-process backtest result
 store (this is tech debt to be fixed, P0 above, rather than an
