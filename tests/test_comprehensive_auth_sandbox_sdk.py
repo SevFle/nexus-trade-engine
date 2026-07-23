@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -82,22 +83,42 @@ class TestGoogleAuthorizeUrl:
 
 
 class TestGitHubAuthorizeUrl:
+    def _query(self, url: str) -> dict[str, list[str]]:
+        """Parse the URL's query string with ``parse_qs`` so assertions compare
+        *decoded* values rather than the raw percent-encoded form (the
+        redirect_uri contains ``:`` and ``/`` which ``urlencode`` escapes)."""
+        return parse_qs(urlparse(url).query)
+
     def test_get_authorize_url_without_state(self, github_provider, github_settings):
+        # No state supplied -> the adapter auto-generates a CSRF token so the
+        # authorization URL is *never* produced without CSRF protection.
         url = github_provider.get_authorize_url()
-        assert "github.com/login/oauth/authorize" in url
-        assert "client_id=test-github-id" in url
-        assert "redirect_uri=https://app.example.com/github/callback" in url
-        assert "scope=user:email" in url
-        assert "state=" not in url
+        parsed = urlparse(url)
+        assert parsed.scheme == "https"
+        assert parsed.netloc == "github.com"
+        assert parsed.path == "/login/oauth/authorize"
+        params = self._query(url)
+        assert params["client_id"] == ["test-github-id"]
+        # redirect_uri is percent-encoded in the URL; parse_qs decodes it.
+        assert params["redirect_uri"] == ["https://app.example.com/github/callback"]
+        assert "user:email" in params["scope"][0]
+        # state is always present and non-empty (auto-generated).
+        assert params["state"]
+        assert params["state"][0]
 
     def test_get_authorize_url_with_state(self, github_provider, github_settings):
         url = github_provider.get_authorize_url(state="csrf-token-123")
-        assert "state=csrf-token-123" in url
         assert "github.com/login/oauth/authorize" in url
+        assert self._query(url)["state"] == ["csrf-token-123"]
 
-    def test_get_authorize_url_with_empty_state(self, github_provider, github_settings):
+    def test_get_authorize_url_with_empty_state_auto_generates(
+        self, github_provider, github_settings
+    ):
+        # An empty state must not yield a stateless URL; it is auto-generated.
         url = github_provider.get_authorize_url(state="")
-        assert "state=" not in url
+        params = self._query(url)
+        assert params["state"]
+        assert params["state"][0]
 
     def test_name_property(self, github_provider):
         assert github_provider.name == "github"
