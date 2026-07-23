@@ -91,8 +91,11 @@ class TestGitHubAuthorizeUrl:
 
     def test_get_authorize_url_without_state(self, github_provider, github_settings):
         # No state supplied -> the adapter auto-generates a CSRF token so the
-        # authorization URL is *never* produced without CSRF protection.
+        # authorization URL is *never* produced without CSRF protection. The
+        # URL is returned as a plain string (the ``-> str`` interface
+        # contract); the generated token is embedded in the URL itself.
         url = github_provider.get_authorize_url()
+        assert isinstance(url, str)
         parsed = urlparse(url)
         assert parsed.scheme == "https"
         assert parsed.netloc == "github.com"
@@ -108,14 +111,17 @@ class TestGitHubAuthorizeUrl:
 
     def test_get_authorize_url_with_state(self, github_provider, github_settings):
         url = github_provider.get_authorize_url(state="csrf-token-123")
+        assert isinstance(url, str)
         assert "github.com/login/oauth/authorize" in url
         assert self._query(url)["state"] == ["csrf-token-123"]
 
     def test_get_authorize_url_with_empty_state_auto_generates(
         self, github_provider, github_settings
     ):
-        # An empty state must not yield a stateless URL; it is auto-generated.
+        # An empty state must not yield a stateless URL; it is auto-generated
+        # and embedded in the returned URL string.
         url = github_provider.get_authorize_url(state="")
+        assert isinstance(url, str)
         params = self._query(url)
         assert params["state"]
         assert params["state"][0]

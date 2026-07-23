@@ -128,7 +128,23 @@ class TestAdapterIdentity:
         oauth.get_authorize_url.assert_called_once()
         kwargs = oauth.get_authorize_url.call_args.kwargs
         assert kwargs["state"] == "abc"
+        # ``get_authorize_url`` now returns the URL string only (honouring the
+        # ``-> str`` interface contract shared with the Google/OIDC providers);
+        # callers needing the state back use ``get_authorize_url_with_state``.
+        assert isinstance(url, str)
         assert url.startswith("https://github.com/login/oauth/authorize")
+
+    def test_get_authorize_url_with_state_round_trips_state(self):
+        # The canonical, typed ``(url, state)`` accessor (spec point 3) returns
+        # the state alongside the URL so the route can persist/validate it.
+        oauth = _make_oauth_provider()
+        url, state = GitHubAuthProvider(oauth_provider=oauth).get_authorize_url_with_state(
+            state="xyz"
+        )
+        oauth.get_authorize_url.assert_called_once()
+        assert oauth.get_authorize_url.call_args.kwargs["state"] == "xyz"
+        assert url.startswith("https://github.com/login/oauth/authorize")
+        assert state == "xyz"
 
     def test_get_authorize_url_without_state_auto_generates(self, mock_settings):
         # No state supplied and no injected provider -> the adapter lazily
@@ -138,6 +154,7 @@ class TestAdapterIdentity:
         # percent-encoded query string.
         adapter = GitHubAuthProvider()
         url = adapter.get_authorize_url()
+        assert isinstance(url, str)
         parsed = urlparse(url)
         assert parsed.scheme == "https"
         assert parsed.netloc == "github.com"
@@ -147,7 +164,9 @@ class TestAdapterIdentity:
         assert params["redirect_uri"] == ["https://app.example.com/callback"]
         assert "read:user" in params["scope"][0]
         assert "user:email" in params["scope"][0]
-        # state is always present and non-empty (auto-generated).
+        # state is always present and non-empty (auto-generated). The URL is
+        # returned as a plain string; callers recover the state via
+        # ``get_authorize_url_with_state``.
         assert params["state"]
         assert params["state"][0]
 
@@ -422,6 +441,28 @@ class TestAuthenticateNullEmailGuard:
         assert result.success is False
         assert "email" in result.error.lower()
         # No user row is ever persisted.
+        db.add.assert_not_called()
+        db.flush.assert_not_awaited()
+
+    async def test_none_email_on_new_user_is_rejected(self):
+        # ``info.email`` is typed ``str`` but defence in depth: an explicit
+        # ``None`` must be rejected *before* the uniqueness query, otherwise
+        # ``User.email == None`` degrades to ``User.email IS NULL`` and would
+        # match every NULL row.
+        profile = GitHubUserInfo(
+            id="12345", login="octocat", email=None, name="The Octocat"  # type: ignore[arg-type]
+        )
+        adapter = GitHubAuthProvider(
+            oauth_provider=_make_oauth_provider(validate=profile)
+        )
+        db = _mock_db([None, None])  # no provider match, no email conflict
+
+        result = await adapter.authenticate(code="abc", db=db)
+
+        assert result.success is False
+        assert "email" in result.error.lower()
+        # The uniqueness query is never executed, so only the first lookup
+        # (provider/external_id) ran.
         db.add.assert_not_called()
         db.flush.assert_not_awaited()
 
