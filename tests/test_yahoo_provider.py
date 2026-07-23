@@ -215,3 +215,63 @@ def test_normalize_symbol_rejects_path_injection() -> None:
         normalize_symbol("EV/IL")
     with pytest.raises(DataValidationError):
         normalize_symbol("..")
+
+
+# --------------------------------------------------------------------------- #
+# lifecycle / teardown
+# --------------------------------------------------------------------------- #
+
+
+async def test_aclose_is_idempotent() -> None:
+    """Calling :meth:`aclose` more than once must never raise.
+
+    Hosts and test fixtures reach for the public teardown hook (sometimes from
+    a ``finally`` plus an explicit cleanup), so a repeated close has to be a
+    no-op. Before the fix ``self._client`` was never cleared, so the second
+    call re-invoked ``client.aclose()`` on an already-closed client.
+    """
+    provider = _build_provider(_mock_transport())
+
+    await provider.aclose()  # first close — closes the injected client
+    await provider.aclose()  # second close — must be a no-op, not raise
+
+    # The reference is cleared so the provider no longer points at a closed
+    # client (which is what lets fetch_ohlcv rebuild one on demand).
+    assert provider._client is None
+
+
+async def test_fetch_ohlcv_works_after_aclose(monkeypatch) -> None:
+    """Fetching after teardown lazily rebuilds a usable client.
+
+    Before the fix :meth:`aclose` left ``self._client`` pointing at the closed
+    client, so the next :meth:`fetch_ohlcv` failed with
+    ``RuntimeError: Cannot send a request, as the client has been closed``.
+    Now teardown clears the reference and the next fetch builds a fresh,
+    short-lived client.
+
+    The lazily-built client (see ``_get_chart``) has no transport of its own,
+    so we intercept ``httpx.AsyncClient`` construction and route it through a
+    :class:`httpx.MockTransport` to keep the test hermetic — this is exactly
+    the lazy-creation path the fix unlocks.
+    """
+    transport = _mock_transport()
+    real_async_client = httpx.AsyncClient
+
+    def _factory(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+        kwargs["transport"] = transport
+        kwargs["base_url"] = "https://query1.finance.yahoo.com"
+        return real_async_client(**kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", _factory)
+
+    provider = _build_provider(_mock_transport())  # injected (mock) client
+    await provider.aclose()
+    assert provider._client is None
+
+    df = await provider.fetch_ohlcv("AAPL", period="1mo", interval="1d")
+
+    assert df.columns == list(POLARS_OHLCV_COLUMNS)
+    assert df.height == 2  # null-close bar dropped, two clean bars remain
+    assert df["close"].to_list() == [104.0, 105.0]
+
+    await provider.aclose()  # teardown of the lazily-built client is safe too
