@@ -551,7 +551,7 @@ describe("ApiClient", () => {
         symbol: "AAPL",
         start_date: "2024-01-01",
         end_date: "2024-12-31",
-        initial_capital: 100000,
+        initial_capital: "100000",
       });
       expect(result).toEqual({ status: "accepted", backtest_id: "bk-1" });
       expect(calls[0].url).toBe("https://api.test/api/v1/backtest");
