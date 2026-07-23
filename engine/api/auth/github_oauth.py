@@ -90,8 +90,21 @@ class GitHubAuthProvider(IAuthProvider):
             )
         return self._oauth
 
-    def get_authorize_url(self, state: str = "") -> str:
-        """Build the GitHub authorization endpoint URL.
+    def get_authorize_url_with_state(self, state: str = "") -> tuple[str, str]:
+        """Build the GitHub authorization URL and return the embedded CSRF state.
+
+        This is the canonical, self-documenting accessor for the ``(url,
+        state)`` pair and the typed resolution of the ``tuple[str, str]``
+        return type that :meth:`get_authorize_url` also exposes (as a
+        backward-compatible alias). Formalizing it as a named method lets the
+        auth route recover -- in a type-safe way -- the ``state`` value the
+        IdP will echo back on the callback, so it can persist and later
+        validate that exact value.
+
+        Returning the state alongside the URL matters most when the caller did
+        not supply one: without it the issuer would have no way to know which
+        token to validate on the callback, defeating the CSRF protection
+        entirely.
 
         A CSRF ``state`` token is **always** embedded. When the caller does not
         supply one, a cryptographically strong token is generated via
@@ -105,7 +118,19 @@ class GitHubAuthProvider(IAuthProvider):
         """
         if not state:
             state = self._get_oauth().generate_state()
-        return self._get_oauth().get_authorize_url(state=state, scope=_DEFAULT_SCOPE)
+        url = self._get_oauth().get_authorize_url(state=state, scope=_DEFAULT_SCOPE)
+        return url, state
+
+    def get_authorize_url(self, state: str = "") -> tuple[str, str]:
+        """Backward-compatible alias for :meth:`get_authorize_url_with_state`.
+
+        Returns the same ``(url, state)`` tuple so existing callers and tests
+        that destructure ``url, state = provider.get_authorize_url(...)`` keep
+        working. New callers should prefer the explicitly named
+        :meth:`get_authorize_url_with_state` so the tuple return type is
+        obvious at the call site.
+        """
+        return self.get_authorize_url_with_state(state)
 
     async def _resolve_profile(
         self, oauth: GitHubOAuthProvider, code: str
@@ -154,13 +179,15 @@ class GitHubAuthProvider(IAuthProvider):
 
         # --- first sign-in -> create a new Nexus user -----------------------
         if user is None:
-            if not email:
-                # The provider synthesizes a noreply address for users with no
-                # public email, so an empty value here means the profile is
-                # unusable. Never persist a user with a NULL/blank email: the
-                # ``User.email`` column is UNIQUE NOT NULL, and accepting a
-                # blank address would let an attacker create unidentifiable,
-                # colliding accounts.
+            # Explicit ``None`` guard on ``info.email`` (defence in depth:
+            # the dataclass types it as ``str``, but never trust the shape of
+            # upstream data). Without this, a ``None`` would make the
+            # uniqueness query below degrade into ``User.email IS NULL`` --
+            # matching every NULL row -- instead of being rejected up front.
+            # The falsy check also rejects blank strings, since the
+            # ``User.email`` column is UNIQUE NOT NULL and a blank address
+            # would let an attacker create unidentifiable, colliding accounts.
+            if info.email is None or not email:
                 logger.warning("auth.github.missing_email", github_id=github_id)
                 return AuthResult(
                     success=False, error="GitHub profile did not provide an email address"

@@ -295,11 +295,25 @@ async def authorize_provider(
     state = secrets.token_urlsafe(32)
 
     url = ""
-    if hasattr(auth_provider, "get_authorize_url"):
+    # Prefer the typed ``(url, state)`` accessor when the provider offers it
+    # (GitHub); otherwise fall back to the generic ``get_authorize_url``
+    # (Google/OIDC return a plain URL string, though a tuple is also handled).
+    # When a tuple is returned we persist the AUTHORITATIVE ``state`` embedded
+    # in the URL -- the value the IdP echoes back on the callback -- rather
+    # than the locally minted token, so the session cookie validated on the
+    # callback always matches what the user's browser actually round-trips.
+    # This defends against a provider that ignores the supplied state and mints
+    # its own: the cookie would otherwise hold a value the IdP never echoes.
+    if hasattr(auth_provider, "get_authorize_url_with_state"):
+        url, state = auth_provider.get_authorize_url_with_state(state=state)
+    elif hasattr(auth_provider, "get_authorize_url"):
         maybe_url = auth_provider.get_authorize_url(state=state)
-        if callable(maybe_url) and not isinstance(maybe_url, str):
+        if callable(maybe_url) and not isinstance(maybe_url, (str, tuple)):
             maybe_url = await maybe_url
-        url = maybe_url
+        if isinstance(maybe_url, tuple):
+            url, state = maybe_url
+        else:
+            url = maybe_url
 
     if not url:
         raise HTTPException(

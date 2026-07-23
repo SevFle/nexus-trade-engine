@@ -167,3 +167,76 @@ class TestAuthRoutes:
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get("/api/v1/auth/nonexistent/authorize")
             assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_authorize_persists_authoritative_state_from_tuple(self, db_session):
+        # When a provider exposes ``get_authorize_url_with_state`` and returns a
+        # state that differs from the one the route minted (e.g. the provider
+        # mints its own CSRF token), the route MUST surface and persist THAT
+        # authoritative state -- the value embedded in the URL the IdP echoes
+        # back -- so the callback's session-cookie check succeeds.
+        app = create_app()
+
+        async def override_get_db():
+            yield db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
+
+        class StubStateProvider:
+            name = "stub"
+
+            def get_authorize_url_with_state(self, state: str = "") -> tuple[str, str]:
+                authoritative = "provider-issued-state"
+                url = f"https://idp.example.com/auth?state={authoritative}"
+                return url, authoritative
+
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = StubStateProvider()
+        app.state.auth_registry = mock_registry
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/stub/authorize")
+            assert resp.status_code == 200, resp.text
+            data = resp.json()
+
+            # The route surfaces the provider-issued state, not a locally
+            # minted token, and it is the one embedded in the authorize URL.
+            assert data["state"] == "provider-issued-state"
+            assert "provider-issued-state" in data["authorize_url"]
+            # And it is persisted in the session cookie for callback validation.
+            assert resp.cookies.get("oauth_state_stub") == "provider-issued-state"
+
+    @pytest.mark.asyncio
+    async def test_authorize_persists_minted_state_for_string_provider(self, db_session):
+        # Providers that only return a plain URL string (Google/OIDC) keep the
+        # route's locally minted state -- the tuple-capture path must not regress
+        # their behaviour.
+        app = create_app()
+
+        async def override_get_db():
+            yield db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
+
+        class StubStringProvider:
+            name = "stubstr"
+
+            def get_authorize_url(self, state: str = "") -> str:
+                return f"https://idp.example.com/auth?state={state}"
+
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = StubStringProvider()
+        app.state.auth_registry = mock_registry
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/stubstr/authorize")
+            assert resp.status_code == 200, resp.text
+            data = resp.json()
+
+            assert data["state"]
+            assert data["state"] in data["authorize_url"]
+            assert resp.cookies.get("oauth_state_stubstr") == data["state"]
