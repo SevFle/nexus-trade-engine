@@ -461,6 +461,86 @@ config surfaces (`oidc_discovery_url` vs `oidc_issuer`/`oidc_jwks_uri`);
 
 ---
 
+<a id="ast-validator-two-implementations"></a>
+## P1 — Static AST validator has two implementations; only the simpler one is wired
+
+**Where**: [`engine/plugins/restricted_importer.py`](../engine/plugins/restricted_importer.py)
+(wired) vs [`engine/plugins/sandbox/ast_validator.py`](../engine/plugins/sandbox/ast_validator.py)
+(PR #1647, patched #1653 — library-only)
+
+This is the import-checking analogue of the
+[OIDC split](#oidc-two-implementations) and
+[LDAP split](#ldap-has-no-route): there are **two** static, parse-time
+AST validators on disk, and the one actually on the plugin-load path is
+the simpler of the two.
+
+- **`ImportValidator`** in `engine/plugins/restricted_importer.py` is
+  the **wired** one. It is invoked at plugin load by
+  [`engine/plugins/registry.py`](../engine/plugins/registry.py)
+  (`ImportValidator(DENYLIST_MODULES).validate(source_bytes)`, run
+  **before** `compile`/`exec`) — this is the Layer 0 check recorded in
+  [ADR-0010](adr/0010-static-ast-validation-toctou-loading.md) and
+  [`architecture/plugins.md`](architecture/plugins.md). Its
+  `visit_ImportFrom` flags only `from <blocked> import …` where the
+  **module root** is on the denylist; it **skips relative imports**
+  (`level > 0` with no absolute module) and does **not** reject wildcard
+  `from … import *`. It returns a flat `list[str]` and applies the
+  denylist only — no parse-time allowlist enforcement (that lives in the
+  runtime Layer 1 hook).
+- **`ASTValidator`** in `engine/plugins/sandbox/ast_validator.py`
+  (PR #1647, patched #1653) is the stricter successor. It additionally:
+  - rejects **wildcard** `from … import *` outright — relative *and*
+    absolute — as `CODE_FORBIDDEN_FROM_IMPORT`, because the bound names
+    cannot be enumerated statically (the #1653 *"critical security
+    bypass for `from . import *`"* lived here);
+  - flags **relative imports that escape the strategy package**
+    (`level > 1`) as `CODE_RELATIVE_IMPORT`, while checking the module
+    root consistently for within-package (`level == 1`) relative
+    imports;
+  - enforces an **allowlist with denylist precedence** at parse time
+    (defence-in-depth that catches unlisted modules before `exec`, not
+    only at import time);
+  - returns a **structured, total** `ValidationResult` of
+    `Violation(line, col, code, severity, …)` records instead of a flat
+    `list[str]`, capturing `SyntaxError` as a violation rather than
+    raising.
+
+  It is **not imported anywhere in the engine** (non-test) code today —
+  confirmed by grep across `engine/` — so none of these stricter checks
+  are live. It is a reusable component / reference implementation
+  awaiting wiring.
+
+**Framing on severity (read this before assuming an exploit):** the
+wired `ImportValidator` not blocking `from … import *` is a
+**defence-in-depth gap at Layer 0**, *not* a full sandbox escape. Every
+`from … import` still passes through the **runtime** allowlist
+([`RestrictedImporter`](../engine/plugins/restricted_importer.py),
+Layer 1) when the names are actually bound, so a forbidden module is
+still refused at exec time. The gap is that the *static* pre-`exec`
+trip-wire is weaker than the stricter `ASTValidator` was built to be, so
+an attempt that should have died at parse time instead survives to the
+runtime hook.
+
+**Workaround today**: assume Layer 0 statically rejects only
+absolute/denylisted imports and forbidden *calls*
+(`exec`/`eval`/`compile`/`__import__`/`importlib.import_module`); rely
+on the runtime Layer 1 allowlist as the real import gate. Treat
+`ASTValidator` as the stricter reference and do **not** assume wildcard
+or escaping-relative rejection is enforced at parse time.
+
+**Fix path**: (1) switch [`registry.py`](../engine/plugins/registry.py)
+from `ImportValidator(...).validate(...)` to
+`validate_strategy_source(...)` (or `ASTValidator(...).validate(...)`),
+adapting the `list[str]`→`ValidationResult` boundary so existing
+violation handling keeps working; (2) confirm the new wildcard /
+relative-import / allowlist checks pass the `tests/test_ast_validator.py`
+corpus (allowlist/denylist/forbidden-call/relative-import cases added in
+#1647) before flipping it on; (3) record the wiring decision in
+[ADR-0010](adr/0010-static-ast-validation-toctou-loading.md) and retire
+`ImportValidator` (or fold it in) once nothing else references it.
+
+---
+
 <a id="mcp"></a>
 ## P1 — MCP server is a library, not a runnable process
 
