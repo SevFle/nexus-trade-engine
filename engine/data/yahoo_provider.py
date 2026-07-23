@@ -216,12 +216,19 @@ class YahooFinanceProvider(IDataProvider):
         """Close the owned HTTP client, if any.
 
         This is the public teardown hook hosts and tests should call instead
-        of reaching into ``self._client``. It is idempotent and a no-op when
+        of reaching into ``self._client``. It is truly idempotent: the client
+        reference is captured, ``self._client`` is cleared *before* the await,
+        and then the captured client is closed. Repeated calls are a no-op
+        (they never close the same client twice), and it is also a no-op when
         no client was injected (in that case the provider builds a short-lived
         client per request and owns nothing to close).
         """
-        if self._client is not None:
-            await self._client.aclose()
+        client = self._client
+        if client is not None:
+            # Clear the reference first so a concurrent/re-entrant call to
+            # ``aclose`` cannot double-close the same underlying client.
+            self._client = None
+            await client.aclose()
 
     # ------------------------------------------------------------------
     # IDataProvider (historical / polars interface)

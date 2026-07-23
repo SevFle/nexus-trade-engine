@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 import polars as pl
 import pytest
+import pytest_asyncio
 
 from engine.data.provider import DataValidationError, IDataProvider
 from engine.data.yahoo_provider import (
@@ -77,7 +78,7 @@ def _build_provider(transport: httpx.MockTransport) -> YahooFinanceProvider:
     return YahooFinanceProvider(client=client, enable_cache=False)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def make_yahoo_provider():
     """Factory that yields :class:`YahooFinanceProvider` instances over mock transports.
 
@@ -215,3 +216,102 @@ def test_normalize_symbol_rejects_path_injection() -> None:
         normalize_symbol("EV/IL")
     with pytest.raises(DataValidationError):
         normalize_symbol("..")
+
+
+# --------------------------------------------------------------------------- #
+# aclose() lifecycle / idempotency
+# --------------------------------------------------------------------------- #
+
+
+async def test_aclose_is_idempotent_and_clears_client_ref() -> None:
+    """Calling :meth:`aclose` twice must be safe and clear ``_client``.
+
+    The provider's teardown hook is documented as idempotent. A naive
+    ``if self._client is not None: await self._client.aclose()`` would (a)
+    attempt to close the same underlying client twice on repeat calls and
+    (b) leave a dangling reference to a closed client. This test pins the
+    stronger contract: the reference is captured, ``self._client`` is set to
+    ``None`` *before* the await, and a second ``aclose`` is a true no-op.
+    """
+    provider = _build_provider(_mock_transport())
+    # Sanity: the injected client is wired before teardown.
+    assert provider._client is not None
+
+    await provider.aclose()
+    assert provider._client is None
+
+    # Second call must not raise (and must not try to double-close).
+    await provider.aclose()
+    assert provider._client is None
+
+
+async def test_aclose_noop_when_no_client_owned() -> None:
+    """``aclose`` is a no-op when the provider owns no client (per-request mode)."""
+    provider = YahooFinanceProvider(client=None, enable_cache=False)
+    assert provider._client is None
+
+    # Repeated teardowns must be harmless and never raise.
+    await provider.aclose()
+    await provider.aclose()
+    assert provider._client is None
+
+
+async def test_aclose_is_reentrant_safe_under_partial_failure() -> None:
+    """``aclose`` clears the reference first, so a failing close can be retried safely.
+
+    Even when the underlying client raises on ``aclose`` (e.g. an already-
+    torn-down transport during interpreter shutdown), the provider must have
+    already nulled its reference so a follow-up ``aclose`` is a no-op rather
+    than re-entering the broken teardown. This is the capture-then-clear-then-
+    await ordering that makes the method truly idempotent.
+    """
+    provider = _build_provider(_mock_transport())
+
+    # Wrap the real client so its aclose raises on the first call only.
+    real_client = provider._client
+    closed = {"count": 0}
+
+    class _BoomClient:
+        async def aclose(self) -> None:
+            closed["count"] += 1
+            raise RuntimeError("boom during close")
+
+    provider._client = _BoomClient()  # type: ignore[assignment]
+
+    with pytest.raises(RuntimeError, match="boom during close"):
+        await provider.aclose()
+    # The reference is cleared *before* the await, so a retry is a safe no-op.
+    assert provider._client is None
+    await provider.aclose()
+    assert closed["count"] == 1, "second aclose must not double-close"
+
+    # The original injected client still closes cleanly (unchanged behaviour).
+    await real_client.aclose()
+
+
+async def test_aclose_does_not_close_caller_owned_client_twice() -> None:
+    """An externally injected client is closed exactly once across teardowns.
+
+    Guards against a regression where ``aclose`` forgets to null the
+    reference: without the capture-then-clear ordering, repeated teardowns
+    would forward two ``aclose`` calls to the same underlying client.
+    """
+    provider = _build_provider(_mock_transport())
+    spy_client = provider._client
+    assert spy_client is not None
+
+    close_calls = {"count": 0}
+    real_aclose = spy_client.aclose
+
+    async def _spy_aclose() -> None:
+        close_calls["count"] += 1
+        await real_aclose()
+
+    spy_client.aclose = _spy_aclose  # type: ignore[method-assign]
+
+    await provider.aclose()
+    await provider.aclose()  # must be a genuine no-op
+    await provider.aclose()
+
+    assert close_calls["count"] == 1, "underlying client closed exactly once"
+    assert provider._client is None
