@@ -212,6 +212,17 @@ class YahooFinanceProvider(IDataProvider):
         self._enable_cache = enable_cache
         self._cache: dict[str, pl.DataFrame] = {}
 
+    async def aclose(self) -> None:
+        """Close the owned HTTP client, if any.
+
+        This is the public teardown hook hosts and tests should call instead
+        of reaching into ``self._client``. It is idempotent and a no-op when
+        no client was injected (in that case the provider builds a short-lived
+        client per request and owns nothing to close).
+        """
+        if self._client is not None:
+            await self._client.aclose()
+
     # ------------------------------------------------------------------
     # IDataProvider (historical / polars interface)
     # ------------------------------------------------------------------
