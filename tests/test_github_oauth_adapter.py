@@ -82,6 +82,15 @@ def _make_oauth_provider(
         provider.validate_access_token = AsyncMock(return_value=validate)
 
     provider.get_authorize_url = MagicMock(return_value="https://github.com/login/oauth/authorize?state=s")
+    # Canonical ``(url, state)`` accessor (delegated to by the adapter). Echo
+    # the supplied ``state`` so tests can assert it is threaded through and
+    # round-tripped unchanged.
+    provider.get_authorize_url_with_state = MagicMock(
+        side_effect=lambda state="": (
+            f"https://github.com/login/oauth/authorize?state={state}",
+            state,
+        )
+    )
     return provider
 
 
@@ -125,8 +134,10 @@ class TestAdapterIdentity:
     def test_get_authorize_url_delegates_to_provider(self):
         oauth = _make_oauth_provider()
         url, state = GitHubAuthProvider(oauth_provider=oauth).get_authorize_url(state="abc")
-        oauth.get_authorize_url.assert_called_once()
-        kwargs = oauth.get_authorize_url.call_args.kwargs
+        # The tuple-returning adapter method forwards to the provider's
+        # canonical ``get_authorize_url_with_state``.
+        oauth.get_authorize_url_with_state.assert_called_once()
+        kwargs = oauth.get_authorize_url_with_state.call_args.kwargs
         assert kwargs["state"] == "abc"
         assert url.startswith("https://github.com/login/oauth/authorize")
         # The state is returned alongside the URL so the caller can persist
@@ -140,8 +151,8 @@ class TestAdapterIdentity:
         url, state = GitHubAuthProvider(oauth_provider=oauth).get_authorize_url_with_state(
             state="xyz"
         )
-        oauth.get_authorize_url.assert_called_once()
-        assert oauth.get_authorize_url.call_args.kwargs["state"] == "xyz"
+        oauth.get_authorize_url_with_state.assert_called_once()
+        assert oauth.get_authorize_url_with_state.call_args.kwargs["state"] == "xyz"
         assert url.startswith("https://github.com/login/oauth/authorize")
         assert state == "xyz"
 

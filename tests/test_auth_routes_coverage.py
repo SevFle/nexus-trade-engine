@@ -240,3 +240,83 @@ class TestAuthRoutes:
             assert data["state"]
             assert data["state"] in data["authorize_url"]
             assert resp.cookies.get("oauth_state_stubstr") == data["state"]
+
+    @pytest.mark.asyncio
+    async def test_authorize_awaits_async_get_authorize_url(self, db_session):
+        # A provider whose ``get_authorize_url`` is ``async`` (e.g. the OIDC
+        # provider) returns a *coroutine* when called. The route MUST await it
+        # via ``inspect.isawaitable`` rather than rely on ``callable()`` -- a
+        # coroutine object is not callable, so the old check left it un-awaited
+        # and stringified the coroutine into the response body.
+        app = create_app()
+
+        async def override_get_db():
+            yield db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
+
+        awaited = {"flag": False}
+
+        class StubAsyncProvider:
+            name = "stubasync"
+
+            async def get_authorize_url(self, state: str = "") -> str:
+                # Prove the coroutine is actually awaited (not stringified).
+                import asyncio
+
+                await asyncio.sleep(0)
+                awaited["flag"] = True
+                return f"https://idp.example.com/auth?state={state}"
+
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = StubAsyncProvider()
+        app.state.auth_registry = mock_registry
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/stubasync/authorize")
+            assert resp.status_code == 200, resp.text
+            data = resp.json()
+
+            # The coroutine was awaited, not stringified.
+            assert awaited["flag"] is True
+            assert "<coroutine" not in data["authorize_url"]
+            assert data["authorize_url"].startswith("https://idp.example.com/auth")
+            assert data["state"]
+            assert data["state"] in data["authorize_url"]
+            assert resp.cookies.get("oauth_state_stubasync") == data["state"]
+
+    @pytest.mark.asyncio
+    async def test_authorize_async_get_authorize_url_returning_tuple(self, db_session):
+        # An ``async get_authorize_url`` may also return a ``(url, state)`` tuple
+        # once awaited; the route must both await *and* destructure it.
+        app = create_app()
+
+        async def override_get_db():
+            yield db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = _fake_authenticated_user
+
+        class StubAsyncTupleProvider:
+            name = "stubasynctuple"
+
+            async def get_authorize_url(self, state: str = ""):
+                return "https://idp.example.com/auth?state=provider-state", "provider-state"
+
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = StubAsyncTupleProvider()
+        app.state.auth_registry = mock_registry
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/stubasynctuple/authorize")
+            assert resp.status_code == 200, resp.text
+            data = resp.json()
+
+            assert data["authorize_url"].startswith("https://idp.example.com/auth")
+            # The AUTHORITATIVE state from the tuple wins over the route-minted one.
+            assert data["state"] == "provider-state"
+            assert "provider-state" in data["authorize_url"]
+            assert resp.cookies.get("oauth_state_stubasynctuple") == "provider-state"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import secrets
 import uuid
 from datetime import UTC, datetime
@@ -308,7 +309,14 @@ async def authorize_provider(
         url, state = auth_provider.get_authorize_url_with_state(state=state)
     elif hasattr(auth_provider, "get_authorize_url"):
         maybe_url = auth_provider.get_authorize_url(state=state)
-        if callable(maybe_url) and not isinstance(maybe_url, (str, tuple)):
+        # ``get_authorize_url`` may be ``async`` (e.g. the OIDC provider), in
+        # which case the call returns a coroutine rather than the URL. Detect
+        # that with :func:`inspect.isawaitable` -- ``callable()`` would never
+        # be true for a coroutine object (coroutines are not callable), so the
+        # previous check silently left the coroutine un-awaited and then
+        # stringified it into the response. ``inspect.isawaitable`` correctly
+        # recognises coroutines, futures, and other awaitables.
+        if inspect.isawaitable(maybe_url):
             maybe_url = await maybe_url
         if isinstance(maybe_url, tuple):
             url, state = maybe_url

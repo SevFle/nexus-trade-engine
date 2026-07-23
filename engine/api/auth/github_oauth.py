@@ -50,11 +50,6 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
-# Default scopes requested on the authorization endpoint. ``read:user`` yields
-# the public profile; ``user:email`` is required to resolve the (frequently
-# private) primary email via /user/emails.
-_DEFAULT_SCOPE = "read:user user:email"
-
 
 class GitHubAuthProvider(IAuthProvider):
     """Registry-facing GitHub provider.
@@ -91,35 +86,26 @@ class GitHubAuthProvider(IAuthProvider):
         return self._oauth
 
     def get_authorize_url_with_state(self, state: str = "") -> tuple[str, str]:
-        """Build the GitHub authorization URL and return the embedded CSRF state.
+        """Delegate to the canonical provider accessor for the ``(url, state)`` pair.
 
-        This is the canonical, self-documenting accessor for the ``(url,
-        state)`` pair and the typed resolution of the ``tuple[str, str]``
-        return type that :meth:`get_authorize_url` also exposes (as a
-        backward-compatible alias). Formalizing it as a named method lets the
-        auth route recover -- in a type-safe way -- the ``state`` value the
-        IdP will echo back on the callback, so it can persist and later
-        validate that exact value.
+        The state-generation + URL-building logic lives on the library
+        :class:`GitHubOAuthProvider` as the canonical
+        :meth:`GitHubOAuthProvider.get_authorize_url_with_state`; this adapter
+        simply forwards to it. A CSRF ``state`` token is **always** embedded:
+        when the caller does not supply one, a cryptographically strong token is
+        generated so that no authorization URL is ever produced without CSRF
+        protection -- the previous behaviour of silently omitting ``state``
+        when none was passed exposed the callback to a login-CSRF attack.
 
         Returning the state alongside the URL matters most when the caller did
         not supply one: without it the issuer would have no way to know which
         token to validate on the callback, defeating the CSRF protection
-        entirely.
-
-        A CSRF ``state`` token is **always** embedded. When the caller does not
-        supply one, a cryptographically strong token is generated via
-        :meth:`GitHubOAuthProvider.generate_state` so that no authorization URL
-        is ever produced without CSRF protection -- the previous behaviour of
-        silently omitting ``state`` when none was passed exposed the callback to
-        a login-CSRF attack. Callers that round-trip the token (the normal
-        case -- the auth route issues one and validates it on the callback)
-        should supply their own ``state`` and persist it server-side (e.g. in a
-        signed cookie).
+        entirely. Callers that round-trip the token (the normal case -- the
+        auth route issues one and validates it on the callback) should supply
+        their own ``state`` and persist it server-side (e.g. in a signed
+        cookie).
         """
-        if not state:
-            state = self._get_oauth().generate_state()
-        url = self._get_oauth().get_authorize_url(state=state, scope=_DEFAULT_SCOPE)
-        return url, state
+        return self._get_oauth().get_authorize_url_with_state(state=state)
 
     def get_authorize_url(self, state: str = "") -> tuple[str, str]:
         """Backward-compatible alias for :meth:`get_authorize_url_with_state`.

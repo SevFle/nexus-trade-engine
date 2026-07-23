@@ -164,6 +164,83 @@ class TestAuthorizeUrl:
 
 
 # ===========================================================================
+# get_authorize_url_with_state -- the canonical ``(url, state)`` accessor
+# ===========================================================================
+class TestAuthorizeUrlWithState:
+    """The canonical tuple-returning accessor on :class:`GitHubOAuthProvider`.
+
+    ``get_authorize_url`` returns only the URL string and *requires* a
+    non-empty ``state``; ``get_authorize_url_with_state`` is the safe default
+    that always embeds a CSRF token (auto-generating one when none is supplied)
+    and returns it alongside the URL so the caller can persist and validate it.
+    """
+
+    def test_with_supplied_state_returns_url_and_same_state(self):
+        provider = GitHubOAuthProvider(
+            client_id=_CLIENT_ID,
+            client_secret=_CLIENT_SECRET,
+            redirect_uri=_REDIRECT_URI,
+        )
+        url, state = provider.get_authorize_url_with_state(state="csrf-state-123")
+        # Interface contract: a 2-tuple of ``(str, str)``.
+        assert isinstance((url, state), tuple)
+        assert isinstance(url, str)
+        assert isinstance(state, str)
+        assert state == "csrf-state-123"
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query)
+        assert parsed.path == "/login/oauth/authorize"
+        assert params["client_id"] == [_CLIENT_ID]
+        assert params["redirect_uri"] == [_REDIRECT_URI]
+        assert params["state"] == ["csrf-state-123"]
+        assert "read:user" in params["scope"][0]
+        assert "user:email" in params["scope"][0]
+
+    def test_without_state_auto_generates_nonempty_csrf_token(self):
+        provider = GitHubOAuthProvider(
+            client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
+        )
+        url, state = provider.get_authorize_url_with_state()
+        assert isinstance(url, str) and isinstance(state, str)
+        # The auto-generated state is always present and non-empty...
+        assert state
+        # ...and it is the exact value embedded in the URL (so the caller can
+        # round-trip it).
+        assert parse_qs(urlparse(url).query)["state"] == [state]
+
+    def test_empty_state_auto_generates_nonempty_csrf_token(self):
+        provider = GitHubOAuthProvider(
+            client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
+        )
+        url, state = provider.get_authorize_url_with_state(state="")
+        assert state  # never stateless
+        assert parse_qs(urlparse(url).query)["state"] == [state]
+
+    def test_each_auto_generated_state_is_unique(self):
+        provider = GitHubOAuthProvider(
+            client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
+        )
+        _, a = provider.get_authorize_url_with_state()
+        _, b = provider.get_authorize_url_with_state()
+        assert a and b and a != b
+
+    def test_custom_scope_is_passed_through(self):
+        provider = GitHubOAuthProvider(
+            client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
+        )
+        url, _ = provider.get_authorize_url_with_state(state="s", scope="repo gist")
+        assert parse_qs(urlparse(url).query)["scope"] == ["repo gist"]
+
+    def test_two_calls_with_distinct_states_yield_distinct_urls(self):
+        provider = GitHubOAuthProvider(
+            client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
+        )
+        url_a, _ = provider.get_authorize_url_with_state(state="a")
+        url_b, _ = provider.get_authorize_url_with_state(state="b")
+        assert url_a != url_b
+
+
+# ===========================================================================
 # CSRF state
 # ===========================================================================
 class TestStateHandling:

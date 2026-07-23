@@ -168,6 +168,32 @@ class GitHubOAuthProvider(IOAuthProvider):
         }
         return f"{_GITHUB_AUTHORIZE_URL}?{urllib.parse.urlencode(params)}"
 
+    def get_authorize_url_with_state(
+        self,
+        *,
+        state: str = "",
+        scope: str = _DEFAULT_SCOPE,
+    ) -> tuple[str, str]:
+        """Build the authorization URL and return the ``(url, state)`` pair.
+
+        This is the canonical, typed accessor for the ``(url, state)`` tuple.
+        A CSRF ``state`` token is **always** embedded: when the caller does not
+        supply one, a cryptographically strong token is generated via
+        :meth:`generate_state` so that no authorization URL is ever produced
+        without CSRF protection. Returning the state alongside the URL lets the
+        caller persist and later validate the exact value the IdP echoes back
+        on the callback.
+
+        Unlike :meth:`get_authorize_url` -- which returns only the URL string
+        and *requires* a non-empty ``state`` -- this method auto-generates one
+        when none is supplied, which is why it is the safer, self-documenting
+        default for the ``state``-round-tripping authorize flow.
+        """
+        if not state:
+            state = self.generate_state()
+        url = self.get_authorize_url(state=state, scope=scope)
+        return url, state
+
     @staticmethod
     def generate_state() -> str:
         return _generate_state()
