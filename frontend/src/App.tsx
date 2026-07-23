@@ -18,6 +18,8 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import OAuthCallback from "./pages/OAuthCallback";
 import Dashboard from "./screens/Dashboard";
+import PortfolioOverview from "./pages/PortfolioOverview";
+import StrategiesPage from "./pages/StrategiesPage";
 import MarketWatch from "./screens/MarketWatch";
 import Strategies from "./screens/Strategies";
 import Backtest from "./screens/Backtest";
@@ -84,8 +86,13 @@ export default function App() {
                 }
               >
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/portfolio" element={<PortfolioOverview />} />
                 <Route path="/market-watch" element={<MarketWatch />} />
-                <Route path="/strategies" element={<Strategies />} />
+                {/* The Strategies listing is the primary destination for the
+                    STRATEGIES nav link; it fetches the live engine registry. The
+                    legacy interactive runner is preserved at /strategies/runner. */}
+                <Route path="/strategies" element={<StrategiesPage />} />
+                <Route path="/strategies/runner" element={<Strategies />} />
                 <Route path="/backtest" element={<Backtest />} />
                 <Route path="/marketplace" element={<Marketplace />} />
                 <Route path="/positions" element={<Positions />} />

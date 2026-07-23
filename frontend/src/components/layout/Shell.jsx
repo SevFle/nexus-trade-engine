@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Zap, Rewind, Store, BarChart3, Shield, Terminal, DollarSign, LogOut, Settings as SettingsIcon, CandlestickChart } from "lucide-react";
+import { LayoutDashboard, Zap, Rewind, Store, BarChart3, Shield, Terminal, DollarSign, LogOut, Settings as SettingsIcon, CandlestickChart, Wallet } from "lucide-react";
 import clsx from "clsx";
 import { useTheme } from "../../hooks/useTheme";
 import { useAuth } from "../../auth/useAuth";
@@ -8,8 +8,10 @@ import { Footer } from "./Footer";
 
 const navItems = [
   { to: "/", label: "DASHBOARD", icon: LayoutDashboard },
+  { to: "/portfolio", label: "PORTFOLIO", icon: Wallet },
   { to: "/market-watch", label: "MARKET WATCH", icon: CandlestickChart },
   { to: "/strategies", label: "STRATEGIES", icon: Zap },
+  { to: "/strategies/runner", label: "STRATEGY RUNNER", icon: Rewind },
   { to: "/backtest", label: "BACKTEST", icon: Rewind },
   { to: "/marketplace", label: "MARKETPLACE", icon: Store },
   { to: "/positions", label: "POSITIONS", icon: BarChart3 },
@@ -47,7 +49,14 @@ function Sidebar({ collapsed, onToggle }) {
 
       <div className="flex-1 py-sm">
         {navItems.map(({ to, label, icon: Icon }) => {
-          const isActive = location.pathname === to || (to !== "/" && location.pathname.startsWith(to));
+          // Exact match for the strategies listing so that visiting
+          // /strategies/runner doesn't also highlight STRATEGIES. Every
+          // other item keeps the prefix-matching behaviour (so /costs/x
+          // still highlights COST ANALYSIS).
+          const exact = to === "/strategies";
+          const isActive = exact
+            ? location.pathname === to
+            : location.pathname === to || (to !== "/" && location.pathname.startsWith(to));
           return (
             <NavLink
               key={to}

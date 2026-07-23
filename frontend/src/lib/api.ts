@@ -90,6 +90,17 @@ export interface StrategySummary {
   author?: string;
   description?: string;
   is_loaded?: boolean;
+  /**
+   * Optional runtime status token from the engine (e.g. "active",
+   * "idle", "paused", "error"). When absent the UI derives a status from
+   * {@link is_loaded}. Kept optional because older engine builds do not
+   * emit it in the list response.
+   */
+  status?: string;
+  /** Optional realised/unrealised P&L for the strategy, in account currency. */
+  pnl?: number;
+  /** Optional P&L expressed as a percentage (e.g. 1.11 for 1.11%). */
+  pnl_pct?: number;
 }
 
 /** Response of `GET /api/v1/strategies/`. */
@@ -137,6 +148,23 @@ export interface Portfolio {
   description: string;
   initial_capital: number;
   created_at: string;
+}
+
+/**
+ * `PortfolioSummaryResponse` from `GET /api/v1/portfolio/summary`.
+ *
+ * `total_pnl` / `total_pnl_pct` are unrealised P&L (the engine has no
+ * intraday baseline yet); the dashboard overview card surfaces them as the
+ * P&L summary. `as_of` is an ISO-8601 UTC timestamp.
+ */
+export interface PortfolioSummaryData {
+  total_value: number;
+  total_pnl: number;
+  total_pnl_pct: number;
+  active_strategies: number;
+  open_positions: number;
+  currency: string;
+  as_of: string;
 }
 
 /** Body of `POST /api/v1/portfolio/`. */
@@ -525,6 +553,11 @@ export class ApiClient {
     return this.get<Portfolio>(`/api/v1/portfolio/${encodeURIComponent(portfolioId)}`);
   }
 
+  /** Aggregate overview for the dashboard: `GET /api/v1/portfolio/summary`. */
+  getPortfolioSummary(): Promise<PortfolioSummaryData> {
+    return this.get<PortfolioSummaryData>("/api/v1/portfolio/summary");
+  }
+
   deletePortfolio(portfolioId: string): Promise<PortfolioActionResponse> {
     return this.delete<PortfolioActionResponse>(
       `/api/v1/portfolio/${encodeURIComponent(portfolioId)}`,
@@ -553,3 +586,15 @@ export class ApiClient {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Shared singleton
+// ---------------------------------------------------------------------------
+
+/**
+ * Process-wide singleton client used by React components and hooks. It reads
+ * the API base URL from `VITE_API_URL` and the JWT from `localStorage` via
+ * {@link defaultTokenGetter}. Construct a dedicated {@link ApiClient} instance
+ * (e.g. with an injectable `fetchImpl`) for tests or non-default token sources.
+ */
+export const apiClient = new ApiClient();
