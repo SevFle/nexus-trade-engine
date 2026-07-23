@@ -47,21 +47,24 @@ interface StrategyOption {
  * identifier strings (the minimal legacy registry); both are handled so the
  * dropdown never crashes on a schema mismatch.
  */
-function toStrategyOption(raw: unknown): StrategyOption {
+function toStrategyOption(raw: unknown, index: number): StrategyOption {
   if (typeof raw === "string" && raw.length > 0) {
     return { id: raw, label: raw };
   }
   const entry = (raw ?? {}) as Record<string, unknown>;
-  const id =
-    typeof entry.id === "string" && entry.id.length > 0
-      ? entry.id
-      : typeof entry.name === "string" && entry.name.length > 0
-        ? (entry.name as string)
-        : "";
   const name =
     typeof entry.name === "string" && entry.name.length > 0
       ? (entry.name as string)
-      : id;
+      : "";
+  const hasId = typeof entry.id === "string" && entry.id.length > 0;
+  // When the entry lacks a stable id, synthesize a composite key from the
+  // name + position so siblings with identical names still produce unique
+  // React keys / option values instead of colliding on a bare name.
+  const id = hasId
+    ? (entry.id as string)
+    : name
+      ? `${name}#${index}`
+      : "";
   return { id, label: name || id };
 }
 
@@ -134,11 +137,12 @@ function validate(form: BacktestForm): ValidationErrors {
   ) {
     errors.end_date = "End date must be on or after the start date.";
   }
-  const capital = Number(form.initial_capital);
+  // Validate the raw string with a strict decimal regex rather than
+  // ``Number()``, which would happily coerce hex (``0x10``), scientific
+  // (``1e5``) and whitespace-padded (``" 5 "``) inputs into valid numbers.
   if (
-    form.initial_capital.trim() === "" ||
-    !Number.isFinite(capital) ||
-    capital <= 0
+    !/^\d+(\.\d+)?$/.test(form.initial_capital) ||
+    Number(form.initial_capital) <= 0
   ) {
     errors.initial_capital = "Initial capital must be a positive number.";
   }
@@ -152,7 +156,7 @@ function buildRequest(form: BacktestForm): BacktestSubmitRequest {
     symbol: form.symbol.trim().toUpperCase(),
     start_date: form.start_date,
     end_date: form.end_date,
-    initial_capital: Number(form.initial_capital),
+    initial_capital: form.initial_capital,
     config: { cost_model: form.cost_model },
   };
 }
