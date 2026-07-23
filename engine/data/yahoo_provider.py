@@ -219,9 +219,18 @@ class YahooFinanceProvider(IDataProvider):
         of reaching into ``self._client``. It is idempotent and a no-op when
         no client was injected (in that case the provider builds a short-lived
         client per request and owns nothing to close).
+
+        Clearing ``self._client`` (rather than only closing it) is deliberate:
+        it makes :meth:`aclose` safe to call repeatedly and lets
+        :meth:`fetch_ohlcv` lazily build a fresh client on the next call after
+        teardown instead of reusing a client that has already been closed
+        (which httpx rejects with ``RuntimeError: Cannot send a request, as
+        the client has been closed``).
         """
-        if self._client is not None:
-            await self._client.aclose()
+        client = self._client
+        self._client = None
+        if client is not None:
+            await client.aclose()
 
     # ------------------------------------------------------------------
     # IDataProvider (historical / polars interface)
