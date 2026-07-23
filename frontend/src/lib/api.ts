@@ -130,13 +130,40 @@ export interface StrategyHealthResponse {
 // Response interfaces — portfolios
 // ---------------------------------------------------------------------------
 
-/** `PortfolioResponse` from engine/api/routes/portfolio.py. */
+/** A single point on the portfolio equity-over-time series. */
+export interface EquityCurvePoint {
+  /** ISO-8601 timestamp of the snapshot. */
+  timestamp: string;
+  /** Total portfolio equity (cash + positions market value) at `timestamp`. */
+  equity: number;
+}
+
+/** A slice of the current portfolio allocation (by symbol or strategy). */
+export interface AllocationSlice {
+  /** Symbol or strategy name for the slice. */
+  name: string;
+  /** Market value (in portfolio currency) allocated to the slice. */
+  value: number;
+}
+
+/**
+ * `PortfolioResponse` from `GET /api/v1/portfolio/{id}`.
+ *
+ * The engine currently returns only metadata. The `equity_curve` and
+ * `allocations` fields are optional so the detail page can render the
+ * performance charts the moment the backend starts exposing them, and
+ * degrade to empty states until then.
+ */
 export interface Portfolio {
   id: string;
   name: string;
   description: string;
   initial_capital: number;
   created_at: string;
+  /** Equity-over-time series powering the detail page AreaChart. */
+  equity_curve?: EquityCurvePoint[];
+  /** Current allocation breakdown powering the detail page PieChart. */
+  allocations?: AllocationSlice[];
 }
 
 /**

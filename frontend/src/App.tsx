@@ -19,6 +19,7 @@ import Register from "./pages/Register";
 import OAuthCallback from "./pages/OAuthCallback";
 import Dashboard from "./screens/Dashboard";
 import PortfolioOverview from "./pages/PortfolioOverview";
+import PortfolioDetail from "./pages/PortfolioDetail";
 import MarketWatch from "./screens/MarketWatch";
 import Strategies from "./screens/Strategies";
 import Backtest from "./screens/Backtest";
@@ -86,6 +87,7 @@ export default function App() {
               >
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/portfolio" element={<PortfolioOverview />} />
+                <Route path="/portfolio/:id" element={<PortfolioDetail />} />
                 <Route path="/market-watch" element={<MarketWatch />} />
                 <Route path="/strategies" element={<Strategies />} />
                 <Route path="/backtest" element={<Backtest />} />
