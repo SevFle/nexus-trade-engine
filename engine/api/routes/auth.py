@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import inspect
+import re
 import secrets
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -282,6 +284,82 @@ async def logout(
     return {"status": "logged_out"}
 
 
+# C0 (\x00-\x1f) and C1 (\x7f-\x9f) control characters. These let an
+# attacker smuggle extra HTTP headers / cookie content into the
+# ``authorize_url`` and ``state`` the route surfaces to the browser (response
+# splitting / cookie injection), so any value carrying them is rejected.
+_OAUTH_VALUE_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def validate_authorize_url(url: str) -> str:
+    """Defence-in-depth validation of an authorize URL before it is surfaced.
+
+    The route returns the provider-built authorize URL verbatim in the JSON
+    body (``{"authorize_url": url}``); a misbehaving or hostile provider --
+    or a monkey-patched/legacy one returning a malformed value -- could
+    otherwise hand back a URL that carries CRLF / control characters (a
+    response-splitting / header-injection vector when the URL is ever used in
+    a ``Location`` redirect) or a non-HTTPS scheme (the authorization
+    response / ``redirect_uri`` carries sensitive material that an observer
+    must never see).
+
+    The HTTPS-scheme check runs first; control-character rejection runs after
+    it, so a URL can never reach the browser carrying smuggled CRLF even when
+    its scheme is valid. Raises :class:`HTTPException` (HTTP 500, generic
+    message) on any failure -- never reflecting the hostile value back.
+    """
+    if not isinstance(url, str) or not url:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not build authorize URL",
+        )
+    parsed = urlparse(url)
+    if (parsed.scheme or "").lower() != "https":
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authorize URL must use the https scheme",
+        )
+    if _OAUTH_VALUE_CONTROL_CHARS_RE.search(url):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authorize URL contains control characters",
+        )
+    return url
+
+
+def validate_oauth_state(state: str) -> str:
+    """Defence-in-depth validation of the OAuth ``state`` token.
+
+    The route mints its own ``state`` (``secrets.token_urlsafe(32)``), but a
+    provider MAY return an AUTHORITATIVE value of its own (the one embedded in
+    the URL it built). That returned value is persisted in the
+    ``oauth_state_{provider}`` session cookie AND echoed by the IdP on the
+    callback, where it is compared with :func:`secrets.compare_digest`. It
+    MUST therefore be a non-empty, control-character-free string:
+
+    * an empty value would let the callback's ``compare_digest`` silently
+      pass against a missing/empty cookie (defeating CSRF protection); and
+    * a CRLF-laden value would let a hostile provider inject cookie / header
+      content into the ``Set-Cookie`` the route emits.
+
+    This guard rejects both. It runs on every URL-building branch so a
+    provider can never smuggle a bad state regardless of which accessor it
+    implements. Raises :class:`HTTPException` (HTTP 500, generic message) on
+    any failure -- never reflecting the hostile value back.
+    """
+    if not isinstance(state, str) or not state:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OAuth state is required",
+        )
+    if _OAUTH_VALUE_CONTROL_CHARS_RE.search(state):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OAuth state contains control characters",
+        )
+    return state
+
+
 @router.get("/{provider}/authorize")
 async def authorize_provider(
     provider: str, request: Request, response: Response
@@ -323,11 +401,16 @@ async def authorize_provider(
         else:
             url = maybe_url
 
-    if not url:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not build authorize URL",
-        )
+    # Defence in depth: regardless of which branch produced them, the URL and
+    # state we surface to the browser (and persist in the session cookie) MUST
+    # be sane. State validation is extracted here so it runs on EVERY branch --
+    # including the plain-string ``else`` fallback -- rather than only on the
+    # tuple-returning paths, so a provider can never smuggle CRLF or hand back
+    # a non-HTTPS URL / empty state via any accessor. This single validation
+    # point supersedes the previous ``if not url`` check (now folded into
+    # :func:`validate_authorize_url`).
+    url = validate_authorize_url(url)
+    state = validate_oauth_state(state)
 
     response.set_cookie(
         key=f"oauth_state_{provider}",
