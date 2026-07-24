@@ -39,7 +39,7 @@ protected route (see [Authentication](../api-reference.md#authentication)).
 | `POST /logout` | `{refresh_token}?` | bearer | `200` | Revokes the supplied token, or every active session for the user when the body is omitted. |
 | `GET  /me` | — | bearer | `200` | Returns the principal's `id`, `email`, `display_name`, `role`, `auth_provider`, `is_active`. |
 | `GET  /{provider}/authorize` | — | none | `200` | Builds an OAuth authorize URL + opaque `state`, set as an httponly cookie scoped to `/api/v1/auth`. `404` if the provider is not in the registry. |
-| `GET  /{provider}/callback` | `?code=&state=` | cookie | `200` | Validates the `oauth_state_{provider}` cookie against `state`, exchanges `code` for a principal, mints tokens. `ldap` is **registered but has no route** — see [known-limitations](../known-limitations.md#ldap-has-no-route). |
+| `GET  /{provider}/callback` | `?code=&state=` | cookie | `200` | Validates the `oauth_state_{provider}` cookie against `state`, exchanges `code` for a principal, mints tokens. `ldap` is **registered but has no route** — see [known-limitations](../known-limitations/auth-and-sandbox-drift.md#ldap-has-no-route). |
 
 <a id="mfa"></a>
 ## MFA — `engine/api/routes/mfa.py`

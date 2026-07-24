@@ -76,7 +76,7 @@ we explain *why*, not *what*.
 | Write a strategy plugin | [`PLUGIN_DEV_GUIDE.md`](PLUGIN_DEV_GUIDE.md) · [`architecture/plugins.md`](architecture/plugins.md) |
 | Understand non-obvious design choices | [`adr/`](adr/README.md) |
 | Operate the running system | [`operations/slos.md`](operations/slos.md) · [`operations/runbooks/`](operations/runbooks/README.md) |
-| Know what's broken or half-built | [`known-limitations.md`](known-limitations.md) |
+| Know what's broken or half-built | [`known-limitations.md`](known-limitations.md) · [`known-limitations/auth-and-sandbox-drift.md`](known-limitations/auth-and-sandbox-drift.md) (auth/sandbox/WebSocket splits) |
 | Debug a production incident | [`operations/runbooks/common-issues.md`](operations/runbooks/common-issues.md) |
 
 ## Layout
@@ -106,7 +106,8 @@ docs/
 │   ├── 0009-cross-replica-eventbus-bridge.md
 │   ├── 0010-static-ast-validation-toctou-loading.md
 │   ├── 0011-runtime-introspection-blocking.md
-│   └── 0012-sandbox-resource-limits-single-flight.md
+│   ├── 0012-sandbox-resource-limits-single-flight.md
+│   └── 0013-legal-score-compliance-gate.md
 ├── api-reference.md                ← conventions: auth, legal gate, errors, middleware
 ├── api-reference/                  ← per-endpoint catalogs (split out of api-reference.md)
 │   ├── routes.md                   ← every HTTP endpoint, grouped by router module
@@ -120,6 +121,8 @@ docs/
 ├── deployment.md                   ← infra requirements, env, rollout
 ├── development.md                  ← local setup, test suite, lint loop
 ├── known-limitations.md            ← tech debt, ranked
+├── known-limitations/              ← companion pages (split to keep each file <500 lines)
+│   └── auth-and-sandbox-drift.md   ← LDAP/OIDC/AST-validator splits + WebSocket gaps
 ├── RELEASING.md                    ← release engineering
 ├── PLUGIN_DEV_GUIDE.md             ← writing strategies
 ├── contributors.md                 ← contributor onboarding
