@@ -31,9 +31,11 @@ import pytest
 from engine.auth.base import IOAuthProvider
 from engine.auth.base import TokenSet as BaseTokenSet
 from engine.auth.providers.google import (
+    GoogleOAuthError,
     GoogleOAuthProvider,
     GoogleUserInfo,
     InvalidTokenError,
+    _coerce_email_verified,
 )
 
 # --- Endpoint URLs (mirror the constants in engine/auth/providers/google.py) -
@@ -262,7 +264,10 @@ class TestMapUser:
             client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
         )
         info = GoogleUserInfo(
-            provider_id="42", email="ada@example.com", name="Ada Lovelace"
+            provider_id="42",
+            email="ada@example.com",
+            name="Ada Lovelace",
+            email_verified=True,
         )
         mapped = provider.map_user(info)
         assert mapped == {
@@ -270,7 +275,7 @@ class TestMapUser:
             "provider": "google",
             "email": "ada@example.com",
             "display_name": "Ada Lovelace",
-            "email_verified": False,
+            "email_verified": True,
             "roles": ["user"],
         }
 
@@ -292,9 +297,55 @@ class TestMapUser:
         provider = GoogleOAuthProvider(
             client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
         )
-        info = GoogleUserInfo(provider_id="42", email="ada@example.com", name="")
+        info = GoogleUserInfo(
+            provider_id="42",
+            email="ada@example.com",
+            name="",
+            email_verified=True,
+        )
         mapped = provider.map_user(info)
         assert mapped["display_name"] == "ada"
+
+    def test_map_user_raises_on_unverified_email(self):
+        # Security guard: linking an unverified email would let an attacker
+        # assert ownership of an address they do not control, so map_user()
+        # MUST refuse such a profile.
+        provider = GoogleOAuthProvider(
+            client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
+        )
+        info = GoogleUserInfo(
+            provider_id="42",
+            email="ada@example.com",
+            name="Ada Lovelace",
+            email_verified=False,
+        )
+        with pytest.raises(GoogleOAuthError, match="unverified email"):
+            provider.map_user(info)
+
+    def test_map_user_unverified_error_is_oauth_error(self):
+        # Callers rely on catching the shared OAuthError base for any provider
+        # rejection, so the unverified-email guard must derive from it.
+        from engine.auth.base import OAuthError
+
+        provider = GoogleOAuthProvider(
+            client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
+        )
+        info = GoogleUserInfo(
+            provider_id="42", email="ada@example.com", email_verified=False
+        )
+        with pytest.raises(OAuthError):
+            provider.map_user(info)
+
+    def test_map_user_allows_profile_without_email(self):
+        # A profile with no email at all is harmless (nothing to impersonate)
+        # and must still map -- some sign-ins grant no ``email`` scope.
+        provider = GoogleOAuthProvider(
+            client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
+        )
+        info = GoogleUserInfo(provider_id="42", email="", name="Ada Lovelace")
+        mapped = provider.map_user(info)
+        assert mapped["email"] == ""
+        assert mapped["display_name"] == "Ada Lovelace"
 
 
 class TestProtocolConformance:
@@ -306,3 +357,35 @@ class TestProtocolConformance:
         )
         assert isinstance(provider, IOAuthProvider)
         assert provider.name == "google"
+
+
+# ===========================================================================
+# _coerce_email_verified normalization
+# ===========================================================================
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        # Real booleans pass straight through.
+        (True, True),
+        (False, False),
+        # Lower-case string spellings.
+        ("true", True),
+        ("false", False),
+        # Title-case spellings (some clients serialize this way).
+        ("True", True),
+        ("False", False),
+        # String "0" must NOT be truthy (bool("0") would be True).
+        ("0", False),
+        # Numeric values fall back to bool().
+        (1, True),
+        (0, False),
+        # None / missing key both collapse to False (the path
+        # profile.get("email_verified", False) takes when the claim is absent).
+        (None, False),
+        # Whitespace + case variants still normalize correctly.
+        ("  TRUE ", True),
+        ("False\n", False),
+    ],
+)
+def test_coerce_email_verified(value, expected):
+    assert _coerce_email_verified(value) is expected
