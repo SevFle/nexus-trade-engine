@@ -31,6 +31,7 @@ import pytest
 from engine.auth.base import IOAuthProvider
 from engine.auth.base import TokenSet as BaseTokenSet
 from engine.auth.providers.google import (
+    GoogleOAuthError,
     GoogleOAuthProvider,
     GoogleUserInfo,
     InvalidTokenError,
@@ -262,7 +263,10 @@ class TestMapUser:
             client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
         )
         info = GoogleUserInfo(
-            provider_id="42", email="ada@example.com", name="Ada Lovelace"
+            provider_id="42",
+            email="ada@example.com",
+            name="Ada Lovelace",
+            email_verified=True,
         )
         mapped = provider.map_user(info)
         assert mapped == {
@@ -270,7 +274,7 @@ class TestMapUser:
             "provider": "google",
             "email": "ada@example.com",
             "display_name": "Ada Lovelace",
-            "email_verified": False,
+            "email_verified": True,
             "roles": ["user"],
         }
 
@@ -292,9 +296,53 @@ class TestMapUser:
         provider = GoogleOAuthProvider(
             client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
         )
-        info = GoogleUserInfo(provider_id="42", email="ada@example.com", name="")
+        info = GoogleUserInfo(
+            provider_id="42", email="ada@example.com", name="", email_verified=True
+        )
         mapped = provider.map_user(info)
         assert mapped["display_name"] == "ada"
+
+    def test_unverified_email_rejected(self):
+        # A present-but-unverified email must never be linkable to an account.
+        provider = GoogleOAuthProvider(
+            client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
+        )
+        info = GoogleUserInfo(
+            provider_id="42",
+            email="x@y.com",
+            name="Ada Lovelace",
+            email_verified=False,
+        )
+        with pytest.raises(GoogleOAuthError, match="not verified"):
+            provider.map_user(info)
+
+    def test_none_email_verified_rejected(self):
+        # ``email_verified=None`` (the shape Google sends when the claim is
+        # absent) MUST be treated as unverified. The buggy ``is False`` form
+        # would let ``None`` slip through because ``None is False`` is ``False``;
+        # the ``not`` guard closes that hole.
+        provider = GoogleOAuthProvider(
+            client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
+        )
+        info = GoogleUserInfo(
+            provider_id="42",
+            email="x@y.com",
+            name="Ada Lovelace",
+            email_verified=None,
+        )
+        with pytest.raises(GoogleOAuthError, match="not verified"):
+            provider.map_user(info)
+
+    def test_no_email_passes_without_verification(self):
+        # An absent email cannot be "unverified", so the verification guard is
+        # skipped -- only the display-name fallback applies.
+        provider = GoogleOAuthProvider(
+            client_id=_CLIENT_ID, client_secret=_CLIENT_SECRET, redirect_uri=_REDIRECT_URI
+        )
+        info = GoogleUserInfo(provider_id="42", email="", name="", email_verified=False)
+        mapped = provider.map_user(info)
+        assert mapped["email"] == ""
+        assert mapped["display_name"] == "Google User"
 
 
 class TestProtocolConformance:

@@ -460,7 +460,21 @@ class GoogleOAuthProvider:
         is the stable Google ``sub`` (``provider_id``), and ``display_name``
         falls back to the email local-part (then a generic label) when no
         display name was provided.
+
+        Raises :class:`GoogleOAuthError` when an ``email`` is present but not
+        verified. Google signals verification with ``email_verified``; when the
+        claim is absent it serializes as ``None``, which MUST be treated as
+        *unverified* -- an unverified identity must never be linkable to an
+        account. The guard uses ``not info.email_verified`` rather than
+        ``info.email_verified is False`` so the ``None`` case is caught too,
+        since ``None is False`` evaluates to ``False`` (and would let an
+        unverified identity slip through).
         """
+        if info.email and not info.email_verified:
+            raise GoogleOAuthError(
+                "email present but not verified; refusing to map unverified identity"
+            )
+
         display_name = info.name
         if not display_name:
             display_name = info.email.split("@")[0] if info.email else "Google User"
