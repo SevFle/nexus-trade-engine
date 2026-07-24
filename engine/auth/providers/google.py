@@ -9,6 +9,12 @@ testable steps:
   back by Google matches the one we issued (CSRF defense).
 * :meth:`GoogleOAuthProvider.exchange_code` -- trade an authorization code for
   a token set over HTTPS (network + status error handling).
+* :meth:`GoogleOAuthProvider.exchange_code_for_token` -- self-documenting alias
+  for :meth:`exchange_code` named after the canonical OAuth2 "code-for-token"
+  step (forwards an optional PKCE ``code_verifier``).
+* :meth:`GoogleOAuthProvider.get_user_info` -- resolve an access token to a
+  normalized :class:`GoogleUserInfo` via the ``oauth2/v2/userinfo`` endpoint
+  (the OAuth2 access-token counterpart to the OIDC ID-token path).
 * :meth:`GoogleOAuthProvider.verify_id_token` -- cryptographically verify the
   ID token returned by Google (signature, issuer, audience, expiry and
   ``alg=none`` rejection).
@@ -48,12 +54,16 @@ from engine.auth.base import (
 from engine.auth.base import (
     TokenExchangeError as _TokenExchangeErrorBase,
 )
+from engine.auth.base import (
+    TokenSet as BaseTokenSet,
+)
 
 logger = structlog.get_logger()
 
 # --- Public endpoints -------------------------------------------------------
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 - public endpoint URL, not a secret
+_GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 _GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 
 # Google's documented ID-token issuers. An ID token is only valid if its
@@ -134,16 +144,51 @@ class IDTokenClaims:
 
 
 @dataclass
-class TokenSet:
-    """Normalized result of a successful token exchange."""
+class GoogleUserInfo:
+    """Normalized, type-safe view of a validated Google user profile.
 
-    access_token: str
-    token_type: str = "Bearer"  # noqa: S105 - OAuth token-type literal, not a secret
-    expires_in: int | None = None
-    refresh_token: str | None = None
-    id_token: str | None = None
-    scope: str | None = None
+    Populated by :meth:`GoogleOAuthProvider.get_user_info` from the
+    ``oauth2/v2/userinfo`` endpoint. Google returns ``sub`` as the stable,
+    globally-unique account identifier; this is exposed as ``provider_id`` --
+    the field the rest of the engine links an OAuth-backed user on (analogous
+    to GitHub's numeric account ``id``). ``email`` is present only when the
+    ``email``/``openid`` scopes were granted, and ``name`` is the display name.
+    """
+
+    provider_id: str
+    email: str = ""
+    name: str = ""
+    avatar_url: str | None = None
+    email_verified: bool = False
     raw: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class TokenSet(BaseTokenSet):
+    """Normalized result of a successful token exchange (Google-specific).
+
+    Subclasses the shared :class:`engine.auth.base.TokenSet` so a caller can
+    treat every provider's token set uniformly (an ``isinstance`` check
+    against the base works) while still carrying Google's OIDC ``id_token``.
+    """
+
+    id_token: str | None = None
+
+
+def _coerce_email_verified(value: Any) -> bool:
+    """Coerce Google's ``email_verified`` claim to a real bool.
+
+    Google documents ``email_verified`` as a boolean, but some flows/clients
+    serialize it as the string ``"true"``/``"false"``. Relying on ``bool()``
+    alone is unsafe because ``bool("false")`` is ``True`` (any non-empty
+    string is truthy), so an *unverified* email would masquerade as verified.
+    We therefore normalize explicitly before exposing the value downstream.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return bool(value)
 
 
 class _JWKSClient(Protocol):
@@ -320,6 +365,114 @@ class GoogleOAuthProvider:
             raw=payload,
         )
 
+    async def exchange_code_for_token(
+        self, code: str, *, code_verifier: str | None = None
+    ) -> TokenSet:
+        """Exchange an authorization code for a :class:`TokenSet`.
+
+        Self-documenting alias for :meth:`exchange_code` named after the
+        canonical "code-for-token" step of the OAuth2 authorization-code flow.
+        It forwards the optional PKCE ``code_verifier`` so a caller that opts
+        into PKCE keeps that defense end-to-end. Kept as a thin delegate
+        (rather than a rename) so existing callers of :meth:`exchange_code`
+        continue to work unchanged.
+        """
+        return await self.exchange_code(code, code_verifier=code_verifier)
+
+    # -- User profile via the userinfo endpoint ----------------------------
+    async def get_user_info(self, access_token: str) -> GoogleUserInfo:
+        """Resolve an access token to a normalized :class:`GoogleUserInfo`.
+
+        The opaque ``access_token`` returned by :meth:`exchange_code` (or
+        :meth:`exchange_code_for_token`) is presented as a Bearer credential to
+        ``https://www.googleapis.com/oauth2/v2/userinfo`` and the JSON response
+        is normalized into a :class:`GoogleUserInfo`. The stable account
+        identifier is Google's ``sub`` claim, exposed as ``provider_id``.
+
+        This is the OAuth2 (access-token) counterpart to the OIDC
+        :meth:`verify_id_token` path: use it when a code was exchanged for an
+        access token rather than validating a signed ID token.
+
+        Raises :class:`InvalidTokenError` for a missing/empty token, an HTTP
+        401, any other HTTP error, a non-JSON body, a transport-level failure,
+        or a profile missing the required ``sub`` identifier -- mirroring the
+        failure contract of
+        :meth:`engine.auth.github.GitHubOAuthProvider.validate_access_token`.
+        """
+        if not access_token or not isinstance(access_token, str):
+            raise InvalidTokenError("access token is required")
+
+        headers: dict[str, str] = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json",
+        }
+
+        profile: dict[str, Any]
+        try:
+            async with httpx.AsyncClient(
+                transport=self._transport, timeout=httpx.Timeout(10.0)
+            ) as client:
+                resp = await client.get(_GOOGLE_USERINFO_URL, headers=headers)
+        except httpx.RequestError as exc:
+            logger.warning("auth.google.userinfo.network_error", error=str(exc))
+            raise InvalidTokenError(
+                f"network error contacting userinfo endpoint: {exc}"
+            ) from exc
+
+        if resp.status_code == httpx.codes.UNAUTHORIZED:
+            raise InvalidTokenError("access token is invalid or expired")
+        if resp.status_code >= _HTTP_ERROR_STATUS_THRESHOLD:
+            raise InvalidTokenError(
+                f"userinfo endpoint returned HTTP {resp.status_code}"
+            )
+
+        try:
+            profile = resp.json()
+        except ValueError as exc:
+            raise InvalidTokenError("userinfo endpoint returned non-JSON body") from exc
+
+        sub = profile.get("sub") if isinstance(profile, dict) else None
+        if not sub:
+            raise InvalidTokenError("incomplete Google profile (missing sub)")
+
+        email = profile.get("email") or ""
+        name = profile.get("name")
+        if not name:
+            # Fall back to the email local-part when Google omits the display
+            # name (mirrors GitHub's login fallback for a null ``name``).
+            name = email.split("@")[0] if email else ""
+
+        logger.info("auth.google.userinfo.success")
+        return GoogleUserInfo(
+            provider_id=str(sub),
+            email=str(email),
+            name=str(name),
+            avatar_url=profile.get("picture"),
+            email_verified=_coerce_email_verified(profile.get("email_verified", False)),
+            raw=profile,
+        )
+
+    def map_user(self, info: GoogleUserInfo) -> dict[str, Any]:
+        """Map a validated Google profile to the Nexus user-model shape.
+
+        Symmetric with
+        :meth:`engine.auth.github.GitHubOAuthProvider.map_user`: ``external_id``
+        is the stable Google ``sub`` (``provider_id``), and ``display_name``
+        falls back to the email local-part (then a generic label) when no
+        display name was provided.
+        """
+        display_name = info.name
+        if not display_name:
+            display_name = info.email.split("@")[0] if info.email else "Google User"
+        return {
+            "external_id": info.provider_id,
+            "provider": self.name,
+            "email": info.email,
+            "display_name": display_name,
+            "email_verified": info.email_verified,
+            "roles": ["user"],
+        }
+
     # -- ID-token verification ----------------------------------------------
     def verify_id_token(
         self,
@@ -404,7 +557,7 @@ class GoogleOAuthProvider:
             exp=int(payload.get("exp", 0)) if payload.get("exp") is not None else 0,
             iat=int(payload.get("iat", 0)) if payload.get("iat") is not None else 0,
             email=str(payload.get("email", "")),
-            email_verified=bool(payload.get("email_verified", False)),
+            email_verified=_coerce_email_verified(payload.get("email_verified", False)),
             name=payload.get("name"),
             picture=payload.get("picture"),
             locale=payload.get("locale"),

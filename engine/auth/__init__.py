@@ -66,6 +66,7 @@ from engine.auth.oidc import (
 from engine.auth.providers.google import (
     GoogleOAuthError,
     GoogleOAuthProvider,
+    GoogleUserInfo,
     IDTokenClaims,
 )
 from engine.auth.providers.google import (
@@ -91,6 +92,7 @@ __all__ = [
     "GoogleOAuthProvider",
     "GoogleTokenExchangeError",
     "GoogleTokenSet",
+    "GoogleUserInfo",
     "IDTokenClaims",
     "IOAuthProvider",
     "InvalidTokenError",
