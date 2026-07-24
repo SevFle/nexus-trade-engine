@@ -204,10 +204,12 @@ on the public API surface or not production-validated.
 - [~] React dashboard *(partial — a real Vite + React SPA lives in
       [`frontend/`](frontend/): the auth flow (login/register/OAuth),
       the legal-consent modal, onboarding, the `ErrorBoundary` →
-      `/api/v1/client/errors` ingest, and the `MarketWatch` screen are
-      wired to the engine API; `Dashboard`/`Backtest`/`Positions`/
-      `Strategies`/`Marketplace` still render hardcoded mock data, and
-      there is no production build (`frontend/Dockerfile` runs
+      `/api/v1/client/errors` ingest, the `MarketWatch` screen, and the
+      `PortfolioOverview` / `StrategiesPage` listings are wired to the
+      engine API (the `screens/*.jsx` → `pages/*.tsx` migration is in
+      progress); `Dashboard`/`Positions`/`Marketplace` and the legacy
+      `/backtest` + `/strategies/runner` still render hardcoded mock
+      data, and there is no production build (`frontend/Dockerfile` runs
       `npm run dev`) nor a frontend service in the prod compose — see
       [known-limitations](docs/known-limitations.md#react-dashboard))*
 - [ ] Observability export *(OpenTelemetry/Prometheus/Sentry wired but
