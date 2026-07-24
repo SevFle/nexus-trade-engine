@@ -263,6 +263,129 @@ class TestRouteNoUrlBuilt:
 
 
 # ===========================================================================
+# Route: get_authorize_url_with_state return-value validation
+# ===========================================================================
+class TestRouteWithStateValidation:
+    """The route treats ``get_authorize_url_with_state`` as provider-agnostic,
+    so -- mirroring the GitHub adapter's ``_normalize_authorize_url`` -- it
+    must defend against a misbehaving provider returning something other than
+    the typed ``(url, state)`` tuple. A plain URL string is accepted (the
+    route keeps its minted state); a malformed tuple or any other type
+    surfaces as an explicit HTTP 500 rather than an opaque unpack error."""
+
+    @pytest.mark.asyncio
+    async def test_with_state_returning_string_keeps_minted_state(self, db_session):
+        # A provider that returns a plain URL string (rather than a tuple)
+        # keeps the route's locally minted state -- the string branch.
+        class StringWithStateProvider:
+            name = "strws"
+
+            def get_authorize_url_with_state(self, state: str = "") -> str:
+                return f"https://idp.example.com/auth?state={state}"
+
+        app = _boot_app_with_provider(db_session, StringWithStateProvider())
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/strws/authorize")
+
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["state"]
+        assert data["state"] in data["authorize_url"]
+        assert resp.cookies.get("oauth_state_strws") == data["state"]
+
+    @pytest.mark.asyncio
+    async def test_with_state_awaitable_returning_string(self, db_session):
+        # The string-accept branch also fires on the async path: an awaitable
+        # that resolves to a plain string is awaited then used as the URL.
+        class AsyncStringWithStateProvider:
+            name = "astrws"
+
+            async def get_authorize_url_with_state(self, state: str = "") -> str:
+                return f"https://idp.example.com/auth?state={state}"
+
+        app = _boot_app_with_provider(db_session, AsyncStringWithStateProvider())
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/astrws/authorize")
+
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["state"] in data["authorize_url"]
+        assert resp.cookies.get("oauth_state_astrws") == data["state"]
+
+    @pytest.mark.asyncio
+    async def test_with_state_tuple_of_wrong_length_returns_500(self, db_session):
+        # A tuple that is not length-2 cannot be unpacked into (url, state);
+        # the route surfaces an explicit 500 rather than a ValueError.
+        class BadTupleProvider:
+            name = "badtup"
+
+            def get_authorize_url_with_state(self, state: str = "") -> tuple:
+                return ("too", "short", "tuple")
+
+        app = _boot_app_with_provider(db_session, BadTupleProvider())
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/badtup/authorize")
+
+        assert resp.status_code == 500
+        assert "(url, state) tuple" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_with_state_single_element_tuple_returns_500(self, db_session):
+        class SingletonTupleProvider:
+            name = "singtup"
+
+            def get_authorize_url_with_state(self, state: str = "") -> tuple:
+                return ("only-one",)
+
+        app = _boot_app_with_provider(db_session, SingletonTupleProvider())
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/singtup/authorize")
+
+        assert resp.status_code == 500
+        assert "(url, state) tuple" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_with_state_non_string_non_tuple_returns_500(self, db_session):
+        # Any type other than str/tuple must not silently propagate; the route
+        # raises HTTP 500 with a descriptive detail.
+        class IntWithStateProvider:
+            name = "intws"
+
+            def get_authorize_url_with_state(self, state: str = ""):
+                return 12345
+
+        app = _boot_app_with_provider(db_session, IntWithStateProvider())
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/intws/authorize")
+
+        assert resp.status_code == 500
+        assert "string or (url, state) tuple" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_with_state_awaitable_non_tuple_returns_500(self, db_session):
+        # The validation runs AFTER the awaitable check, so an async provider
+        # that resolves to an invalid type is also caught.
+        class AsyncBadProvider:
+            name = "abadws"
+
+            async def get_authorize_url_with_state(self, state: str = ""):
+                return {"url": "https://idp.example.com/auth"}
+
+        app = _boot_app_with_provider(db_session, AsyncBadProvider())
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/abadws/authorize")
+
+        assert resp.status_code == 500
+        assert "string or (url, state) tuple" in resp.json()["detail"]
+
+
+# ===========================================================================
 # Adapter: _normalize_authorize_url defence-in-depth guard
 # ===========================================================================
 class TestNormalizeAuthorizeUrl:

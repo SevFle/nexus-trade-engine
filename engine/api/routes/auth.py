@@ -313,7 +313,28 @@ async def authorize_provider(
         # awaitable. A synchronous ``(url, state)`` tuple is unpacked directly.
         if inspect.isawaitable(result):
             result = await result
-        url, state = result
+        # Defence in depth: the registry is provider-agnostic, so never trust
+        # the shape of upstream data. The accessor is typed to return a
+        # ``(url, state)`` tuple, but a misbehaving or monkey-patched provider
+        # could return a plain URL string or an unexpected type. Accept only a
+        # length-2 tuple (unpacking the AUTHORITATIVE state it carries) or a
+        # string (keeping the route's minted state), and surface anything else
+        # as an explicit 500 rather than letting an opaque unpack error reach
+        # the user's browser.
+        if isinstance(result, tuple):
+            if len(result) != 2:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Provider authorize URL must be a (url, state) tuple",
+                )
+            url, state = result
+        elif isinstance(result, str):
+            url = result
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Provider authorize URL must be a string or (url, state) tuple",
+            )
     elif hasattr(auth_provider, "get_authorize_url"):
         maybe_url = auth_provider.get_authorize_url(state=state)
         if inspect.isawaitable(maybe_url):
