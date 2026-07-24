@@ -29,6 +29,7 @@ is a plain :class:`~unittest.mock.MagicMock`.
 
 from __future__ import annotations
 
+import secrets
 from unittest.mock import AsyncMock, MagicMock
 from urllib.parse import parse_qs, urlparse
 
@@ -37,7 +38,11 @@ from httpx import ASGITransport, AsyncClient
 
 from engine.api.auth.dependency import get_current_user
 from engine.api.auth.github_oauth import GitHubAuthProvider
-from engine.api.routes.auth import authorize_provider
+from engine.api.routes.auth import (
+    authorize_provider,
+    validate_authorize_url,
+    validate_oauth_state,
+)
 from engine.app import create_app
 from engine.auth.base import TokenSet
 from engine.auth.github import (
@@ -421,3 +426,202 @@ class TestAuthorizeProviderCallable:
         import inspect
 
         assert inspect.iscoroutinefunction(authorize_provider)
+
+
+# ===========================================================================
+# Route: validate_authorize_url / validate_oauth_state defence-in-depth
+# ===========================================================================
+class TestAuthorizeUrlAndStateValidation:
+    """The route must refuse to emit a non-``https://`` authorize URL (e.g. a
+    ``javascript:`` or protocol-relative ``//evil`` payload) or a
+    malformed/short/non-string ``state`` token, surfacing a generic 500 --
+    never the bad value itself -- and logging a security warning. Covers the
+    tuple return (``get_authorize_url_with_state``) and the plain-string return
+    (``get_authorize_url``) paths."""
+
+    @pytest.mark.asyncio
+    async def test_valid_tuple_is_accepted(self, db_session):
+        # A well-formed ``(https_url, urlsafe state >= 16 chars)`` tuple round
+        # trips through to a 200 with both values surfaced unchanged.
+        class ValidTupleProvider:
+            name = "validtuple"
+
+            def get_authorize_url_with_state(self, state: str = "") -> tuple[str, str]:
+                return "https://idp.example.com/auth", "good-urlsafe-state-token"
+
+        app = _boot_app_with_provider(db_session, ValidTupleProvider())
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/validtuple/authorize")
+
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["authorize_url"] == "https://idp.example.com/auth"
+        assert data["state"] == "good-urlsafe-state-token"
+        assert resp.cookies.get("oauth_state_validtuple") == "good-urlsafe-state-token"
+
+    @pytest.mark.asyncio
+    async def test_tuple_with_none_elements_returns_500(self, db_session):
+        # A provider returning ``(None, None)`` (e.g. an unconfigured client)
+        # must never emit ``None`` to the victim's browser -- rejected.
+        class NoneTupleProvider:
+            name = "nonetuple"
+
+            def get_authorize_url_with_state(self, state: str = "") -> tuple[str, str]:
+                return (None, None)  # type: ignore[return-value]
+
+        app = _boot_app_with_provider(db_session, NoneTupleProvider())
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/nonetuple/authorize")
+
+        assert resp.status_code == 500
+        assert "authorize URL" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_tuple_with_empty_state_returns_500(self, db_session):
+        # An empty/missing state would defeat the CSRF protection on callback;
+        # rejected even though the URL itself is valid https.
+        class EmptyStateProvider:
+            name = "emptystate"
+
+            def get_authorize_url_with_state(self, state: str = "") -> tuple[str, str]:
+                return ("https://idp.example.com/auth", "")
+
+        app = _boot_app_with_provider(db_session, EmptyStateProvider())
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/emptystate/authorize")
+
+        assert resp.status_code == 500
+        assert "authorize URL" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_plain_string_javascript_url_returns_500(self, db_session):
+        # A ``javascript:`` payload would execute script in the victim's
+        # browser if bounced through the redirect -- must be rejected.
+        class JavascriptUrlProvider:
+            name = "jsurl"
+
+            def get_authorize_url(self, state: str = "") -> str:
+                return "javascript:alert(document.cookie)"
+
+        app = _boot_app_with_provider(db_session, JavascriptUrlProvider())
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/jsurl/authorize")
+
+        assert resp.status_code == 500
+        assert "authorize URL" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_plain_string_protocol_relative_url_returns_500(self, db_session):
+        # A protocol-relative ``//evil`` URL inherits the host page's scheme and
+        # can leak the redirect to an attacker-controlled origin.
+        class ProtocolRelativeProvider:
+            name = "proprel"
+
+            def get_authorize_url(self, state: str = "") -> str:
+                return "//evil.example.com/auth"
+
+        app = _boot_app_with_provider(db_session, ProtocolRelativeProvider())
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/proprel/authorize")
+
+        assert resp.status_code == 500
+        assert "authorize URL" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_valid_https_url_string_is_accepted(self, db_session):
+        # A plain-string ``https://`` URL on the fallback path is accepted; the
+        # route's minted state is surfaced and persisted in the session cookie.
+        class HttpsStringProvider:
+            name = "httpsstr"
+
+            def get_authorize_url(self, state: str = "") -> str:
+                return "https://idp.example.com/auth?state=" + state
+
+        app = _boot_app_with_provider(db_session, HttpsStringProvider())
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/v1/auth/httpsstr/authorize")
+
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["authorize_url"].startswith("https://")
+        assert resp.cookies.get("oauth_state_httpsstr") == data["state"]
+
+    @pytest.mark.asyncio
+    async def test_security_warning_logged_on_invalid_url(self, db_session):
+        # The defence-in-depth guard must emit a structured security warning so
+        # an attempted exploit is observable in the audit log.
+        class JavascriptUrlProvider:
+            name = "jsurl2"
+
+            def get_authorize_url(self, state: str = "") -> str:
+                return "javascript:alert(1)"
+
+        app = _boot_app_with_provider(db_session, JavascriptUrlProvider())
+        transport = ASGITransport(app=app)
+        with pytest.MonkeyPatch().context() as mp:
+            mock_logger = MagicMock()
+            mp.setattr("engine.api.routes.auth.logger", mock_logger)
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                resp = await ac.get("/api/v1/auth/jsurl2/authorize")
+
+        assert resp.status_code == 500
+        mock_logger.warning.assert_called_once()
+        assert "invalid_provider_url" in mock_logger.warning.call_args.args[0]
+
+
+# ===========================================================================
+# Helpers: validate_authorize_url / validate_oauth_state contract
+# ===========================================================================
+class TestAuthorizeValidatorsDirect:
+    """Pin the contract of the validator helpers independently of the route
+    wiring so the security boundary is explicit."""
+
+    @pytest.mark.parametrize("bad", [None, 123, 4.5, object(), b"https://x", ""])
+    def test_validate_authorize_url_rejects_non_string_or_empty(self, bad):
+        assert validate_authorize_url(bad) is False
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "javascript:alert(1)",
+            "//evil.example.com",
+            "http://insecure.example.com",
+            "ftp://example.com",
+            " https://idp/auth",  # leading space -- not a clean https:// prefix
+        ],
+    )
+    def test_validate_authorize_url_rejects_wrong_scheme(self, url):
+        assert validate_authorize_url(url) is False
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://idp.example.com/auth",
+            "https://github.com/login/oauth/authorize?state=x",
+        ],
+    )
+    def test_validate_authorize_url_accepts_https(self, url):
+        assert validate_authorize_url(url) is True
+
+    @pytest.mark.parametrize("bad", [None, 123, 4.5, object(), "", "short", "a" * 15])
+    def test_validate_oauth_state_rejects_non_string_or_too_short(self, bad):
+        assert validate_oauth_state(bad) is False
+
+    def test_validate_oauth_state_rejects_non_urlsafe_characters(self):
+        # Spaces, slashes, query separators and punctuation are NOT in the
+        # urlsafe alphabet and would corrupt the cookie store / redirect URL.
+        assert validate_oauth_state("contains space here!!") is False
+        assert validate_oauth_state("a" * 15 + "/") is False
+
+    def test_validate_oauth_state_accepts_urlsafe_tokens(self):
+        # ``secrets.token_urlsafe`` output is the canonical acceptable value.
+        assert validate_oauth_state(secrets.token_urlsafe(32)) is True
+        assert validate_oauth_state("good-urlsafe-state-token") is True
+        # Exactly 16 urlsafe chars is the floor and must pass.
+        assert validate_oauth_state("a" * 16) is True

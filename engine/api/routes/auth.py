@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import inspect
 import secrets
+import string
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -32,6 +33,41 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 MIN_PASSWORD_LENGTH = 8
+
+# Characters permitted in a CSRF ``state`` token: the urlsafe ASCII alphabet
+# produced by ``secrets.token_urlsafe`` (alphanumerics plus ``-`` and ``_``).
+_OAUTH_STATE_ALPHABET = frozenset(string.ascii_letters + string.digits + "-_")
+# Minimum length for an OAuth CSRF ``state`` token to be considered
+# cryptographically adequate (``secrets.token_urlsafe(16)`` already yields 22+
+# chars; 16 is a conservative floor).
+_OAUTH_STATE_MIN_LENGTH = 16
+
+
+def validate_authorize_url(url: Any) -> bool:
+    """Return ``True`` iff ``url`` is a non-empty ``str`` that starts with
+    ``https://``.
+
+    Defence-in-depth guard for the authorize redirect: a malformed or
+    compromised provider could otherwise bounce the user's browser through a
+    ``javascript:`` payload or a protocol-relative ``//evil`` URL. Rejects
+    non-strings and empty strings outright so the guard is total.
+    """
+    return isinstance(url, str) and bool(url) and url.startswith("https://")
+
+
+def validate_oauth_state(state: Any) -> bool:
+    """Return ``True`` iff ``state`` is a ``str`` of at least
+    :data:`_OAUTH_STATE_MIN_LENGTH` characters drawn entirely from the urlsafe
+    ASCII alphabet.
+
+    The OAuth CSRF ``state`` is persisted in a session cookie and echoed back
+    by the IdP on callback, so it must be an opaque, unguessable, URL-safe
+    token -- never empty, too short to be unguessable, or carrying characters
+    that would corrupt the cookie store or the redirect URL.
+    """
+    if not isinstance(state, str) or len(state) < _OAUTH_STATE_MIN_LENGTH:
+        return False
+    return all(ch in _OAUTH_STATE_ALPHABET for ch in state)
 
 
 class RegisterRequest(BaseModel):
@@ -314,14 +350,46 @@ async def authorize_provider(
         if inspect.isawaitable(result):
             result = await result
         url, state = result
+        # Defence-in-depth: a malformed or compromised provider could hand back
+        # a tuple whose elements are not the expected ``(https_url, csrf_state)``
+        # pair. Validate BOTH members before they reach the user's browser / the
+        # session cookie -- on failure log a security warning and surface a
+        # generic 500 (never the bad value itself).
+        if not (validate_authorize_url(url) and validate_oauth_state(state)):
+            logger.warning(
+                "auth.authorize.invalid_provider_tuple", provider=provider
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not build authorize URL",
+            )
     elif hasattr(auth_provider, "get_authorize_url"):
         maybe_url = auth_provider.get_authorize_url(state=state)
         if inspect.isawaitable(maybe_url):
             maybe_url = await maybe_url
         if isinstance(maybe_url, tuple):
             url, state = maybe_url
+            if not (validate_authorize_url(url) and validate_oauth_state(state)):
+                logger.warning(
+                    "auth.authorize.invalid_provider_tuple", provider=provider
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Could not build authorize URL",
+                )
         else:
             url = maybe_url
+            # A plain-string return still must be an ``https://`` URL -- reject
+            # ``javascript:`` and protocol-relative ``//evil`` payloads that a
+            # malformed provider could otherwise bounce through the redirect.
+            if not validate_authorize_url(url):
+                logger.warning(
+                    "auth.authorize.invalid_provider_url", provider=provider
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Could not build authorize URL",
+                )
 
     if not url:
         raise HTTPException(
