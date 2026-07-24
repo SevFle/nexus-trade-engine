@@ -217,19 +217,33 @@ The shell and the read paths are genuinely wired to the engine:
   `ConsentRequiredError` and emits a `legal:consent-required` event).
 - **Onboarding** + `ErrorBoundary` (per-page and app scope) POST
   browser errors to `POST /api/v1/client/errors`.
-- **`MarketWatch`** is the one analytical screen backed by live data
+- **`MarketWatch`** is backed by live market data
   ([`frontend/src/api/marketData.js`](../frontend/src/api/marketData.js)).
+- **`PortfolioOverview`** (`/portfolio`) and **`StrategiesPage`**
+  (`/strategies`, the primary destination of the STRATEGIES nav link)
+  are wired to the engine through a typed `apiClient` + TanStack Query
+  — `GET /api/v1/portfolio/summary` and `GET /api/v1/strategies/`
+  respectively (gh#1671, gh#1669). Both render loading-skeleton / error
+  / empty states so a slow or absent backend degrades to an inline
+  notice. This is the leading edge of a `screens/*.jsx` → `pages/*.tsx`
+  migration that is still in progress (see below).
 
-What is **not** wired is the core trading surface. These screens render
-hardcoded `MOCK_*` fixtures instead of engine responses:
+What is **not** wired is the rest of the core trading surface. These
+routes still render hardcoded `MOCK_*` fixtures instead of engine
+responses:
 
-- [`Dashboard.jsx`](../frontend/src/screens/Dashboard.jsx) — `MOCK_PORTFOLIO`.
-- [`Backtest.jsx`](../frontend/src/screens/Backtest.jsx) — `MOCK_RESULTS`,
-  `MOCK_CONFIG`, a synthetic `EQUITY_CURVE` (it never calls
-  `POST /api/v1/backtest/run`).
-- [`Positions.jsx`](../frontend/src/screens/Positions.jsx),
-  [`Strategies.jsx`](../frontend/src/screens/Strategies.jsx),
-  [`Marketplace.jsx`](../frontend/src/screens/Marketplace.jsx) — mock lists.
+- [`Dashboard.jsx`](../frontend/src/screens/Dashboard.jsx) (`/`) — `MOCK_PORTFOLIO`.
+- [`Backtest.jsx`](../frontend/src/screens/Backtest.jsx) (`/backtest`) —
+  `MOCK_RESULTS`, `MOCK_CONFIG`, a synthetic `EQUITY_CURVE` (it never
+  calls `POST /api/v1/backtest/run`). A migrated
+  [`BacktestPage.tsx`](../frontend/src/pages/BacktestPage.tsx) that *does*
+  post to `/api/v1/backtest/run` and poll `/api/v1/backtest/results/{id}`
+  exists on disk but is **not yet imported or routed** in `App.tsx`.
+- [`Strategies.jsx`](../frontend/src/screens/Strategies.jsx)
+  (`/strategies/runner`) — the legacy interactive runner, kept as mock;
+  the primary `/strategies` listing is the real `StrategiesPage` above.
+- [`Positions.jsx`](../frontend/src/screens/Positions.jsx) (`/positions`),
+  [`Marketplace.jsx`](../frontend/src/screens/Marketplace.jsx) (`/marketplace`) — mock lists.
 
 There is also **no production artifact**:
 
@@ -250,8 +264,11 @@ surface today.
 npm install && npm run dev` (or `make docker-dev`) pointed at a local
 engine. Do not serve `frontend/Dockerfile` in production.
 
-**Fix path**: (1) replace the `MOCK_*` fixtures in the five analytical
-screens with `useQuery` calls against the existing engine routes;
+**Fix path**: (1) finish the `screens/*.jsx` → `pages/*.tsx` migration
+(the pattern is already set by `PortfolioOverview`/`StrategiesPage`:
+replace the remaining `MOCK_*` fixtures with `useQuery` calls and flip
+the `App.tsx` route imports — `BacktestPage.tsx` is already migrated on
+disk and only needs to be wired to `/backtest`);
 (2) convert `frontend/Dockerfile` to a multi-stage build (`vite build` →
 `nginx`/`Caddy` static serve, or `vite preview`); (3) add a `frontend`
 service (static host) to `docker-compose.yml`. None of (1)–(3) require
